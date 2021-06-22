@@ -184,8 +184,9 @@ public final class Support {
         return handlePtr.read();
     }
 
-    public static String getClassNameOr(JNIEnvironment env, JNIObjectHandle clazz, String forNullHandle, String forNullNameOrException) {
-        if (clazz.notEqual(nullHandle())) {
+    public static String getClassNameOr(JNIEnvironment env, JNIObjectHandle rawClazz, String forNullHandle, String forNullNameOrException) {
+        if (rawClazz.notEqual(nullHandle())) {
+            JNIObjectHandle clazz = JvmtiAgentBase.singleton().handles().unwrapClass(env, rawClazz);
             JNIObjectHandle clazzName = callObjectMethod(env, clazz, JvmtiAgentBase.singleton().handles().javaLangClassGetName);
             String result = Support.fromJniString(env, clazzName);
             if (result == null || clearException(env)) {
@@ -365,6 +366,12 @@ public final class Support {
         args.addressOf(0).setObject(l0);
         args.addressOf(1).setObject(l1);
         jniFunctions().getCallStaticVoidMethodA().invoke(env, clazz, method, args);
+    }
+
+    public static boolean callStaticBooleanMethodL(JNIEnvironment env, JNIObjectHandle clazz, JNIMethodId method, JNIObjectHandle l0) {
+        JNIValue args = StackValue.get(1, JNIValue.class);
+        args.addressOf(0).setObject(l0);
+        return jniFunctions().getCallStaticBooleanMethodA().invoke(env, clazz, method, args);
     }
 
     public static boolean callBooleanMethod(JNIEnvironment env, JNIObjectHandle obj, JNIMethodId method) {

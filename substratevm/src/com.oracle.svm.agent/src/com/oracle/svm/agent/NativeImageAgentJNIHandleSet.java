@@ -24,8 +24,10 @@
  */
 package com.oracle.svm.agent;
 
+import static com.oracle.svm.core.util.VMError.guarantee;
 import static com.oracle.svm.jni.JNIObjectHandles.nullHandle;
 
+import org.graalvm.nativeimage.c.type.CTypeConversion;
 import org.graalvm.word.WordFactory;
 
 import com.oracle.svm.jni.nativeapi.JNIEnvironment;
@@ -33,6 +35,7 @@ import com.oracle.svm.jni.nativeapi.JNIFieldId;
 import com.oracle.svm.jni.nativeapi.JNIMethodId;
 import com.oracle.svm.jni.nativeapi.JNIObjectHandle;
 import com.oracle.svm.jvmtiagentbase.JNIHandleSet;
+import com.oracle.svm.jvmtiagentbase.Support;
 
 public class NativeImageAgentJNIHandleSet extends JNIHandleSet {
 
@@ -70,6 +73,10 @@ public class NativeImageAgentJNIHandleSet extends JNIHandleSet {
 
     private JNIMethodId javaLangReflectConstructorDeclaringClassName;
 
+    final JNIMethodId javaLangClassGetInterfaces;
+    private JNIObjectHandle javaLangReflectProxy;
+    private JNIMethodId javaLangReflectProxyIsProxyClass = WordFactory.nullPointer();
+
     NativeImageAgentJNIHandleSet(JNIEnvironment env) {
         super(env);
         javaLangClass = newClassGlobalRef(env, "java/lang/Class");
@@ -99,6 +106,11 @@ public class NativeImageAgentJNIHandleSet extends JNIHandleSet {
         javaLangIllegalAccessError = newClassGlobalRef(env, "java/lang/IllegalAccessError");
         javaLangInvokeWrongMethodTypeException = newClassGlobalRef(env, "java/lang/invoke/WrongMethodTypeException");
         javaLangIllegalArgumentException = newClassGlobalRef(env, "java/lang/IllegalArgumentException");
+
+        try (CTypeConversion.CCharPointerHolder name = Support.toCString("getInterfaces"); CTypeConversion.CCharPointerHolder signature = Support.toCString("()[Ljava/lang/Class;")) {
+            javaLangClassGetInterfaces = Support.jniFunctions().getGetMethodID().invoke(env, javaLangClass, name.get(), signature.get());
+            guarantee(javaLangClassGetInterfaces.isNonNull());
+        }
     }
 
     JNIMethodId getJavaLangInvokeMethodTypeReturnType(JNIEnvironment env) {
@@ -167,5 +179,43 @@ public class NativeImageAgentJNIHandleSet extends JNIHandleSet {
             javaLangReflectConstructorDeclaringClassName = getMethodId(env, customSerializationConstructorClass, "getName", "()Ljava/lang/String;", false);
         }
         return javaLangReflectConstructorDeclaringClassName;
+    }
+
+    JNIObjectHandle getJavaLangReflectProxy(JNIEnvironment env) {
+        if (javaLangReflectProxy.equal(nullHandle())) {
+            javaLangReflectProxy = newClassGlobalRef(env, "java/lang/reflect/Proxy");
+        }
+        return javaLangReflectProxy;
+    }
+
+    JNIMethodId getJavaLangReflectProxyIsProxyClass(JNIEnvironment env) {
+        if (javaLangReflectProxyIsProxyClass.equal(nullHandle())) {
+            javaLangReflectProxyIsProxyClass = getMethodId(env, getJavaLangReflectProxy(env), "isProxyClass", "(Ljava/lang/Class;)Z", true);
+        }
+        return javaLangReflectProxyIsProxyClass;
+    }
+
+    @Override
+    public JNIObjectHandle unwrapClass(JNIEnvironment env, JNIObjectHandle clazz) {
+        boolean isProxy = Support.callStaticBooleanMethodL(env, getJavaLangReflectProxy(env), getJavaLangReflectProxyIsProxyClass(env), clazz);
+        if (Support.clearException(env) || !isProxy) {
+            return clazz;
+        }
+
+        JNIObjectHandle interfaces = Support.callObjectMethod(env, clazz, javaLangClassGetInterfaces);
+        if (Support.clearException(env) || interfaces.equal(nullHandle())) {
+            return clazz;
+        }
+
+        int interfacesLength = Support.jniFunctions().getGetArrayLength().invoke(env, interfaces);
+        guarantee(!Support.clearException(env));
+        if (interfacesLength != 1) {
+            return clazz;
+        }
+
+        JNIObjectHandle iface = Support.jniFunctions().getGetObjectArrayElement().invoke(env, interfaces, 0);
+        guarantee(!Support.clearException(env) && iface.notEqual(nullHandle()));
+
+        return iface;
     }
 }

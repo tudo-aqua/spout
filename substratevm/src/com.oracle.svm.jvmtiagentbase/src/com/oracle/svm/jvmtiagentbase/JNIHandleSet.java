@@ -203,6 +203,17 @@ public abstract class JNIHandleSet {
     }
 
     /**
+     * Performs necessary transformations on a class handle to allow its handling by the agent.
+     *
+     * @param env JNI environment of the thread running the JVMTI callback.
+     * @param clazz Handle to the class.
+     * @return The potentially unwrapped class.
+     */
+    public JNIObjectHandle unwrapClass(JNIEnvironment env, JNIObjectHandle clazz) {
+        return clazz;
+    }
+
+    /**
      * Releases all global JNI handles. This class and the handles must not be used after a call to
      * this method. This function is automatically called by {@link JvmtiAgentBase} after the agent
      * unloads. It should not be called manually.
