@@ -22,7 +22,7 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package com.oracle.svm.thirdparty.jline;
+package com.oracle.svm.thirdparty.jline.base;
 
 // Checkstyle: allow reflection
 
