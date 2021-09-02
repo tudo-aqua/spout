@@ -23,6 +23,7 @@
 package com.oracle.truffle.espresso.libespresso;
 
 import java.io.PrintStream;
+import java.util.Map;
 
 import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.ObjectHandle;
@@ -78,7 +79,12 @@ public class LibEspresso {
         }
         javaVMPointer.write(espressoJavaVM);
 
-        context.eval("java", "<NewPath> ");
+        Map<String,String> concolicOptions = Arguments.getConcolicOptions();
+        String params = "";
+        if (concolicOptions.containsKey("concolic.ints")) {
+            params += concolicOptions.get("concolic.ints");
+        }
+        context.eval("java", "<NewPath> " + params);
 
         return JNIErrors.JNI_OK();
     }
@@ -128,6 +134,7 @@ public class LibEspresso {
     static void exit(@SuppressWarnings("unused") IsolateThread thread, JNIJavaVM javaVM) {
         ObjectHandle contextHandle = javaVM.getFunctions().getContext();
         Context context = ObjectHandles.getGlobal().get(contextHandle);
+        context.eval("java","<EndPath>");
         Value exitValue = context.eval("java", "<ExitCode>");
         int exitCode;
         if (!exitValue.fitsInInt()) {

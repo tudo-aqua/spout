@@ -27,28 +27,21 @@ import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.espresso.EspressoLanguage;
-import com.oracle.truffle.espresso.meta.EspressoError;
-import com.oracle.truffle.espresso.runtime.EspressoContext;
+import tools.aqua.concolic.Concolic;
 
 /**
- * Node that performs the soft destruction of the Espresso VM. In practice, it is intended to be
- * used once the main method has returned, so that the main thread can wait for all other thread to
- * naturally terminate
- * 
- * @see EspressoContext#destroyVM(boolean)
+ *
  */
-public final class DestroyVMNode extends RootNode {
-    public static final String EVAL_NAME = "<DestroyJavaVM>";
+public final class EndPathNode extends RootNode {
+    public static final String EVAL_NAME = "<EndPath>";
 
-    public DestroyVMNode(TruffleLanguage<?> language) {
+    public EndPathNode(TruffleLanguage<?> language) {
         super(language);
     }
 
     @Override
     public Object execute(VirtualFrame frame) {
-        assert frame.getArguments().length == 0;
-        EspressoContext context = EspressoLanguage.getCurrentContext();
-        context.destroyVM(true); // Throws an exit exception.
-        throw EspressoError.shouldNotReachHere();
+        Concolic.endPath();
+        return EspressoLanguage.getCurrentContext().getBindings();
     }
 }

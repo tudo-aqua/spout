@@ -27,6 +27,7 @@ import java.util.logging.Level;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.espresso.meta.JavaKind;
+import com.oracle.truffle.espresso.nodes.interop.EndPathNode;
 import com.oracle.truffle.espresso.nodes.interop.GetBindingsNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import com.oracle.truffle.espresso.runtime.StaticObject.StaticObjectFactory;
@@ -186,6 +187,10 @@ public final class EspressoLanguage extends TruffleLanguage<EspressoContext> imp
         }
         if (GetBindingsNode.EVAL_NAME.equals(contents)) {
             RootNode node = new GetBindingsNode(this);
+            return Truffle.getRuntime().createCallTarget(node);
+        }
+        if (EndPathNode.EVAL_NAME.equals(contents)) {
+            RootNode node = new EndPathNode(this);
             return Truffle.getRuntime().createCallTarget(node);
         }
         if (contents.startsWith(NewPathNode.EVAL_NAME)) {

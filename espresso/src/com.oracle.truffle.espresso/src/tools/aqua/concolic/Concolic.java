@@ -584,4 +584,8 @@ public class Concolic {
         assert symbolic[symbolic.length - 1 - slot] instanceof AnnotatedValue;
         return (AnnotatedValue) symbolic[symbolic.length - 1 - slot];
     }
+
+    public static void uncaughtException(StaticObject pendingException) {
+        addTraceElement(new ExceptionEvent(pendingException.getKlass().getNameAsString()));
+    }
 }

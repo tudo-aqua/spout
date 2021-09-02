@@ -487,7 +487,6 @@ public final class EspressoLauncher extends AbstractLanguageLauncher {
 
         contextBuilder.allowCreateThread(true);
 
-        PathState state = new PathState(PathState.State.OK);
         //for (int i=0; i<2; i++) {
 
             try (Context context = contextBuilder.build()) {
@@ -541,15 +540,11 @@ public final class EspressoLauncher extends AbstractLanguageLauncher {
                         e.printStackTrace();
                         // FIXME: set path state ...
                     } else if (!e.isExit()) {
-
-                        Value klass = e.getGuestObject().invokeMember("getClass");
-                        Value name = klass.invokeMember("getName");
-                        state = new PathState(PathState.State.ERROR, name.asString());
-
                         handleMainUncaught(context, e);
                     }
                 } finally {
                     try {
+                        context.eval("java","<EndPath>");
                         context.eval("java", "<DestroyJavaVM>").execute();
                     } catch (PolyglotException e) {
                         /*
@@ -568,7 +563,6 @@ public final class EspressoLauncher extends AbstractLanguageLauncher {
 
             }
 
-            System.out.println("STATE: " + state);
         //}
 
             /*

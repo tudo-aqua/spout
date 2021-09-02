@@ -28,7 +28,9 @@ import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.graalvm.nativeimage.RuntimeOptions;
 import org.graalvm.nativeimage.c.struct.SizeOf;
@@ -50,6 +52,8 @@ public final class Arguments {
     private static final String AGENT_LIB = "java.AgentLib.";
     private static final String AGENT_PATH = "java.AgentPath.";
     private static final String JAVA_AGENT = "java.JavaAgent";
+
+    private static final Map<String, String> concolicOptions = new HashMap<>();
 
     /*
      * HotSpot comment:
@@ -141,6 +145,9 @@ public final class Arguments {
                                 break;
                             case "sun.boot.library.path":
                                 builder.option("java.BootLibraryPath", value);
+                                break;
+                            case "concolic.ints":
+                                concolicOptions.put("concolic.ints", value);
                                 break;
                         }
                         builder.option(JAVA_PROPS + key, value);
@@ -297,6 +304,10 @@ public final class Arguments {
 
     public static ArgumentException abortExperimental(String message) {
         throw new Arguments.ArgumentException(message, true);
+    }
+
+    public static Map<String, String> getConcolicOptions() {
+        return concolicOptions;
     }
 
     public static void warn(String message) {

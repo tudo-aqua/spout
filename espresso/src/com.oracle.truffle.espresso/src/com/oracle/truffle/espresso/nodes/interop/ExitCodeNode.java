@@ -29,7 +29,6 @@ import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.espresso.EspressoLanguage;
 import com.oracle.truffle.espresso.runtime.EspressoContext;
 import com.oracle.truffle.espresso.runtime.StaticObject;
-import tools.aqua.concolic.Concolic;
 
 public final class ExitCodeNode extends RootNode {
     public static final String EVAL_NAME = "<ExitCode>";
@@ -41,7 +40,6 @@ public final class ExitCodeNode extends RootNode {
     @Override
     public Object execute(VirtualFrame frame) {
         assert frame.getArguments().length == 0;
-        Concolic.endPath();
         EspressoContext context = EspressoLanguage.getCurrentContext();
         if (!context.isClosing()) {
             return StaticObject.NULL;

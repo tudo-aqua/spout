@@ -135,6 +135,7 @@ import com.oracle.truffle.espresso.substitutions.Target_java_lang_System;
 import com.oracle.truffle.espresso.substitutions.Target_java_lang_Thread;
 import com.oracle.truffle.espresso.substitutions.Target_java_lang_Thread.State;
 import com.oracle.truffle.espresso.substitutions.VMCollector;
+import tools.aqua.concolic.Concolic;
 
 /**
  * Espresso implementation of the VM interface (libjvm).
@@ -738,6 +739,7 @@ public final class VM extends NativeEnv implements ContextAccess {
         Meta meta = context.getMeta();
         try {
             if (pendingException != null) {
+                Concolic.uncaughtException(pendingException);
                 meta.java_lang_Thread_dispatchUncaughtException.invokeDirect(currentThread, pendingException);
             }
 

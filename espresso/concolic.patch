@@ -1,0 +1,1995 @@
+diff --git a/README.md b/README.md
+index 55449d2a20..d13e6e96f9 100644
+--- a/README.md
++++ b/README.md
+@@ -1,4 +1,29 @@
+-# GraalVM
++
++# GDart
++
++This project is a fork of [graal/espresso](https://github.com/oracle/graal/)
++
++## Installation
++
++- You need mx on the path
++- Can only run on Linux currently
++
++## Building
++
++```bash
++$ mx build --all
++```
++
++## Running
++
++```bash
++$ CONCOLIC=99 mx espresso -cp /home/falk/workspace/tests/ Test3 
++```
++
++- Input can currently be set using ```CONCOLIC``` env var (PoC)
++- Output is logged to ```gdart.log```
++
++# Original Readme GraalVM
+ 
+ [![https://graalvm.slack.com](https://img.shields.io/badge/slack-join%20channel-active)](https://www.graalvm.org/slack-invitation/)
+ 
+diff --git a/espresso/src/com.oracle.truffle.espresso.launcher/src/com/oracle/truffle/espresso/launcher/EspressoLauncher.java b/espresso/src/com.oracle.truffle.espresso.launcher/src/com/oracle/truffle/espresso/launcher/EspressoLauncher.java
+index 0dd201271d..141c969823 100644
+--- a/espresso/src/com.oracle.truffle.espresso.launcher/src/com/oracle/truffle/espresso/launcher/EspressoLauncher.java
++++ b/espresso/src/com.oracle.truffle.espresso.launcher/src/com/oracle/truffle/espresso/launcher/EspressoLauncher.java
+@@ -56,6 +56,8 @@ public final class EspressoLauncher extends AbstractLanguageLauncher {
+     private VersionAction versionAction = VersionAction.None;
+     private final Map<String, String> espressoOptions = new HashMap<>();
+ 
++    private final Map<String, String> concolicOptions = new HashMap<>();
++
+     private final class Arguments {
+         private final List<String> arguments;
+         private int index = -1;
+@@ -295,6 +297,9 @@ public final class EspressoLauncher extends AbstractLanguageLauncher {
+                             case "sun.boot.library.path":
+                                 espressoOptions.put("java.BootLibraryPath", value);
+                                 break;
++                            case "concolic.ints":
++                                concolicOptions.put("concolic.ints", value);
++                                break;
+                         }
+ 
+                         espressoOptions.put("java.Properties." + key, value);
+@@ -482,67 +487,90 @@ public final class EspressoLauncher extends AbstractLanguageLauncher {
+ 
+         contextBuilder.allowCreateThread(true);
+ 
+-        try (Context context = contextBuilder.build()) {
++        PathState state = new PathState(PathState.State.OK);
++        //for (int i=0; i<2; i++) {
+ 
+-            // TODO: Ensure consistency between option "java.Version" and the given "java.JavaHome".
++            try (Context context = contextBuilder.build()) {
+ 
+-            // runVersionAction(versionAction, context.getEngine());
+-            if (versionAction != VersionAction.None) {
+-                // The Java version is not known yet, try 8 first.
+-                Value version = context.getBindings("java").getMember("sun.misc.Version");
+-                if (version != null && !version.isNull()) {
+-                    // Java 8
+-                    version.invokeMember("print");
+-                } else {
+-                    // > Java 8
+-                    version = context.getBindings("java").getMember("java.lang.VersionProps");
+-                    version.invokeMember("print", /* print to stderr = */false);
+-                }
+-                if (versionAction == VersionAction.PrintAndExit) {
+-                    throw exit(0);
++                String params = "";
++                if (concolicOptions.containsKey("concolic.ints")) {
++                    params += concolicOptions.get("concolic.ints");
+                 }
+-            }
+ 
+-            if (mainClassName == null) {
+-                throw abort(usage());
+-            }
+-            try {
+-                Value launcherHelper = context.getBindings("java").getMember("sun.launcher.LauncherHelper");
+-                Value mainKlass = launcherHelper //
+-                                .invokeMember("checkAndLoadMain", true, launchMode.ordinal(), mainClassName) //
+-                                .getMember("static");
+-                mainKlass.invokeMember("main/([Ljava/lang/String;)V", (Object) mainClassArgs.toArray(new String[0]));
+-                if (pauseOnExit) {
+-                    getError().print("Press any key to continue...");
+-                    try {
+-                        System.in.read();
+-                    } catch (IOException e) {
+-                        e.printStackTrace();
++                context.eval("java", "<NewPath> " + params);
++
++                // TODO: Ensure consistency between option "java.Version" and the given "java.JavaHome".
++
++                // runVersionAction(versionAction, context.getEngine());
++                if (versionAction != VersionAction.None) {
++                    // The Java version is not known yet, try 8 first.
++                    Value version = context.getBindings("java").getMember("sun.misc.Version");
++                    if (version != null && !version.isNull()) {
++                        // Java 8
++                        version.invokeMember("print");
++                    } else {
++                        // > Java 8
++                        version = context.getBindings("java").getMember("java.lang.VersionProps");
++                        version.invokeMember("print", /* print to stderr = */false);
++                    }
++                    if (versionAction == VersionAction.PrintAndExit) {
++                        throw exit(0);
+                     }
+                 }
+-            } catch (PolyglotException e) {
+-                if (e.isInternalError()) {
+-                    e.printStackTrace();
+-                } else if (!e.isExit()) {
+-                    handleMainUncaught(context, e);
++
++                if (mainClassName == null) {
++                    throw abort(usage());
+                 }
+-            } finally {
++
+                 try {
+-                    context.eval("java", "<DestroyJavaVM>").execute();
++                    Value launcherHelper = context.getBindings("java").getMember("sun.launcher.LauncherHelper");
++                    Value mainKlass = launcherHelper //
++                            .invokeMember("checkAndLoadMain", true, launchMode.ordinal(), mainClassName) //
++                            .getMember("static");
++                    mainKlass.invokeMember("main/([Ljava/lang/String;)V", (Object) mainClassArgs.toArray(new String[0]));
++                    if (pauseOnExit) {
++                        getError().print("Press any key to continue...");
++                        try {
++                            System.in.read();
++                        } catch (IOException e) {
++                            e.printStackTrace();
++                        }
++                    }
+                 } catch (PolyglotException e) {
+-                    /*
+-                     * If everything went well, an exit exception is expected here. Failure to see
+-                     * an exit exception most likely means something went wrong during context
+-                     * initialization.
+-                     */
+-                    if (e.isExit()) {
+-                        rc = e.getExitStatus();
+-                    } else {
++                    if (e.isInternalError()) {
+                         e.printStackTrace();
+-                        throw handleUnexpectedDestroy(e);
++                        // FIXME: set path state ...
++                    } else if (!e.isExit()) {
++
++                        Value klass = e.getGuestObject().invokeMember("getClass");
++                        Value name = klass.invokeMember("getName");
++                        state = new PathState(PathState.State.ERROR, name.asString());
++
++                        handleMainUncaught(context, e);
++                    }
++                } finally {
++                    try {
++                        context.eval("java", "<DestroyJavaVM>").execute();
++                    } catch (PolyglotException e) {
++                        /*
++                         * If everything went well, an exit exception is expected here. Failure to see
++                         * an exit exception most likely means something went wrong during context
++                         * initialization.
++                         */
++                        if (e.isExit()) {
++                            rc = e.getExitStatus();
++                        } else {
++                            e.printStackTrace();
++                            throw handleUnexpectedDestroy(e);
++                        }
+                     }
+                 }
++
+             }
++
++            System.out.println("STATE: " + state);
++        //}
++
+             /*
+              * We abruptly exit the host system for compatibility with the reference implementation,
+              * and because we have no control over un-registering thread from Truffle, which
+@@ -553,7 +581,6 @@ public final class EspressoLauncher extends AbstractLanguageLauncher {
+              * main means we may never return.
+              */
+             System.exit(rc);
+-        }
+     }
+ 
+     private AbortException handleUnexpectedDestroy(PolyglotException e) {
+diff --git a/espresso/src/com.oracle.truffle.espresso.launcher/src/com/oracle/truffle/espresso/launcher/PathState.java b/espresso/src/com.oracle.truffle.espresso.launcher/src/com/oracle/truffle/espresso/launcher/PathState.java
+new file mode 100644
+index 0000000000..c094402361
+--- /dev/null
++++ b/espresso/src/com.oracle.truffle.espresso.launcher/src/com/oracle/truffle/espresso/launcher/PathState.java
+@@ -0,0 +1,27 @@
++package com.oracle.truffle.espresso.launcher;
++
++public class PathState {
++
++    public static enum State { OK, ERROR, ESPRESSO_ERROR };
++
++    State state;
++
++    Object error;
++
++    PathState(State s) {
++        this.state = s;
++    }
++
++    PathState(State s, Object error) {
++        this(s);
++        this.error = error;
++    }
++
++    @Override
++    public String toString() {
++        return "PathState{" +
++                "state=" + state +
++                ", error=" + error +
++                '}';
++    }
++}
+diff --git a/espresso/src/com.oracle.truffle.espresso.libespresso/src/com/oracle/truffle/espresso/libespresso/LibEspresso.java b/espresso/src/com.oracle.truffle.espresso.libespresso/src/com/oracle/truffle/espresso/libespresso/LibEspresso.java
+index a33cc28dd5..874724790b 100644
+--- a/espresso/src/com.oracle.truffle.espresso.libespresso/src/com/oracle/truffle/espresso/libespresso/LibEspresso.java
++++ b/espresso/src/com.oracle.truffle.espresso.libespresso/src/com/oracle/truffle/espresso/libespresso/LibEspresso.java
+@@ -77,6 +77,9 @@ public class LibEspresso {
+             return result;
+         }
+         javaVMPointer.write(espressoJavaVM);
++
++        context.eval("java", "<NewPath> ");
++
+         return JNIErrors.JNI_OK();
+     }
+ 
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/EspressoLanguage.java b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/EspressoLanguage.java
+index 8a963ebbf4..cf759b1658 100644
+--- a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/EspressoLanguage.java
++++ b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/EspressoLanguage.java
+@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
+ import java.util.logging.Level;
+ 
+ import com.oracle.truffle.espresso.nodes.interop.GetBindingsNode;
++import com.oracle.truffle.espresso.nodes.interop.NewPathNode;
+ import org.graalvm.home.Version;
+ import org.graalvm.options.OptionDescriptors;
+ 
+@@ -161,6 +162,10 @@ public final class EspressoLanguage extends TruffleLanguage<EspressoContext> {
+             RootNode node = new GetBindingsNode(this);
+             return Truffle.getRuntime().createCallTarget(node);
+         }
++        if (contents.startsWith(NewPathNode.EVAL_NAME)) {
++            RootNode node = new NewPathNode(this, contents.substring(NewPathNode.EVAL_NAME.length()));
++            return Truffle.getRuntime().createCallTarget(node);
++        }
+         throw new UnsupportedOperationException("Unsupported operation. Use the language bindings to load classes e.g. context.getBindings(\"" + ID + "\").getMember(\"java.lang.Integer\")");
+     }
+ 
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/impl/Field.java b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/impl/Field.java
+index defca28b53..b8a6de1592 100644
+--- a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/impl/Field.java
++++ b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/impl/Field.java
+@@ -37,6 +37,7 @@ import com.oracle.truffle.espresso.jdwp.api.FieldRef;
+ import com.oracle.truffle.espresso.meta.EspressoError;
+ import com.oracle.truffle.espresso.meta.JavaKind;
+ import com.oracle.truffle.espresso.meta.Meta;
++import tools.aqua.concolic.AnnotatedValue;
+ import com.oracle.truffle.espresso.runtime.Attribute;
+ import com.oracle.truffle.espresso.runtime.StaticObject;
+ 
+@@ -357,6 +358,20 @@ public final class Field extends Member<Type> implements FieldRef {
+     // endregion Hidden Object
+     // endregion Object
+ 
++    // region annotations
++    // annotations
++    public final AnnotatedValue getAnnotation(StaticObject obj) {
++        AnnotatedValue[] annotations = obj.getAnnotationStorage();
++        return annotations == null ? null : annotations[ 0 /*getSlot()*/];
++    }
++
++    public final void setAnnotation(StaticObject obj, AnnotatedValue value) {
++        AnnotatedValue[] annotations = obj.getAnnotationStorage();
++        if (annotations != null) annotations[0 /*getSlot()*/] = value;
++    }
++
++    // endregion annotations
++
+     // region boolean
+     public boolean getBoolean(StaticObject obj) {
+         return getBoolean(obj, false);
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/BytecodeNode.java b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/BytecodeNode.java
+index 72fd5b1049..917bbfc82c 100644
+--- a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/BytecodeNode.java
++++ b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/BytecodeNode.java
+@@ -336,6 +336,8 @@ import com.oracle.truffle.espresso.runtime.ReturnAddress;
+ import com.oracle.truffle.espresso.runtime.StaticObject;
+ import com.oracle.truffle.espresso.substitutions.Target_java_lang_Thread;
+ import com.oracle.truffle.espresso.vm.InterpreterToVM;
++import tools.aqua.concolic.AnnotatedValue;
++import tools.aqua.concolic.Concolic;
+ 
+ /**
+  * Bytecode interpreter loop.
+@@ -460,6 +462,11 @@ public final class BytecodeNode extends EspressoMethodNode {
+         }
+         for (int i = 0; i < argCount; ++i) {
+             JavaKind expectedkind = Signatures.parameterKind(getMethod().getParsedSignature(), i);
++            if (arguments[i + receiverSlot] instanceof AnnotatedValue) {
++                AnnotatedValue a = (AnnotatedValue) arguments[i + receiverSlot];
++                Concolic.setLocalSymbolic(refs, curSlot, a);
++                arguments[i + receiverSlot] = a.asRaw();
++            }
+             // @formatter:off
+             switch (expectedkind) {
+                 case Boolean : setLocalInt(primitives, curSlot, ((boolean) arguments[i + receiverSlot]) ? 1 : 0); break;
+@@ -714,7 +722,10 @@ public final class BytecodeNode extends EspressoMethodNode {
+                     case LDC_W: // fall through
+                     case LDC2_W: putPoolConstant(primitives, refs, top, readCPI(curBCI), curOpcode); break;
+ 
+-                    case ILOAD: putInt(primitives, top, getLocalInt(primitives, bs.readLocalIndex(curBCI))); break;
++                    case ILOAD:
++                        putInt(primitives, top, getLocalInt(primitives, bs.readLocalIndex(curBCI)));
++                        Concolic.putSymbolic(refs, top, Concolic.getLocalSymbolic(refs, bs.readLocalIndex(curBCI)));
++                        break;
+                     case LLOAD: putLong(primitives, top, getLocalLong(primitives, bs.readLocalIndex(curBCI))); break;
+                     case FLOAD: putFloat(primitives, top, getLocalFloat(primitives, bs.readLocalIndex(curBCI))); break;
+                     case DLOAD: putDouble(primitives, top, getLocalDouble(primitives, bs.readLocalIndex(curBCI))); break;
+@@ -723,7 +734,10 @@ public final class BytecodeNode extends EspressoMethodNode {
+                     case ILOAD_0: // fall through
+                     case ILOAD_1: // fall through
+                     case ILOAD_2: // fall through
+-                    case ILOAD_3: putInt(primitives, top, getLocalInt(primitives, curOpcode - ILOAD_0)); break;
++                    case ILOAD_3:
++                        putInt(primitives, top, getLocalInt(primitives, curOpcode - ILOAD_0));
++                        Concolic.putSymbolic(refs, top, Concolic.getLocalSymbolic(refs,curOpcode - ILOAD_0));
++                        break;
+                     case LLOAD_0: // fall through
+                     case LLOAD_1: // fall through
+                     case LLOAD_2: // fall through
+@@ -756,7 +770,10 @@ public final class BytecodeNode extends EspressoMethodNode {
+                         }
+                         break;
+ 
+-                    case ISTORE: setLocalInt(primitives, bs.readLocalIndex(curBCI), popInt(primitives, top - 1)); break;
++                    case ISTORE:
++                        setLocalInt(primitives, bs.readLocalIndex(curBCI), popInt(primitives, top - 1));
++                        Concolic.setLocalSymbolic(refs, bs.readLocalIndex(curBCI), Concolic.popSymbolic(refs,top - 1));
++                        break;
+                     case LSTORE: setLocalLong(primitives, bs.readLocalIndex(curBCI), popLong(primitives, top - 1)); break;
+                     case FSTORE: setLocalFloat(primitives, bs.readLocalIndex(curBCI), popFloat(primitives, top - 1)); break;
+                     case DSTORE: setLocalDouble(primitives, bs.readLocalIndex(curBCI), popDouble(primitives, top - 1)); break;
+@@ -765,7 +782,10 @@ public final class BytecodeNode extends EspressoMethodNode {
+                     case ISTORE_0: // fall through
+                     case ISTORE_1: // fall through
+                     case ISTORE_2: // fall through
+-                    case ISTORE_3: setLocalInt(primitives, curOpcode - ISTORE_0, popInt(primitives, top - 1)); break;
++                    case ISTORE_3:
++                        setLocalInt(primitives, curOpcode - ISTORE_0, popInt(primitives, top - 1));
++                        Concolic.setLocalSymbolic(refs,curOpcode - ISTORE_0, Concolic.popSymbolic(refs,top - 1));
++                        break;
+                     case LSTORE_0: // fall through
+                     case LSTORE_1: // fall through
+                     case LSTORE_2: // fall through
+@@ -795,9 +815,12 @@ public final class BytecodeNode extends EspressoMethodNode {
+                     case POP2:
+                         EspressoFrame.clear(primitives, refs, top - 1);
+                         EspressoFrame.clear(primitives, refs, top - 2);
++                        Concolic.popSymbolic( refs,top - 1);
++                        Concolic.popSymbolic( refs,top - 2);
+                         break;
+                     case POP:
+                         EspressoFrame.clear(primitives, refs, top - 1);
++                        Concolic.popSymbolic(refs,top - 1);
+                         break;
+ 
+                     // TODO(peterssen): Stack shuffling is expensive.
+@@ -809,53 +832,92 @@ public final class BytecodeNode extends EspressoMethodNode {
+                     case DUP2_X2 : EspressoFrame.dup2x2(primitives, refs, top);     break;
+                     case SWAP    : EspressoFrame.swapSingle(primitives, refs, top); break;
+ 
+-                    case IADD: putInt(primitives, top - 2, popInt(primitives, top - 1) + popInt(primitives, top - 2)); break;
++                    case IADD:
++                        // putInt(primitives, top - 2, popInt(primitives, top - 1) + popInt(primitives, top - 2));
++                        Concolic.iadd(primitives, refs, top);
++                        break;
+                     case LADD: putLong(primitives, top - 4, popLong(primitives, top - 1) + popLong(primitives, top - 3)); break;
+                     case FADD: putFloat(primitives, top - 2, popFloat(primitives, top - 1) + popFloat(primitives, top - 2)); break;
+                     case DADD: putDouble(primitives, top - 4, popDouble(primitives, top - 1) + popDouble(primitives, top - 3)); break;
+ 
+-                    case ISUB: putInt(primitives, top - 2, -popInt(primitives, top - 1) + popInt(primitives, top - 2)); break;
++                    case ISUB:
++                        // putInt(primitives, top - 2, -popInt(primitives, top - 1) + popInt(primitives, top - 2));
++                        Concolic.isub(primitives, refs, top);
++                        break;
+                     case LSUB: putLong(primitives, top - 4, -popLong(primitives, top - 1) + popLong(primitives, top - 3)); break;
+                     case FSUB: putFloat(primitives, top - 2, -popFloat(primitives, top - 1) + popFloat(primitives, top - 2)); break;
+                     case DSUB: putDouble(primitives, top - 4, -popDouble(primitives, top - 1) + popDouble(primitives, top - 3)); break;
+ 
+-                    case IMUL: putInt(primitives, top - 2, popInt(primitives, top - 1) * popInt(primitives, top - 2)); break;
++                    case IMUL:
++                        // putInt(primitives, top - 2, popInt(primitives, top - 1) * popInt(primitives, top - 2));
++                        Concolic.imul(primitives, refs, top);
++                        break;
+                     case LMUL: putLong(primitives, top - 4, popLong(primitives, top - 1) * popLong(primitives, top - 3)); break;
+                     case FMUL: putFloat(primitives, top - 2, popFloat(primitives, top - 1) * popFloat(primitives, top - 2)); break;
+                     case DMUL: putDouble(primitives, top - 4, popDouble(primitives, top - 1) * popDouble(primitives, top - 3)); break;
+ 
+-                    case IDIV: putInt(primitives, top - 2, divInt(checkNonZero(popInt(primitives, top - 1)), popInt(primitives, top - 2))); break;
++                    case IDIV:
++                        // putInt(primitives, top - 2, divInt(checkNonZero(popInt(primitives, top - 1)), popInt(primitives, top - 2)));
++                        Concolic.idiv(primitives, refs,  top, this);
++                        break;
+                     case LDIV: putLong(primitives, top - 4, divLong(checkNonZero(popLong(primitives, top - 1)), popLong(primitives, top - 3))); break;
+                     case FDIV: putFloat(primitives, top - 2, divFloat(popFloat(primitives, top - 1), popFloat(primitives, top - 2))); break;
+                     case DDIV: putDouble(primitives, top - 4, divDouble(popDouble(primitives, top - 1), popDouble(primitives, top - 3))); break;
+ 
+-                    case IREM: putInt(primitives, top - 2, remInt(checkNonZero(popInt(primitives, top - 1)), popInt(primitives, top - 2))); break;
++                    case IREM:
++                        // putInt(primitives, top - 2, remInt(checkNonZero(popInt(primitives, top - 1)), popInt(primitives, top - 2)));
++                        Concolic.irem(primitives, refs, top, this);
++                        break;
+                     case LREM: putLong(primitives, top - 4, remLong(checkNonZero(popLong(primitives, top - 1)), popLong(primitives, top - 3))); break;
+                     case FREM: putFloat(primitives, top - 2, remFloat(popFloat(primitives, top - 1), popFloat(primitives, top - 2))); break;
+                     case DREM: putDouble(primitives, top - 4, remDouble(popDouble(primitives, top - 1), popDouble(primitives, top - 3))); break;
+ 
+-                    case INEG: putInt(primitives, top - 1, -popInt(primitives, top - 1)); break;
++                    case INEG:
++                        // putInt(primitives, top - 1, -popInt(primitives, top - 1));
++                        Concolic.ineg(primitives, refs, top);
++                        break;
+                     case LNEG: putLong(primitives, top - 2, -popLong(primitives, top - 1)); break;
+                     case FNEG: putFloat(primitives, top - 1, -popFloat(primitives, top - 1)); break;
+                     case DNEG: putDouble(primitives, top - 2, -popDouble(primitives, top - 1)); break;
+ 
+-                    case ISHL: putInt(primitives, top - 2, shiftLeftInt(popInt(primitives, top - 1), popInt(primitives, top - 2))); break;
++                    case ISHL:
++                        // putInt(primitives, top - 2, shiftLeftInt(popInt(primitives, top - 1), popInt(primitives, top - 2)));
++                        Concolic.ishl(primitives, refs, top);
++                        break;
+                     case LSHL: putLong(primitives, top - 3, shiftLeftLong(popInt(primitives, top - 1), popLong(primitives, top - 2))); break;
+-                    case ISHR: putInt(primitives, top - 2, shiftRightSignedInt(popInt(primitives, top - 1), popInt(primitives, top - 2))); break;
++                    case ISHR:
++                        // putInt(primitives, top - 2, shiftRightSignedInt(popInt(primitives, top - 1), popInt(primitives, top - 2)));
++                        Concolic.ishr(primitives, refs, top);
++                        break;
+                     case LSHR: putLong(primitives, top - 3, shiftRightSignedLong(popInt(primitives, top - 1), popLong(primitives, top - 2))); break;
+-                    case IUSHR: putInt(primitives, top - 2, shiftRightUnsignedInt(popInt(primitives, top - 1), popInt(primitives, top - 2))); break;
++                    case IUSHR:
++                        // putInt(primitives, top - 2, shiftRightUnsignedInt(popInt(primitives, top - 1), popInt(primitives, top - 2)));
++                        Concolic.iushr(primitives, refs, top);
++                        break;
+                     case LUSHR: putLong(primitives, top - 3, shiftRightUnsignedLong(popInt(primitives, top - 1), popLong(primitives, top - 2))); break;
+ 
+-                    case IAND: putInt(primitives, top - 2, popInt(primitives, top - 1) & popInt(primitives, top - 2)); break;
++                    case IAND:
++                        // putInt(primitives, top - 2, popInt(primitives, top - 1) & popInt(primitives, top - 2));
++                        Concolic.iand(primitives, refs, top);
++                        break;
+                     case LAND: putLong(primitives, top - 4, popLong(primitives, top - 1) & popLong(primitives, top - 3)); break;
+ 
+-                    case IOR: putInt(primitives, top - 2, popInt(primitives, top - 1) | popInt(primitives, top - 2)); break;
++                    case IOR:
++                        // putInt(primitives, top - 2, popInt(primitives, top - 1) | popInt(primitives, top - 2));
++                        Concolic.ior(primitives, refs, top);
++                        break;
+                     case LOR: putLong(primitives, top - 4, popLong(primitives, top - 1) | popLong(primitives, top - 3)); break;
+ 
+-                    case IXOR: putInt(primitives, top - 2, popInt(primitives, top - 1) ^ popInt(primitives, top - 2)); break;
++                    case IXOR:
++                        // putInt(primitives, top - 2, popInt(primitives, top - 1) ^ popInt(primitives, top - 2));
++                        Concolic.ixor(primitives, refs, top);
++                        break;
+                     case LXOR: putLong(primitives, top - 4, popLong(primitives, top - 1) ^ popLong(primitives, top - 3)); break;
+ 
+-                    case IINC: setLocalInt(primitives, bs.readLocalIndex(curBCI), getLocalInt(primitives, bs.readLocalIndex(curBCI)) + bs.readIncrement(curBCI)); break;
++                    case IINC:
++                        //setLocalInt(primitives, bs.readLocalIndex(curBCI), getLocalInt(primitives, bs.readLocalIndex(curBCI)) + bs.readIncrement(curBCI));
++                        Concolic.iinc(primitives, refs, bs, curBCI);
++                        break;
+ 
+                     case I2L: putLong(primitives, top - 1, popInt(primitives, top - 1)); break;
+                     case I2F: putFloat(primitives, top - 1, popInt(primitives, top - 1)); break;
+@@ -1025,7 +1087,13 @@ public final class BytecodeNode extends EspressoMethodNode {
+                         continue loop;
+                     }
+                     // @formatter:off
+-                    case IRETURN: return notifyReturn(frame, statementIndex, exitMethodAndReturn(popInt(primitives, top - 1)));
++                    case IRETURN:
++                        //return notifyReturn(frame, statementIndex, exitMethodAndReturn(popInt(primitives, top - 1)));
++                        Object retConc = exitMethodAndReturn(popInt(primitives, top - 1));
++                        notifyReturn(frame, statementIndex, retConc);
++                        AnnotatedValue retSymb = Concolic.popSymbolic(refs,top -1);
++                        // FIXME: could we just return retSymb?
++                        return (retSymb == null) ? retConc : Concolic.newAnnotatedValue(retConc, retSymb.symbolic());
+                     case LRETURN: return notifyReturn(frame, statementIndex, exitMethodAndReturnObject(popLong(primitives, top - 1)));
+                     case FRETURN: return notifyReturn(frame, statementIndex, exitMethodAndReturnObject(popFloat(primitives, top - 1)));
+                     case DRETURN: return notifyReturn(frame, statementIndex, exitMethodAndReturnObject(popDouble(primitives, top - 1)));
+@@ -1149,6 +1217,7 @@ public final class BytecodeNode extends EspressoMethodNode {
+                     if (instrument != null) {
+                         instrument.notifyExceptionAt(frame, wrappedStackOverflowError, statementIndex);
+                     }
++                    //Concolic.uncaughtException(wrappedStackOverflowError);
+                     throw wrappedStackOverflowError;
+ 
+                 } else /* EspressoException or AbstractTruffleException or OutOfMemoryError */ {
+@@ -1194,6 +1263,7 @@ public final class BytecodeNode extends EspressoMethodNode {
+                         if (instrument != null) {
+                             instrument.notifyExceptionAt(frame, wrappedException, statementIndex);
+                         }
++
+                         throw e;
+                     }
+                 }
+@@ -1308,12 +1379,13 @@ public final class BytecodeNode extends EspressoMethodNode {
+             case IFGE      : return popInt(primitives, top - 1) >= 0;
+             case IFGT      : return popInt(primitives, top - 1)  > 0;
+             case IFLE      : return popInt(primitives, top - 1) <= 0;
+-            case IF_ICMPEQ : return popInt(primitives, top - 1) == popInt(primitives, top - 2);
+-            case IF_ICMPNE : return popInt(primitives, top - 1) != popInt(primitives, top - 2);
+-            case IF_ICMPLT : return popInt(primitives, top - 1)  > popInt(primitives, top - 2);
+-            case IF_ICMPGE : return popInt(primitives, top - 1) <= popInt(primitives, top - 2);
+-            case IF_ICMPGT : return popInt(primitives, top - 1)  < popInt(primitives, top - 2);
+-            case IF_ICMPLE : return popInt(primitives, top - 1) >= popInt(primitives, top - 2);
++            case IF_ICMPEQ : //return popInt(primitives, top - 1) == popInt(primitives, top - 2);
++            case IF_ICMPNE : //return popInt(primitives, top - 1) != popInt(primitives, top - 2);
++            case IF_ICMPLT : //return popInt(primitives, top - 1)  > popInt(primitives, top - 2);
++            case IF_ICMPGE : //return popInt(primitives, top - 1) <= popInt(primitives, top - 2);
++            case IF_ICMPGT : //return popInt(primitives, top - 1)  < popInt(primitives, top - 2);
++            case IF_ICMPLE : //return popInt(primitives, top - 1) >= popInt(primitives, top - 2);
++                return Concolic.takeBranch2(primitives,refs, top, opcode);
+             case IF_ACMPEQ : return popObject(refs, top - 1) == popObject(refs, top - 2);
+             case IF_ACMPNE : return popObject(refs, top - 1) != popObject(refs, top - 2);
+             case GOTO      : // fall though
+@@ -1385,7 +1457,11 @@ public final class BytecodeNode extends EspressoMethodNode {
+                 case Byte:    putInt(primitives, top - 2, getInterpreterToVM().getArrayByte(index, array, this));      break;
+                 case Short:   putInt(primitives, top - 2, getInterpreterToVM().getArrayShort(index, array, this));     break;
+                 case Char:    putInt(primitives, top - 2, getInterpreterToVM().getArrayChar(index, array, this));      break;
+-                case Int:     putInt(primitives, top - 2, getInterpreterToVM().getArrayInt(index, array, this));       break;
++                case Int:
++                    int intVal = getInterpreterToVM().getArrayInt(index, array, this);
++                    putInt(primitives, top - 2, intVal);
++                    Concolic.putSymbolic(refs,top -2, Concolic.getArray(array, index, intVal));
++                    break;
+                 case Float:   putFloat(primitives, top - 2, getInterpreterToVM().getArrayFloat(index, array, this));   break;
+                 case Long:    putLong(primitives, top - 2, getInterpreterToVM().getArrayLong(index, array, this));     break;
+                 case Double:  putDouble(primitives, top - 2, getInterpreterToVM().getArrayDouble(index, array, this)); break;
+@@ -1418,7 +1494,10 @@ public final class BytecodeNode extends EspressoMethodNode {
+                 case Byte:    getInterpreterToVM().setArrayByte((byte) popInt(primitives, top - 1), index, array, this);   break;
+                 case Short:   getInterpreterToVM().setArrayShort((short) popInt(primitives, top - 1), index, array, this); break;
+                 case Char:    getInterpreterToVM().setArrayChar((char) popInt(primitives, top - 1), index, array, this);   break;
+-                case Int:     getInterpreterToVM().setArrayInt(popInt(primitives, top - 1), index, array, this);           break;
++                case Int:
++                    getInterpreterToVM().setArrayInt(popInt(primitives, top - 1), index, array, this);
++                    Concolic.setArray(array, index, Concolic.popSymbolic(refs,top -1));
++                    break;
+                 case Float:   getInterpreterToVM().setArrayFloat(popFloat(primitives, top - 1), index, array, this);       break;
+                 case Long:    getInterpreterToVM().setArrayLong(popLong(primitives, top - 1), index, array, this);         break;
+                 case Double:  getInterpreterToVM().setArrayDouble(popDouble(primitives, top - 1), index, array, this);     break;
+@@ -2238,10 +2320,12 @@ public final class BytecodeNode extends EspressoMethodNode {
+                 break;
+             case Int:
+                 int intValue = popInt(primitives, top - 1);
++                AnnotatedValue intSymbolic = Concolic.popSymbolic(refs,top -1);
+                 if (instrumentation != null) {
+                     instrumentation.notifyFieldModification(frame, statementIndex, field, receiver, intValue);
+                 }
+                 InterpreterToVM.setFieldInt(intValue, receiver, field);
++                Concolic.setField(receiver, field, intSymbolic);
+                 break;
+             case Double:
+                 double doubleValue = popDouble(primitives, top - 1);
+@@ -2337,7 +2421,11 @@ public final class BytecodeNode extends EspressoMethodNode {
+             case Byte    : putInt(primitives, resultAt, InterpreterToVM.getFieldByte(receiver, field));      break;
+             case Char    : putInt(primitives, resultAt, InterpreterToVM.getFieldChar(receiver, field));      break;
+             case Short   : putInt(primitives, resultAt, InterpreterToVM.getFieldShort(receiver, field));     break;
+-            case Int     : putInt(primitives, resultAt, InterpreterToVM.getFieldInt(receiver, field));       break;
++            case Int     :
++                int intVal = InterpreterToVM.getFieldInt(receiver, field);
++                putInt(primitives, resultAt, intVal);
++                Concolic.putSymbolic(refs, resultAt, Concolic.getField(receiver, field, intVal));
++                break;
+             case Double  : putDouble(primitives, resultAt, InterpreterToVM.getFieldDouble(receiver, field)); break;
+             case Float   : putFloat(primitives, resultAt, InterpreterToVM.getFieldFloat(receiver, field));   break;
+             case Long    : putLong(primitives, resultAt, InterpreterToVM.getFieldLong(receiver, field));     break;
+@@ -2385,7 +2473,10 @@ public final class BytecodeNode extends EspressoMethodNode {
+                 case Byte    : args[i + extraParam] = (byte) popInt(primitives, argAt);  break;
+                 case Short   : args[i + extraParam] = (short) popInt(primitives, argAt); break;
+                 case Char    : args[i + extraParam] = (char) popInt(primitives, argAt);  break;
+-                case Int     : args[i + extraParam] = popInt(primitives, argAt);         break;
++                case Int     :
++                    // args[i + extraParam] = popInt(primitives, argAt);
++                    args[i + extraParam] = (Concolic.peekSymbolic(refs, argAt) == null) ? popInt(primitives, argAt) : Concolic.popSymbolic(refs, argAt);
++                    break;
+                 case Float   : args[i + extraParam] = popFloat(primitives, argAt);       break;
+                 case Long    : args[i + extraParam] = popLong(primitives, argAt);        break;
+                 case Double  : args[i + extraParam] = popDouble(primitives, argAt);      break;
+@@ -2405,7 +2496,38 @@ public final class BytecodeNode extends EspressoMethodNode {
+ 
+     // Effort to prevent double copies. Erases sub-word primitive types.
+     @ExplodeLoop
+-    public static Object[] popBasicArgumentsWithArray(long[] primitives, Object[] refs, int top, final Symbol<Type>[] signature, Object[] args, final int argCount, int start) {
++    public static Object[] popBasicArgumentsWithArrayConcrete(long[] primitives, Object[] refs, int top, final Symbol<Type>[] signature, Object[] args, final int argCount, int start) {
++        // Use basic types
++        CompilerAsserts.partialEvaluationConstant(argCount);
++        CompilerAsserts.partialEvaluationConstant(signature);
++
++        int argAt = top - 1;
++        for (int i = argCount - 1; i >= 0; --i) {
++            JavaKind kind = Signatures.parameterKind(signature, i);
++            // @formatter:off
++            switch (kind) {
++                case Boolean : // Fall through
++                case Byte    : // Fall through
++                case Short   : // Fall through
++                case Char    : // Fall through
++                case Int     : args[i + start] = popInt(primitives, argAt); break;
++                case Float   : args[i + start] = popFloat(primitives, argAt);  break;
++                case Long    : args[i + start] = popLong(primitives, argAt);   break;
++                case Double  : args[i + start] = popDouble(primitives, argAt); break;
++                case Object  : args[i + start] = popObject(refs, argAt); break;
++                default      :
++                    CompilerDirectives.transferToInterpreter();
++                    throw EspressoError.shouldNotReachHere();
++            }
++            // @formatter:on
++            argAt -= kind.getSlotCount();
++        }
++        return args;
++    }
++
++    // Effort to prevent double copies. Erases sub-word primitive types.
++    @ExplodeLoop
++    public static Object[] popBasicArgumentsWithArray(long[] primitives, Object[] refs,  int top, final Symbol<Type>[] signature, Object[] args, final int argCount, int start) {
+         // Use basic types
+         CompilerAsserts.partialEvaluationConstant(argCount);
+         CompilerAsserts.partialEvaluationConstant(signature);
+@@ -2419,7 +2541,9 @@ public final class BytecodeNode extends EspressoMethodNode {
+                 case Byte    : // Fall through
+                 case Short   : // Fall through
+                 case Char    : // Fall through
+-                case Int     : args[i + start] = popInt(primitives, argAt);    break;
++                case Int     :
++                    // args[i + start] = popInt(primitives, argAt); break;
++                    args[i + start] = (Concolic.peekSymbolic(refs, argAt) == null) ? popInt(primitives, argAt) : Concolic.popSymbolic(refs, argAt); break;
+                 case Float   : args[i + start] = popFloat(primitives, argAt);  break;
+                 case Long    : args[i + start] = popLong(primitives, argAt);   break;
+                 case Double  : args[i + start] = popDouble(primitives, argAt); break;
+@@ -2443,14 +2567,24 @@ public final class BytecodeNode extends EspressoMethodNode {
+      * @param value value to push
+      * @param kind kind to push
+      */
+-    public static int putKind(long[] primitives, Object[] refs, int top, Object value, JavaKind kind) {
++    public static int putKind(long[] primitives, Object[] refs,  int top, Object value, JavaKind kind) {
+         // @formatter:off
+         switch (kind) {
+             case Boolean : putInt(primitives, top, ((boolean) value) ? 1 : 0); break;
+             case Byte    : putInt(primitives, top, (byte) value);              break;
+             case Short   : putInt(primitives, top, (short) value);             break;
+             case Char    : putInt(primitives, top, (char) value);              break;
+-            case Int     : putInt(primitives, top, (int) value);               break;
++            case Int     :
++                // putInt(primitives, top, (int) value);
++                if (value instanceof AnnotatedValue) {
++                    AnnotatedValue a = (AnnotatedValue) value;
++                    Concolic.putSymbolic(refs, top, a);
++                    putInt(primitives, top, a.asInt());
++                }
++                else {
++                    putInt(primitives, top, (int) value);
++                }
++                break;
+             case Float   : putFloat(primitives, top, (float) value);           break;
+             case Long    : putLong(primitives, top, (long) value);             break;
+             case Double  : putDouble(primitives, top, (double) value);         break;
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/helper/AbstractGetFieldNode.java b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/helper/AbstractGetFieldNode.java
+index 48f85aeeba..a8911602e1 100644
+--- a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/helper/AbstractGetFieldNode.java
++++ b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/helper/AbstractGetFieldNode.java
+@@ -39,7 +39,9 @@ import com.oracle.truffle.espresso.impl.Klass;
+ import com.oracle.truffle.espresso.meta.EspressoError;
+ import com.oracle.truffle.espresso.meta.JavaKind;
+ import com.oracle.truffle.espresso.meta.Meta;
++import tools.aqua.concolic.AnnotatedValue;
+ import com.oracle.truffle.espresso.nodes.BytecodeNode;
++import tools.aqua.concolic.Concolic;
+ import com.oracle.truffle.espresso.nodes.interop.ToEspressoNode;
+ import com.oracle.truffle.espresso.runtime.EspressoContext;
+ import com.oracle.truffle.espresso.runtime.StaticObject;
+@@ -98,9 +100,15 @@ abstract class IntGetFieldNode extends AbstractGetFieldNode {
+     }
+ 
+     @Override
+-    public int getField(VirtualFrame frame, long[] primitives, Object[] refs, BytecodeNode root, StaticObject receiver, int at, int statementIndex) {
++    public int getField(VirtualFrame frame, long[] primitives, Object[] refs,  BytecodeNode root, StaticObject receiver, int at, int statementIndex) {
+         root.notifyFieldAccess(frame, statementIndex, field, receiver);
+-        BytecodeNode.putInt(primitives, at, executeGetField(receiver));
++
++        // TODO: Limit of concolic analysis
++        int conc = executeGetField(receiver);
++        AnnotatedValue symb  = Concolic.getField(receiver, field, conc);
++
++        BytecodeNode.putInt(primitives, at, conc);
++        Concolic.putSymbolic(refs, at, symb);
+         return slotCount;
+     }
+ 
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/helper/AbstractSetFieldNode.java b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/helper/AbstractSetFieldNode.java
+index 8096b056c9..d56cc36a73 100644
+--- a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/helper/AbstractSetFieldNode.java
++++ b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/helper/AbstractSetFieldNode.java
+@@ -38,7 +38,9 @@ import com.oracle.truffle.espresso.impl.Field;
+ import com.oracle.truffle.espresso.meta.EspressoError;
+ import com.oracle.truffle.espresso.meta.JavaKind;
+ import com.oracle.truffle.espresso.meta.Meta;
++import tools.aqua.concolic.AnnotatedValue;
+ import com.oracle.truffle.espresso.nodes.BytecodeNode;
++import tools.aqua.concolic.Concolic;
+ import com.oracle.truffle.espresso.runtime.EspressoContext;
+ import com.oracle.truffle.espresso.runtime.StaticObject;
+ 
+@@ -102,8 +104,10 @@ abstract class IntSetFieldNode extends AbstractSetFieldNode {
+     @Override
+     public void setField(VirtualFrame frame, long[] primitives, Object[] refs, BytecodeNode root, StaticObject receiver, int top, int statementIndex) {
+         int value = BytecodeNode.popInt(primitives, top - 1);
++        AnnotatedValue a = Concolic.popSymbolic( refs,top -1);
+         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
+         executeSetField(receiver, value);
++        Concolic.setField(receiver, field, a);
+     }
+ 
+     abstract void executeSetField(StaticObject receiver, int value);
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/interop/DestroyVMNode.java b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/interop/DestroyVMNode.java
+index 90c6c19b45..8aa48cf15b 100644
+--- a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/interop/DestroyVMNode.java
++++ b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/interop/DestroyVMNode.java
+@@ -28,6 +28,7 @@ import com.oracle.truffle.api.frame.VirtualFrame;
+ import com.oracle.truffle.api.nodes.RootNode;
+ import com.oracle.truffle.espresso.EspressoLanguage;
+ import com.oracle.truffle.espresso.meta.EspressoError;
++import tools.aqua.concolic.Concolic;
+ import com.oracle.truffle.espresso.runtime.EspressoContext;
+ 
+ /**
+@@ -46,6 +47,7 @@ public final class DestroyVMNode extends RootNode {
+ 
+     @Override
+     public Object execute(VirtualFrame frame) {
++        Concolic.endPath();
+         assert frame.getArguments().length == 0;
+         EspressoContext context = EspressoLanguage.getCurrentContext();
+         context.destroyVM(true); // Throws an exit exception.
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/interop/ExitCodeNode.java b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/interop/ExitCodeNode.java
+index dc03a8076b..9e26fcc57a 100644
+--- a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/interop/ExitCodeNode.java
++++ b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/interop/ExitCodeNode.java
+@@ -29,6 +29,7 @@ import com.oracle.truffle.api.nodes.RootNode;
+ import com.oracle.truffle.espresso.EspressoLanguage;
+ import com.oracle.truffle.espresso.runtime.EspressoContext;
+ import com.oracle.truffle.espresso.runtime.StaticObject;
++import tools.aqua.concolic.Concolic;
+ 
+ public final class ExitCodeNode extends RootNode {
+     public static final String EVAL_NAME = "<ExitCode>";
+@@ -40,6 +41,7 @@ public final class ExitCodeNode extends RootNode {
+     @Override
+     public Object execute(VirtualFrame frame) {
+         assert frame.getArguments().length == 0;
++        Concolic.endPath();
+         EspressoContext context = EspressoLanguage.getCurrentContext();
+         if (!context.isClosing()) {
+             return StaticObject.NULL;
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/interop/NewPathNode.java b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/interop/NewPathNode.java
+new file mode 100644
+index 0000000000..4cb8ddc446
+--- /dev/null
++++ b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/interop/NewPathNode.java
+@@ -0,0 +1,51 @@
++/*
++ * Copyright (c) 2018, 2020, Oracle and/or its affiliates. All rights reserved.
++ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
++ *
++ * This code is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU General Public License version 2 only, as
++ * published by the Free Software Foundation.
++ *
++ * This code is distributed in the hope that it will be useful, but WITHOUT
++ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
++ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
++ * version 2 for more details (a copy is included in the LICENSE file that
++ * accompanied this code).
++ *
++ * You should have received a copy of the GNU General Public License version
++ * 2 along with this work; if not, write to the Free Software Foundation,
++ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
++ *
++ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
++ * or visit www.oracle.com if you need additional information or have any
++ * questions.
++ */
++
++package com.oracle.truffle.espresso.nodes.interop;
++
++import com.oracle.truffle.api.TruffleLanguage;
++import com.oracle.truffle.api.frame.VirtualFrame;
++import com.oracle.truffle.api.nodes.RootNode;
++import com.oracle.truffle.espresso.EspressoLanguage;
++import tools.aqua.concolic.Concolic;
++import com.oracle.truffle.espresso.runtime.EspressoContext;
++
++/**
++ *
++ */
++public final class NewPathNode extends RootNode {
++    public static final String EVAL_NAME = "<NewPath>";
++
++    private final String config;
++
++    public NewPathNode(TruffleLanguage<?> language, String config) {
++        super(language);
++        this.config = config;
++    }
++
++    @Override
++    public Object execute(VirtualFrame frame) {
++        Concolic.newPath(config);
++        return EspressoLanguage.getCurrentContext().getBindings();
++    }
++}
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/quick/interop/IntArrayLoadNode.java b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/quick/interop/IntArrayLoadNode.java
+index fb41c4f566..d538b77533 100644
+--- a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/quick/interop/IntArrayLoadNode.java
++++ b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/quick/interop/IntArrayLoadNode.java
+@@ -34,7 +34,9 @@ import com.oracle.truffle.api.profiles.BranchProfile;
+ import com.oracle.truffle.espresso.EspressoLanguage;
+ import com.oracle.truffle.espresso.bytecode.Bytecodes;
+ import com.oracle.truffle.espresso.meta.Meta;
++import tools.aqua.concolic.AnnotatedValue;
+ import com.oracle.truffle.espresso.nodes.BytecodeNode;
++import tools.aqua.concolic.Concolic;
+ import com.oracle.truffle.espresso.nodes.interop.ToEspressoNode;
+ import com.oracle.truffle.espresso.nodes.quick.QuickNode;
+ import com.oracle.truffle.espresso.runtime.EspressoContext;
+@@ -51,7 +53,13 @@ public abstract class IntArrayLoadNode extends QuickNode {
+     public final int execute(VirtualFrame frame, long[] primitives, Object[] refs) {
+         StaticObject array = nullCheck(BytecodeNode.popObject(refs, top - 2));
+         int index = BytecodeNode.popInt(primitives, top - 1);
+-        BytecodeNode.putInt(primitives, top - 2, executeLoad(array, index));
++        int intValue = executeLoad(array, index);
++        BytecodeNode.putInt(primitives, top - 2, intValue);
++
++        // symbolic
++        AnnotatedValue symb = Concolic.getArray(array, index, intValue);
++        Concolic.putSymbolic(refs, top - 2, symb);
++
+         return Bytecodes.stackEffectOf(Bytecodes.IALOAD);
+     }
+ 
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/quick/interop/IntArrayStoreNode.java b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/quick/interop/IntArrayStoreNode.java
+index 0d7b38b8ec..03c4a697ad 100644
+--- a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/quick/interop/IntArrayStoreNode.java
++++ b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/quick/interop/IntArrayStoreNode.java
+@@ -32,7 +32,9 @@ import com.oracle.truffle.api.library.CachedLibrary;
+ import com.oracle.truffle.api.profiles.BranchProfile;
+ import com.oracle.truffle.espresso.EspressoLanguage;
+ import com.oracle.truffle.espresso.bytecode.Bytecodes;
++import tools.aqua.concolic.AnnotatedValue;
+ import com.oracle.truffle.espresso.nodes.BytecodeNode;
++import tools.aqua.concolic.Concolic;
+ import com.oracle.truffle.espresso.nodes.quick.QuickNode;
+ import com.oracle.truffle.espresso.runtime.EspressoContext;
+ import com.oracle.truffle.espresso.runtime.StaticObject;
+@@ -50,6 +52,10 @@ public abstract class IntArrayStoreNode extends QuickNode {
+         int index = BytecodeNode.popInt(primitives, top - 2);
+         int value = BytecodeNode.popInt(primitives, top - 1);
+         executeStore(array, index, value);
++
++        // symbolic
++        AnnotatedValue symb = null; // BytecodeNode.popSymbolic(top - 1);
++        Concolic.setArray(array, index, symb);
+         return Bytecodes.stackEffectOf(Bytecodes.IASTORE);
+     }
+ 
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/quick/invoke/InvokeHandleNode.java b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/quick/invoke/InvokeHandleNode.java
+index 88ccb84df6..2f8a669f23 100644
+--- a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/quick/invoke/InvokeHandleNode.java
++++ b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/nodes/quick/invoke/InvokeHandleNode.java
+@@ -30,6 +30,7 @@ import com.oracle.truffle.espresso.descriptors.Symbol.Type;
+ import com.oracle.truffle.espresso.impl.Klass;
+ import com.oracle.truffle.espresso.impl.Method;
+ import com.oracle.truffle.espresso.meta.JavaKind;
++import tools.aqua.concolic.AnnotatedValue;
+ import com.oracle.truffle.espresso.nodes.BytecodeNode;
+ import com.oracle.truffle.espresso.nodes.methodhandle.MethodHandleIntrinsicNode;
+ import com.oracle.truffle.espresso.nodes.quick.QuickNode;
+@@ -66,7 +67,12 @@ public final class InvokeHandleNode extends QuickNode {
+         if (hasReceiver) {
+             args[0] = nullCheck(BytecodeNode.peekReceiver(refs, top, method));
+         }
+-        BytecodeNode.popBasicArgumentsWithArray(primitives, refs, top, parsedSignature, args, parameterCount, hasReceiver ? 1 : 0);
++
++        //FIXME: not sure if this is the correct spot for killing annotations of parameters to contain symbolic values?
++
++        //BytecodeNode.popBasicArgumentsWithArray(primitives, refs, top, parsedSignature, args, parameterCount, hasReceiver ? 1 : 0);
++        BytecodeNode.popBasicArgumentsWithArrayConcrete(primitives, refs, top, parsedSignature, args, parameterCount, hasReceiver ? 1 : 0);
++
+         Object result = intrinsic.processReturnValue(intrinsic.call(args), rKind);
+         return (getResultAt() - top) + BytecodeNode.putKind(primitives, refs, getResultAt(), result, method.getReturnKind());
+     }
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/runtime/StaticObject.java b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/runtime/StaticObject.java
+index 16f90220a1..32b6eab791 100644
+--- a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/runtime/StaticObject.java
++++ b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/runtime/StaticObject.java
+@@ -75,6 +75,7 @@ import com.oracle.truffle.espresso.impl.ObjectKlass;
+ import com.oracle.truffle.espresso.meta.EspressoError;
+ import com.oracle.truffle.espresso.meta.JavaKind;
+ import com.oracle.truffle.espresso.meta.Meta;
++import tools.aqua.concolic.AnnotatedValue;
+ import com.oracle.truffle.espresso.nodes.BytecodeNode;
+ import com.oracle.truffle.espresso.nodes.interop.InvokeEspressoNode;
+ import com.oracle.truffle.espresso.nodes.interop.LookupVirtualMethodNode;
+@@ -116,6 +117,12 @@ public final class StaticObject implements TruffleObject {
+      */
+     private final byte[] primitiveFields;
+ 
++    /* added tentatively for gdart */
++
++    private Object annotations;
++
++    /* added tentatively for gdart */
++
+     private volatile EspressoLock lock;
+ 
+     static {
+@@ -152,6 +159,10 @@ public final class StaticObject implements TruffleObject {
+         int toAlloc = lk.getInstancePrimitiveToAlloc();
+         this.primitiveFields = toAlloc > 0 ? new byte[toAlloc] : null;
+         initInstanceFields(klass);
++
++        // symbolic
++        // TODO: what about static fields?
++        if (!isArray()) this.annotations = new AnnotatedValue[klass.getFieldTable().length];
+     }
+ 
+     // Constructor for Class objects.
+@@ -323,6 +334,13 @@ public final class StaticObject implements TruffleObject {
+         checkNotForeign();
+         return primitiveFields;
+     }
++
++    public AnnotatedValue[] getAnnotationStorage() {
++        assert !isArray();
++        checkNotForeign();
++        return castExact(annotations, AnnotatedValue[].class);
++    }
++
+     // endregion Accessors for field accesses of non-array, non-foreign objects
+ 
+     // region Interop
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/substitutions/Target_java_util_Random.java b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/substitutions/Target_java_util_Random.java
+new file mode 100644
+index 0000000000..4c4bd3fcfd
+--- /dev/null
++++ b/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/substitutions/Target_java_util_Random.java
+@@ -0,0 +1,39 @@
++/*
++ * Copyright (c) 2018, 2020, Oracle and/or its affiliates. All rights reserved.
++ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
++ *
++ * This code is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU General Public License version 2 only, as
++ * published by the Free Software Foundation.
++ *
++ * This code is distributed in the hope that it will be useful, but WITHOUT
++ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
++ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
++ * version 2 for more details (a copy is included in the LICENSE file that
++ * accompanied this code).
++ *
++ * You should have received a copy of the GNU General Public License version
++ * 2 along with this work; if not, write to the Free Software Foundation,
++ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
++ *
++ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
++ * or visit www.oracle.com if you need additional information or have any
++ * questions.
++ */
++
++package com.oracle.truffle.espresso.substitutions;
++
++import com.oracle.truffle.espresso.meta.Meta;
++import tools.aqua.concolic.Concolic;
++import com.oracle.truffle.espresso.runtime.StaticObject;
++
++import java.util.Random;
++
++@EspressoSubstitutions
++public class Target_java_util_Random {
++
++    @Substitution(hasReceiver = true)
++    public static @Host(typeName = "I") Object nextInt(@Host(Random.class) StaticObject self, int bound, @InjectMeta Meta meta) {
++        return Concolic.nextSymbolicInt();
++    }
++}
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/AnnotatedValue.java b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/AnnotatedValue.java
+new file mode 100644
+index 0000000000..ef0ed292f0
+--- /dev/null
++++ b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/AnnotatedValue.java
+@@ -0,0 +1,65 @@
++package tools.aqua.concolic;
++
++import com.oracle.truffle.espresso.runtime.StaticObject;
++
++public class AnnotatedValue {
++
++    //public static final AnnotatedValue NADA = new AnnotatedValue(null);
++
++    //public static final AnnotatedValue NULL = new AnnotatedValue(StaticObject.NULL);
++    //public static final AnnotatedValue ZERO = new AnnotatedValue( (int) 0);
++
++    // FIXME: change public api!
++
++    AnnotatedValue(Object c, Expression s) {
++        this.concrete = c;
++        this.symbolic = s;
++    }
++
++    static AnnotatedValue fromInt(int i) {
++        return new AnnotatedValue(i, Constant.fromConcreteValue(i));
++    }
++
++    private Object concrete;
++
++    private Expression symbolic = null;
++
++    public long asLong() {
++        return (long) concrete;
++    }
++
++    public int asInt() {
++        if (concrete instanceof Boolean) {
++            // FIXME: should never happen!
++            return ((Boolean)concrete) ? 1 : 0;
++        }
++        if (concrete instanceof Byte) {
++            return ((Byte)concrete);
++        }
++        return (int) concrete;
++    }
++
++    public float asFloat() {
++        return (float) concrete;
++    }
++
++    public double asDouble() {
++        return (double) concrete;
++    }
++
++    public StaticObject asRef() {
++        return (StaticObject) concrete;
++    }
++
++    public boolean isSymbolic() {
++        return symbolic == null;
++    }
++
++    public Expression symbolic() {
++        return symbolic;
++    }
++
++    public Object asRaw() {
++        return concrete;
++    }
++}
+\ No newline at end of file
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/BinaryPrimitiveExpression.java b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/BinaryPrimitiveExpression.java
+new file mode 100644
+index 0000000000..eb8b8e7154
+--- /dev/null
++++ b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/BinaryPrimitiveExpression.java
+@@ -0,0 +1,56 @@
++package tools.aqua.concolic;
++
++public class BinaryPrimitiveExpression extends PrimitiveExpression {
++
++    public enum BinaryPrimitiveOperator {
++        IADD,
++        ISUB,
++        IMUL,
++        IDIV,
++        IREM,
++        ISHR,
++        ISHL,
++        IUSHR,
++        IAND,
++        IOR,
++        IXOR,
++        GT,
++        LT,
++        GE,
++        LE,
++        EQ,
++        NE;
++
++        @Override
++        public String toString() {
++            switch(this) {
++                case IADD:
++                    return "bvadd";
++                case EQ:
++                    return "=";
++                default:
++                    return super.toString();
++            }
++        }
++    }
++
++    private final BinaryPrimitiveOperator operator;
++
++    private final Expression left;
++
++    private final Expression right;
++
++    BinaryPrimitiveExpression(PrimitiveTypes returnType, BinaryPrimitiveOperator op,
++                                      Expression left, Expression right) {
++        super(returnType);
++        this.operator = op;
++        this.left = left;
++        this.right = right;
++    }
++
++    @Override
++    public String toString() {
++        return "(" + operator + " " + left + " " + right + ")";
++    }
++
++}
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/BooleanExpression.java b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/BooleanExpression.java
+new file mode 100644
+index 0000000000..05d3d0c9ec
+--- /dev/null
++++ b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/BooleanExpression.java
+@@ -0,0 +1,4 @@
++package tools.aqua.concolic;
++
++public class BooleanExpression {
++}
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/Concolic.java b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/Concolic.java
+new file mode 100644
+index 0000000000..c8c1e70424
+--- /dev/null
++++ b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/Concolic.java
+@@ -0,0 +1,572 @@
++package tools.aqua.concolic;
++
++import com.oracle.truffle.api.CompilerDirectives;
++import com.oracle.truffle.espresso.bytecode.BytecodeStream;
++import com.oracle.truffle.espresso.impl.Field;
++import com.oracle.truffle.espresso.meta.EspressoError;
++import com.oracle.truffle.espresso.meta.Meta;
++import com.oracle.truffle.espresso.nodes.BytecodeNode;
++import com.oracle.truffle.espresso.runtime.StaticObject;
++
++import java.util.Arrays;
++
++import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFEQ;
++import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFGE;
++import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFGT;
++import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFLE;
++import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFLT;
++import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFNE;
++import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFNONNULL;
++import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFNULL;
++import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPEQ;
++import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPGE;
++import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPGT;
++import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPLE;
++import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPLT;
++import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPNE;
++
++public class Concolic {
++
++    private static TraceElement traceHead = null;
++    private static TraceElement traceTail = null;
++
++    public static void addTraceElement(TraceElement tNew) {
++        if (traceHead == null) {
++            traceHead = tNew;
++        }
++        else {
++            traceTail.setNext(tNew);
++        }
++        traceTail = tNew;
++    }
++
++    private static void printTrace() {
++        TraceElement cur = traceHead;
++        while (cur != null) {
++            System.out.println(cur);
++            cur = cur.getNext();
++        }
++    }
++
++    private static int[] seedsIntValues = new int[] {};
++    private static int countIntSeeds = 0;
++
++    public static AnnotatedValue nextSymbolicInt() {
++        int concrete = 0;
++        if (countIntSeeds < seedsIntValues.length) {
++            concrete = seedsIntValues[countIntSeeds];
++        }
++        Variable symbolic = new Variable(PrimitiveTypes.INT, countIntSeeds);
++        AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
++        countIntSeeds++;
++        addTraceElement(new SymbolDeclaration(symbolic));
++        return a;
++    }
++
++    public static Object newAnnotatedValue(Object retConc, Expression symbolic) {
++        return new AnnotatedValue(retConc, symbolic);
++    }
++
++    public static AnnotatedValue getField(StaticObject receiver, Field field, Object value) {
++        return field.getAnnotation(receiver);
++    }
++
++    public static void setField(StaticObject receiver, Field field, AnnotatedValue a) {
++        field.setAnnotation(receiver, a);
++    }
++
++    public static AnnotatedValue getArray(StaticObject receiver, int index, Object value) {
++        return null;
++    }
++
++    public static void setArray(StaticObject receiver, int index, AnnotatedValue a) {
++    }
++
++    @CompilerDirectives.TruffleBoundary
++    public static void newPath(String config) {
++        System.out.println("======================== START PATH [BEGIN].");
++        traceHead = null;
++        traceTail = null;
++        countIntSeeds = 0;
++        parseConfig(config);
++        System.out.println("Seeded Int Values: " + Arrays.toString(seedsIntValues));
++        System.out.println("======================== START PATH [END].");
++    }
++
++    private static void parseConfig(String config) {
++        String[] valsAsStr;
++        if (config.trim().length() > 0) {
++            valsAsStr = config.split(",");
++        }
++        else {
++            valsAsStr = new String[] {};
++        }
++
++        int[] vals = new int[valsAsStr.length];
++        for (int i=0; i<valsAsStr.length; i++) {
++            vals[i] = Integer.valueOf(valsAsStr[i].trim());
++        }
++        seedsIntValues = vals;
++    }
++
++    @CompilerDirectives.TruffleBoundary
++    public static void endPath() {
++        System.out.println("======================== END PATH [BEGIN].");
++        printTrace();
++        System.out.println("======================== END PATH [END].");
++    }
++
++
++    // case IADD: putInt(stack, top - 2, popInt(stack, top - 1) + popInt(stack, top - 2)); break;
++    // case LADD: putLong(stack, top - 4, popLong(stack, top - 1) + popLong(stack, top - 3)); break;
++    // case FADD: putFloat(stack, top - 2, popFloat(stack, top - 1) + popFloat(stack, top - 2)); break;
++    // case DADD: putDouble(stack, top - 4, popDouble(stack, top - 1) + popDouble(stack, top - 3)); break;
++
++
++    private static void symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator op, Object[] symbolic,
++                                       int top, int c1, int c2, int concResult) {
++        symbolicIntOp(op, symbolic, top, c1, c2, concResult, false);
++    }
++
++    private static void symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator op, Object[] symbolic,
++                                       int top, int c1, int c2, int concResult, boolean reverse) {
++
++        AnnotatedValue s1 = popSymbolic(symbolic, reverse ? top -2 : top -1);
++        AnnotatedValue s2 = popSymbolic(symbolic, reverse ? top -1 : top -2);
++        if (s1 == null && s2 == null) {
++            return;
++        }
++
++        if (s1 == null) s1 = AnnotatedValue.fromInt(c1);
++        if (s2 == null) s2 = AnnotatedValue.fromInt(c2);
++
++        AnnotatedValue result = new AnnotatedValue( concResult, Expression.intOp(op, s1.symbolic(), s2.symbolic() ));
++        putSymbolic(symbolic,top - 2, result);
++    }
++
++    private static void unarySymbolicIntOp(UnaryPrimitiveExpression.UnaryPrimitiveOperator op, Object[] symbolic,
++                                            int top, int c1, int concResult) {
++
++        AnnotatedValue s1 = popSymbolic(symbolic, top -1);
++        if (s1 == null) {
++            return;
++        }
++        AnnotatedValue result = new AnnotatedValue( concResult, Expression.unaryIntOp(op, s1.symbolic()));
++        putSymbolic(symbolic,top - 1, result);
++    }
++
++    public static void iadd(long[] primitives,  Object[] symbolic, int top) {
++        int c1 = BytecodeNode.popInt(primitives, top - 1);
++        int c2 = BytecodeNode.popInt(primitives, top - 2);
++        int concResult = c1 + c2;
++        BytecodeNode.putInt(primitives, top - 2, concResult);
++        symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.IADD, symbolic, top, c1, c2, concResult);
++    }
++
++//    public static AnnotatedValue ladd(AnnotatedValue topm1,  AnnotatedValue topm3) {
++//        return new AnnotatedValue( topm1.asLong() + topm3.asLong());
++//    }
++//
++//    public static AnnotatedValue fadd(AnnotatedValue topm1,  AnnotatedValue topm2) {
++//        return new AnnotatedValue( topm1.asFloat() + topm2.asFloat());
++//    }
++//
++//    public static AnnotatedValue dadd(AnnotatedValue topm1,  AnnotatedValue topm3) {
++//        return new AnnotatedValue( topm1.asDouble() + topm3.asDouble());
++//    }
++
++    //case ISUB: putInt(stack, top - 2, -popInt(stack, top - 1) + popInt(stack, top - 2)); break;
++    public static void isub(long[] primitives, Object[] symbolic, int top) {
++        int c1 = BytecodeNode.popInt(primitives, top - 1);
++        int c2 = BytecodeNode.popInt(primitives, top - 2);
++        int concResult = c2 - c1;
++        BytecodeNode.putInt(primitives, top - 2, concResult);
++        symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.ISUB, symbolic, top, c2, c1, concResult, true);
++    }
++
++    //case LSUB: putLong(stack, top - 4, -popLong(stack, top - 1) + popLong(stack, top - 3)); break;
++    //case FSUB: putFloat(stack, top - 2, -popFloat(stack, top - 1) + popFloat(stack, top - 2)); break;
++    //case DSUB: putDouble(stack, top - 4, -popDouble(stack, top - 1) + popDouble(stack, top - 3)); break;
++
++    // case IMUL: putInt(stack, top - 2, popInt(stack, top - 1) * popInt(stack, top - 2)); break;
++    public static void imul(long[] primitives,  Object[] symbolic, int top) {
++        int c1 = BytecodeNode.popInt(primitives, top - 1);
++        int c2 = BytecodeNode.popInt(primitives, top - 2);
++        int concResult = c1 * c2;
++        BytecodeNode.putInt(primitives, top - 2, concResult);
++        symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.IMUL, symbolic, top, c1, c2, concResult);
++    }
++
++    // case LMUL: putLong(stack, top - 4, popLong(stack, top - 1) * popLong(stack, top - 3)); break;
++    // case FMUL: putFloat(stack, top - 2, popFloat(stack, top - 1) * popFloat(stack, top - 2)); break;
++    // case DMUL: putDouble(stack, top - 4, popDouble(stack, top - 1) * popDouble(stack, top - 3)); break;
++
++
++    private static void checkNonZero(int value, AnnotatedValue a, BytecodeNode bn) {
++        if (value != 0) {
++            if (a != null) {
++                addTraceElement(new PathCondition( Expression.intComp(
++                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.NE, a.symbolic(), Constant.INT_ZERO),0, 2));
++            }
++        }
++        else {
++            if (a != null) {
++                addTraceElement(new PathCondition(Expression.intComp(
++                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.EQ, a.symbolic(), Constant.INT_ZERO), 1, 2));
++            }
++            bn.enterImplicitExceptionProfile();
++            Meta meta = bn.getMeta();
++            throw meta.throwExceptionWithMessage(meta.java_lang_ArithmeticException, "/ by zero");
++        }
++    }
++
++    // case IDIV: putInt(stack, top - 2, divInt(checkNonZero(popInt(stack, top - 1)), popInt(stack, top - 2))); break;
++    public static void idiv(long[] primitives, Object[] symbolic, int top, BytecodeNode bn) {
++        int c1 = BytecodeNode.popInt(primitives, top - 1);
++        int c2 = BytecodeNode.popInt(primitives, top - 2);
++        checkNonZero(c1, peekSymbolic(symbolic, top -1), bn);
++        int concResult = c2 / c1;
++        BytecodeNode.putInt(primitives, top - 2, concResult);
++        symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.IDIV, symbolic, top, c2, c1, concResult, true);
++    }
++
++    // case LDIV: putLong(stack, top - 4, divLong(checkNonZero(popLong(stack, top - 1)), popLong(stack, top - 3))); break;
++    // case FDIV: putFloat(stack, top - 2, divFloat(popFloat(stack, top - 1), popFloat(stack, top - 2))); break;
++    // case DDIV: putDouble(stack, top - 4, divDouble(popDouble(stack, top - 1), popDouble(stack, top - 3))); break;
++
++    // case IREM: putInt(stack, top - 2, remInt(checkNonZero(popInt(stack, top - 1)), popInt(stack, top - 2))); break;
++    public static void irem(long[] primitives, Object[] symbolic, int top, BytecodeNode bn) {
++        int c1 = BytecodeNode.popInt(primitives, top - 1);
++        int c2 = BytecodeNode.popInt(primitives, top - 2);
++        checkNonZero(c1, peekSymbolic(symbolic, top -1), bn);
++        int concResult = c2 % c1;
++        BytecodeNode.putInt(primitives, top - 2, concResult);
++        symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.IREM, symbolic, top, c2, c1, concResult, true);
++    }
++
++    // case LREM: putLong(stack, top - 4, remLong(checkNonZero(popLong(stack, top - 1)), popLong(stack, top - 3))); break;
++    // case FREM: putFloat(stack, top - 2, remFloat(popFloat(stack, top - 1), popFloat(stack, top - 2))); break;
++    // case DREM: putDouble(stack, top - 4, remDouble(popDouble(stack, top - 1), popDouble(stack, top - 3))); break;
++
++    // case INEG: putInt(stack, top - 1, -popInt(stack, top - 1)); break;
++    public static void ineg(long[] primitives, Object[] symbolic, int top) {
++        int c1 = BytecodeNode.popInt(primitives, top - 1);
++        int concResult = -c1;
++        BytecodeNode.putInt(primitives, top - 1, concResult);
++        unarySymbolicIntOp(UnaryPrimitiveExpression.UnaryPrimitiveOperator.INEG, symbolic, top, c1, concResult);
++    }
++
++    // case LNEG: putLong(stack, top - 2, -popLong(stack, top - 1)); break;
++    // case FNEG: putFloat(stack, top - 1, -popFloat(stack, top - 1)); break;
++    // case DNEG: putDouble(stack, top - 2, -popDouble(stack, top - 1)); break;
++
++    // case ISHL: putInt(stack, top - 2, shiftLeftInt(popInt(stack, top - 1), popInt(stack, top - 2))); break;
++    public static void ishl(long[] primitives, Object[] symbolic, int top) {
++        int c1 = BytecodeNode.popInt(primitives, top - 1);
++        int c2 = BytecodeNode.popInt(primitives, top - 2);
++        int concResult = c2 << c1;
++        BytecodeNode.putInt(primitives, top - 2, concResult);
++        symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.ISHL, symbolic, top, c2, c1, concResult, true);
++    }
++
++    // case LSHL: putLong(stack, top - 3, shiftLeftLong(popInt(stack, top - 1), popLong(stack, top - 2))); break;
++
++    // case ISHR: putInt(stack, top - 2, shiftRightSignedInt(popInt(stack, top - 1), popInt(stack, top - 2))); break;
++    public static void ishr(long[] primitives, Object[] symbolic, int top) {
++        int c1 = BytecodeNode.popInt(primitives, top - 1);
++        int c2 = BytecodeNode.popInt(primitives, top - 2);
++        int concResult = c2 >> c1;
++        BytecodeNode.putInt(primitives, top - 2, concResult);
++        symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.ISHR, symbolic, top, c2, c1, concResult, true);
++    }
++
++    // case LSHR: putLong(stack, top - 3, shiftRightSignedLong(popInt(stack, top - 1), popLong(stack, top - 2))); break;
++
++    // case IUSHR: putInt(stack, top - 2, shiftRightUnsignedInt(popInt(stack, top - 1), popInt(stack, top - 2))); break;
++    public static void iushr(long[] primitives, Object[] symbolic, int top) {
++        int c1 = BytecodeNode.popInt(primitives, top - 1);
++        int c2 = BytecodeNode.popInt(primitives, top - 2);
++        int concResult = c2 >>> c1;
++        BytecodeNode.putInt(primitives, top - 2, concResult);
++        symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.IUSHR, symbolic, top, c2, c1, concResult, true);
++    }
++
++    // case LUSHR: putLong(stack, top - 3, shiftRightUnsignedLong(popInt(stack, top - 1), popLong(stack, top - 2))); break;
++
++    // case IAND: putInt(stack, top - 2, popInt(stack, top - 1) & popInt(stack, top - 2)); break;
++    public static void iand(long[] primitives, Object[] symbolic, int top) {
++        int c1 = BytecodeNode.popInt(primitives, top - 1);
++        int c2 = BytecodeNode.popInt(primitives, top - 2);
++        int concResult = c1 & c2;
++        BytecodeNode.putInt(primitives, top - 2, concResult);
++        symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.IAND, symbolic, top, c1, c2, concResult);
++    }
++
++    //                    case LAND: putLong(stack, top - 4, popLong(stack, top - 1) & popLong(stack, top - 3)); break;
++
++    //  case IOR: putInt(stack, top - 2, popInt(stack, top - 1) | popInt(stack, top - 2)); break;
++    public static void ior(long[] primitives, Object[] symbolic, int top) {
++        int c1 = BytecodeNode.popInt(primitives, top - 1);
++        int c2 = BytecodeNode.popInt(primitives, top - 2);
++        int concResult = c1 | c2;
++        BytecodeNode.putInt(primitives, top - 2, concResult);
++        symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.IOR, symbolic, top, c1, c2, concResult);
++    }
++
++    //                    case LOR: putLong(stack, top - 4, popLong(stack, top - 1) | popLong(stack, top - 3)); break;
++
++    // case IXOR: putInt(stack, top - 2, popInt(stack, top - 1) ^ popInt(stack, top - 2)); break;
++    public static void ixor(long[] primitives, Object[] symbolic, int top) {
++        int c1 = BytecodeNode.popInt(primitives, top - 1);
++        int c2 = BytecodeNode.popInt(primitives, top - 2);
++        int concResult = c1 ^ c2;
++        BytecodeNode.putInt(primitives, top - 2, concResult);
++        symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.IXOR, symbolic, top, c1, c2, concResult);
++    }
++
++    //                    case LXOR: putLong(stack, top - 4, popLong(stack, top - 1) ^ popLong(stack, top - 3)); break;
++
++
++    // case IINC: setLocalInt(stack, bs.readLocalIndex(curBCI), getLocalInt(stack, bs.readLocalIndex(curBCI)) + bs.readIncrement(curBCI)); break;
++    public static void iinc(long[] primitives, Object[] symbolic, BytecodeStream bs, int curBCI) {
++        int index = bs.readLocalIndex(curBCI);
++        int incr =  bs.readIncrement(curBCI);
++        AnnotatedValue s1 = getLocalSymbolic(symbolic, index);
++        int c1 = BytecodeNode.getLocalInt(primitives, index);
++
++        // concrete
++        int concResult = c1 + incr;
++        BytecodeNode.setLocalInt(primitives, index, c1 + incr);
++
++        // symbolic
++        if (s1 == null) {
++            return;
++        }
++
++        Constant symbIncr = Constant.fromConcreteValue(incr);
++        AnnotatedValue symbResult = new AnnotatedValue(concResult, Expression.intOp(
++                BinaryPrimitiveExpression.BinaryPrimitiveOperator.IADD, s1.symbolic(), symbIncr));
++        setLocalSymbolic(symbolic, index, symbResult);
++    }
++
++    //                    case I2L: putLong(stack, top - 1, popInt(stack, top - 1)); break;
++    //                    case I2F: putFloat(stack, top - 1, popInt(stack, top - 1)); break;
++    //                    case I2D: putDouble(stack, top - 1, popInt(stack, top - 1)); break;
++
++//    public static AnnotatedValue i2l(AnnotatedValue topm1) {
++//        return new AnnotatedValue( (long) topm1.asInt());
++//    }
++//
++//    public static AnnotatedValue i2f(AnnotatedValue topm1) {
++//        return new AnnotatedValue( (float) topm1.asInt());
++//    }
++//
++//    public static AnnotatedValue i2d(AnnotatedValue topm1) {
++//        return new AnnotatedValue( (double) topm1.asInt());
++//    }
++
++    //                    case L2I: putInt(stack, top - 2, (int) popLong(stack, top - 1)); break;
++    //                    case L2F: putFloat(stack, top - 2, popLong(stack, top - 1)); break;
++    //                    case L2D: putDouble(stack, top - 2, popLong(stack, top - 1)); break;
++
++
++//    public static AnnotatedValue l2i(AnnotatedValue topm1) {
++//        return new AnnotatedValue( (int) topm1.asLong());
++//    }
++//
++//    public static AnnotatedValue l2f(AnnotatedValue topm1) {
++//        return new AnnotatedValue( (float) topm1.asLong());
++//    }
++//
++//    public static AnnotatedValue l2d(AnnotatedValue topm1) {
++//        return new AnnotatedValue( (double) topm1.asLong());
++//    }
++
++    //                    case F2I: putInt(stack, top - 1, (int) popFloat(stack, top - 1)); break;
++    //                    case F2L: putLong(stack, top - 1, (long) popFloat(stack, top - 1)); break;
++    //                    case F2D: putDouble(stack, top - 1, popFloat(stack, top - 1)); break;
++
++//    public static AnnotatedValue f2i(AnnotatedValue topm1) {
++//        return new AnnotatedValue( (int) topm1.asFloat());
++//    }
++//
++//    public static AnnotatedValue f2l(AnnotatedValue topm1) {
++//        return new AnnotatedValue( (long) topm1.asFloat());
++//    }
++//
++//    public static AnnotatedValue f2d(AnnotatedValue topm1) {
++//        return new AnnotatedValue( (double) topm1.asFloat());
++//    }
++
++    //                    case D2I: putInt(stack, top - 2, (int) popDouble(stack, top - 1)); break;
++    //                    case D2L: putLong(stack, top - 2, (long) popDouble(stack, top - 1)); break;
++    //                    case D2F: putFloat(stack, top - 2, (float) popDouble(stack, top - 1)); break;
++
++//    public static AnnotatedValue d2i(AnnotatedValue topm1) {
++//        return new AnnotatedValue( (int) topm1.asDouble());
++//    }
++//
++//    public static AnnotatedValue d2l(AnnotatedValue topm1) {
++//        return new AnnotatedValue( (long) topm1.asDouble());
++//    }
++//
++//    public static AnnotatedValue d2f(AnnotatedValue topm1) {
++//        return new AnnotatedValue( (float) topm1.asDouble());
++//    }
++
++    //                    case I2B: putInt(stack, top - 1, (byte) popInt(stack, top - 1)); break;
++    //                   case I2C: putInt(stack, top - 1, (char) popInt(stack, top - 1)); break;
++    //                    case I2S: putInt(stack, top - 1, (short) popInt(stack, top - 1)); break;
++
++//    public static AnnotatedValue i2b(AnnotatedValue topm1) {
++//        return new AnnotatedValue( (byte) topm1.asInt());
++//    }
++//
++//    public static AnnotatedValue i2c(AnnotatedValue topm1) {
++//        return new AnnotatedValue( (char) topm1.asInt());
++//    }
++//
++//    public static AnnotatedValue i2s(AnnotatedValue topm1) {
++//        return new AnnotatedValue( (short) topm1.asInt());
++//    }
++
++    //                    case LCMP : putInt(stack, top - 4, compareLong(popLong(stack, top - 1), popLong(stack, top - 3))); break;
++    //                    case FCMPL: putInt(stack, top - 2, compareFloatLess(popFloat(stack, top - 1), popFloat(stack, top - 2))); break;
++    //                    case FCMPG: putInt(stack, top - 2, compareFloatGreater(popFloat(stack, top - 1), popFloat(stack, top - 2))); break;
++    //                    case DCMPL: putInt(stack, top - 4, compareDoubleLess(popDouble(stack, top - 1), popDouble(stack, top - 3))); break;
++    //                    case DCMPG: putInt(stack, top - 4, compareDoubleGreater(popDouble(stack, top - 1), popDouble(stack, top - 3))); break;
++
++
++//    public static AnnotatedValue lcmp(AnnotatedValue topm1,  AnnotatedValue topm3) {
++//        return new AnnotatedValue( compareLong( topm1.asLong(), topm3.asLong()));
++//    }
++//
++//    public static AnnotatedValue fcmpl(AnnotatedValue topm1,  AnnotatedValue topm2) {
++//        return new AnnotatedValue( compareFloatLess(topm1.asFloat(), topm2.asFloat()));
++//    }
++//
++//    public static AnnotatedValue fcmpg(AnnotatedValue topm1,  AnnotatedValue topm2) {
++//        return new AnnotatedValue( compareFloatGreater(topm1.asFloat(), topm2.asFloat()));
++//    }
++//
++//    public static AnnotatedValue dcmpl(AnnotatedValue topm1,  AnnotatedValue topm3) {
++//        return new AnnotatedValue( compareDoubleLess(topm1.asDouble(), topm3.asDouble()));
++//    }
++//
++//    public static AnnotatedValue dcmpg(AnnotatedValue topm1,  AnnotatedValue topm3) {
++//        return new AnnotatedValue( compareDoubleGreater(topm1.asDouble(), topm3.asDouble()));
++//    }
++
++    //@CompilerDirectives.TruffleBoundary
++    public static boolean takeBranch1(AnnotatedValue topm1, Object[] symbolic, int opcode) {
++        switch (opcode) {
++            case IFEQ      : return topm1.asInt() == 0;
++            case IFNE      : return topm1.asInt() != 0;
++            case IFLT      : return topm1.asInt()  < 0;
++            case IFGE      : return topm1.asInt() >= 0;
++            case IFGT      : return topm1.asInt()  > 0;
++            case IFLE      : return topm1.asInt() <= 0;
++            case IFNULL    : return StaticObject.isNull( topm1.asRef() );
++            case IFNONNULL : return StaticObject.notNull( topm1.asRef() );
++            default        :
++                CompilerDirectives.transferToInterpreter();
++                throw EspressoError.shouldNotReachHere("non-branching bytecode");
++        }
++    }
++
++    public static boolean takeBranch2(long[] primitives, Object[] symbolic, int top, int opcode) {
++        AnnotatedValue s1 = popSymbolic( symbolic,top -1);
++        AnnotatedValue s2 = popSymbolic( symbolic,top -2);
++        int c1 = BytecodeNode.popInt(primitives, top - 1);
++        int c2 = BytecodeNode.popInt(primitives, top - 2);
++
++        // concrete
++        boolean takeBranch = true;
++
++        switch (opcode) {
++            case IF_ICMPEQ : takeBranch = (c1 == c2); break;
++            case IF_ICMPNE : takeBranch = (c1 != c2); break;
++            case IF_ICMPLT : takeBranch = (c1  > c2); break;
++            case IF_ICMPGE : takeBranch = (c1 <= c2); break;
++            case IF_ICMPGT : takeBranch = (c1  < c2); break;
++            case IF_ICMPLE : takeBranch = (c1 >= c2); break;
++            default        :
++                CompilerDirectives.transferToInterpreter();
++                throw EspressoError.shouldNotReachHere("non-branching bytecode");
++        }
++
++        // symbolic
++        if (s1 != null || s2 != null) {
++            if (s1 == null) s1 = AnnotatedValue.fromInt(c1);
++            if (s2 == null) s2 = AnnotatedValue.fromInt(c2);
++
++            Expression expr = null;
++            switch (opcode) {
++                case IF_ICMPEQ : expr = Expression.intComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.EQ, s1.symbolic(), s2.symbolic()); break;
++                case IF_ICMPNE : expr = Expression.intComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.NE, s1.symbolic(), s2.symbolic()); break;
++                case IF_ICMPLT : expr = Expression.intComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.LT, s1.symbolic(), s2.symbolic()); break;
++                case IF_ICMPGE : expr = Expression.intComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.GE, s1.symbolic(), s2.symbolic()); break;
++                case IF_ICMPGT : expr = Expression.intComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.GT, s1.symbolic(), s2.symbolic()); break;
++                case IF_ICMPLE : expr = Expression.intComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.LE, s1.symbolic(), s2.symbolic()); break;
++                default        :
++                    CompilerDirectives.transferToInterpreter();
++                    throw EspressoError.shouldNotReachHere("non-branching bytecode");
++            }
++
++            PathCondition pc = new PathCondition(expr, takeBranch ? 1 : 0, 2);
++            addTraceElement(pc);
++        }
++        return takeBranch;
++    }
++
++
++    private static int compareLong(long y, long x) {
++        return Long.compare(x, y);
++    }
++
++    private static int compareFloatGreater(float y, float x) {
++        return (x < y ? -1 : ((x == y) ? 0 : 1));
++    }
++
++    private static int compareFloatLess(float y, float x) {
++        return (x > y ? 1 : ((x == y) ? 0 : -1));
++    }
++
++    private static int compareDoubleGreater(double y, double x) {
++        return (x < y ? -1 : ((x == y) ? 0 : 1));
++    }
++
++    private static int compareDoubleLess(double y, double x) {
++        return (x > y ? 1 : ((x == y) ? 0 : -1));
++    }
++
++    public static AnnotatedValue popSymbolic(Object[] symbolic, int slot) {
++        if (symbolic[slot] == null || !(symbolic[slot] instanceof AnnotatedValue)) {
++            return null;
++        }
++        AnnotatedValue result = (AnnotatedValue) symbolic[slot];
++        symbolic[slot] = null;
++        return result;
++    }
++
++    public static AnnotatedValue peekSymbolic(Object[] symbolic, int slot) {
++        if (symbolic[slot] == null || !(symbolic[slot] instanceof AnnotatedValue)) {
++            return null;
++        }
++        AnnotatedValue result = (AnnotatedValue) symbolic[slot];
++        return result;
++    }
++
++    public static void putSymbolic(Object[] symbolic, int slot, AnnotatedValue value) {
++        symbolic[slot] = value;
++    }
++
++    public static void setLocalSymbolic(Object[] symbolic, int slot, AnnotatedValue value) {
++        symbolic[symbolic.length - 1 - slot] = value;
++    }
++
++    public static AnnotatedValue getLocalSymbolic(Object[] symbolic, int slot) {
++        assert symbolic[symbolic.length - 1 - slot] instanceof AnnotatedValue;
++        return (AnnotatedValue) symbolic[symbolic.length - 1 - slot];
++    }
++}
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/Constant.java b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/Constant.java
+new file mode 100644
+index 0000000000..ddcce389d5
+--- /dev/null
++++ b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/Constant.java
+@@ -0,0 +1,40 @@
++package tools.aqua.concolic;
++
++import com.oracle.truffle.espresso.runtime.StaticObject;
++
++public abstract class Constant extends PrimitiveExpression {
++
++    public final static IntConstant INT_ZERO = new IntConstant(0);
++
++    private final static class IntConstant extends Constant {
++
++        IntConstant(int value) {
++            super(PrimitiveTypes.INT, value);
++        }
++
++        @Override
++        Integer getValue() {
++            return (int) super.getValue();
++        }
++    }
++
++    private Object value;
++
++    Constant(PrimitiveTypes type, Object value) {
++        super(type);
++        this.value = value;
++    }
++
++    Object getValue() {
++        return value;
++    }
++
++    @Override
++    public String toString() {
++        return "" + value;
++    }
++
++    public static Constant fromConcreteValue(int i) {
++        return new IntConstant(i);
++    }
++}
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/Expression.java b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/Expression.java
+new file mode 100644
+index 0000000000..2a989dc2df
+--- /dev/null
++++ b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/Expression.java
+@@ -0,0 +1,24 @@
++package tools.aqua.concolic;
++
++import com.oracle.truffle.espresso.runtime.StaticObject;
++
++public interface Expression {
++
++    public static BinaryPrimitiveExpression intOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator op, Expression left, Expression right) {
++        assert left instanceof PrimitiveExpression;
++        assert right instanceof PrimitiveExpression;
++        return new BinaryPrimitiveExpression(PrimitiveTypes.INT, op, left, right);
++    }
++
++    public static UnaryPrimitiveExpression unaryIntOp(UnaryPrimitiveExpression.UnaryPrimitiveOperator op, Expression inner) {
++        assert inner instanceof PrimitiveExpression;
++        return new UnaryPrimitiveExpression(PrimitiveTypes.INT, op, inner);
++    }
++
++    public static BinaryPrimitiveExpression intComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator comp, Expression left, Expression right) {
++        assert left instanceof PrimitiveExpression;
++        assert right instanceof PrimitiveExpression;
++        return new BinaryPrimitiveExpression(PrimitiveTypes.BOOL, comp, left, right);
++    }
++
++}
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/PathCondition.java b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/PathCondition.java
+new file mode 100644
+index 0000000000..08bdddaf53
+--- /dev/null
++++ b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/PathCondition.java
+@@ -0,0 +1,23 @@
++package tools.aqua.concolic;
++
++public class PathCondition extends TraceElement {
++
++    private final Expression condition;
++
++    private final int branchCount;
++
++    private final int branchId;
++
++    public PathCondition(Expression condition, int branchId, int branchCount) {
++        this.condition = condition;
++        this.branchId = branchId;
++        this.branchCount = branchCount;
++    }
++
++    @Override
++    public String toString() {
++        return "(assert " + condition + ")" +
++                " // branchCount=" + branchCount +
++                ", branchId=" + branchId;
++    }
++}
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/PrimitiveExpression.java b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/PrimitiveExpression.java
+new file mode 100644
+index 0000000000..39c7da51cb
+--- /dev/null
++++ b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/PrimitiveExpression.java
+@@ -0,0 +1,14 @@
++package tools.aqua.concolic;
++
++public class PrimitiveExpression implements Expression {
++
++    private final PrimitiveTypes returnType;
++
++    public PrimitiveExpression(PrimitiveTypes returnType) {
++        this.returnType = returnType;
++    }
++
++    public PrimitiveTypes getType() {
++        return returnType;
++    }
++}
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/PrimitiveTypes.java b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/PrimitiveTypes.java
+new file mode 100644
+index 0000000000..e18e871715
+--- /dev/null
++++ b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/PrimitiveTypes.java
+@@ -0,0 +1,15 @@
++package tools.aqua.concolic;
++
++public enum PrimitiveTypes {
++    INT, BOOL, CHAR, BYTE, SHORT, LONG, FLOAT, DOUBLE;
++
++    @Override
++    public String toString() {
++        switch(this) {
++            case INT:
++                return "Int";
++            default:
++                return super.toString();
++        }
++    }
++}
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/SymbolDeclaration.java b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/SymbolDeclaration.java
+new file mode 100644
+index 0000000000..9760268435
+--- /dev/null
++++ b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/SymbolDeclaration.java
+@@ -0,0 +1,17 @@
++package tools.aqua.concolic;
++
++public class SymbolDeclaration extends TraceElement {
++
++    private final Variable variable;
++
++    public SymbolDeclaration(Variable var) {
++        this.variable = var;
++    }
++
++    @Override
++    public String toString() {
++        return "(define-fun " +
++                variable + " () " +
++                variable.getType() + ")";
++    }
++}
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/TraceElement.java b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/TraceElement.java
+new file mode 100644
+index 0000000000..1dbf7835e6
+--- /dev/null
++++ b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/TraceElement.java
+@@ -0,0 +1,14 @@
++package tools.aqua.concolic;
++
++public abstract class TraceElement {
++
++    private TraceElement next;
++
++    public void setNext(TraceElement next) {
++        this.next = next;
++    }
++
++    public TraceElement getNext() {
++        return next;
++    }
++}
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/UnaryPrimitiveExpression.java b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/UnaryPrimitiveExpression.java
+new file mode 100644
+index 0000000000..ff3edaf3c9
+--- /dev/null
++++ b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/UnaryPrimitiveExpression.java
+@@ -0,0 +1,26 @@
++package tools.aqua.concolic;
++
++public class UnaryPrimitiveExpression extends PrimitiveExpression{
++
++    public enum UnaryPrimitiveOperator {
++        INEG
++    }
++
++    private final UnaryPrimitiveExpression.UnaryPrimitiveOperator operator;
++
++    private final Expression inner;
++
++    UnaryPrimitiveExpression(PrimitiveTypes returnType, UnaryPrimitiveExpression.UnaryPrimitiveOperator op, Expression inner) {
++        super(returnType);
++        this.operator = op;
++        this.inner = inner;
++    }
++
++    @Override
++    public String toString() {
++        return "BinaryPrimitiveExpression{" +
++                "operator=" + operator +
++                ", inner=" + inner +
++                '}';
++    }
++}
+diff --git a/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/Variable.java b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/Variable.java
+new file mode 100644
+index 0000000000..3a213f32d6
+--- /dev/null
++++ b/espresso/src/com.oracle.truffle.espresso/src/tools/aqua/concolic/Variable.java
+@@ -0,0 +1,25 @@
++package tools.aqua.concolic;
++
++public class Variable extends PrimitiveExpression {
++
++    private final int id;
++
++    public Variable(PrimitiveTypes type, int id) {
++        super(type);
++        this.id = id;
++    }
++
++    @Override
++    public String toString() {
++        switch (this.getType()) {
++            case INT:
++                return "__int_" + this.id;
++            default:
++                return "Variable{" +
++                        "id=" + id +
++                        "id=" + id +
++                        '}';
++        }
++
++    }
++}
