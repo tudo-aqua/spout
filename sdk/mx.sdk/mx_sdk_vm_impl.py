@@ -1212,7 +1212,8 @@ class NativePropertiesBuildTask(mx.ProjectBuildTask):
 
     @staticmethod
     def get_launcher_classpath(graalvm_dist, start, image_config, component, exclude_implicit=False):
-        exclude_names = NativePropertiesBuildTask.implicit_excludes if exclude_implicit else None
+        with_substratevm = 'substratevm' in [s.name for s in mx.suites()]
+        exclude_names = NativePropertiesBuildTask.implicit_excludes if with_substratevm and exclude_implicit else None
         location_cp = graalvm_home_relative_classpath(image_config.jar_distributions, start, graal_vm=graalvm_dist, exclude_names=exclude_names)
         location_classpath = location_cp.split(os.pathsep) if location_cp else []
         if image_config.dir_jars:
