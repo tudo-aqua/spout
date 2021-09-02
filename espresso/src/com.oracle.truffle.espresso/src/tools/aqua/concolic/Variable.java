@@ -14,6 +14,8 @@ public class Variable extends PrimitiveExpression {
         switch (this.getType()) {
             case INT:
                 return "__int_" + this.id;
+            case STRING:
+                return "__string_" + this.id;
             default:
                 return "Variable{" +
                         "id=" + id +

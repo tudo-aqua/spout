@@ -23,17 +23,7 @@
 
 package com.oracle.truffle.espresso.substitutions;
 
-import com.oracle.truffle.espresso.meta.Meta;
-import tools.aqua.concolic.Concolic;
-import com.oracle.truffle.espresso.runtime.StaticObject;
-
-import java.util.Random;
-
 @EspressoSubstitutions
 public class Target_java_util_Random {
 
-    @Substitution(hasReceiver = true)
-    public static @Host(typeName = "I") Object nextInt(@Host(Random.class) StaticObject self, int bound, @InjectMeta Meta meta) {
-        return Concolic.nextSymbolicInt();
-    }
 }

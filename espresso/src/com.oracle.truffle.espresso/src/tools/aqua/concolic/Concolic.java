@@ -65,6 +65,20 @@ public class Concolic {
         return a;
     }
 
+    private static String[] seedStringValues = new String[] {};
+    private static int countStringSeeds = 0;
+
+    @CompilerDirectives.TruffleBoundary
+    public static StaticObject nextSymbolicString(Meta meta) {
+        StaticObject concrete = meta.toGuestString("");
+        Variable symbolic = new Variable(PrimitiveTypes.STRING, countStringSeeds);
+        AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
+        //TODO: track symbolic annotation
+        countStringSeeds++;
+        addTraceElement(new SymbolDeclaration(symbolic));
+        return concrete;
+    }
+
     // field access
 
     private static ArrayList<AnnotatedValue[]> symbolicObjects = new ArrayList<>();
@@ -588,4 +602,5 @@ public class Concolic {
     public static void uncaughtException(StaticObject pendingException) {
         addTraceElement(new ExceptionEvent(pendingException.getKlass().getNameAsString()));
     }
+
 }
