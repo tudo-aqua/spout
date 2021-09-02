@@ -39,7 +39,9 @@ import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.JavaKind;
 import com.oracle.truffle.espresso.meta.Meta;
+import tools.aqua.concolic.AnnotatedValue;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
+import tools.aqua.concolic.Concolic;
 import com.oracle.truffle.espresso.nodes.interop.ToEspressoNode;
 import com.oracle.truffle.espresso.runtime.EspressoContext;
 import com.oracle.truffle.espresso.runtime.StaticObject;
@@ -105,6 +107,7 @@ abstract class IntGetFieldNode extends AbstractGetFieldNode {
     public int getField(VirtualFrame frame, long[] primitives, Object[] refs, BytecodeNode root, StaticObject receiver, int at, int statementIndex) {
         root.notifyFieldAccess(frame, statementIndex, getField(), receiver);
         BytecodeNode.putInt(primitives, at, executeGetField(receiver));
+        Concolic.getFieldAnnotation(receiver, getField(), refs, at);
         return slotCount;
     }
 

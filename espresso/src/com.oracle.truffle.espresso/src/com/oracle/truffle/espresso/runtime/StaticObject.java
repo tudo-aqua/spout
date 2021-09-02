@@ -591,4 +591,14 @@ public class StaticObject implements TruffleObject, Cloneable {
             return new DefaultArrayBasedStaticObject(klass, isForeign, shape, primitiveArraySize, objectArraySize);
         }
     }
+
+    private int concolicId = -1;
+
+    public void setConcolicId(int id) {
+        this.concolicId = id;
+    }
+
+    public int getConcolicId() {
+        return concolicId;
+    }
 }

@@ -31,6 +31,7 @@ import com.oracle.truffle.espresso.descriptors.Types;
 import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.meta.JavaKind;
+import tools.aqua.concolic.AnnotatedValue;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.nodes.methodhandle.MethodHandleIntrinsicNode;
 import com.oracle.truffle.espresso.nodes.quick.QuickNode;
@@ -70,7 +71,12 @@ public final class InvokeHandleNode extends QuickNode {
         if (hasReceiver) {
             args[0] = nullCheck(BytecodeNode.peekReceiver(refs, top, method));
         }
-        BytecodeNode.popBasicArgumentsWithArray(primitives, refs, top, parsedSignature, args, parameterCount, hasReceiver ? 1 : 0);
+
+        //FIXME: not sure if this is the correct spot for killing annotations of parameters to contain symbolic values?
+
+        //BytecodeNode.popBasicArgumentsWithArray(primitives, refs, top, parsedSignature, args, parameterCount, hasReceiver ? 1 : 0);
+        BytecodeNode.popBasicArgumentsWithArrayConcrete(primitives, refs, top, parsedSignature, args, parameterCount, hasReceiver ? 1 : 0);
+
         Object result = intrinsic.processReturnValue(intrinsic.call(args), rKind);
         if (!returnsPrimitiveType) {
             getBytecodeNode().checkNoForeignObjectAssumption((StaticObject) result);

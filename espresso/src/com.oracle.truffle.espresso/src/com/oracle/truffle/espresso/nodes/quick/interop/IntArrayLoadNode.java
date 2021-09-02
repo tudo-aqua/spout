@@ -34,7 +34,9 @@ import com.oracle.truffle.api.profiles.BranchProfile;
 import com.oracle.truffle.espresso.EspressoLanguage;
 import com.oracle.truffle.espresso.bytecode.Bytecodes;
 import com.oracle.truffle.espresso.meta.Meta;
+import tools.aqua.concolic.AnnotatedValue;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
+import tools.aqua.concolic.Concolic;
 import com.oracle.truffle.espresso.nodes.interop.ToEspressoNode;
 import com.oracle.truffle.espresso.nodes.quick.QuickNode;
 import com.oracle.truffle.espresso.runtime.EspressoContext;
@@ -51,7 +53,13 @@ public abstract class IntArrayLoadNode extends QuickNode {
     public final int execute(VirtualFrame frame, long[] primitives, Object[] refs) {
         StaticObject array = nullCheck(BytecodeNode.popObject(refs, top - 2));
         int index = BytecodeNode.popInt(primitives, top - 1);
-        BytecodeNode.putInt(primitives, top - 2, executeLoad(array, index));
+        int intValue = executeLoad(array, index);
+        BytecodeNode.putInt(primitives, top - 2, intValue);
+
+        // symbolic
+        AnnotatedValue symb = Concolic.getArray(array, index, intValue);
+        Concolic.putSymbolic(refs, top - 2, symb);
+
         return Bytecodes.stackEffectOf(Bytecodes.IALOAD);
     }
 

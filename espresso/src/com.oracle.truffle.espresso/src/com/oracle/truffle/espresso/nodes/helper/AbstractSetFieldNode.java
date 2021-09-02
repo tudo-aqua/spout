@@ -38,7 +38,9 @@ import com.oracle.truffle.espresso.impl.Field;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.JavaKind;
 import com.oracle.truffle.espresso.meta.Meta;
+import tools.aqua.concolic.AnnotatedValue;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
+import tools.aqua.concolic.Concolic;
 import com.oracle.truffle.espresso.runtime.EspressoContext;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 
@@ -102,8 +104,10 @@ abstract class IntSetFieldNode extends AbstractSetFieldNode {
     @Override
     public void setField(VirtualFrame frame, long[] primitives, Object[] refs, BytecodeNode root, StaticObject receiver, int top, int statementIndex) {
         int value = BytecodeNode.popInt(primitives, top - 1);
+        AnnotatedValue a = Concolic.popSymbolic( refs,top -1);
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        Concolic.setFieldAnnotation(receiver, field, a);
     }
 
     abstract void executeSetField(StaticObject receiver, int value);

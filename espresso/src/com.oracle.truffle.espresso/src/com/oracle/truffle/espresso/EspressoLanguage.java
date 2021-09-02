@@ -35,6 +35,7 @@ import com.oracle.truffle.espresso.staticobject.DefaultStaticProperty;
 import com.oracle.truffle.espresso.staticobject.StaticProperty;
 import com.oracle.truffle.espresso.staticobject.StaticPropertyKind;
 import com.oracle.truffle.espresso.staticobject.StaticShape;
+import com.oracle.truffle.espresso.nodes.interop.NewPathNode;
 import org.graalvm.home.Version;
 import org.graalvm.options.OptionDescriptors;
 
@@ -185,6 +186,10 @@ public final class EspressoLanguage extends TruffleLanguage<EspressoContext> imp
         }
         if (GetBindingsNode.EVAL_NAME.equals(contents)) {
             RootNode node = new GetBindingsNode(this);
+            return Truffle.getRuntime().createCallTarget(node);
+        }
+        if (contents.startsWith(NewPathNode.EVAL_NAME)) {
+            RootNode node = new NewPathNode(this, contents.substring(NewPathNode.EVAL_NAME.length()));
             return Truffle.getRuntime().createCallTarget(node);
         }
         throw new UnsupportedOperationException("Unsupported operation. Use the language bindings to load classes e.g. context.getBindings(\"" + ID + "\").getMember(\"java.lang.Integer\")");

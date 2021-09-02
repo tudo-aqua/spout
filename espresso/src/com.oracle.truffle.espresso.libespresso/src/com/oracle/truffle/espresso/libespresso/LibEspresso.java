@@ -77,6 +77,9 @@ public class LibEspresso {
             return result;
         }
         javaVMPointer.write(espressoJavaVM);
+
+        context.eval("java", "<NewPath> ");
+
         return JNIErrors.JNI_OK();
     }
 

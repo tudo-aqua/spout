@@ -339,6 +339,8 @@ import com.oracle.truffle.espresso.runtime.ReturnAddress;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import com.oracle.truffle.espresso.substitutions.Target_java_lang_Thread;
 import com.oracle.truffle.espresso.vm.InterpreterToVM;
+import tools.aqua.concolic.AnnotatedValue;
+import tools.aqua.concolic.Concolic;
 
 /**
  * Bytecode interpreter loop.
@@ -463,6 +465,11 @@ public final class BytecodeNode extends EspressoMethodNode {
             Symbol<Type> argType = Signatures.parameterType(methodSignature, i);
             if (argType.length() == 1) {
                 // @formatter:off
+                if (arguments[i + receiverSlot] instanceof AnnotatedValue) {
+                    AnnotatedValue a = (AnnotatedValue) arguments[i + receiverSlot];
+                    Concolic.setLocalSymbolic(refs, curSlot, a);
+                    arguments[i + receiverSlot] = a.asRaw();
+                }
                 switch (argType.byteAt(0)) {
                     case 'Z' : setLocalInt(primitives, curSlot, ((boolean) arguments[i + receiverSlot]) ? 1 : 0); break;
                     case 'B' : setLocalInt(primitives, curSlot, ((byte) arguments[i + receiverSlot]));            break;
@@ -730,6 +737,7 @@ public final class BytecodeNode extends EspressoMethodNode {
                     case ILOAD:
                         putInt(primitives, top, getLocalInt(primitives, bs.readLocalIndex(curBCI)));
                         livenessAnalysis.performPostBCI(primitives, refs, curBCI);
+                        Concolic.putSymbolic(refs, top, Concolic.getLocalSymbolic(refs, bs.readLocalIndex(curBCI)));
                         break;
                     case LLOAD:
                         putLong(primitives, top, getLocalLong(primitives, bs.readLocalIndex(curBCI)));
@@ -754,6 +762,7 @@ public final class BytecodeNode extends EspressoMethodNode {
                     case ILOAD_3:
                         putInt(primitives, top, getLocalInt(primitives, curOpcode - ILOAD_0));
                         livenessAnalysis.performPostBCI(primitives, refs, curBCI);
+                        Concolic.putSymbolic(refs, top, Concolic.getLocalSymbolic(refs,curOpcode - ILOAD_0));
                         break;
                     case LLOAD_0: // fall through
                     case LLOAD_1: // fall through
@@ -802,6 +811,7 @@ public final class BytecodeNode extends EspressoMethodNode {
                     case ISTORE:
                         setLocalInt(primitives, bs.readLocalIndex(curBCI), popInt(primitives, top - 1));
                         livenessAnalysis.performPostBCI(primitives, refs, curBCI);
+                        Concolic.setLocalSymbolic(refs, bs.readLocalIndex(curBCI), Concolic.popSymbolic(refs,top - 1));
                         break;
                     case LSTORE:
                         setLocalLong(primitives, bs.readLocalIndex(curBCI), popLong(primitives, top - 1));
@@ -826,6 +836,7 @@ public final class BytecodeNode extends EspressoMethodNode {
                     case ISTORE_3:
                         setLocalInt(primitives, curOpcode - ISTORE_0, popInt(primitives, top - 1));
                         livenessAnalysis.performPostBCI(primitives, refs, curBCI);
+                        Concolic.setLocalSymbolic(refs,curOpcode - ISTORE_0, Concolic.popSymbolic(refs,top - 1));
                         break;
                     case LSTORE_0: // fall through
                     case LSTORE_1: // fall through
@@ -868,9 +879,12 @@ public final class BytecodeNode extends EspressoMethodNode {
                     case POP2:
                         EspressoFrame.clear(primitives, refs, top - 1);
                         EspressoFrame.clear(primitives, refs, top - 2);
+                        Concolic.popSymbolic( refs,top - 1);
+                        Concolic.popSymbolic( refs,top - 2);
                         break;
                     case POP:
                         EspressoFrame.clear(primitives, refs, top - 1);
+                        Concolic.popSymbolic(refs,top - 1);
                         break;
 
                     // TODO(peterssen): Stack shuffling is expensive.
@@ -882,54 +896,91 @@ public final class BytecodeNode extends EspressoMethodNode {
                     case DUP2_X2 : EspressoFrame.dup2x2(primitives, refs, top);     break;
                     case SWAP    : EspressoFrame.swapSingle(primitives, refs, top); break;
 
-                    case IADD: putInt(primitives, top - 2, popInt(primitives, top - 1) + popInt(primitives, top - 2)); break;
+                    case IADD:
+                        // putInt(primitives, top - 2, popInt(primitives, top - 1) + popInt(primitives, top - 2));
+                        Concolic.iadd(primitives, refs, top);
+                        break;
                     case LADD: putLong(primitives, top - 4, popLong(primitives, top - 1) + popLong(primitives, top - 3)); break;
                     case FADD: putFloat(primitives, top - 2, popFloat(primitives, top - 1) + popFloat(primitives, top - 2)); break;
                     case DADD: putDouble(primitives, top - 4, popDouble(primitives, top - 1) + popDouble(primitives, top - 3)); break;
 
-                    case ISUB: putInt(primitives, top - 2, popInt(primitives, top - 2) - popInt(primitives, top - 1)); break;
+                    case ISUB:
+                        // putInt(primitives, top - 2, -popInt(primitives, top - 1) + popInt(primitives, top - 2));
+                        Concolic.isub(primitives, refs, top);
+                        break;
                     case LSUB: putLong(primitives, top - 4, popLong(primitives, top - 3) - popLong(primitives, top - 1)); break;
                     case FSUB: putFloat(primitives, top - 2, popFloat(primitives, top - 2) - popFloat(primitives, top - 1)); break;
                     case DSUB: putDouble(primitives, top - 4, popDouble(primitives, top - 3) - popDouble(primitives, top - 1)); break;
 
-                    case IMUL: putInt(primitives, top - 2, popInt(primitives, top - 1) * popInt(primitives, top - 2)); break;
+                    case IMUL:
+                        // putInt(primitives, top - 2, popInt(primitives, top - 1) * popInt(primitives, top - 2));
+                        Concolic.imul(primitives, refs, top);
+                        break;
                     case LMUL: putLong(primitives, top - 4, popLong(primitives, top - 1) * popLong(primitives, top - 3)); break;
                     case FMUL: putFloat(primitives, top - 2, popFloat(primitives, top - 1) * popFloat(primitives, top - 2)); break;
                     case DMUL: putDouble(primitives, top - 4, popDouble(primitives, top - 1) * popDouble(primitives, top - 3)); break;
 
-                    case IDIV: putInt(primitives, top - 2, divInt(checkNonZero(popInt(primitives, top - 1)), popInt(primitives, top - 2))); break;
+                    case IDIV:
+                        // putInt(primitives, top - 2, divInt(checkNonZero(popInt(primitives, top - 1)), popInt(primitives, top - 2)));
+                        Concolic.idiv(primitives, refs,  top, this);
+                        break;
                     case LDIV: putLong(primitives, top - 4, divLong(checkNonZero(popLong(primitives, top - 1)), popLong(primitives, top - 3))); break;
                     case FDIV: putFloat(primitives, top - 2, divFloat(popFloat(primitives, top - 1), popFloat(primitives, top - 2))); break;
                     case DDIV: putDouble(primitives, top - 4, divDouble(popDouble(primitives, top - 1), popDouble(primitives, top - 3))); break;
 
-                    case IREM: putInt(primitives, top - 2, remInt(checkNonZero(popInt(primitives, top - 1)), popInt(primitives, top - 2))); break;
+                    case IREM:
+                        // putInt(primitives, top - 2, remInt(checkNonZero(popInt(primitives, top - 1)), popInt(primitives, top - 2)));
+                        Concolic.irem(primitives, refs, top, this);
+                        break;
                     case LREM: putLong(primitives, top - 4, remLong(checkNonZero(popLong(primitives, top - 1)), popLong(primitives, top - 3))); break;
                     case FREM: putFloat(primitives, top - 2, remFloat(popFloat(primitives, top - 1), popFloat(primitives, top - 2))); break;
                     case DREM: putDouble(primitives, top - 4, remDouble(popDouble(primitives, top - 1), popDouble(primitives, top - 3))); break;
 
-                    case INEG: putInt(primitives, top - 1, -popInt(primitives, top - 1)); break;
+                    case INEG:
+                        // putInt(primitives, top - 1, -popInt(primitives, top - 1));
+                        Concolic.ineg(primitives, refs, top);
+                        break;
                     case LNEG: putLong(primitives, top - 2, -popLong(primitives, top - 1)); break;
                     case FNEG: putFloat(primitives, top - 1, -popFloat(primitives, top - 1)); break;
                     case DNEG: putDouble(primitives, top - 2, -popDouble(primitives, top - 1)); break;
 
-                    case ISHL: putInt(primitives, top - 2, shiftLeftInt(popInt(primitives, top - 1), popInt(primitives, top - 2))); break;
+                    case ISHL:
+                        // putInt(primitives, top - 2, shiftLeftInt(popInt(primitives, top - 1), popInt(primitives, top - 2)));
+                        Concolic.ishl(primitives, refs, top);
+                        break;
                     case LSHL: putLong(primitives, top - 3, shiftLeftLong(popInt(primitives, top - 1), popLong(primitives, top - 2))); break;
-                    case ISHR: putInt(primitives, top - 2, shiftRightSignedInt(popInt(primitives, top - 1), popInt(primitives, top - 2))); break;
+                    case ISHR:
+                        // putInt(primitives, top - 2, shiftRightSignedInt(popInt(primitives, top - 1), popInt(primitives, top - 2)));
+                        Concolic.ishr(primitives, refs, top);
+                        break;
                     case LSHR: putLong(primitives, top - 3, shiftRightSignedLong(popInt(primitives, top - 1), popLong(primitives, top - 2))); break;
-                    case IUSHR: putInt(primitives, top - 2, shiftRightUnsignedInt(popInt(primitives, top - 1), popInt(primitives, top - 2))); break;
+                    case IUSHR:
+                        // putInt(primitives, top - 2, shiftRightUnsignedInt(popInt(primitives, top - 1), popInt(primitives, top - 2)));
+                        Concolic.iushr(primitives, refs, top);
+                        break;
                     case LUSHR: putLong(primitives, top - 3, shiftRightUnsignedLong(popInt(primitives, top - 1), popLong(primitives, top - 2))); break;
 
-                    case IAND: putInt(primitives, top - 2, popInt(primitives, top - 1) & popInt(primitives, top - 2)); break;
+                    case IAND:
+                        // putInt(primitives, top - 2, popInt(primitives, top - 1) & popInt(primitives, top - 2));
+                        Concolic.iand(primitives, refs, top);
+                        break;
                     case LAND: putLong(primitives, top - 4, popLong(primitives, top - 1) & popLong(primitives, top - 3)); break;
 
-                    case IOR: putInt(primitives, top - 2, popInt(primitives, top - 1) | popInt(primitives, top - 2)); break;
+                    case IOR:
+                        // putInt(primitives, top - 2, popInt(primitives, top - 1) | popInt(primitives, top - 2));
+                        Concolic.ior(primitives, refs, top);
+                        break;
                     case LOR: putLong(primitives, top - 4, popLong(primitives, top - 1) | popLong(primitives, top - 3)); break;
 
-                    case IXOR: putInt(primitives, top - 2, popInt(primitives, top - 1) ^ popInt(primitives, top - 2)); break;
+                    case IXOR:
+                        // putInt(primitives, top - 2, popInt(primitives, top - 1) ^ popInt(primitives, top - 2));
+                        Concolic.ixor(primitives, refs, top);
+                        break;
                     case LXOR: putLong(primitives, top - 4, popLong(primitives, top - 1) ^ popLong(primitives, top - 3)); break;
 
                     case IINC:
-                        setLocalInt(primitives, bs.readLocalIndex1(curBCI), getLocalInt(primitives, bs.readLocalIndex1(curBCI)) + bs.readIncrement1(curBCI));
+                        //setLocalInt(primitives, bs.readLocalIndex(curBCI), getLocalInt(primitives, bs.readLocalIndex(curBCI)) + bs.readIncrement(curBCI));
+                        Concolic.iinc(primitives, refs, bs, curBCI);
                         livenessAnalysis.performPostBCI(primitives, refs, curBCI);
                         break;
 
@@ -980,7 +1031,8 @@ public final class BytecodeNode extends EspressoMethodNode {
                     case IF_ICMPGE: // fall through
                     case IF_ICMPGT: // fall through
                     case IF_ICMPLE:
-                        if (takeBranchPrimitive2(popInt(primitives, top - 1), popInt(primitives, top - 2), curOpcode)) {
+                        //if (takeBranchPrimitive2(popInt(primitives, top - 1), popInt(primitives, top - 2), curOpcode)) {
+                        if (Concolic.takeBranch2(primitives, refs, top, curOpcode)) {
                             nextStatementIndex = beforeJumpChecks(primitives, refs, curBCI, bs.readBranchDest2(curBCI), statementIndex, instrument, loopCount);
                             top += Bytecodes.stackEffectOf(IF_ICMPLE);
                             curBCI = bs.readBranchDest2(curBCI);
@@ -1413,7 +1465,10 @@ public final class BytecodeNode extends EspressoMethodNode {
             case 'B' : return (byte) popInt(primitives, top - 1);
             case 'S' : return (short) popInt(primitives, top - 1);
             case 'C' : return (char) popInt(primitives, top - 1);
-            case 'I' : return popInt(primitives, top - 1);
+            case 'I' :
+                Object r = Concolic.popSymbolic(refs, top -1);
+                if (r != null) return r;
+                return popInt(primitives, top - 1);
             case 'J' : return popLong(primitives, top - 1);
             case 'F' : return popFloat(primitives, top - 1);
             case 'D' : return popDouble(primitives, top - 1);
@@ -1557,7 +1612,12 @@ public final class BytecodeNode extends EspressoMethodNode {
                 case BALOAD: putInt(primitives, top - 2, getInterpreterToVM().getArrayByte(index, array, this));      break;
                 case SALOAD: putInt(primitives, top - 2, getInterpreterToVM().getArrayShort(index, array, this));     break;
                 case CALOAD: putInt(primitives, top - 2, getInterpreterToVM().getArrayChar(index, array, this));      break;
-                case IALOAD: putInt(primitives, top - 2, getInterpreterToVM().getArrayInt(index, array, this));       break;
+                case IALOAD:
+                    //putInt(primitives, top - 2, getInterpreterToVM().getArrayInt(index, array, this));       break;
+                    int intVal = getInterpreterToVM().getArrayInt(index, array, this);
+                    putInt(primitives, top - 2, intVal);
+                    Concolic.putSymbolic(refs,top -2, Concolic.getArray(array, index, intVal));
+                    break;
                 case FALOAD: putFloat(primitives, top - 2, getInterpreterToVM().getArrayFloat(index, array, this));   break;
                 case LALOAD: putLong(primitives, top - 2, getInterpreterToVM().getArrayLong(index, array, this));     break;
                 case DALOAD: putDouble(primitives, top - 2, getInterpreterToVM().getArrayDouble(index, array, this)); break;
@@ -1589,7 +1649,11 @@ public final class BytecodeNode extends EspressoMethodNode {
                 case BASTORE: getInterpreterToVM().setArrayByte((byte) popInt(primitives, top - 1), index, array, this);   break;
                 case SASTORE: getInterpreterToVM().setArrayShort((short) popInt(primitives, top - 1), index, array, this); break;
                 case CASTORE: getInterpreterToVM().setArrayChar((char) popInt(primitives, top - 1), index, array, this);   break;
-                case IASTORE: getInterpreterToVM().setArrayInt(popInt(primitives, top - 1), index, array, this);           break;
+                case IASTORE:
+                    // getInterpreterToVM().setArrayInt(popInt(primitives, top - 1), index, array, this);           break;
+                    getInterpreterToVM().setArrayInt(popInt(primitives, top - 1), index, array, this);
+                    Concolic.setArray(array, index, Concolic.popSymbolic(refs,top -1));
+                    break;
                 case FASTORE: getInterpreterToVM().setArrayFloat(popFloat(primitives, top - 1), index, array, this);       break;
                 case LASTORE: getInterpreterToVM().setArrayLong(popLong(primitives, top - 1), index, array, this);         break;
                 case DASTORE: getInterpreterToVM().setArrayDouble(popDouble(primitives, top - 1), index, array, this);     break;
@@ -2376,10 +2440,12 @@ public final class BytecodeNode extends EspressoMethodNode {
                 break;
             case Int:
                 int intValue = popInt(primitives, top - 1);
+                AnnotatedValue intSymbolic = Concolic.popSymbolic(refs,top -1);
                 if (instrumentation != null) {
                     instrumentation.notifyFieldModification(frame, statementIndex, field, receiver, intValue);
                 }
                 InterpreterToVM.setFieldInt(intValue, receiver, field);
+                Concolic.setFieldAnnotation(receiver, field, intSymbolic);
                 break;
             case Double:
                 double doubleValue = popDouble(primitives, top - 1);
@@ -2476,7 +2542,11 @@ public final class BytecodeNode extends EspressoMethodNode {
             case Byte    : putInt(primitives, resultAt, InterpreterToVM.getFieldByte(receiver, field));      break;
             case Char    : putInt(primitives, resultAt, InterpreterToVM.getFieldChar(receiver, field));      break;
             case Short   : putInt(primitives, resultAt, InterpreterToVM.getFieldShort(receiver, field));     break;
-            case Int     : putInt(primitives, resultAt, InterpreterToVM.getFieldInt(receiver, field));       break;
+            case Int     :
+                int intVal = InterpreterToVM.getFieldInt(receiver, field);
+                putInt(primitives, resultAt, intVal);
+                Concolic.getFieldAnnotation(receiver, field, refs, resultAt);
+                break;
             case Double  : putDouble(primitives, resultAt, InterpreterToVM.getFieldDouble(receiver, field)); break;
             case Float   : putFloat(primitives, resultAt, InterpreterToVM.getFieldFloat(receiver, field));   break;
             case Long    : putLong(primitives, resultAt, InterpreterToVM.getFieldLong(receiver, field));     break;
@@ -2522,7 +2592,10 @@ public final class BytecodeNode extends EspressoMethodNode {
                     case 'B' : args[i + extraParam] = (byte) popInt(primitives, argAt);  break;
                     case 'S' : args[i + extraParam] = (short) popInt(primitives, argAt); break;
                     case 'C' : args[i + extraParam] = (char) popInt(primitives, argAt);  break;
-                    case 'I' : args[i + extraParam] = popInt(primitives, argAt);         break;
+                    case 'I' :
+                        //args[i + extraParam] = popInt(primitives, argAt);         break;
+                        args[i + extraParam] = (Concolic.peekSymbolic(refs, argAt) == null) ? popInt(primitives, argAt) : Concolic.popSymbolic(refs, argAt);
+                        break;
                     case 'F' : args[i + extraParam] = popFloat(primitives, argAt);       break;
                     case 'J' : args[i + extraParam] = popLong(primitives, argAt);   --argAt; break;
                     case 'D' : args[i + extraParam] = popDouble(primitives, argAt); --argAt; break;
@@ -2545,7 +2618,7 @@ public final class BytecodeNode extends EspressoMethodNode {
 
     // Effort to prevent double copies. Erases sub-word primitive types.
     @ExplodeLoop
-    public static Object[] popBasicArgumentsWithArray(long[] primitives, Object[] refs, int top, final Symbol<Type>[] signature, Object[] args, final int argCount, int start) {
+    public static Object[] popBasicArgumentsWithArrayConcrete(long[] primitives, Object[] refs, int top, final Symbol<Type>[] signature, Object[] args, final int argCount, int start) {
         // Use basic types
         CompilerAsserts.partialEvaluationConstant(argCount);
         CompilerAsserts.partialEvaluationConstant(signature);
@@ -2576,6 +2649,42 @@ public final class BytecodeNode extends EspressoMethodNode {
         return args;
     }
 
+    // Effort to prevent double copies. Erases sub-word primitive types.
+    @ExplodeLoop
+    public static Object[] popBasicArgumentsWithArray(long[] primitives, Object[] refs,  int top, final Symbol<Type>[] signature, Object[] args, final int argCount, int start) {
+        // Use basic types
+        CompilerAsserts.partialEvaluationConstant(argCount);
+        CompilerAsserts.partialEvaluationConstant(signature);
+
+        int argAt = top - 1;
+            for (int i = argCount - 1; i >= 0; --i) {
+                Symbol<Type> argType = Signatures.parameterType(signature, i);
+                if (argType.length() == 1) {
+                    // @formatter:off
+                    switch (argType.byteAt(0)) {
+                        case 'Z' : // fall through
+                        case 'B' : // fall through
+                        case 'S' : // fall through
+                        case 'C' : // fall through
+                        case 'I' :
+                            // args[i + start] = popInt(primitives, argAt);    break;
+                            args[i + start] = (Concolic.peekSymbolic(refs, argAt) == null) ? popInt(primitives, argAt) : Concolic.popSymbolic(refs, argAt); break;
+                        case 'F' : args[i + start] = popFloat(primitives, argAt);  break;
+                        case 'J' : args[i + start] = popLong(primitives, argAt);   --argAt; break;
+                        case 'D' : args[i + start] = popDouble(primitives, argAt); --argAt; break;
+                        default  :
+                            CompilerDirectives.transferToInterpreter();
+                            throw EspressoError.shouldNotReachHere();
+                    }
+                    // @formatter:on
+                } else {
+                    args[i + start] = popObject(refs, argAt);
+                }
+                --argAt;
+            }
+            return args;
+    }
+
     /**
      * Puts a value in the operand stack. This method follows the JVM spec, where sub-word types (<
      * int) are always treated as int.
@@ -2585,14 +2694,24 @@ public final class BytecodeNode extends EspressoMethodNode {
      * @param value value to push
      * @param kind kind to push
      */
-    public static int putKind(long[] primitives, Object[] refs, int top, Object value, JavaKind kind) {
+    public static int putKind(long[] primitives, Object[] refs,  int top, Object value, JavaKind kind) {
         // @formatter:off
         switch (kind) {
             case Boolean : putInt(primitives, top, ((boolean) value) ? 1 : 0); break;
             case Byte    : putInt(primitives, top, (byte) value);              break;
             case Short   : putInt(primitives, top, (short) value);             break;
             case Char    : putInt(primitives, top, (char) value);              break;
-            case Int     : putInt(primitives, top, (int) value);               break;
+            case Int     :
+                // putInt(primitives, top, (int) value);
+                if (value instanceof AnnotatedValue) {
+                    AnnotatedValue a = (AnnotatedValue) value;
+                    Concolic.putSymbolic(refs, top, a);
+                    putInt(primitives, top, a.asInt());
+                }
+                else {
+                    putInt(primitives, top, (int) value);
+                }
+                break;
             case Float   : putFloat(primitives, top, (float) value);           break;
             case Long    : putLong(primitives, top, (long) value);             break;
             case Double  : putDouble(primitives, top, (double) value);         break;

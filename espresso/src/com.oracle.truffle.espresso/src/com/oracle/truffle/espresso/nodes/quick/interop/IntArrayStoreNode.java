@@ -32,7 +32,9 @@ import com.oracle.truffle.api.library.CachedLibrary;
 import com.oracle.truffle.api.profiles.BranchProfile;
 import com.oracle.truffle.espresso.EspressoLanguage;
 import com.oracle.truffle.espresso.bytecode.Bytecodes;
+import tools.aqua.concolic.AnnotatedValue;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
+import tools.aqua.concolic.Concolic;
 import com.oracle.truffle.espresso.nodes.quick.QuickNode;
 import com.oracle.truffle.espresso.runtime.EspressoContext;
 import com.oracle.truffle.espresso.runtime.StaticObject;
@@ -50,6 +52,10 @@ public abstract class IntArrayStoreNode extends QuickNode {
         int index = BytecodeNode.popInt(primitives, top - 2);
         int value = BytecodeNode.popInt(primitives, top - 1);
         executeStore(array, index, value);
+
+        // symbolic
+        AnnotatedValue symb = null; // BytecodeNode.popSymbolic(top - 1);
+        Concolic.setArray(array, index, symb);
         return Bytecodes.stackEffectOf(Bytecodes.IASTORE);
     }
 

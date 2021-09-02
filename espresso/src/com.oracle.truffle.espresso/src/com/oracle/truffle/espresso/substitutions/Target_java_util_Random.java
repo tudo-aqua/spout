@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -21,31 +21,19 @@
  * questions.
  */
 
-package com.oracle.truffle.espresso.nodes.interop;
+package com.oracle.truffle.espresso.substitutions;
 
-import com.oracle.truffle.api.TruffleLanguage;
-import com.oracle.truffle.api.frame.VirtualFrame;
-import com.oracle.truffle.api.nodes.RootNode;
-import com.oracle.truffle.espresso.EspressoLanguage;
-import com.oracle.truffle.espresso.runtime.EspressoContext;
-import com.oracle.truffle.espresso.runtime.StaticObject;
+import com.oracle.truffle.espresso.meta.Meta;
 import tools.aqua.concolic.Concolic;
+import com.oracle.truffle.espresso.runtime.StaticObject;
 
-public final class ExitCodeNode extends RootNode {
-    public static final String EVAL_NAME = "<ExitCode>";
+import java.util.Random;
 
-    public ExitCodeNode(TruffleLanguage<?> language) {
-        super(language);
-    }
+@EspressoSubstitutions
+public class Target_java_util_Random {
 
-    @Override
-    public Object execute(VirtualFrame frame) {
-        assert frame.getArguments().length == 0;
-        Concolic.endPath();
-        EspressoContext context = EspressoLanguage.getCurrentContext();
-        if (!context.isClosing()) {
-            return StaticObject.NULL;
-        }
-        return context.getExitStatus();
+    @Substitution(hasReceiver = true)
+    public static @Host(typeName = "I") Object nextInt(@Host(Random.class) StaticObject self, int bound, @InjectMeta Meta meta) {
+        return Concolic.nextSymbolicInt();
     }
 }

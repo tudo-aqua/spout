@@ -56,6 +56,8 @@ public final class EspressoLauncher extends AbstractLanguageLauncher {
     private VersionAction versionAction = VersionAction.None;
     private final Map<String, String> espressoOptions = new HashMap<>();
 
+    private final Map<String, String> concolicOptions = new HashMap<>();
+
     private final class Arguments {
         private final List<String> arguments;
         private int index = -1;
@@ -295,6 +297,9 @@ public final class EspressoLauncher extends AbstractLanguageLauncher {
                             case "sun.boot.library.path":
                                 espressoOptions.put("java.BootLibraryPath", value);
                                 break;
+                            case "concolic.ints":
+                                concolicOptions.put("concolic.ints", value);
+                                break;
                         }
 
                         espressoOptions.put("java.Properties." + key, value);
@@ -482,67 +487,90 @@ public final class EspressoLauncher extends AbstractLanguageLauncher {
 
         contextBuilder.allowCreateThread(true);
 
-        try (Context context = contextBuilder.build()) {
+        PathState state = new PathState(PathState.State.OK);
+        //for (int i=0; i<2; i++) {
 
-            // TODO: Ensure consistency between option "java.Version" and the given "java.JavaHome".
+            try (Context context = contextBuilder.build()) {
 
-            // runVersionAction(versionAction, context.getEngine());
-            if (versionAction != VersionAction.None) {
-                // The Java version is not known yet, try 8 first.
-                Value version = context.getBindings("java").getMember("sun.misc.Version");
-                if (version != null && !version.isNull()) {
-                    // Java 8
-                    version.invokeMember("print");
-                } else {
-                    // > Java 8
-                    version = context.getBindings("java").getMember("java.lang.VersionProps");
-                    version.invokeMember("print", /* print to stderr = */false);
+                String params = "";
+                if (concolicOptions.containsKey("concolic.ints")) {
+                    params += concolicOptions.get("concolic.ints");
                 }
-                if (versionAction == VersionAction.PrintAndExit) {
-                    throw exit(0);
-                }
-            }
 
-            if (mainClassName == null) {
-                throw abort(usage());
-            }
-            try {
-                Value launcherHelper = context.getBindings("java").getMember("sun.launcher.LauncherHelper");
-                Value mainKlass = launcherHelper //
-                                .invokeMember("checkAndLoadMain", true, launchMode.ordinal(), mainClassName) //
-                                .getMember("static");
-                mainKlass.invokeMember("main/([Ljava/lang/String;)V", (Object) mainClassArgs.toArray(new String[0]));
-                if (pauseOnExit) {
-                    getError().print("Press any key to continue...");
-                    try {
-                        System.in.read();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                }
-            } catch (PolyglotException e) {
-                if (e.isInternalError()) {
-                    e.printStackTrace();
-                } else if (!e.isExit()) {
-                    handleMainUncaught(context, e);
-                }
-            } finally {
-                try {
-                    context.eval("java", "<DestroyJavaVM>").execute();
-                } catch (PolyglotException e) {
-                    /*
-                     * If everything went well, an exit exception is expected here. Failure to see
-                     * an exit exception most likely means something went wrong during context
-                     * initialization.
-                     */
-                    if (e.isExit()) {
-                        rc = e.getExitStatus();
+                context.eval("java", "<NewPath> " + params);
+
+                // TODO: Ensure consistency between option "java.Version" and the given "java.JavaHome".
+
+                // runVersionAction(versionAction, context.getEngine());
+                if (versionAction != VersionAction.None) {
+                    // The Java version is not known yet, try 8 first.
+                    Value version = context.getBindings("java").getMember("sun.misc.Version");
+                    if (version != null && !version.isNull()) {
+                        // Java 8
+                        version.invokeMember("print");
                     } else {
-                        e.printStackTrace();
-                        throw handleUnexpectedDestroy(e);
+                        // > Java 8
+                        version = context.getBindings("java").getMember("java.lang.VersionProps");
+                        version.invokeMember("print", /* print to stderr = */false);
+                    }
+                    if (versionAction == VersionAction.PrintAndExit) {
+                        throw exit(0);
                     }
                 }
+
+                if (mainClassName == null) {
+                    throw abort(usage());
+                }
+
+                try {
+                    Value launcherHelper = context.getBindings("java").getMember("sun.launcher.LauncherHelper");
+                    Value mainKlass = launcherHelper //
+                            .invokeMember("checkAndLoadMain", true, launchMode.ordinal(), mainClassName) //
+                            .getMember("static");
+                    mainKlass.invokeMember("main/([Ljava/lang/String;)V", (Object) mainClassArgs.toArray(new String[0]));
+                    if (pauseOnExit) {
+                        getError().print("Press any key to continue...");
+                        try {
+                            System.in.read();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                } catch (PolyglotException e) {
+                    if (e.isInternalError()) {
+                        e.printStackTrace();
+                        // FIXME: set path state ...
+                    } else if (!e.isExit()) {
+
+                        Value klass = e.getGuestObject().invokeMember("getClass");
+                        Value name = klass.invokeMember("getName");
+                        state = new PathState(PathState.State.ERROR, name.asString());
+
+                        handleMainUncaught(context, e);
+                    }
+                } finally {
+                    try {
+                        context.eval("java", "<DestroyJavaVM>").execute();
+                    } catch (PolyglotException e) {
+                        /*
+                         * If everything went well, an exit exception is expected here. Failure to see
+                         * an exit exception most likely means something went wrong during context
+                         * initialization.
+                         */
+                        if (e.isExit()) {
+                            rc = e.getExitStatus();
+                        } else {
+                            e.printStackTrace();
+                            throw handleUnexpectedDestroy(e);
+                        }
+                    }
+                }
+
             }
+
+            System.out.println("STATE: " + state);
+        //}
+
             /*
              * We abruptly exit the host system for compatibility with the reference implementation,
              * and because we have no control over un-registering thread from Truffle, which
@@ -553,7 +581,6 @@ public final class EspressoLauncher extends AbstractLanguageLauncher {
              * main means we may never return.
              */
             System.exit(rc);
-        }
     }
 
     private AbortException handleUnexpectedDestroy(PolyglotException e) {
