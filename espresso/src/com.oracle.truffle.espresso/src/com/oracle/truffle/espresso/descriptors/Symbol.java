@@ -233,6 +233,7 @@ public final class Symbol<T> extends ByteSequence {
         public static final Symbol<Name> coder = StaticSymbols.putName("coder");
         public static final Symbol<Name> COMPACT_STRINGS = StaticSymbols.putName("COMPACT_STRINGS");
         public static final Symbol<Name> indexOf = StaticSymbols.putName("indexOf");
+        public static final Symbol<Name> equals = StaticSymbols.putName("equals");
 
         // j.l.Throwable
         public static final Symbol<Name> backtrace = StaticSymbols.putName("backtrace");

@@ -19,7 +19,9 @@ public class BinaryPrimitiveExpression extends PrimitiveExpression {
         GE,
         LE,
         EQ,
-        NE;
+        NE,
+        STRINGEQ,
+        STRINGNE;
 
         @Override
         public String toString() {

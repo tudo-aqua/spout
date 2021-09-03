@@ -73,7 +73,8 @@ public class Concolic {
         StaticObject concrete = meta.toGuestString("");
         Variable symbolic = new Variable(PrimitiveTypes.STRING, countStringSeeds);
         AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
-        //TODO: track symbolic annotation
+        concrete.setConcolicId(symbolicObjects.size());
+        symbolicObjects.add(new AnnotatedValue[] { a });
         countStringSeeds++;
         addTraceElement(new SymbolDeclaration(symbolic));
         return concrete;
@@ -487,23 +488,44 @@ public class Concolic {
 //    }
 
     //@CompilerDirectives.TruffleBoundary
-    public static boolean takeBranch1(AnnotatedValue topm1, Object[] symbolic, int opcode) {
+    public static boolean takeBranchPrimitive1(long[] primitives, Object[] symbolic, int top, int opcode) {
+        assert IFEQ <= opcode && opcode <= IFLE;
+
+        AnnotatedValue s1 = popSymbolic( symbolic,top -1);
+        int c1 = BytecodeNode.popInt(primitives, top - 1);
+
+        boolean takeBranch = true;
+
+        // @formatter:off
         switch (opcode) {
-            case IFEQ      : return topm1.asInt() == 0;
-            case IFNE      : return topm1.asInt() != 0;
-            case IFLT      : return topm1.asInt()  < 0;
-            case IFGE      : return topm1.asInt() >= 0;
-            case IFGT      : return topm1.asInt()  > 0;
-            case IFLE      : return topm1.asInt() <= 0;
-            case IFNULL    : return StaticObject.isNull( topm1.asRef() );
-            case IFNONNULL : return StaticObject.notNull( topm1.asRef() );
+            case IFEQ      : takeBranch = (c1 == 0); break;
+            case IFNE      : takeBranch = (c1 != 0); break;
+            case IFLT      : takeBranch = (c1  < 0); break;
+            case IFGE      : takeBranch = (c1 >= 0); break;
+            case IFGT      : takeBranch = (c1  > 0); break;
+            case IFLE      : takeBranch = (c1 <= 0); break;
             default        :
                 CompilerDirectives.transferToInterpreter();
-                throw EspressoError.shouldNotReachHere("non-branching bytecode");
+                throw EspressoError.shouldNotReachHere("expecting IFEQ,IFNE,IFLT,IFGE,IFGT,IFLE");
         }
+
+        if (s1 != null) {
+            BinaryPrimitiveExpression.BinaryPrimitiveOperator op = null;
+            switch (opcode) {
+                case IFEQ      : op = BinaryPrimitiveExpression.BinaryPrimitiveOperator.EQ; break;
+                default        :
+                    CompilerDirectives.transferToInterpreter();
+                    throw EspressoError.shouldNotReachHere("expecting IFEQ,IFNE,IFLT,IFGE,IFGT,IFLE");
+            }
+
+            Expression pc = Expression.intComp(op, s1.symbolic(), Constant.INT_ZERO);
+            addTraceElement(new PathCondition(pc, takeBranch ? 1 : 0, 2));
+        }
+        return takeBranch;
     }
 
     public static boolean takeBranch2(long[] primitives, Object[] symbolic, int top, int opcode) {
+        assert IF_ICMPEQ <= opcode && opcode <= IF_ICMPLE;
         AnnotatedValue s1 = popSymbolic( symbolic,top -1);
         AnnotatedValue s2 = popSymbolic( symbolic,top -2);
         int c1 = BytecodeNode.popInt(primitives, top - 1);
@@ -548,6 +570,28 @@ public class Concolic {
         return takeBranch;
     }
 
+    public static Object stringEquals(StaticObject self, StaticObject other, Meta meta) {
+        // FIXME: we currently do not track conditions for exceptions inside equals!
+        // FIXME: could be better to use method handle from meta?
+        String hostSelf = meta.toHostString(self);
+        String hostOther = meta.toHostString(other);
+        boolean areEqual = hostSelf.equals(hostOther);
+        if (self.getConcolicId() < 0 && other.getConcolicId() < 0) {
+            return areEqual;
+        }
+
+        Expression exprSelf = (self.getConcolicId() < 0) ?
+                Constant.fromConcreteValue(hostSelf) :
+                symbolicObjects.get(self.getConcolicId())[0].symbolic();
+        Expression exprOther = (other.getConcolicId() < 0) ?
+                Constant.fromConcreteValue(hostOther) :
+                symbolicObjects.get(other.getConcolicId())[0].symbolic();
+
+        Expression symbolic = Expression.stringComp(
+                BinaryPrimitiveExpression.BinaryPrimitiveOperator.STRINGEQ, exprSelf, exprOther);
+
+        return new AnnotatedValue(areEqual, symbolic);
+    }
 
     private static int compareLong(long y, long x) {
         return Long.compare(x, y);

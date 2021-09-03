@@ -23,6 +23,21 @@
 
 package com.oracle.truffle.espresso.substitutions;
 
+import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.espresso.meta.Meta;
+import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.concolic.Concolic;
+
 @EspressoSubstitutions
 public class Target_java_lang_String {
+
+    @CompilerDirectives.TruffleBoundary
+    @Substitution(hasReceiver = true)
+    public static @Host(typeName = "Z") Object equals(
+            @Host(String.class) StaticObject self,
+            @Host(Object.class) StaticObject other,
+            @InjectMeta Meta meta) {
+
+        return Concolic.stringEquals(self, other, meta);
+    }
 }

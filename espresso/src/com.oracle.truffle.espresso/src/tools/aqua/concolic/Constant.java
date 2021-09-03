@@ -18,6 +18,23 @@ public abstract class Constant extends PrimitiveExpression {
         }
     }
 
+    private final static class StringConstant extends Constant {
+
+        StringConstant(String value) {
+            super(PrimitiveTypes.STRING, value);
+        }
+
+        @Override
+        String getValue() {
+            return (String) super.getValue();
+        }
+
+        @Override
+        public String toString() {
+            return "\"" + getValue() + "\"";
+        }
+    }
+
     private Object value;
 
     Constant(PrimitiveTypes type, Object value) {
@@ -37,4 +54,9 @@ public abstract class Constant extends PrimitiveExpression {
     public static Constant fromConcreteValue(int i) {
         return new IntConstant(i);
     }
+
+    public static Constant fromConcreteValue(String s) {
+        return new StringConstant(s);
+    }
+
 }

@@ -1016,7 +1016,8 @@ public final class BytecodeNode extends EspressoMethodNode {
                     case IFGE: // fall through
                     case IFGT: // fall through
                     case IFLE: // fall through
-                        if (takeBranchPrimitive1(popInt(primitives, top - 1), curOpcode)) {
+                        //if (takeBranchPrimitive1(popInt(primitives, top - 1), curOpcode)) {
+                        if (Concolic.takeBranchPrimitive1(primitives, refs, top, curOpcode)) {
                             int targetBCI = bs.readBranchDest2(curBCI);
                             nextStatementIndex = beforeJumpChecks(primitives, refs, curBCI, targetBCI, statementIndex, instrument, loopCount);
                             top += Bytecodes.stackEffectOf(IFLE);
@@ -2697,7 +2698,17 @@ public final class BytecodeNode extends EspressoMethodNode {
     public static int putKind(long[] primitives, Object[] refs,  int top, Object value, JavaKind kind) {
         // @formatter:off
         switch (kind) {
-            case Boolean : putInt(primitives, top, ((boolean) value) ? 1 : 0); break;
+            case Boolean :
+                // putInt(primitives, top, ((boolean) value) ? 1 : 0);
+                if (value instanceof AnnotatedValue) {
+                    AnnotatedValue a = (AnnotatedValue) value;
+                    Concolic.putSymbolic(refs, top, a);
+                    putInt(primitives, top, (a.asBoolean()) ? 1 : 0);
+                }
+                else {
+                    putInt(primitives, top, ((boolean) value) ? 1 : 0);
+                }
+                break;
             case Byte    : putInt(primitives, top, (byte) value);              break;
             case Short   : putInt(primitives, top, (short) value);             break;
             case Char    : putInt(primitives, top, (char) value);              break;

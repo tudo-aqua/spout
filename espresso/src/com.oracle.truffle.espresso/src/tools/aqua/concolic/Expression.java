@@ -21,4 +21,9 @@ public interface Expression {
         return new BinaryPrimitiveExpression(PrimitiveTypes.BOOL, comp, left, right);
     }
 
+    public static BinaryPrimitiveExpression stringComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator comp, Expression left, Expression right) {
+        assert left instanceof PrimitiveExpression;
+        assert right instanceof PrimitiveExpression;
+        return new BinaryPrimitiveExpression(PrimitiveTypes.BOOL, comp, left, right);
+    }
 }

@@ -62,4 +62,8 @@ public class AnnotatedValue {
     public Object asRaw() {
         return concrete;
     }
+
+    public boolean asBoolean() {
+        return (boolean) concrete;
+    }
 }
