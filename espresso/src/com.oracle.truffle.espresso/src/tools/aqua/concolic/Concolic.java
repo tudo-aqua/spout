@@ -573,18 +573,17 @@ public class Concolic {
     public static Object stringEquals(StaticObject self, StaticObject other, Meta meta) {
         // FIXME: we currently do not track conditions for exceptions inside equals!
         // FIXME: could be better to use method handle from meta?
-        String hostSelf = meta.toHostString(self);
-        String hostOther = meta.toHostString(other);
-        boolean areEqual = hostSelf.equals(hostOther);
+        //boolean areEqual = (boolean) meta.java_lang_String_equals.invokeDirect(self, other);
+        boolean areEqual = meta.toHostString(self).equals(meta.toHostString(other));
         if (self.getConcolicId() < 0 && other.getConcolicId() < 0) {
             return areEqual;
         }
 
         Expression exprSelf = (self.getConcolicId() < 0) ?
-                Constant.fromConcreteValue(hostSelf) :
+                Constant.fromConcreteValue(meta.toHostString(self)) :
                 symbolicObjects.get(self.getConcolicId())[0].symbolic();
         Expression exprOther = (other.getConcolicId() < 0) ?
-                Constant.fromConcreteValue(hostOther) :
+                Constant.fromConcreteValue(meta.toHostString(other)) :
                 symbolicObjects.get(other.getConcolicId())[0].symbolic();
 
         Expression symbolic = Expression.stringComp(

@@ -168,6 +168,7 @@ public final class Meta implements ContextAccess {
         java_lang_String_hashCode = java_lang_String.requireDeclaredMethod(Name.hashCode, Signature._int);
         java_lang_String_length = java_lang_String.requireDeclaredMethod(Name.length, Signature._int);
         java_lang_String_toCharArray = java_lang_String.requireDeclaredMethod(Name.toCharArray, Signature._char_array);
+        java_lang_String_equals = java_lang_String.requireDeclaredMethod(Name.equals, Signature._boolean_Object);
         java_lang_String_indexOf = java_lang_String.requireDeclaredMethod(Name.indexOf, Signature._int_int_int);
         java_lang_String_init_char_array = java_lang_String.requireDeclaredMethod(Name._init_, Signature._void_char_array);
         if (getJavaVersion().java9OrLater()) {
@@ -878,6 +879,7 @@ public final class Meta implements ContextAccess {
     public final Method java_lang_String_hashCode;
     public final Method java_lang_String_length;
     public final Method java_lang_String_toCharArray;
+    public final Method java_lang_String_equals;
     public final Method java_lang_String_indexOf;
     public final Method java_lang_String_init_char_array;
 
