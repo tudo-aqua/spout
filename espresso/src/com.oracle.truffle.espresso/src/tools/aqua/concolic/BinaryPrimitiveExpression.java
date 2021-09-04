@@ -28,10 +28,21 @@ public class BinaryPrimitiveExpression extends PrimitiveExpression {
             switch(this) {
                 case IADD:
                     return "+";
+                case ISUB:
+                    return "-";
                 case EQ:
+                case STRINGEQ:
                     return "=";
+                case NE:
+                    return "!=";
+                case GT:
+                    return ">";
                 case GE:
                     return ">=";
+                case LT:
+                    return "<";
+                case LE:
+                    return "<=";
                 default:
                     return super.toString();
             }

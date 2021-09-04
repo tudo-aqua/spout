@@ -26,4 +26,8 @@ public interface Expression {
         assert right instanceof PrimitiveExpression;
         return new BinaryPrimitiveExpression(PrimitiveTypes.BOOL, comp, left, right);
     }
+
+    public static UnaryPrimitiveExpression negation(Expression expr) {
+        return new UnaryPrimitiveExpression(PrimitiveTypes.BOOL, UnaryPrimitiveExpression.UnaryPrimitiveOperator.BNEG, expr);
+    }
 }

@@ -510,16 +510,15 @@ public class Concolic {
         }
 
         if (s1 != null) {
-            BinaryPrimitiveExpression.BinaryPrimitiveOperator op = null;
+            Expression expr = null;
             switch (opcode) {
-                case IFEQ      : op = BinaryPrimitiveExpression.BinaryPrimitiveOperator.EQ; break;
-                default        :
+                case IFEQ: expr = !takeBranch ? s1.symbolic() : Expression.negation(s1.symbolic()); break;
+                default:
                     CompilerDirectives.transferToInterpreter();
                     throw EspressoError.shouldNotReachHere("expecting IFEQ,IFNE,IFLT,IFGE,IFGT,IFLE");
             }
 
-            Expression pc = Expression.intComp(op, s1.symbolic(), Constant.INT_ZERO);
-            addTraceElement(new PathCondition(pc, takeBranch ? 1 : 0, 2));
+            addTraceElement(new PathCondition(expr, takeBranch ? 1 : 0, 2));
         }
         return takeBranch;
     }
@@ -553,12 +552,24 @@ public class Concolic {
 
             Expression expr = null;
             switch (opcode) {
-                case IF_ICMPEQ : expr = Expression.intComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.EQ, s1.symbolic(), s2.symbolic()); break;
-                case IF_ICMPNE : expr = Expression.intComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.NE, s1.symbolic(), s2.symbolic()); break;
-                case IF_ICMPLT : expr = Expression.intComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.GT, s1.symbolic(), s2.symbolic()); break;
-                case IF_ICMPGE : expr = Expression.intComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.LE, s1.symbolic(), s2.symbolic()); break;
-                case IF_ICMPGT : expr = Expression.intComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.LT, s1.symbolic(), s2.symbolic()); break;
-                case IF_ICMPLE : expr = Expression.intComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.GE, s1.symbolic(), s2.symbolic()); break;
+                case IF_ICMPEQ : expr = Expression.intComp(takeBranch ?
+                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.EQ :
+                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.NE, s1.symbolic(), s2.symbolic()); break;
+                case IF_ICMPNE : expr = Expression.intComp(takeBranch ?
+                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.NE :
+                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.EQ, s1.symbolic(), s2.symbolic()); break;
+                case IF_ICMPLT : expr = Expression.intComp(takeBranch ?
+                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.GT :
+                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.LE, s1.symbolic(), s2.symbolic()); break;
+                case IF_ICMPGE : expr = Expression.intComp(takeBranch ?
+                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.LE :
+                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.GT, s1.symbolic(), s2.symbolic()); break;
+                case IF_ICMPGT : expr = Expression.intComp(takeBranch ?
+                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.LT :
+                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.GE, s1.symbolic(), s2.symbolic()); break;
+                case IF_ICMPLE : expr = Expression.intComp(takeBranch ?
+                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.GE :
+                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.LT, s1.symbolic(), s2.symbolic()); break;
                 default        :
                     CompilerDirectives.transferToInterpreter();
                     throw EspressoError.shouldNotReachHere("non-branching bytecode");
