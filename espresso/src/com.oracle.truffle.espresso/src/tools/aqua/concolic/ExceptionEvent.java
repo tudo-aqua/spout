@@ -10,8 +10,6 @@ public class ExceptionEvent extends TraceElement {
 
     @Override
     public String toString() {
-        return "ExceptionEvent{" +
-                "className='" + className + '\'' +
-                '}';
+        return "[ERROR] " + className;
     }
 }

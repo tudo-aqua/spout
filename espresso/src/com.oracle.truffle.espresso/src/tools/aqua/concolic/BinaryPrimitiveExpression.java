@@ -27,9 +27,11 @@ public class BinaryPrimitiveExpression extends PrimitiveExpression {
         public String toString() {
             switch(this) {
                 case IADD:
-                    return "bvadd";
+                    return "+";
                 case EQ:
                     return "=";
+                case GE:
+                    return ">=";
                 default:
                     return super.toString();
             }

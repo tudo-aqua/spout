@@ -555,10 +555,10 @@ public class Concolic {
             switch (opcode) {
                 case IF_ICMPEQ : expr = Expression.intComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.EQ, s1.symbolic(), s2.symbolic()); break;
                 case IF_ICMPNE : expr = Expression.intComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.NE, s1.symbolic(), s2.symbolic()); break;
-                case IF_ICMPLT : expr = Expression.intComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.LT, s1.symbolic(), s2.symbolic()); break;
-                case IF_ICMPGE : expr = Expression.intComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.GE, s1.symbolic(), s2.symbolic()); break;
-                case IF_ICMPGT : expr = Expression.intComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.GT, s1.symbolic(), s2.symbolic()); break;
-                case IF_ICMPLE : expr = Expression.intComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.LE, s1.symbolic(), s2.symbolic()); break;
+                case IF_ICMPLT : expr = Expression.intComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.GT, s1.symbolic(), s2.symbolic()); break;
+                case IF_ICMPGE : expr = Expression.intComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.LE, s1.symbolic(), s2.symbolic()); break;
+                case IF_ICMPGT : expr = Expression.intComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.LT, s1.symbolic(), s2.symbolic()); break;
+                case IF_ICMPLE : expr = Expression.intComp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.GE, s1.symbolic(), s2.symbolic()); break;
                 default        :
                     CompilerDirectives.transferToInterpreter();
                     throw EspressoError.shouldNotReachHere("non-branching bytecode");

@@ -16,7 +16,7 @@ public class PathCondition extends TraceElement {
 
     @Override
     public String toString() {
-        return "(assert " + condition + ")" +
+        return "[DECISION] (assert " + condition + ")" +
                 " // branchCount=" + branchCount +
                 ", branchId=" + branchId;
     }

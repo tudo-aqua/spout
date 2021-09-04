@@ -10,7 +10,7 @@ public class SymbolDeclaration extends TraceElement {
 
     @Override
     public String toString() {
-        return "(define-fun " +
+        return "[DECLARE] (declare-fun " +
                 variable + " () " +
                 variable.getType() + ")";
     }
