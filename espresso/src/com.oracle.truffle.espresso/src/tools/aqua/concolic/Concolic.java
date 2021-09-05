@@ -18,8 +18,6 @@ import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFGT;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFLE;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFLT;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFNE;
-import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFNONNULL;
-import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFNULL;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPEQ;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPGE;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPGT;
@@ -31,8 +29,12 @@ public class Concolic {
 
     private static TraceElement traceHead = null;
     private static TraceElement traceTail = null;
+    private static boolean recordTrace = true;
 
     public static void addTraceElement(TraceElement tNew) {
+        if (!recordTrace) {
+            return;
+        }
         if (traceHead == null) {
             traceHead = tNew;
         }
@@ -121,6 +123,7 @@ public class Concolic {
         System.out.println("======================== START PATH [BEGIN].");
         traceHead = null;
         traceTail = null;
+        recordTrace = true;
         countIntSeeds = 0;
         countStringSeeds = 0;
         parseConfig(config);
@@ -693,8 +696,16 @@ public class Concolic {
         return (AnnotatedValue) symbolic[symbolic.length - 1 - slot];
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static void uncaughtException(StaticObject pendingException) {
-        addTraceElement(new ExceptionEvent(pendingException.getKlass().getNameAsString()));
+        String errorMessage = pendingException.getKlass().getNameAsString();
+        addTraceElement(new ErrorEvent(errorMessage));
     }
 
+    @CompilerDirectives.TruffleBoundary
+    public static void stopRecording(String message, Meta meta) {
+        addTraceElement(new ExceptionalEvent(message));
+        recordTrace = false;
+        meta.throwException(meta.java_lang_RuntimeException);
+    }
 }
