@@ -70,7 +70,11 @@ public class Concolic {
 
     @CompilerDirectives.TruffleBoundary
     public static StaticObject nextSymbolicString(Meta meta) {
-        StaticObject concrete = meta.toGuestString("");
+        String concreteHost = "";
+        if (countStringSeeds < seedStringValues.length) {
+            concreteHost = seedStringValues[countStringSeeds];
+        }
+        StaticObject concrete = meta.toGuestString(concreteHost);
         Variable symbolic = new Variable(PrimitiveTypes.STRING, countStringSeeds);
         AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
         concrete.setConcolicId(symbolicObjects.size());
@@ -118,12 +122,32 @@ public class Concolic {
         traceHead = null;
         traceTail = null;
         countIntSeeds = 0;
+        countStringSeeds = 0;
         parseConfig(config);
         System.out.println("Seeded Int Values: " + Arrays.toString(seedsIntValues));
         System.out.println("======================== START PATH [END].");
     }
 
     private static void parseConfig(String config) {
+        if (config.trim().length() < 1) {
+            return;
+        }
+
+        String[] paramsGroups = config.trim().split(" "); // not in base64
+        for (String paramGroup : paramsGroups) {
+            String[] keyValue = paramGroup.split(":"); // not in base64
+            switch (keyValue[0]) {
+                case "concolic.ints":
+                    parseInts(keyValue[1]);
+                    break;
+                case "concolic.strings":
+                    parseStrings(keyValue[1]);
+                    break;
+            }
+        }
+    }
+
+    private static void parseInts(String config) {
         String[] valsAsStr;
         if (config.trim().length() > 0) {
             valsAsStr = config.split(",");
@@ -137,6 +161,22 @@ public class Concolic {
             vals[i] = Integer.valueOf(valsAsStr[i].trim());
         }
         seedsIntValues = vals;
+    }
+
+    private static void parseStrings(String config) {
+        String[] valsAsStr;
+        if (config.trim().length() > 0) {
+            valsAsStr = config.split(",");
+        }
+        else {
+            valsAsStr = new String[] {};
+        }
+
+        String[] vals = new String[valsAsStr.length];
+        for (int i=0; i<valsAsStr.length; i++) {
+            vals[i] = valsAsStr[i].trim();
+        }
+        seedStringValues = vals;
     }
 
     @CompilerDirectives.TruffleBoundary

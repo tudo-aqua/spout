@@ -82,7 +82,10 @@ public class LibEspresso {
         Map<String,String> concolicOptions = Arguments.getConcolicOptions();
         String params = "";
         if (concolicOptions.containsKey("concolic.ints")) {
-            params += concolicOptions.get("concolic.ints");
+            params += " concolic.ints:" + concolicOptions.get("concolic.ints");
+        }
+        if (concolicOptions.containsKey("concolic.strings")) {
+            params += " concolic.strings:" + concolicOptions.get("concolic.strings");
         }
         context.eval("java", "<NewPath> " + params);
 

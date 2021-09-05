@@ -149,6 +149,9 @@ public final class Arguments {
                             case "concolic.ints":
                                 concolicOptions.put("concolic.ints", value);
                                 break;
+                            case "concolic.strings":
+                                concolicOptions.put("concolic.strings", value);
+                                break;
                         }
                         builder.option(JAVA_PROPS + key, value);
                     } else if (optionString.equals("-ea") || optionString.equals("-enableassertions")) {
