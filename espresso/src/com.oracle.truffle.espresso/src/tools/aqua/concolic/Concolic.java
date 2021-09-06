@@ -27,6 +27,10 @@ import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPNE;
 
 public class Concolic {
 
+    // --------------------------------------------------------------------------
+    //
+    // Section trace functions
+
     private static TraceElement traceHead = null;
     private static TraceElement traceTail = null;
     private static boolean recordTrace = true;
@@ -51,6 +55,10 @@ public class Concolic {
             cur = cur.getNext();
         }
     }
+
+    // --------------------------------------------------------------------------
+    //
+    // Section symbolic values
 
     private static int[] seedsIntValues = new int[] {};
     private static int countIntSeeds = 0;
@@ -86,7 +94,12 @@ public class Concolic {
         return concrete;
     }
 
-    // field access
+    //TODO: add concolic values for all primitive types
+
+
+    // --------------------------------------------------------------------------
+    //
+    // Section symbolic fields of objects / arrays
 
     private static ArrayList<AnnotatedValue[]> symbolicObjects = new ArrayList<>();
 
@@ -112,11 +125,17 @@ public class Concolic {
     }
 
     public static AnnotatedValue getArray(StaticObject receiver, int index, Object value) {
+        //TODO: add array get
         return null;
     }
 
     public static void setArray(StaticObject receiver, int index, AnnotatedValue a) {
+        //TODO: add array set
     }
+
+    // --------------------------------------------------------------------------
+    //
+    // start / end analysis functions
 
     @CompilerDirectives.TruffleBoundary
     public static void newPath(String config) {
@@ -126,8 +145,11 @@ public class Concolic {
         recordTrace = true;
         countIntSeeds = 0;
         countStringSeeds = 0;
+        symbolicObjects.clear();
         parseConfig(config);
         System.out.println("Seeded Int Values: " + Arrays.toString(seedsIntValues));
+        System.out.println("Seeded String Values: " + Arrays.toString(seedStringValues));
+        //TODO: init all values
         System.out.println("======================== START PATH [END].");
     }
 
@@ -135,7 +157,6 @@ public class Concolic {
         if (config.trim().length() < 1) {
             return;
         }
-
         String[] paramsGroups = config.trim().split(" "); // not in base64
         for (String paramGroup : paramsGroups) {
             String[] keyValue = paramGroup.split(":"); // not in base64
@@ -146,6 +167,7 @@ public class Concolic {
                 case "concolic.strings":
                     parseStrings(keyValue[1]);
                     break;
+                //TODO: add all classes
             }
         }
     }
@@ -189,12 +211,22 @@ public class Concolic {
         System.out.println("======================== END PATH [END].");
     }
 
+    @CompilerDirectives.TruffleBoundary
+    public static void uncaughtException(StaticObject pendingException) {
+        String errorMessage = pendingException.getKlass().getNameAsString();
+        addTraceElement(new ErrorEvent(errorMessage));
+    }
 
-    // case IADD: putInt(stack, top - 2, popInt(stack, top - 1) + popInt(stack, top - 2)); break;
-    // case LADD: putLong(stack, top - 4, popLong(stack, top - 1) + popLong(stack, top - 3)); break;
-    // case FADD: putFloat(stack, top - 2, popFloat(stack, top - 1) + popFloat(stack, top - 2)); break;
-    // case DADD: putDouble(stack, top - 4, popDouble(stack, top - 1) + popDouble(stack, top - 3)); break;
+    @CompilerDirectives.TruffleBoundary
+    public static void stopRecording(String message, Meta meta) {
+        addTraceElement(new ExceptionalEvent(message));
+        recordTrace = false;
+        meta.throwException(meta.java_lang_RuntimeException);
+    }
 
+    // --------------------------------------------------------------------------
+    //
+    // bytecode functions
 
     private static void symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator op, Object[] symbolic,
                                        int top, int c1, int c2, int concResult) {
@@ -228,6 +260,7 @@ public class Concolic {
         putSymbolic(symbolic,top - 1, result);
     }
 
+    // case IADD: putInt(stack, top - 2, popInt(stack, top - 1) + popInt(stack, top - 2)); break;
     public static void iadd(long[] primitives,  Object[] symbolic, int top) {
         int c1 = BytecodeNode.popInt(primitives, top - 1);
         int c2 = BytecodeNode.popInt(primitives, top - 2);
@@ -236,17 +269,10 @@ public class Concolic {
         symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.IADD, symbolic, top, c1, c2, concResult);
     }
 
-//    public static AnnotatedValue ladd(AnnotatedValue topm1,  AnnotatedValue topm3) {
-//        return new AnnotatedValue( topm1.asLong() + topm3.asLong());
-//    }
-//
-//    public static AnnotatedValue fadd(AnnotatedValue topm1,  AnnotatedValue topm2) {
-//        return new AnnotatedValue( topm1.asFloat() + topm2.asFloat());
-//    }
-//
-//    public static AnnotatedValue dadd(AnnotatedValue topm1,  AnnotatedValue topm3) {
-//        return new AnnotatedValue( topm1.asDouble() + topm3.asDouble());
-//    }
+    // case LADD: putLong(stack, top - 4, popLong(stack, top - 1) + popLong(stack, top - 3)); break;
+    // case FADD: putFloat(stack, top - 2, popFloat(stack, top - 1) + popFloat(stack, top - 2)); break;
+    // case DADD: putDouble(stack, top - 4, popDouble(stack, top - 1) + popDouble(stack, top - 3)); break;
+
 
     //case ISUB: putInt(stack, top - 2, -popInt(stack, top - 1) + popInt(stack, top - 2)); break;
     public static void isub(long[] primitives, Object[] symbolic, int top) {
@@ -375,7 +401,7 @@ public class Concolic {
         symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.IAND, symbolic, top, c1, c2, concResult);
     }
 
-    //                    case LAND: putLong(stack, top - 4, popLong(stack, top - 1) & popLong(stack, top - 3)); break;
+    // case LAND: putLong(stack, top - 4, popLong(stack, top - 1) & popLong(stack, top - 3)); break;
 
     //  case IOR: putInt(stack, top - 2, popInt(stack, top - 1) | popInt(stack, top - 2)); break;
     public static void ior(long[] primitives, Object[] symbolic, int top) {
@@ -386,7 +412,7 @@ public class Concolic {
         symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.IOR, symbolic, top, c1, c2, concResult);
     }
 
-    //                    case LOR: putLong(stack, top - 4, popLong(stack, top - 1) | popLong(stack, top - 3)); break;
+    // case LOR: putLong(stack, top - 4, popLong(stack, top - 1) | popLong(stack, top - 3)); break;
 
     // case IXOR: putInt(stack, top - 2, popInt(stack, top - 1) ^ popInt(stack, top - 2)); break;
     public static void ixor(long[] primitives, Object[] symbolic, int top) {
@@ -397,8 +423,7 @@ public class Concolic {
         symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.IXOR, symbolic, top, c1, c2, concResult);
     }
 
-    //                    case LXOR: putLong(stack, top - 4, popLong(stack, top - 1) ^ popLong(stack, top - 3)); break;
-
+    // case LXOR: putLong(stack, top - 4, popLong(stack, top - 1) ^ popLong(stack, top - 3)); break;
 
     // case IINC: setLocalInt(stack, bs.readLocalIndex(curBCI), getLocalInt(stack, bs.readLocalIndex(curBCI)) + bs.readIncrement(curBCI)); break;
     public static void iinc(long[] primitives, Object[] symbolic, BytecodeStream bs, int curBCI) {
@@ -422,115 +447,33 @@ public class Concolic {
         setLocalSymbolic(symbolic, index, symbResult);
     }
 
-    //                    case I2L: putLong(stack, top - 1, popInt(stack, top - 1)); break;
-    //                    case I2F: putFloat(stack, top - 1, popInt(stack, top - 1)); break;
-    //                    case I2D: putDouble(stack, top - 1, popInt(stack, top - 1)); break;
+    // case I2L: putLong(stack, top - 1, popInt(stack, top - 1)); break;
+    // case I2F: putFloat(stack, top - 1, popInt(stack, top - 1)); break;
+    // case I2D: putDouble(stack, top - 1, popInt(stack, top - 1)); break;
 
-//    public static AnnotatedValue i2l(AnnotatedValue topm1) {
-//        return new AnnotatedValue( (long) topm1.asInt());
-//    }
-//
-//    public static AnnotatedValue i2f(AnnotatedValue topm1) {
-//        return new AnnotatedValue( (float) topm1.asInt());
-//    }
-//
-//    public static AnnotatedValue i2d(AnnotatedValue topm1) {
-//        return new AnnotatedValue( (double) topm1.asInt());
-//    }
+    // case L2I: putInt(stack, top - 2, (int) popLong(stack, top - 1)); break;
+    // case L2F: putFloat(stack, top - 2, popLong(stack, top - 1)); break;
+    // case L2D: putDouble(stack, top - 2, popLong(stack, top - 1)); break;
 
-    //                    case L2I: putInt(stack, top - 2, (int) popLong(stack, top - 1)); break;
-    //                    case L2F: putFloat(stack, top - 2, popLong(stack, top - 1)); break;
-    //                    case L2D: putDouble(stack, top - 2, popLong(stack, top - 1)); break;
+    // case F2I: putInt(stack, top - 1, (int) popFloat(stack, top - 1)); break;
+    // case F2L: putLong(stack, top - 1, (long) popFloat(stack, top - 1)); break;
+    // case F2D: putDouble(stack, top - 1, popFloat(stack, top - 1)); break;
 
+    // case D2I: putInt(stack, top - 2, (int) popDouble(stack, top - 1)); break;
+    // case D2L: putLong(stack, top - 2, (long) popDouble(stack, top - 1)); break;
+    // case D2F: putFloat(stack, top - 2, (float) popDouble(stack, top - 1)); break;
 
-//    public static AnnotatedValue l2i(AnnotatedValue topm1) {
-//        return new AnnotatedValue( (int) topm1.asLong());
-//    }
-//
-//    public static AnnotatedValue l2f(AnnotatedValue topm1) {
-//        return new AnnotatedValue( (float) topm1.asLong());
-//    }
-//
-//    public static AnnotatedValue l2d(AnnotatedValue topm1) {
-//        return new AnnotatedValue( (double) topm1.asLong());
-//    }
+    // case I2B: putInt(stack, top - 1, (byte) popInt(stack, top - 1)); break;
+    // case I2C: putInt(stack, top - 1, (char) popInt(stack, top - 1)); break;
+    // case I2S: putInt(stack, top - 1, (short) popInt(stack, top - 1)); break;
 
-    //                    case F2I: putInt(stack, top - 1, (int) popFloat(stack, top - 1)); break;
-    //                    case F2L: putLong(stack, top - 1, (long) popFloat(stack, top - 1)); break;
-    //                    case F2D: putDouble(stack, top - 1, popFloat(stack, top - 1)); break;
-
-//    public static AnnotatedValue f2i(AnnotatedValue topm1) {
-//        return new AnnotatedValue( (int) topm1.asFloat());
-//    }
-//
-//    public static AnnotatedValue f2l(AnnotatedValue topm1) {
-//        return new AnnotatedValue( (long) topm1.asFloat());
-//    }
-//
-//    public static AnnotatedValue f2d(AnnotatedValue topm1) {
-//        return new AnnotatedValue( (double) topm1.asFloat());
-//    }
-
-    //                    case D2I: putInt(stack, top - 2, (int) popDouble(stack, top - 1)); break;
-    //                    case D2L: putLong(stack, top - 2, (long) popDouble(stack, top - 1)); break;
-    //                    case D2F: putFloat(stack, top - 2, (float) popDouble(stack, top - 1)); break;
-
-//    public static AnnotatedValue d2i(AnnotatedValue topm1) {
-//        return new AnnotatedValue( (int) topm1.asDouble());
-//    }
-//
-//    public static AnnotatedValue d2l(AnnotatedValue topm1) {
-//        return new AnnotatedValue( (long) topm1.asDouble());
-//    }
-//
-//    public static AnnotatedValue d2f(AnnotatedValue topm1) {
-//        return new AnnotatedValue( (float) topm1.asDouble());
-//    }
-
-    //                    case I2B: putInt(stack, top - 1, (byte) popInt(stack, top - 1)); break;
-    //                   case I2C: putInt(stack, top - 1, (char) popInt(stack, top - 1)); break;
-    //                    case I2S: putInt(stack, top - 1, (short) popInt(stack, top - 1)); break;
-
-//    public static AnnotatedValue i2b(AnnotatedValue topm1) {
-//        return new AnnotatedValue( (byte) topm1.asInt());
-//    }
-//
-//    public static AnnotatedValue i2c(AnnotatedValue topm1) {
-//        return new AnnotatedValue( (char) topm1.asInt());
-//    }
-//
-//    public static AnnotatedValue i2s(AnnotatedValue topm1) {
-//        return new AnnotatedValue( (short) topm1.asInt());
-//    }
-
-    //                    case LCMP : putInt(stack, top - 4, compareLong(popLong(stack, top - 1), popLong(stack, top - 3))); break;
-    //                    case FCMPL: putInt(stack, top - 2, compareFloatLess(popFloat(stack, top - 1), popFloat(stack, top - 2))); break;
-    //                    case FCMPG: putInt(stack, top - 2, compareFloatGreater(popFloat(stack, top - 1), popFloat(stack, top - 2))); break;
-    //                    case DCMPL: putInt(stack, top - 4, compareDoubleLess(popDouble(stack, top - 1), popDouble(stack, top - 3))); break;
-    //                    case DCMPG: putInt(stack, top - 4, compareDoubleGreater(popDouble(stack, top - 1), popDouble(stack, top - 3))); break;
+    // case LCMP : putInt(stack, top - 4, compareLong(popLong(stack, top - 1), popLong(stack, top - 3))); break;
+    // case FCMPL: putInt(stack, top - 2, compareFloatLess(popFloat(stack, top - 1), popFloat(stack, top - 2))); break;
+    // case FCMPG: putInt(stack, top - 2, compareFloatGreater(popFloat(stack, top - 1), popFloat(stack, top - 2))); break;
+    // case DCMPL: putInt(stack, top - 4, compareDoubleLess(popDouble(stack, top - 1), popDouble(stack, top - 3))); break;
+    // case DCMPG: putInt(stack, top - 4, compareDoubleGreater(popDouble(stack, top - 1), popDouble(stack, top - 3))); break;
 
 
-//    public static AnnotatedValue lcmp(AnnotatedValue topm1,  AnnotatedValue topm3) {
-//        return new AnnotatedValue( compareLong( topm1.asLong(), topm3.asLong()));
-//    }
-//
-//    public static AnnotatedValue fcmpl(AnnotatedValue topm1,  AnnotatedValue topm2) {
-//        return new AnnotatedValue( compareFloatLess(topm1.asFloat(), topm2.asFloat()));
-//    }
-//
-//    public static AnnotatedValue fcmpg(AnnotatedValue topm1,  AnnotatedValue topm2) {
-//        return new AnnotatedValue( compareFloatGreater(topm1.asFloat(), topm2.asFloat()));
-//    }
-//
-//    public static AnnotatedValue dcmpl(AnnotatedValue topm1,  AnnotatedValue topm3) {
-//        return new AnnotatedValue( compareDoubleLess(topm1.asDouble(), topm3.asDouble()));
-//    }
-//
-//    public static AnnotatedValue dcmpg(AnnotatedValue topm1,  AnnotatedValue topm3) {
-//        return new AnnotatedValue( compareDoubleGreater(topm1.asDouble(), topm3.asDouble()));
-//    }
-
-    //@CompilerDirectives.TruffleBoundary
     public static boolean takeBranchPrimitive1(long[] primitives, Object[] symbolic, int top, int opcode) {
         assert IFEQ <= opcode && opcode <= IFLE;
 
@@ -556,6 +499,7 @@ public class Concolic {
             Expression expr = null;
             switch (opcode) {
                 case IFEQ: expr = !takeBranch ? s1.symbolic() : Expression.negation(s1.symbolic()); break;
+                //TODO: add cases
                 default:
                     CompilerDirectives.transferToInterpreter();
                     throw EspressoError.shouldNotReachHere("expecting IFEQ,IFNE,IFLT,IFGE,IFGT,IFLE");
@@ -646,25 +590,9 @@ public class Concolic {
         return new AnnotatedValue(areEqual, symbolic);
     }
 
-    private static int compareLong(long y, long x) {
-        return Long.compare(x, y);
-    }
-
-    private static int compareFloatGreater(float y, float x) {
-        return (x < y ? -1 : ((x == y) ? 0 : 1));
-    }
-
-    private static int compareFloatLess(float y, float x) {
-        return (x > y ? 1 : ((x == y) ? 0 : -1));
-    }
-
-    private static int compareDoubleGreater(double y, double x) {
-        return (x < y ? -1 : ((x == y) ? 0 : 1));
-    }
-
-    private static int compareDoubleLess(double y, double x) {
-        return (x > y ? 1 : ((x == y) ? 0 : -1));
-    }
+    // --------------------------------------------------------------------------
+    //
+    // symbolic stack and var functions
 
     public static AnnotatedValue popSymbolic(Object[] symbolic, int slot) {
         if (symbolic[slot] == null || !(symbolic[slot] instanceof AnnotatedValue)) {
@@ -696,16 +624,4 @@ public class Concolic {
         return (AnnotatedValue) symbolic[symbolic.length - 1 - slot];
     }
 
-    @CompilerDirectives.TruffleBoundary
-    public static void uncaughtException(StaticObject pendingException) {
-        String errorMessage = pendingException.getKlass().getNameAsString();
-        addTraceElement(new ErrorEvent(errorMessage));
-    }
-
-    @CompilerDirectives.TruffleBoundary
-    public static void stopRecording(String message, Meta meta) {
-        addTraceElement(new ExceptionalEvent(message));
-        recordTrace = false;
-        meta.throwException(meta.java_lang_RuntimeException);
-    }
 }

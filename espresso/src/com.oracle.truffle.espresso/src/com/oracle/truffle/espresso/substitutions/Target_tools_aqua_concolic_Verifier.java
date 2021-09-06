@@ -30,10 +30,31 @@ public class Target_tools_aqua_concolic_Verifier {
     }
 
     //    public static byte nondetByte()
+    @Substitution(hasReceiver = false)
+    @CompilerDirectives.TruffleBoundary
+    public static @Host(typeName = "B") Object nondetByte(@InjectMeta Meta meta) {
+        Concolic.stopRecording("not supported", meta);
+        // never reached ...
+        return false;
+    }
 
     //    public static char nondetChar()
+    @Substitution(hasReceiver = false)
+    @CompilerDirectives.TruffleBoundary
+    public static @Host(typeName = "C") Object nondetChar(@InjectMeta Meta meta) {
+        Concolic.stopRecording("not supported", meta);
+        // never reached ...
+        return false;
+    }
 
     //    public static short nondetShort()
+    @Substitution(hasReceiver = false)
+    @CompilerDirectives.TruffleBoundary
+    public static @Host(typeName = "S") Object nondetShort(@InjectMeta Meta meta) {
+        Concolic.stopRecording("not supported", meta);
+        // never reached ...
+        return false;
+    }
 
     //    public static int nondetInt()
     @Substitution(hasReceiver = false)
@@ -42,10 +63,31 @@ public class Target_tools_aqua_concolic_Verifier {
     }
 
     //    public static long nondetLong()
+    @Substitution(hasReceiver = false)
+    @CompilerDirectives.TruffleBoundary
+    public static @Host(typeName = "J") Object nondetLong(@InjectMeta Meta meta) {
+        Concolic.stopRecording("not supported", meta);
+        // never reached ...
+        return false;
+    }
 
     //    public static float nondetFloat()
+    @Substitution(hasReceiver = false)
+    @CompilerDirectives.TruffleBoundary
+    public static @Host(typeName = "F") Object nondetFloat(@InjectMeta Meta meta) {
+        Concolic.stopRecording("not supported", meta);
+        // never reached ...
+        return false;
+    }
 
     //    public static double nondetDouble()
+    @Substitution(hasReceiver = false)
+    @CompilerDirectives.TruffleBoundary
+    public static @Host(typeName = "D") Object nondetDouble(@InjectMeta Meta meta) {
+        Concolic.stopRecording("not supported", meta);
+        // never reached ...
+        return false;
+    }
 
     //    public static String nondetString()
     @Substitution(hasReceiver = false)
