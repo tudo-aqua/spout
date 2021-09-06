@@ -228,12 +228,12 @@ public class Concolic {
     //
     // bytecode functions
 
-    private static void symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator op, Object[] symbolic,
+    private static void symbolicIntOp(OperatorComparator op, Object[] symbolic,
                                        int top, int c1, int c2, int concResult) {
         symbolicIntOp(op, symbolic, top, c1, c2, concResult, false);
     }
 
-    private static void symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator op, Object[] symbolic,
+    private static void symbolicIntOp(OperatorComparator op, Object[] symbolic,
                                        int top, int c1, int c2, int concResult, boolean reverse) {
 
         AnnotatedValue s1 = popSymbolic(symbolic, reverse ? top -2 : top -1);
@@ -245,18 +245,18 @@ public class Concolic {
         if (s1 == null) s1 = AnnotatedValue.fromInt(c1);
         if (s2 == null) s2 = AnnotatedValue.fromInt(c2);
 
-        AnnotatedValue result = new AnnotatedValue( concResult, Expression.intOp(op, s1.symbolic(), s2.symbolic() ));
+        AnnotatedValue result = new AnnotatedValue( concResult, new ComplexExpression(op, s1.symbolic(), s2.symbolic() ));
         putSymbolic(symbolic,top - 2, result);
     }
 
-    private static void unarySymbolicIntOp(UnaryPrimitiveExpression.UnaryPrimitiveOperator op, Object[] symbolic,
+    private static void unarySymbolicIntOp(OperatorComparator op, Object[] symbolic,
                                             int top, int c1, int concResult) {
 
         AnnotatedValue s1 = popSymbolic(symbolic, top -1);
         if (s1 == null) {
             return;
         }
-        AnnotatedValue result = new AnnotatedValue( concResult, Expression.unaryIntOp(op, s1.symbolic()));
+        AnnotatedValue result = new AnnotatedValue( concResult, new ComplexExpression(op, s1.symbolic()));
         putSymbolic(symbolic,top - 1, result);
     }
 
@@ -266,7 +266,7 @@ public class Concolic {
         int c2 = BytecodeNode.popInt(primitives, top - 2);
         int concResult = c1 + c2;
         BytecodeNode.putInt(primitives, top - 2, concResult);
-        symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.IADD, symbolic, top, c1, c2, concResult);
+        symbolicIntOp(OperatorComparator.IADD, symbolic, top, c1, c2, concResult);
     }
 
     // case LADD: putLong(stack, top - 4, popLong(stack, top - 1) + popLong(stack, top - 3)); break;
@@ -280,7 +280,7 @@ public class Concolic {
         int c2 = BytecodeNode.popInt(primitives, top - 2);
         int concResult = c2 - c1;
         BytecodeNode.putInt(primitives, top - 2, concResult);
-        symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.ISUB, symbolic, top, c2, c1, concResult, true);
+        symbolicIntOp(OperatorComparator.ISUB, symbolic, top, c2, c1, concResult, true);
     }
 
     //case LSUB: putLong(stack, top - 4, -popLong(stack, top - 1) + popLong(stack, top - 3)); break;
@@ -293,7 +293,7 @@ public class Concolic {
         int c2 = BytecodeNode.popInt(primitives, top - 2);
         int concResult = c1 * c2;
         BytecodeNode.putInt(primitives, top - 2, concResult);
-        symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.IMUL, symbolic, top, c1, c2, concResult);
+        symbolicIntOp(OperatorComparator.IMUL, symbolic, top, c1, c2, concResult);
     }
 
     // case LMUL: putLong(stack, top - 4, popLong(stack, top - 1) * popLong(stack, top - 3)); break;
@@ -304,14 +304,14 @@ public class Concolic {
     private static void checkNonZero(int value, AnnotatedValue a, BytecodeNode bn) {
         if (value != 0) {
             if (a != null) {
-                addTraceElement(new PathCondition( Expression.intComp(
-                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.NE, a.symbolic(), Constant.INT_ZERO),0, 2));
+                addTraceElement(new PathCondition( new ComplexExpression(
+                        OperatorComparator.NE, a.symbolic(), Constant.INT_ZERO),0, 2));
             }
         }
         else {
             if (a != null) {
-                addTraceElement(new PathCondition(Expression.intComp(
-                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.EQ, a.symbolic(), Constant.INT_ZERO), 1, 2));
+                addTraceElement(new PathCondition(new ComplexExpression(
+                        OperatorComparator.EQ, a.symbolic(), Constant.INT_ZERO), 1, 2));
             }
             bn.enterImplicitExceptionProfile();
             Meta meta = bn.getMeta();
@@ -326,7 +326,7 @@ public class Concolic {
         checkNonZero(c1, peekSymbolic(symbolic, top -1), bn);
         int concResult = c2 / c1;
         BytecodeNode.putInt(primitives, top - 2, concResult);
-        symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.IDIV, symbolic, top, c2, c1, concResult, true);
+        symbolicIntOp(OperatorComparator.IDIV, symbolic, top, c2, c1, concResult, true);
     }
 
     // case LDIV: putLong(stack, top - 4, divLong(checkNonZero(popLong(stack, top - 1)), popLong(stack, top - 3))); break;
@@ -340,7 +340,7 @@ public class Concolic {
         checkNonZero(c1, peekSymbolic(symbolic, top -1), bn);
         int concResult = c2 % c1;
         BytecodeNode.putInt(primitives, top - 2, concResult);
-        symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.IREM, symbolic, top, c2, c1, concResult, true);
+        symbolicIntOp(OperatorComparator.IREM, symbolic, top, c2, c1, concResult, true);
     }
 
     // case LREM: putLong(stack, top - 4, remLong(checkNonZero(popLong(stack, top - 1)), popLong(stack, top - 3))); break;
@@ -352,7 +352,7 @@ public class Concolic {
         int c1 = BytecodeNode.popInt(primitives, top - 1);
         int concResult = -c1;
         BytecodeNode.putInt(primitives, top - 1, concResult);
-        unarySymbolicIntOp(UnaryPrimitiveExpression.UnaryPrimitiveOperator.INEG, symbolic, top, c1, concResult);
+        unarySymbolicIntOp(OperatorComparator.INEG, symbolic, top, c1, concResult);
     }
 
     // case LNEG: putLong(stack, top - 2, -popLong(stack, top - 1)); break;
@@ -365,7 +365,7 @@ public class Concolic {
         int c2 = BytecodeNode.popInt(primitives, top - 2);
         int concResult = c2 << c1;
         BytecodeNode.putInt(primitives, top - 2, concResult);
-        symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.ISHL, symbolic, top, c2, c1, concResult, true);
+        symbolicIntOp(OperatorComparator.ISHL, symbolic, top, c2, c1, concResult, true);
     }
 
     // case LSHL: putLong(stack, top - 3, shiftLeftLong(popInt(stack, top - 1), popLong(stack, top - 2))); break;
@@ -376,7 +376,7 @@ public class Concolic {
         int c2 = BytecodeNode.popInt(primitives, top - 2);
         int concResult = c2 >> c1;
         BytecodeNode.putInt(primitives, top - 2, concResult);
-        symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.ISHR, symbolic, top, c2, c1, concResult, true);
+        symbolicIntOp(OperatorComparator.ISHR, symbolic, top, c2, c1, concResult, true);
     }
 
     // case LSHR: putLong(stack, top - 3, shiftRightSignedLong(popInt(stack, top - 1), popLong(stack, top - 2))); break;
@@ -387,7 +387,7 @@ public class Concolic {
         int c2 = BytecodeNode.popInt(primitives, top - 2);
         int concResult = c2 >>> c1;
         BytecodeNode.putInt(primitives, top - 2, concResult);
-        symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.IUSHR, symbolic, top, c2, c1, concResult, true);
+        symbolicIntOp(OperatorComparator.IUSHR, symbolic, top, c2, c1, concResult, true);
     }
 
     // case LUSHR: putLong(stack, top - 3, shiftRightUnsignedLong(popInt(stack, top - 1), popLong(stack, top - 2))); break;
@@ -398,7 +398,7 @@ public class Concolic {
         int c2 = BytecodeNode.popInt(primitives, top - 2);
         int concResult = c1 & c2;
         BytecodeNode.putInt(primitives, top - 2, concResult);
-        symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.IAND, symbolic, top, c1, c2, concResult);
+        symbolicIntOp(OperatorComparator.IAND, symbolic, top, c1, c2, concResult);
     }
 
     // case LAND: putLong(stack, top - 4, popLong(stack, top - 1) & popLong(stack, top - 3)); break;
@@ -409,7 +409,7 @@ public class Concolic {
         int c2 = BytecodeNode.popInt(primitives, top - 2);
         int concResult = c1 | c2;
         BytecodeNode.putInt(primitives, top - 2, concResult);
-        symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.IOR, symbolic, top, c1, c2, concResult);
+        symbolicIntOp(OperatorComparator.IOR, symbolic, top, c1, c2, concResult);
     }
 
     // case LOR: putLong(stack, top - 4, popLong(stack, top - 1) | popLong(stack, top - 3)); break;
@@ -420,7 +420,7 @@ public class Concolic {
         int c2 = BytecodeNode.popInt(primitives, top - 2);
         int concResult = c1 ^ c2;
         BytecodeNode.putInt(primitives, top - 2, concResult);
-        symbolicIntOp(BinaryPrimitiveExpression.BinaryPrimitiveOperator.IXOR, symbolic, top, c1, c2, concResult);
+        symbolicIntOp(OperatorComparator.IXOR, symbolic, top, c1, c2, concResult);
     }
 
     // case LXOR: putLong(stack, top - 4, popLong(stack, top - 1) ^ popLong(stack, top - 3)); break;
@@ -442,8 +442,8 @@ public class Concolic {
         }
 
         Constant symbIncr = Constant.fromConcreteValue(incr);
-        AnnotatedValue symbResult = new AnnotatedValue(concResult, Expression.intOp(
-                BinaryPrimitiveExpression.BinaryPrimitiveOperator.IADD, s1.symbolic(), symbIncr));
+        AnnotatedValue symbResult = new AnnotatedValue(concResult,
+                new ComplexExpression(OperatorComparator.IADD, s1.symbolic(), symbIncr));
         setLocalSymbolic(symbolic, index, symbResult);
     }
 
@@ -498,7 +498,7 @@ public class Concolic {
         if (s1 != null) {
             Expression expr = null;
             switch (opcode) {
-                case IFEQ: expr = !takeBranch ? s1.symbolic() : Expression.negation(s1.symbolic()); break;
+                case IFEQ: expr = !takeBranch ? s1.symbolic() : new ComplexExpression(OperatorComparator.BNEG, s1.symbolic()); break;
                 //TODO: add cases
                 default:
                     CompilerDirectives.transferToInterpreter();
@@ -539,24 +539,24 @@ public class Concolic {
 
             Expression expr = null;
             switch (opcode) {
-                case IF_ICMPEQ : expr = Expression.intComp(takeBranch ?
-                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.EQ :
-                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.NE, s1.symbolic(), s2.symbolic()); break;
-                case IF_ICMPNE : expr = Expression.intComp(takeBranch ?
-                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.NE :
-                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.EQ, s1.symbolic(), s2.symbolic()); break;
-                case IF_ICMPLT : expr = Expression.intComp(takeBranch ?
-                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.GT :
-                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.LE, s1.symbolic(), s2.symbolic()); break;
-                case IF_ICMPGE : expr = Expression.intComp(takeBranch ?
-                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.LE :
-                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.GT, s1.symbolic(), s2.symbolic()); break;
-                case IF_ICMPGT : expr = Expression.intComp(takeBranch ?
-                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.LT :
-                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.GE, s1.symbolic(), s2.symbolic()); break;
-                case IF_ICMPLE : expr = Expression.intComp(takeBranch ?
-                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.GE :
-                        BinaryPrimitiveExpression.BinaryPrimitiveOperator.LT, s1.symbolic(), s2.symbolic()); break;
+                case IF_ICMPEQ : expr = new ComplexExpression(takeBranch ?
+                        OperatorComparator.EQ :
+                        OperatorComparator.NE, s1.symbolic(), s2.symbolic()); break;
+                case IF_ICMPNE : expr = new ComplexExpression(takeBranch ?
+                        OperatorComparator.NE :
+                        OperatorComparator.EQ, s1.symbolic(), s2.symbolic()); break;
+                case IF_ICMPLT : expr = new ComplexExpression(takeBranch ?
+                        OperatorComparator.GT :
+                        OperatorComparator.LE, s1.symbolic(), s2.symbolic()); break;
+                case IF_ICMPGE : expr = new ComplexExpression(takeBranch ?
+                        OperatorComparator.LE :
+                        OperatorComparator.GT, s1.symbolic(), s2.symbolic()); break;
+                case IF_ICMPGT : expr = new ComplexExpression(takeBranch ?
+                        OperatorComparator.LT :
+                        OperatorComparator.GE, s1.symbolic(), s2.symbolic()); break;
+                case IF_ICMPLE : expr = new ComplexExpression(takeBranch ?
+                        OperatorComparator.GE :
+                        OperatorComparator.LT, s1.symbolic(), s2.symbolic()); break;
                 default        :
                     CompilerDirectives.transferToInterpreter();
                     throw EspressoError.shouldNotReachHere("non-branching bytecode");
@@ -584,8 +584,7 @@ public class Concolic {
                 Constant.fromConcreteValue(meta.toHostString(other)) :
                 symbolicObjects.get(other.getConcolicId())[0].symbolic();
 
-        Expression symbolic = Expression.stringComp(
-                BinaryPrimitiveExpression.BinaryPrimitiveOperator.STRINGEQ, exprSelf, exprOther);
+        Expression symbolic = new ComplexExpression(OperatorComparator.STRINGEQ, exprSelf, exprOther);
 
         return new AnnotatedValue(areEqual, symbolic);
     }
