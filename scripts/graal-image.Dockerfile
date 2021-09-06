@@ -11,4 +11,4 @@ ENV PATH=/data/mx:$PATH
 RUN echo $PATH
 RUN java -version && javac -version
 RUN gu install native-image
-RUN apt-get -y install build-essential libz-dev zlib1g-dev
+RUN apt-get -y install build-essential libz-dev zlib1g-dev pip
