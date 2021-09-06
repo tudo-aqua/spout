@@ -1,3 +1,33 @@
+
+# GDart
+
+This project is a fork of [graal/espresso](https://github.com/oracle/graal/)
+
+## Installation
+
+- You need [mx](https://github.com/graalvm/mx) on the path
+- You need [GraalVM](https://github.com/graalvm/graalvm-ce-builds/releases). Tested to work with 21.1.0 and 21.2.0
+- Can only run on Linux currently
+
+## Building
+
+```bash
+$ cd graal/espresso 
+$ export JAVA_HOME=[PATH-TO-GRAALVM]
+$ mx --env native-ce build 
+```
+
+## Running
+
+- Concolic Values are currently seeded using ```-Dconcolic.ints=[comma separated list of ints]```
+- Espresso native image is built as ```java```with truffle extension into a folder in ```graal/sdk/mxbuild``` e.g. ```graal/sdk/mxbuild/linux-amd64/GRAALVM_ESPRESSO_NATIVE_CE_JAVA11/graalvm-espresso-native-ce-java11-21.2.0``` 
+
+```bash
+$ [path-to-native-espresso]/bin/java -truffle ...
+```
+
+
+
 # Espresso :coffee:
 A meta-circular Java bytecode interpreter for the [GraalVM](https://github.com/oracle/graal).  
 Espresso is a fully meta-circular implementation of *The Java Virtual Machine Specification, Java SE [8](https://docs.oracle.com/javase/specs/jvms/se8/html/index.html) and [11](https://docs.oracle.com/javase/specs/jvms/se11/html/index.html) Edition*, written in Java, capable of running non-trivial programs at speed.  
