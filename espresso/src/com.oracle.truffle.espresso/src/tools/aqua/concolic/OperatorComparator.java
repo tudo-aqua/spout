@@ -40,29 +40,30 @@ public enum OperatorComparator {
 
     @Override
     public String toString() {
+        //TODO: someone needs to check these!
         switch(this) {
             case IADD:
-                return "+";
+                return "bvadd";
             case ISUB:
-                return "-";
+                return "bvsub";
             case IMUL:
-                return "*";
+                return "bvmul";
             case IDIV:
-                return "/";
+                return "bvsdiv";
             case IREM:
-                return "%";
+                return "bvsrem";
             case ISHL:
-                return "<<";
+                return "bvshl";
             case ISHR:
-                return ">>";
+                return "bvashr";
             case IUSHR:
-                return ">>>";
+                return "bvlshr";
             case IAND:
-                return "&";
+                return "bvand";
             case IOR:
-                return "|";
+                return "bvor";
             case IXOR:
-                return "^";
+                return "bvxor";
 
             case INEG:
                 return "-";
@@ -76,13 +77,13 @@ public enum OperatorComparator {
             case STRINGNE:
                 return "!=";
             case GT:
-                return ">";
+                return "bvsgt";
             case GE:
-                return ">=";
+                return "bvsge";
             case LT:
-                return "<";
+                return "bvslt";
             case LE:
-                return "<=";
+                return "bvsle";
 
             case SLENGTH:
                 return "str.len";

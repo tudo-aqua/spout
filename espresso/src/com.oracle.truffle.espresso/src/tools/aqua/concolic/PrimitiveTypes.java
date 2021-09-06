@@ -7,7 +7,7 @@ public enum PrimitiveTypes {
     public String toString() {
         switch(this) {
             case INT:
-                return "Int";
+                return "(_ BitVec 32)";
             case STRING:
                 return "String";
             default:

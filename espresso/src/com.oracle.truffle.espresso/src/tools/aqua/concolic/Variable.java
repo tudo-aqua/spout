@@ -1,6 +1,6 @@
 package tools.aqua.concolic;
 
-public class Variable extends PrimitiveExpression {
+public class Variable extends Atom {
 
     private final int id;
 

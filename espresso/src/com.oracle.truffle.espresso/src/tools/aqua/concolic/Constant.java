@@ -1,8 +1,6 @@
 package tools.aqua.concolic;
 
-import com.oracle.truffle.espresso.runtime.StaticObject;
-
-public abstract class Constant extends PrimitiveExpression {
+public abstract class Constant extends Atom {
 
     public final static IntConstant INT_ZERO = new IntConstant(0);
 
@@ -15,6 +13,11 @@ public abstract class Constant extends PrimitiveExpression {
         @Override
         Integer getValue() {
             return (int) super.getValue();
+        }
+
+        @Override
+        public String toString() {
+            return "#x" + String.format("%1$08x", getValue());
         }
     }
 
