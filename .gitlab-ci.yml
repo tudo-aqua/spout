@@ -25,3 +25,6 @@ development-image:
 build:
   stage: build
   image: $CI_REGISTRY/psyco/gdart/development:21.2.0
+  script:
+    - mx build -all
+    - mx --env native-ce build

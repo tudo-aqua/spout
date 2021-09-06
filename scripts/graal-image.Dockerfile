@@ -10,3 +10,5 @@ RUN git clone https://github.com/graalvm/mx.git
 ENV PATH=/data/mx:$PATH
 RUN echo $PATH
 RUN java -version && javac -version
+RUN gu install native-image
+RUN apt-get install build-essential libz-dev zlib1g-dev
