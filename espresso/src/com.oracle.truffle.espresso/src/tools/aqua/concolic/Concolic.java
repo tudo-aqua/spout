@@ -2,6 +2,7 @@ package tools.aqua.concolic;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.espresso.bytecode.BytecodeStream;
+import com.oracle.truffle.espresso.impl.ArrayKlass;
 import com.oracle.truffle.espresso.impl.Field;
 import com.oracle.truffle.espresso.impl.ObjectKlass;
 import com.oracle.truffle.espresso.meta.EspressoError;
@@ -124,14 +125,62 @@ public class Concolic {
         putSymbolic(symbolic, at, a);
     }
 
-    public static AnnotatedValue getArray(StaticObject receiver, int index, Object value) {
-        //TODO: add array get
-        return null;
+    public static void getArrayAnnotation(StaticObject array, int concIndex, Object[] symbolic, int from, int to) {
+        AnnotatedValue symbIndex = popSymbolic(symbolic, from);
+        if (!checkArrayAccessPathConstraint(array, concIndex, symbIndex) || array.getConcolicId() < 0) {
+            return;
+        }
+        AnnotatedValue[] annotations = symbolicObjects.get(array.getConcolicId());
+        AnnotatedValue a = annotations[concIndex];
+        putSymbolic(symbolic, to, a);
     }
 
-    public static void setArray(StaticObject receiver, int index, AnnotatedValue a) {
-        //TODO: add array set
+    public static void setArrayAnnotation(StaticObject array, int concValue, int concIndex, Object[] symbolic, int fromValue, int fromIndex) {
+        AnnotatedValue symbIndex = popSymbolic(symbolic, fromIndex);
+        AnnotatedValue symbValue = popSymbolic(symbolic, fromValue);
+        if (!checkArrayAccessPathConstraint(array, concIndex, symbIndex) || symbValue == null) {
+            return;
+        }
+
+        if (array.getConcolicId() < 0) {
+            array.setConcolicId(symbolicObjects.size());
+            symbolicObjects.add(new AnnotatedValue[ arrayLength(array) + 1]);
+        }
+        AnnotatedValue[] annotations = symbolicObjects.get(array.getConcolicId());
+        annotations[concIndex] = symbValue;
     }
+
+    private static boolean checkArrayAccessPathConstraint(StaticObject array, int concIndex, AnnotatedValue annotatedIndex) {
+        assert array.isArray();
+        int concLen = arrayLength(array);
+        boolean safe = 0 <= concIndex && concIndex < concLen;
+        if ((array.getConcolicId() >= 0 && symbolicObjects.get(array.getConcolicId())[concLen] != null) || annotatedIndex != null) {
+
+            Expression symbIndex = (annotatedIndex == null) ?
+                    Constant.fromConcreteValue(concIndex) :
+                    annotatedIndex.symbolic();
+            Expression symbLen;
+            if (array.getConcolicId() < 0) {
+                symbLen = Constant.fromConcreteValue(concLen);
+            }
+            else {
+                AnnotatedValue a = symbolicObjects.get(array.getConcolicId())[concLen];
+                symbLen = (a != null) ? a.symbolic() : Constant.fromConcreteValue(concLen);
+            }
+
+            Expression arrayBound = new ComplexExpression(OperatorComparator.BAND,
+                    new ComplexExpression(OperatorComparator.LE, Constant.INT_ZERO, symbIndex ),
+                    new ComplexExpression(OperatorComparator.LT, symbIndex, symbLen));
+
+            addTraceElement(new PathCondition(safe ? arrayBound : new ComplexExpression(OperatorComparator.BNEG, arrayBound), safe ? 1 : 0, 2));
+        }
+        return safe;
+    }
+
+    private static int arrayLength(StaticObject array) {
+        return array.length();
+    }
+
 
     // --------------------------------------------------------------------------
     //
@@ -497,12 +546,28 @@ public class Concolic {
 
         if (s1 != null) {
             Expression expr = null;
-            switch (opcode) {
-                case IFEQ: expr = !takeBranch ? s1.symbolic() : new ComplexExpression(OperatorComparator.BNEG, s1.symbolic()); break;
-                //TODO: add cases
-                default:
-                    CompilerDirectives.transferToInterpreter();
-                    throw EspressoError.shouldNotReachHere("expecting IFEQ,IFNE,IFLT,IFGE,IFGT,IFLE");
+
+            if (Expression.isBoolean(s1.symbolic())) {
+                switch (opcode) {
+                    case IFEQ      : expr = !takeBranch ? s1.symbolic() : new ComplexExpression(OperatorComparator.BNEG, s1.symbolic()); break;
+                    default        :
+                        CompilerDirectives.transferToInterpreter();
+                        throw EspressoError.shouldNotReachHere("only defined for IFEQ so far");
+                }
+            }
+            else {
+                switch (opcode) {
+                    case IFEQ      : expr = new ComplexExpression(OperatorComparator.EQ, s1.symbolic(), Constant.INT_ZERO); break;
+                    case IFNE      : expr = new ComplexExpression(OperatorComparator.NE, s1.symbolic(), Constant.INT_ZERO); break;
+                    case IFLT      : expr = new ComplexExpression(OperatorComparator.LT, s1.symbolic(), Constant.INT_ZERO);  break;
+                    case IFGE      : expr = new ComplexExpression(OperatorComparator.GE, s1.symbolic(), Constant.INT_ZERO);  break;
+                    case IFGT      : expr = new ComplexExpression(OperatorComparator.GT, s1.symbolic(), Constant.INT_ZERO);  break;
+                    case IFLE      : expr = new ComplexExpression(OperatorComparator.LE, s1.symbolic(), Constant.INT_ZERO);  break;
+                    default        :
+                        CompilerDirectives.transferToInterpreter();
+                        throw EspressoError.shouldNotReachHere("expecting IFEQ,IFNE,IFLT,IFGE,IFGT,IFLE");
+                }
+                expr = takeBranch ? expr : new ComplexExpression(OperatorComparator.BNEG, expr);
             }
 
             addTraceElement(new PathCondition(expr, takeBranch ? 1 : 0, 2));

@@ -1,5 +1,7 @@
 package tools.aqua.concolic;
 
+import java.util.EnumSet;
+
 public enum OperatorComparator {
     // Integer (maybe all numeric types?)
     IADD,
@@ -19,9 +21,14 @@ public enum OperatorComparator {
     LE,
     EQ,
     NE,
-    // Unary
     INEG,
+    // Boolean
     BNEG,
+    BAND,
+    BOR,
+    BXOR,
+    BEQUIV,
+    BIMPLIES,
     // String
     STRINGEQ,
     STRINGNE,
@@ -97,5 +104,9 @@ public enum OperatorComparator {
         }
     }
 
+    static EnumSet<OperatorComparator> boolOps = EnumSet.of(EQ, STRINGEQ, NE, STRINGNE, LT, LE, GT, GE, BNEG, BAND, BOR, BXOR, BEQUIV, BIMPLIES);
 
+    public boolean isBoolean() {
+        return boolOps.contains(this);
+    }
 }

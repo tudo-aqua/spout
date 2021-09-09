@@ -53,13 +53,9 @@ public abstract class IntArrayLoadNode extends QuickNode {
     public final int execute(VirtualFrame frame, long[] primitives, Object[] refs) {
         StaticObject array = nullCheck(BytecodeNode.popObject(refs, top - 2));
         int index = BytecodeNode.popInt(primitives, top - 1);
+        Concolic.getArrayAnnotation(array, index, refs, top -1, top -2);
         int intValue = executeLoad(array, index);
         BytecodeNode.putInt(primitives, top - 2, intValue);
-
-        // symbolic
-        AnnotatedValue symb = Concolic.getArray(array, index, intValue);
-        Concolic.putSymbolic(refs, top - 2, symb);
-
         return Bytecodes.stackEffectOf(Bytecodes.IALOAD);
     }
 

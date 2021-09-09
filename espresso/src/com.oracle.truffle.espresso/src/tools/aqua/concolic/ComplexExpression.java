@@ -13,6 +13,10 @@ public class ComplexExpression implements Expression {
         this.subExpressions = subExpressions;
     }
 
+    public OperatorComparator getOperator() {
+        return operator;
+    }
+
     @Override
     public String toString() {
         return "(" + operator + " " + String.join(" ", new Iterable<CharSequence>() {
@@ -32,4 +36,5 @@ public class ComplexExpression implements Expression {
             }
         }) + ")";
     }
+
 }

@@ -1615,9 +1615,9 @@ public final class BytecodeNode extends EspressoMethodNode {
                 case CALOAD: putInt(primitives, top - 2, getInterpreterToVM().getArrayChar(index, array, this));      break;
                 case IALOAD:
                     //putInt(primitives, top - 2, getInterpreterToVM().getArrayInt(index, array, this));       break;
+                    Concolic.getArrayAnnotation(array, index, refs, top -1, top -2);
                     int intVal = getInterpreterToVM().getArrayInt(index, array, this);
                     putInt(primitives, top - 2, intVal);
-                    Concolic.putSymbolic(refs,top -2, Concolic.getArray(array, index, intVal));
                     break;
                 case FALOAD: putFloat(primitives, top - 2, getInterpreterToVM().getArrayFloat(index, array, this));   break;
                 case LALOAD: putLong(primitives, top - 2, getInterpreterToVM().getArrayLong(index, array, this));     break;
@@ -1652,8 +1652,9 @@ public final class BytecodeNode extends EspressoMethodNode {
                 case CASTORE: getInterpreterToVM().setArrayChar((char) popInt(primitives, top - 1), index, array, this);   break;
                 case IASTORE:
                     // getInterpreterToVM().setArrayInt(popInt(primitives, top - 1), index, array, this);           break;
-                    getInterpreterToVM().setArrayInt(popInt(primitives, top - 1), index, array, this);
-                    Concolic.setArray(array, index, Concolic.popSymbolic(refs,top -1));
+                    int intValue = popInt(primitives, top - 1);
+                    Concolic.setArrayAnnotation(array, intValue, index, refs, top -1, top - 1 - offset);
+                    getInterpreterToVM().setArrayInt(intValue, index, array, this);
                     break;
                 case FASTORE: getInterpreterToVM().setArrayFloat(popFloat(primitives, top - 1), index, array, this);       break;
                 case LASTORE: getInterpreterToVM().setArrayLong(popLong(primitives, top - 1), index, array, this);         break;

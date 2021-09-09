@@ -51,11 +51,8 @@ public abstract class IntArrayStoreNode extends QuickNode {
         StaticObject array = nullCheck(BytecodeNode.popObject(refs, top - 3));
         int index = BytecodeNode.popInt(primitives, top - 2);
         int value = BytecodeNode.popInt(primitives, top - 1);
+        Concolic.setArrayAnnotation(array, value, index, refs, top -1, top -2);
         executeStore(array, index, value);
-
-        // symbolic
-        AnnotatedValue symb = null; // BytecodeNode.popSymbolic(top - 1);
-        Concolic.setArray(array, index, symb);
         return Bytecodes.stackEffectOf(Bytecodes.IASTORE);
     }
 
