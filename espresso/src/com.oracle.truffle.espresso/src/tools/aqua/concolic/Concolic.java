@@ -9,6 +9,7 @@ import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import com.oracle.truffle.espresso.vm.InterpreterToVM;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -181,6 +182,34 @@ public class Concolic {
         return array.length();
     }
 
+    // --------------------------------------------------------------------------
+    //
+    // symbolic array sizes
+
+    public static void newArray(long[] primitives, Object[] symbolic, byte jvmPrimitiveType, int top, Meta meta, BytecodeNode bytecodeNode) {
+        int concLen = BytecodeNode.popInt(primitives, top - 1);
+        AnnotatedValue symbLen = popSymbolic(symbolic, top -1);
+        addArrayCreationPathConstraint(concLen, symbLen);
+        StaticObject array = InterpreterToVM.allocatePrimitiveArray(jvmPrimitiveType, concLen, meta, bytecodeNode);
+        if (symbLen != null) {
+            array.setConcolicId(symbolicObjects.size());
+            symbolicObjects.add(new AnnotatedValue[ concLen + 1]);
+            symbolicObjects.get(array.getConcolicId())[concLen] = symbLen;
+        }
+        BytecodeNode.putObject(symbolic, top - 1, array);
+    }
+
+    private static void addArrayCreationPathConstraint(int conclen, AnnotatedValue symbLen) {
+        if (symbLen == null) {
+            return;
+        }
+        boolean holds = (0 <= conclen);
+        Expression lengthConstraint = new ComplexExpression(OperatorComparator.LE, Constant.INT_ZERO, symbLen.symbolic());
+
+        addTraceElement(new PathCondition(
+                holds ? lengthConstraint : new ComplexExpression(OperatorComparator.BNEG, lengthConstraint),
+                holds ? 1 : 0, 2));
+    }
 
     // --------------------------------------------------------------------------
     //

@@ -1226,7 +1226,10 @@ public final class BytecodeNode extends EspressoMethodNode {
                         top += quickenInvoke(frame, primitives, refs, top, curBCI, curOpcode, statementIndex); break;
 
                     case NEW         : putObject(refs, top, InterpreterToVM.newObject(resolveType(NEW, readCPI(curBCI)), true)); break;
-                    case NEWARRAY    : putObject(refs, top - 1, InterpreterToVM.allocatePrimitiveArray(bs.readByte(curBCI), popInt(primitives, top - 1), getMeta(), this)); break;
+                    case NEWARRAY    :
+                        //putObject(refs, top - 1, InterpreterToVM.allocatePrimitiveArray(bs.readByte(curBCI), popInt(primitives, top - 1), getMeta(), this)); break;
+                        Concolic.newArray(primitives, refs, bs.readByte(curBCI), top, getMeta(), this);
+                        break;
                     case ANEWARRAY   : putObject(refs, top - 1, InterpreterToVM.newReferenceArray(resolveType(ANEWARRAY, readCPI(curBCI)), popInt(primitives, top - 1), this)); break;
 
                     case ARRAYLENGTH : arrayLength(frame, primitives, refs, top, curBCI); break;
