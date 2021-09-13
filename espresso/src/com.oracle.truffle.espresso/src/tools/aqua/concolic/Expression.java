@@ -15,8 +15,17 @@ public interface Expression {
             return c.getOperator().isBoolean();
         }
         else {
-            CompilerDirectives.transferToInterpreter();
-            throw EspressoError.shouldNotReachHere("expecting IFEQ,IFNE,IFLT,IFGE,IFGT,IFLE");
+            return false;
+        }
+    }
+
+    static boolean isCmpExpression(Expression e) {
+        if (e instanceof ComplexExpression) {
+            ComplexExpression c = (ComplexExpression) e;
+            return c.getOperator().isCmp();
+        }
+        else {
+            return false;
         }
     }
 

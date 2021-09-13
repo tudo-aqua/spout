@@ -388,7 +388,7 @@ abstract class LongGetFieldNode extends AbstractGetFieldNode {
     public int getField(VirtualFrame frame, long[] primitives, Object[] refs, BytecodeNode root, StaticObject receiver, int at, int statementIndex) {
         root.notifyFieldAccess(frame, statementIndex, getField(), receiver);
         BytecodeNode.putLong(primitives, at, executeGetField(receiver));
-        Concolic.getFieldAnnotation(receiver, getField(), refs, at);
+        Concolic.getFieldAnnotation(receiver, getField(), refs, at +1);
         return slotCount;
     }
 
@@ -498,7 +498,7 @@ abstract class DoubleGetFieldNode extends AbstractGetFieldNode {
     public int getField(VirtualFrame frame, long[] primitives, Object[] refs, BytecodeNode root, StaticObject receiver, int at, int statementIndex) {
         root.notifyFieldAccess(frame, statementIndex, getField(), receiver);
         BytecodeNode.putDouble(primitives, at, executeGetField(receiver));
-        Concolic.getFieldAnnotation(receiver, getField(), refs, at);
+        Concolic.getFieldAnnotation(receiver, getField(), refs, at+1);
         return slotCount;
     }
 

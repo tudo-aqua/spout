@@ -52,7 +52,7 @@ public abstract class DoubleArrayLoadNode extends QuickNode {
     public final int execute(VirtualFrame frame, long[] primitives, Object[] refs) {
         StaticObject array = nullCheck(BytecodeNode.popObject(refs, top - 2));
         int index = BytecodeNode.popInt(primitives, top - 1);
-        Concolic.getArrayAnnotation(array, index, refs, top -1, top -2);
+        Concolic.getArrayAnnotation(array, index, refs, top -1, top -1);
         BytecodeNode.putDouble(primitives, top - 2, executeLoad(array, index));
         return Bytecodes.stackEffectOf(Bytecodes.DALOAD);
     }

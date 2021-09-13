@@ -272,8 +272,8 @@ public class Concolic {
             }
 
             Expression arrayBound = new ComplexExpression(OperatorComparator.BAND,
-                    new ComplexExpression(OperatorComparator.LE, Constant.INT_ZERO, symbIndex ),
-                    new ComplexExpression(OperatorComparator.LT, symbIndex, symbLen));
+                    new ComplexExpression(OperatorComparator.BVLE, Constant.INT_ZERO, symbIndex ),
+                    new ComplexExpression(OperatorComparator.BVLT, symbIndex, symbLen));
 
             addTraceElement(new PathCondition(safe ? arrayBound : new ComplexExpression(OperatorComparator.BNEG, arrayBound), safe ? 1 : 0, 2));
         }
@@ -306,7 +306,7 @@ public class Concolic {
             return;
         }
         boolean holds = (0 <= conclen);
-        Expression lengthConstraint = new ComplexExpression(OperatorComparator.LE, Constant.INT_ZERO, symbLen.symbolic());
+        Expression lengthConstraint = new ComplexExpression(OperatorComparator.BVLE, Constant.INT_ZERO, symbLen.symbolic());
 
         addTraceElement(new PathCondition(
                 holds ? lengthConstraint : new ComplexExpression(OperatorComparator.BNEG, lengthConstraint),
@@ -525,7 +525,7 @@ public class Concolic {
         long c2 = BytecodeNode.popLong(primitives, top - 3);
         long concResult = c1 + c2;
         BytecodeNode.putLong(primitives, top - 4, concResult);
-        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.LADD, PrimitiveTypes.LONG,
+        putSymbolic(symbolic, top -3, binarySymbolicOp(OperatorComparator.LADD, PrimitiveTypes.LONG,
                 c1, c2, concResult, popSymbolic(symbolic, top-1), popSymbolic(symbolic,top-3)));
     }
 
@@ -545,7 +545,7 @@ public class Concolic {
         double c2 = BytecodeNode.popDouble(primitives, top - 3);
         double concResult = c1 + c2;
         BytecodeNode.putDouble(primitives, top - 4, concResult);
-        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.DADD, PrimitiveTypes.DOUBLE,
+        putSymbolic(symbolic, top -3, binarySymbolicOp(OperatorComparator.DADD, PrimitiveTypes.DOUBLE,
                 c1, c2, concResult, popSymbolic(symbolic, top-1), popSymbolic(symbolic,top-3)));
     }
 
@@ -565,7 +565,7 @@ public class Concolic {
         long c2 = BytecodeNode.popLong(primitives, top - 3);
         long concResult = c2 - c1;
         BytecodeNode.putLong(primitives, top - 4, concResult);
-        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.LSUB, PrimitiveTypes.LONG,
+        putSymbolic(symbolic, top -3, binarySymbolicOp(OperatorComparator.LSUB, PrimitiveTypes.LONG,
                 c2, c1, concResult, popSymbolic(symbolic, top-3), popSymbolic(symbolic,top-1)));
     }
 
@@ -585,7 +585,7 @@ public class Concolic {
         double c2 = BytecodeNode.popDouble(primitives, top - 3);
         double concResult = c2 - c1;
         BytecodeNode.putDouble(primitives, top - 4, concResult);
-        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.DSUB, PrimitiveTypes.DOUBLE,
+        putSymbolic(symbolic, top -3, binarySymbolicOp(OperatorComparator.DSUB, PrimitiveTypes.DOUBLE,
                 c2, c1, concResult, popSymbolic(symbolic, top-3), popSymbolic(symbolic,top-1)));
     }
 
@@ -605,7 +605,7 @@ public class Concolic {
         long c2 = BytecodeNode.popLong(primitives, top - 3);
         long concResult = c1 * c2;
         BytecodeNode.putLong(primitives, top - 4, concResult);
-        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.LMUL, PrimitiveTypes.LONG,
+        putSymbolic(symbolic, top -3, binarySymbolicOp(OperatorComparator.LMUL, PrimitiveTypes.LONG,
                 c1, c2, concResult, popSymbolic(symbolic, top-1), popSymbolic(symbolic,top-3)));
     }
 
@@ -625,7 +625,7 @@ public class Concolic {
         double c2 = BytecodeNode.popDouble(primitives, top - 3);
         double concResult = c1 * c2;
         BytecodeNode.putDouble(primitives, top - 4, concResult);
-        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.DMUL, PrimitiveTypes.DOUBLE,
+        putSymbolic(symbolic, top -3, binarySymbolicOp(OperatorComparator.DMUL, PrimitiveTypes.DOUBLE,
                 c1, c2, concResult, popSymbolic(symbolic, top-1), popSymbolic(symbolic,top-3)));
     }
 
@@ -633,13 +633,13 @@ public class Concolic {
         if (value != 0) {
             if (a != null) {
                 addTraceElement(new PathCondition( new ComplexExpression(
-                        OperatorComparator.NE, a.symbolic(), Constant.INT_ZERO),0, 2));
+                        OperatorComparator.BVNE, a.symbolic(), Constant.INT_ZERO),0, 2));
             }
         }
         else {
             if (a != null) {
                 addTraceElement(new PathCondition(new ComplexExpression(
-                        OperatorComparator.EQ, a.symbolic(), Constant.INT_ZERO), 1, 2));
+                        OperatorComparator.BVEQ, a.symbolic(), Constant.INT_ZERO), 1, 2));
             }
             bn.enterImplicitExceptionProfile();
             Meta meta = bn.getMeta();
@@ -651,13 +651,13 @@ public class Concolic {
         if (value != 0L) {
             if (a != null) {
                 addTraceElement(new PathCondition( new ComplexExpression(
-                        OperatorComparator.NE, a.symbolic(), Constant.LONG_ZERO),0, 2));
+                        OperatorComparator.BVNE, a.symbolic(), Constant.LONG_ZERO),0, 2));
             }
         }
         else {
             if (a != null) {
                 addTraceElement(new PathCondition(new ComplexExpression(
-                        OperatorComparator.EQ, a.symbolic(), Constant.LONG_ZERO), 1, 2));
+                        OperatorComparator.BVEQ, a.symbolic(), Constant.LONG_ZERO), 1, 2));
             }
             bn.enterImplicitExceptionProfile();
             Meta meta = bn.getMeta();
@@ -683,7 +683,7 @@ public class Concolic {
         checkNonZero(c1, peekSymbolic(symbolic, top -1), bn);
         long concResult = c2 / c1;
         BytecodeNode.putLong(primitives, top - 4, concResult);
-        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.LDIV, PrimitiveTypes.LONG,
+        putSymbolic(symbolic, top -3, binarySymbolicOp(OperatorComparator.LDIV, PrimitiveTypes.LONG,
                 c2, c1, concResult, popSymbolic(symbolic, top-3), popSymbolic(symbolic,top-1)));
     }
 
@@ -703,7 +703,7 @@ public class Concolic {
         double c2 = BytecodeNode.popDouble(primitives, top - 3);
         double concResult = c2 / c1;
         BytecodeNode.putDouble(primitives, top - 4, concResult);
-        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.DDIV, PrimitiveTypes.DOUBLE,
+        putSymbolic(symbolic, top -3, binarySymbolicOp(OperatorComparator.DDIV, PrimitiveTypes.DOUBLE,
                 c2, c1, concResult, popSymbolic(symbolic, top-3), popSymbolic(symbolic,top-1)));
     }
 
@@ -725,7 +725,7 @@ public class Concolic {
         checkNonZero(c1, peekSymbolic(symbolic, top -1), bn);
         long concResult = c2 % c1;
         BytecodeNode.putLong(primitives, top - 4, concResult);
-        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.LREM, PrimitiveTypes.LONG,
+        putSymbolic(symbolic, top -3, binarySymbolicOp(OperatorComparator.LREM, PrimitiveTypes.LONG,
                 c2, c1, concResult, popSymbolic(symbolic, top-3), popSymbolic(symbolic,top-1)));
     }
 
@@ -745,7 +745,7 @@ public class Concolic {
         double c2 = BytecodeNode.popDouble(primitives, top - 3);
         double concResult = c2 % c1;
         BytecodeNode.putDouble(primitives, top - 4, concResult);
-        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.DREM, PrimitiveTypes.DOUBLE,
+        putSymbolic(symbolic, top -3, binarySymbolicOp(OperatorComparator.DREM, PrimitiveTypes.DOUBLE,
                 c2, c1, concResult, popSymbolic(symbolic, top-3), popSymbolic(symbolic,top-1)));
     }
 
@@ -762,7 +762,7 @@ public class Concolic {
         long c1 = BytecodeNode.popLong(primitives, top - 1);
         long concResult = -c1;
         BytecodeNode.putLong(primitives, top - 2, concResult);
-        putSymbolic(symbolic, top-2, unarySymbolicOp(OperatorComparator.LNEG, concResult, popSymbolic(symbolic, top-1)));
+        putSymbolic(symbolic, top-1, unarySymbolicOp(OperatorComparator.LNEG, concResult, popSymbolic(symbolic, top-1)));
     }
 
     // case FNEG: putFloat(stack, top - 1, -popFloat(stack, top - 1)); break;
@@ -778,7 +778,7 @@ public class Concolic {
         double c1 = BytecodeNode.popDouble(primitives, top - 1);
         double concResult = -c1;
         BytecodeNode.putDouble(primitives, top - 2, concResult);
-        putSymbolic(symbolic, top-2, unarySymbolicOp(OperatorComparator.DNEG, concResult, popSymbolic(symbolic, top-1)));
+        putSymbolic(symbolic, top-1, unarySymbolicOp(OperatorComparator.DNEG, concResult, popSymbolic(symbolic, top-1)));
     }
 
     // case ISHL: putInt(stack, top - 2, shiftLeftInt(popInt(stack, top - 1), popInt(stack, top - 2))); break;
@@ -797,7 +797,7 @@ public class Concolic {
         long c2 = BytecodeNode.popLong(primitives, top - 2);
         long concResult = c2 << c1;
         BytecodeNode.putLong(primitives, top - 3, concResult);
-        putSymbolic(symbolic, top -3, binarySymbolicOp(OperatorComparator.LSHL, PrimitiveTypes.LONG, PrimitiveTypes.INT,
+        putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.LSHL, PrimitiveTypes.LONG, PrimitiveTypes.INT,
                 c2, c1, concResult, popSymbolic(symbolic, top-2), popSymbolic(symbolic,top-1)));
     }
 
@@ -817,7 +817,7 @@ public class Concolic {
         long c2 = BytecodeNode.popLong(primitives, top - 2);
         long concResult = c2 >> c1;
         BytecodeNode.putLong(primitives, top - 3, concResult);
-        putSymbolic(symbolic, top -3, binarySymbolicOp(OperatorComparator.LSHR, PrimitiveTypes.LONG, PrimitiveTypes.INT,
+        putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.LSHR, PrimitiveTypes.LONG, PrimitiveTypes.INT,
                 c2, c1, concResult, popSymbolic(symbolic, top-2), popSymbolic(symbolic,top-1)));
     }
 
@@ -837,7 +837,7 @@ public class Concolic {
         long c2 = BytecodeNode.popLong(primitives, top - 2);
         long concResult = c2 >>> c1;
         BytecodeNode.putLong(primitives, top - 3, concResult);
-        putSymbolic(symbolic, top -3, binarySymbolicOp(OperatorComparator.LUSHR, PrimitiveTypes.LONG, PrimitiveTypes.INT,
+        putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.LUSHR, PrimitiveTypes.LONG, PrimitiveTypes.INT,
                 c2, c1, concResult, popSymbolic(symbolic, top-2), popSymbolic(symbolic,top-1)));
     }
 
@@ -857,7 +857,7 @@ public class Concolic {
         long c2 = BytecodeNode.popLong(primitives, top - 3);
         long concResult = c1 & c2;
         BytecodeNode.putLong(primitives, top - 4, concResult);
-        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.LAND, PrimitiveTypes.LONG,
+        putSymbolic(symbolic, top -3, binarySymbolicOp(OperatorComparator.LAND, PrimitiveTypes.LONG,
                 c1, c2, concResult, popSymbolic(symbolic, top-1), popSymbolic(symbolic,top-3)));
     }
 
@@ -877,7 +877,7 @@ public class Concolic {
         long c2 = BytecodeNode.popLong(primitives, top - 3);
         long concResult = c1 | c2;
         BytecodeNode.putLong(primitives, top - 4, concResult);
-        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.LOR, PrimitiveTypes.LONG,
+        putSymbolic(symbolic, top -3, binarySymbolicOp(OperatorComparator.LOR, PrimitiveTypes.LONG,
                 c1, c2, concResult, popSymbolic(symbolic, top-1), popSymbolic(symbolic,top-3)));
     }
 
@@ -897,7 +897,7 @@ public class Concolic {
         long c2 = BytecodeNode.popLong(primitives, top - 3);
         long concResult = c1 ^ c2;
         BytecodeNode.putLong(primitives, top - 4, concResult);
-        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.LXOR, PrimitiveTypes.LONG,
+        putSymbolic(symbolic, top -3, binarySymbolicOp(OperatorComparator.LXOR, PrimitiveTypes.LONG,
                 c1, c2, concResult, popSymbolic(symbolic, top-1), popSymbolic(symbolic,top-3)));
     }
 
@@ -924,31 +924,161 @@ public class Concolic {
     }
 
     // case I2L: putLong(stack, top - 1, popInt(stack, top - 1)); break;
+    public static void i2l(long[] primitives, Object[] symbolic, int top) {
+        int c1 = BytecodeNode.popInt(primitives, top - 1);
+        BytecodeNode.putLong(primitives, top -1, c1);
+        putSymbolic(symbolic, top-1, unarySymbolicOp(OperatorComparator.I2L, c1, popSymbolic(symbolic, top -1)));
+    }
+
     // case I2F: putFloat(stack, top - 1, popInt(stack, top - 1)); break;
+    public static void i2f(long[] primitives, Object[] symbolic, int top) {
+        float c1 = BytecodeNode.popInt(primitives, top - 1);
+        BytecodeNode.putFloat(primitives, top -1, c1);
+        putSymbolic(symbolic, top-1, unarySymbolicOp(OperatorComparator.I2F, c1, popSymbolic(symbolic, top -1)));
+    }
+
     // case I2D: putDouble(stack, top - 1, popInt(stack, top - 1)); break;
+    public static void i2d(long[] primitives, Object[] symbolic, int top) {
+        double c1 = BytecodeNode.popInt(primitives, top - 1);
+        BytecodeNode.putDouble(primitives, top -1, c1);
+        putSymbolic(symbolic, top, unarySymbolicOp(OperatorComparator.I2D, c1, popSymbolic(symbolic, top -1)));
+    }
 
     // case L2I: putInt(stack, top - 2, (int) popLong(stack, top - 1)); break;
+    public static void l2i(long[] primitives, Object[] symbolic, int top) {
+        int c1 = (int) BytecodeNode.popLong(primitives, top - 1);
+        BytecodeNode.putInt(primitives, top -2, c1);
+        putSymbolic(symbolic, top-2, unarySymbolicOp(OperatorComparator.L2I, c1, popSymbolic(symbolic, top -1)));
+    }
+
     // case L2F: putFloat(stack, top - 2, popLong(stack, top - 1)); break;
+    public static void l2f(long[] primitives, Object[] symbolic, int top) {
+        float c1 = (float) BytecodeNode.popLong(primitives, top - 1);
+        BytecodeNode.putFloat(primitives, top -2, c1);
+        putSymbolic(symbolic, top-2, unarySymbolicOp(OperatorComparator.L2F, c1, popSymbolic(symbolic, top -1)));
+    }
+
     // case L2D: putDouble(stack, top - 2, popLong(stack, top - 1)); break;
+    public static void l2d(long[] primitives, Object[] symbolic, int top) {
+        double c1 = (double) BytecodeNode.popLong(primitives, top - 1);
+        BytecodeNode.putDouble(primitives, top -2, c1);
+        putSymbolic(symbolic, top-1, unarySymbolicOp(OperatorComparator.L2D, c1, popSymbolic(symbolic, top -1)));
+    }
 
     // case F2I: putInt(stack, top - 1, (int) popFloat(stack, top - 1)); break;
+    public static void f2i(long[] primitives, Object[] symbolic, int top) {
+        int c1 = (int) BytecodeNode.popFloat(primitives, top - 1);
+        BytecodeNode.putInt(primitives, top -1, c1);
+        putSymbolic(symbolic, top-1, unarySymbolicOp(OperatorComparator.F2I, c1, popSymbolic(symbolic, top -1)));
+    }
+
     // case F2L: putLong(stack, top - 1, (long) popFloat(stack, top - 1)); break;
+    public static void f2l(long[] primitives, Object[] symbolic, int top) {
+        long c1 = (long) BytecodeNode.popFloat(primitives, top - 1);
+        BytecodeNode.putLong(primitives, top -1, c1);
+        putSymbolic(symbolic, top, unarySymbolicOp(OperatorComparator.F2L, c1, popSymbolic(symbolic, top -1)));
+    }
+
     // case F2D: putDouble(stack, top - 1, popFloat(stack, top - 1)); break;
+    public static void f2d(long[] primitives, Object[] symbolic, int top) {
+        double c1 = BytecodeNode.popFloat(primitives, top - 1);
+        BytecodeNode.putDouble(primitives, top -1, c1);
+        putSymbolic(symbolic, top, unarySymbolicOp(OperatorComparator.I2L, c1, popSymbolic(symbolic, top -1)));
+    }
 
     // case D2I: putInt(stack, top - 2, (int) popDouble(stack, top - 1)); break;
+    public static void d2i(long[] primitives, Object[] symbolic, int top) {
+        int c1 = (int) BytecodeNode.popDouble(primitives, top - 1);
+        BytecodeNode.putInt(primitives, top -2, c1);
+        putSymbolic(symbolic, top-2, unarySymbolicOp(OperatorComparator.D2I, c1, popSymbolic(symbolic, top -1)));
+    }
+
     // case D2L: putLong(stack, top - 2, (long) popDouble(stack, top - 1)); break;
+    public static void d2l(long[] primitives, Object[] symbolic, int top) {
+        long c1 = (long) BytecodeNode.popDouble(primitives, top - 1);
+        BytecodeNode.putLong(primitives, top -2, c1);
+        putSymbolic(symbolic, top-1, unarySymbolicOp(OperatorComparator.D2L, c1, popSymbolic(symbolic, top -1)));
+    }
+
     // case D2F: putFloat(stack, top - 2, (float) popDouble(stack, top - 1)); break;
+    public static void d2f(long[] primitives, Object[] symbolic, int top) {
+        float c1 = (float) BytecodeNode.popDouble(primitives, top - 1);
+        BytecodeNode.putFloat(primitives, top -2, c1);
+        putSymbolic(symbolic, top-2, unarySymbolicOp(OperatorComparator.D2F, c1, popSymbolic(symbolic, top -1)));
+    }
 
     // case I2B: putInt(stack, top - 1, (byte) popInt(stack, top - 1)); break;
+    public static void i2b(long[] primitives, Object[] symbolic, int top) {
+        byte c1 = (byte) BytecodeNode.popInt(primitives, top - 1);
+        BytecodeNode.putInt(primitives, top -1, c1);
+        putSymbolic(symbolic, top-1, unarySymbolicOp(OperatorComparator.I2B, c1, popSymbolic(symbolic, top -1)));
+    }
+
     // case I2C: putInt(stack, top - 1, (char) popInt(stack, top - 1)); break;
+    public static void i2c(long[] primitives, Object[] symbolic, int top) {
+        char c1 = (char) BytecodeNode.popInt(primitives, top - 1);
+        BytecodeNode.putInt(primitives, top -1, c1);
+        putSymbolic(symbolic, top-1, unarySymbolicOp(OperatorComparator.I2C, c1, popSymbolic(symbolic, top -1)));
+    }
+
     // case I2S: putInt(stack, top - 1, (short) popInt(stack, top - 1)); break;
+    public static void i2s(long[] primitives, Object[] symbolic, int top) {
+        short c1 = (short) BytecodeNode.popInt(primitives, top - 1);
+        BytecodeNode.putInt(primitives, top -1, c1);
+        putSymbolic(symbolic, top-1, unarySymbolicOp(OperatorComparator.I2S, c1, popSymbolic(symbolic, top -1)));
+    }
 
     // case LCMP : putInt(stack, top - 4, compareLong(popLong(stack, top - 1), popLong(stack, top - 3))); break;
-    // case FCMPL: putInt(stack, top - 2, compareFloatLess(popFloat(stack, top - 1), popFloat(stack, top - 2))); break;
-    // case FCMPG: putInt(stack, top - 2, compareFloatGreater(popFloat(stack, top - 1), popFloat(stack, top - 2))); break;
-    // case DCMPL: putInt(stack, top - 4, compareDoubleLess(popDouble(stack, top - 1), popDouble(stack, top - 3))); break;
-    // case DCMPG: putInt(stack, top - 4, compareDoubleGreater(popDouble(stack, top - 1), popDouble(stack, top - 3))); break;
+    public static void lcmp(long[] primitives, Object[] symbolic, int top) {
+        long c1 = BytecodeNode.popLong(primitives, top - 1);
+        long c2 = BytecodeNode.popLong(primitives, top - 3);
+        int concResult = Long.compare(c2, c1);
+        BytecodeNode.putInt(primitives, top - 4, concResult);
+        putSymbolic(symbolic, top-4, binarySymbolicOp(OperatorComparator.LCMP, PrimitiveTypes.LONG,
+                c2, c1, concResult, popSymbolic(symbolic, top - 3), popSymbolic(symbolic, top - 1)));
+    }
 
+    // case FCMPL: putInt(stack, top - 2, compareFloatLess(popFloat(stack, top - 1), popFloat(stack, top - 2))); break;
+    public static void fcmpl(long[] primitives, Object[] symbolic, int top) {
+        float c1 = BytecodeNode.popFloat(primitives, top - 1);
+        float c2 = BytecodeNode.popFloat(primitives, top - 2);
+        int concResult = BytecodeNode.compareFloatLess(c1, c2);
+        BytecodeNode.putInt(primitives, top - 2, concResult);
+        putSymbolic(symbolic, top-2, binarySymbolicOp(OperatorComparator.FCMPL, PrimitiveTypes.FLOAT,
+                c2, c1, concResult, popSymbolic(symbolic, top - 2), popSymbolic(symbolic, top - 1)));
+    }
+
+    // case FCMPG: putInt(stack, top - 2, compareFloatGreater(popFloat(stack, top - 1), popFloat(stack, top - 2))); break;
+    public static void fcmpg(long[] primitives, Object[] symbolic, int top) {
+        float c1 = BytecodeNode.popFloat(primitives, top - 1);
+        float c2 = BytecodeNode.popFloat(primitives, top - 2);
+        int concResult = BytecodeNode.compareFloatGreater(c1, c2);
+        BytecodeNode.putInt(primitives, top - 2, concResult);
+        putSymbolic(symbolic, top-2, binarySymbolicOp(OperatorComparator.FCMPG, PrimitiveTypes.FLOAT,
+                c2, c1, concResult, popSymbolic(symbolic, top - 2), popSymbolic(symbolic, top - 1)));
+    }
+
+    // case DCMPL: putInt(stack, top - 4, compareDoubleLess(popDouble(stack, top - 1), popDouble(stack, top - 3))); break;
+    public static void dcmpl(long[] primitives, Object[] symbolic, int top) {
+        double c1 = BytecodeNode.popDouble(primitives, top - 1);
+        double c2 = BytecodeNode.popDouble(primitives, top - 3);
+        int concResult = BytecodeNode.compareDoubleLess(c1, c2);
+        BytecodeNode.putInt(primitives, top - 4, concResult);
+        putSymbolic(symbolic, top-4, binarySymbolicOp(OperatorComparator.DCMPL, PrimitiveTypes.DOUBLE,
+                c2, c1, concResult, popSymbolic(symbolic, top - 3), popSymbolic(symbolic, top - 1)));
+    }
+
+    // case DCMPG: putInt(stack, top - 4, compareDoubleGreater(popDouble(stack, top - 1), popDouble(stack, top - 3))); break;
+    public static void dcmpg(long[] primitives, Object[] symbolic, int top) {
+        double c1 = BytecodeNode.popDouble(primitives, top - 1);
+        double c2 = BytecodeNode.popDouble(primitives, top - 3);
+        int concResult = BytecodeNode.compareDoubleGreater(c1, c2);
+        BytecodeNode.putInt(primitives, top - 4, concResult);
+        putSymbolic(symbolic, top-4, binarySymbolicOp(OperatorComparator.DCMPG, PrimitiveTypes.DOUBLE,
+                c2, c1, concResult, popSymbolic(symbolic, top - 3), popSymbolic(symbolic, top - 1)));
+    }
+
+    // branching helpers ...
 
     public static boolean takeBranchPrimitive1(long[] primitives, Object[] symbolic, int top, int opcode) {
         assert IFEQ <= opcode && opcode <= IFLE;
@@ -982,14 +1112,50 @@ public class Concolic {
                         throw EspressoError.shouldNotReachHere("only defined for IFEQ so far");
                 }
             }
+            else if (Expression.isCmpExpression(s1.symbolic())) {
+                ComplexExpression ce = (ComplexExpression) s1.symbolic();
+                OperatorComparator op = null;
+                switch (ce.getOperator()) {
+                    case LCMP:
+                        // 0 if x == y; less than 0 if x < y; greater than 0 if x > y
+                        switch (opcode) {
+                            case IFEQ      : op = takeBranch ? OperatorComparator.BVEQ : OperatorComparator.BVNE; break;
+                            case IFNE      : op = takeBranch ? OperatorComparator.BVNE : OperatorComparator.BVEQ; break;
+                            case IFLT      : op = takeBranch ? OperatorComparator.BVLT : OperatorComparator.BVGE; break;
+                            case IFGE      : op = takeBranch ? OperatorComparator.BVGE : OperatorComparator.BVLT; break;
+                            case IFGT      : op = takeBranch ? OperatorComparator.BVGT : OperatorComparator.BVLE; break;
+                            case IFLE      : op = takeBranch ? OperatorComparator.BVLE : OperatorComparator.BVGT; break;
+                        }
+                        break;
+                    case FCMPL:
+                    case FCMPG:
+                    case DCMPL:
+                    case DCMPG:
+                        // 0 if x == y; less than 0 if x < y; greater than 0 if x > y
+                        switch (opcode) {
+                            case IFEQ      :
+                            case IFNE      : op = OperatorComparator.FPEQ; break;
+                            case IFLT      : op = takeBranch ? OperatorComparator.FPLT : OperatorComparator.FPGE; break;
+                            case IFGE      : op = takeBranch ? OperatorComparator.FPGE : OperatorComparator.FPLT; break;
+                            case IFGT      : op = takeBranch ? OperatorComparator.FPGT : OperatorComparator.FPLE; break;
+                            case IFLE      : op = takeBranch ? OperatorComparator.FPLE : OperatorComparator.FPGT; break;
+                        }
+                        break;                
+                }
+                expr = new ComplexExpression(op, ce.getSubExpressions());
+                if (!ce.getOperator().equals(OperatorComparator.LCMP) && (
+                        (opcode == IFEQ && !takeBranch) || (opcode == IFNE && takeBranch))) {
+                    expr = new ComplexExpression(OperatorComparator.BNEG, expr);
+                }
+            }
             else {
                 switch (opcode) {
-                    case IFEQ      : expr = new ComplexExpression(OperatorComparator.EQ, s1.symbolic(), Constant.INT_ZERO); break;
-                    case IFNE      : expr = new ComplexExpression(OperatorComparator.NE, s1.symbolic(), Constant.INT_ZERO); break;
-                    case IFLT      : expr = new ComplexExpression(OperatorComparator.LT, s1.symbolic(), Constant.INT_ZERO);  break;
-                    case IFGE      : expr = new ComplexExpression(OperatorComparator.GE, s1.symbolic(), Constant.INT_ZERO);  break;
-                    case IFGT      : expr = new ComplexExpression(OperatorComparator.GT, s1.symbolic(), Constant.INT_ZERO);  break;
-                    case IFLE      : expr = new ComplexExpression(OperatorComparator.LE, s1.symbolic(), Constant.INT_ZERO);  break;
+                    case IFEQ      : expr = new ComplexExpression(OperatorComparator.BVEQ, s1.symbolic(), Constant.INT_ZERO); break;
+                    case IFNE      : expr = new ComplexExpression(OperatorComparator.BVNE, s1.symbolic(), Constant.INT_ZERO); break;
+                    case IFLT      : expr = new ComplexExpression(OperatorComparator.BVLT, s1.symbolic(), Constant.INT_ZERO);  break;
+                    case IFGE      : expr = new ComplexExpression(OperatorComparator.BVGE, s1.symbolic(), Constant.INT_ZERO);  break;
+                    case IFGT      : expr = new ComplexExpression(OperatorComparator.BVGT, s1.symbolic(), Constant.INT_ZERO);  break;
+                    case IFLE      : expr = new ComplexExpression(OperatorComparator.BVLE, s1.symbolic(), Constant.INT_ZERO);  break;
                     default        :
                         CompilerDirectives.transferToInterpreter();
                         throw EspressoError.shouldNotReachHere("expecting IFEQ,IFNE,IFLT,IFGE,IFGT,IFLE");
@@ -1032,23 +1198,23 @@ public class Concolic {
             Expression expr = null;
             switch (opcode) {
                 case IF_ICMPEQ : expr = new ComplexExpression(takeBranch ?
-                        OperatorComparator.EQ :
-                        OperatorComparator.NE, s1.symbolic(), s2.symbolic()); break;
+                        OperatorComparator.BVEQ :
+                        OperatorComparator.BVNE, s1.symbolic(), s2.symbolic()); break;
                 case IF_ICMPNE : expr = new ComplexExpression(takeBranch ?
-                        OperatorComparator.NE :
-                        OperatorComparator.EQ, s1.symbolic(), s2.symbolic()); break;
+                        OperatorComparator.BVNE :
+                        OperatorComparator.BVEQ, s1.symbolic(), s2.symbolic()); break;
                 case IF_ICMPLT : expr = new ComplexExpression(takeBranch ?
-                        OperatorComparator.GT :
-                        OperatorComparator.LE, s1.symbolic(), s2.symbolic()); break;
+                        OperatorComparator.BVGT :
+                        OperatorComparator.BVLE, s1.symbolic(), s2.symbolic()); break;
                 case IF_ICMPGE : expr = new ComplexExpression(takeBranch ?
-                        OperatorComparator.LE :
-                        OperatorComparator.GT, s1.symbolic(), s2.symbolic()); break;
+                        OperatorComparator.BVLE :
+                        OperatorComparator.BVGT, s1.symbolic(), s2.symbolic()); break;
                 case IF_ICMPGT : expr = new ComplexExpression(takeBranch ?
-                        OperatorComparator.LT :
-                        OperatorComparator.GE, s1.symbolic(), s2.symbolic()); break;
+                        OperatorComparator.BVLT :
+                        OperatorComparator.BVGE, s1.symbolic(), s2.symbolic()); break;
                 case IF_ICMPLE : expr = new ComplexExpression(takeBranch ?
-                        OperatorComparator.GE :
-                        OperatorComparator.LT, s1.symbolic(), s2.symbolic()); break;
+                        OperatorComparator.BVGE :
+                        OperatorComparator.BVLT, s1.symbolic(), s2.symbolic()); break;
                 default        :
                     CompilerDirectives.transferToInterpreter();
                     throw EspressoError.shouldNotReachHere("non-branching bytecode");

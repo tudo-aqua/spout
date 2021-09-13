@@ -3,49 +3,59 @@ package tools.aqua.concolic;
 import java.util.EnumSet;
 
 public enum OperatorComparator {
-    // all numeric types?
+    // int
     IADD,
     ISUB,
     IMUL,
     IDIV,
     IREM,
     INEG,
-    LADD,
-    LSUB,
-    LMUL,
-    LDIV,
-    LNEG,
-    LREM,
-    FADD,
-    FSUB,
-    FMUL,
-    FDIV,
-    FREM,
-    FNEG,
-    DADD,
-    DSUB,
-    DMUL,
-    DDIV,
-    DREM,
-    DNEG,
     ISHR,
     ISHL,
     IUSHR,
     IAND,
     IOR,
     IXOR,
+    // long
+    LADD,
+    LSUB,
+    LMUL,
+    LDIV,
+    LNEG,
+    LREM,
     LSHR,
     LSHL,
     LUSHR,
     LAND,
     LOR,
     LXOR,
-    GT,
-    LT,
-    GE,
-    LE,
-    EQ,
-    NE,
+    // float
+    FADD,
+    FSUB,
+    FMUL,
+    FDIV,
+    FREM,
+    FNEG,
+    // double
+    DADD,
+    DSUB,
+    DMUL,
+    DDIV,
+    DREM,
+    DNEG,
+    // Comp
+    BVGT,
+    BVLT,
+    BVGE,
+    BVLE,
+    BVEQ,
+    BVNE,
+    // Fp. Comp
+    FPGT,
+    FPLT,
+    FPGE,
+    FPLE,
+    FPEQ,
     // Boolean
     BNEG,
     BAND,
@@ -53,6 +63,28 @@ public enum OperatorComparator {
     BXOR,
     BEQUIV,
     BIMPLIES,
+    // Casting
+    I2L,
+    I2F,
+    I2D,
+    L2I,
+    L2F,
+    L2D,
+    F2I,
+    F2L,
+    F2D,
+    D2I,
+    D2L,
+    D2F,
+    I2B,
+    I2C,
+    I2S,
+    // CMP -- never printed
+    LCMP,
+    FCMPL,
+    FCMPG,
+    DCMPL,
+    DCMPG,
     // String
     STRINGEQ,
     STRINGNE,
@@ -73,49 +105,117 @@ public enum OperatorComparator {
     public String toString() {
         //TODO: someone needs to check these!
         switch(this) {
+            // int and long
             case IADD:
+            case LADD:
                 return "bvadd";
             case ISUB:
+            case LSUB:
                 return "bvsub";
             case IMUL:
+            case LMUL:
                 return "bvmul";
             case IDIV:
+            case LDIV:
                 return "bvsdiv";
             case IREM:
+            case LREM:
                 return "bvsrem";
             case ISHL:
+            case LSHL:
                 return "bvshl";
             case ISHR:
+            case LSHR:
                 return "bvashr";
             case IUSHR:
+            case LUSHR:
                 return "bvlshr";
             case IAND:
+            case LAND:
                 return "bvand";
             case IOR:
+            case LOR:
                 return "bvor";
             case IXOR:
+            case LXOR:
                 return "bvxor";
-
             case INEG:
+            case LNEG:
                 return "-";
+
+            // float and double
+            case FADD:
+            case DADD:
+                return "fp.add (RNE RoundingMode)";
+            case FSUB:
+            case DSUB:
+                return "fp.sub (RNE RoundingMode)";
+            case FMUL:
+            case DMUL:
+                return "fp.mul (RNE RoundingMode)";
+            case FDIV:
+            case DDIV:
+                return "fp.div (RNE RoundingMode)";
+            case FREM:
+            case DREM:
+                return "fp.rem (RNE RoundingMode)";
+            case FNEG:
+            case DNEG:
+                return "fp.neg";
+
             case BNEG:
                 return "not";
 
-            case EQ:
+            case FPEQ:
+                return "fp.eq";
+            case FPLT:
+                return "fp.lt";
+            case FPLE:
+                return "fp.leq";
+            case FPGT:
+                return "fp.gt";
+            case FPGE:
+                return "fp.geq";
+
+            case BVEQ:
             case STRINGEQ:
                 return "=";
-            case NE:
+            case BVNE:
             case STRINGNE:
                 return "!=";
-            case GT:
+            case BVGT:
                 return "bvsgt";
-            case GE:
+            case BVGE:
                 return "bvsge";
-            case LT:
+            case BVLT:
                 return "bvslt";
-            case LE:
+            case BVLE:
                 return "bvsle";
-
+            case I2L:
+                return "(_ sign_extend 32)";
+            case I2F:
+            case L2F:
+                return "(_ to_fp 8 24)";
+            case I2D:
+            case L2D:
+                return "(_ to_fp 11 53)";
+            case L2I:
+                return "(_ extract 32)"; // FIXME: correct number of bits?
+            case F2I:
+            case D2I:
+                return "(_ fp.to_sbv 32) (RNE RoundingMode)";
+            case F2L:
+            case D2L:
+                return "(_ fp.to_sbv 64) (RNE RoundingMode)";
+            case F2D:
+                return "(_ to_fp 11 53) (RNE RoundingMode)";
+            case D2F:
+                return "(_ to_fp 8 24) (RNE RoundingMode)";
+            case I2B:
+                return "(_ extract 8)"; // FIXME: correct number of bits?
+            case I2C:
+            case I2S:
+                return "(_ extract 16)"; // FIXME: correct number of bits?
             case SLENGTH:
                 return "str.len";
             case SINDEXOF:
@@ -128,9 +228,15 @@ public enum OperatorComparator {
         }
     }
 
-    static EnumSet<OperatorComparator> boolOps = EnumSet.of(EQ, STRINGEQ, NE, STRINGNE, LT, LE, GT, GE, BNEG, BAND, BOR, BXOR, BEQUIV, BIMPLIES);
+    static EnumSet<OperatorComparator> boolOps = EnumSet.of(BVEQ, STRINGEQ, BVNE, STRINGNE, BVLT, BVLE, BVGT, BVGE, BNEG, BAND, BOR, BXOR, BEQUIV, BIMPLIES);
+
+    static EnumSet<OperatorComparator> cmpOps = EnumSet.of(LCMP, FCMPL, FCMPG, DCMPL, DCMPG);
 
     public boolean isBoolean() {
         return boolOps.contains(this);
+    }
+
+    public boolean isCmp() {
+        return  cmpOps.contains(this);
     }
 }

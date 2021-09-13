@@ -17,6 +17,10 @@ public class ComplexExpression implements Expression {
         return operator;
     }
 
+    public Expression[] getSubExpressions() {
+        return subExpressions;
+    }
+
     @Override
     public String toString() {
         return "(" + operator + " " + String.join(" ", new Iterable<CharSequence>() {
