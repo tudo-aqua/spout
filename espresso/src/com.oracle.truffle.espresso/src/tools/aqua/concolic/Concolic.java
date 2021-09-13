@@ -1,12 +1,14 @@
 package tools.aqua.concolic;
 
 import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.espresso.EspressoLanguage;
 import com.oracle.truffle.espresso.bytecode.BytecodeStream;
 import com.oracle.truffle.espresso.impl.Field;
 import com.oracle.truffle.espresso.impl.ObjectKlass;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
+import com.oracle.truffle.espresso.runtime.EspressoContext;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import com.oracle.truffle.espresso.vm.InterpreterToVM;
 
@@ -47,6 +49,23 @@ public class Concolic {
             traceTail.setNext(tNew);
         }
         traceTail = tNew;
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static void assume(Object condition, Meta meta) {
+        boolean cont;
+        if (condition instanceof AnnotatedValue) {
+            AnnotatedValue a = (AnnotatedValue) condition;
+            cont = a.asBoolean();
+            //FIXME: can be more optimal by making a path element "assumption"
+            addTraceElement(new PathCondition(a.symbolic(), cont ? 1 : 0, 2 ));
+        }
+        else {
+            cont = (boolean) condition;
+        }
+        if (!cont) {
+            stopRecording("assumption violation", meta);
+        }
     }
 
     private static void printTrace() {
@@ -100,10 +119,10 @@ public class Concolic {
             concrete = seedsByteValues[countByteSeeds];
         }
         Variable symbolic = new Variable(PrimitiveTypes.BYTE, countByteSeeds);
-        AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
         countByteSeeds++;
         addTraceElement(new SymbolDeclaration(symbolic));
-        return a;
+        // upcast byte to int
+        return new AnnotatedValue(concrete, new ComplexExpression(OperatorComparator.B2I, symbolic));
     }
 
     private static char[] seedsCharValues = new char[] {};
@@ -115,10 +134,10 @@ public class Concolic {
             concrete = seedsCharValues[countCharSeeds];
         }
         Variable symbolic = new Variable(PrimitiveTypes.CHAR, countCharSeeds);
-        AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
         countCharSeeds++;
         addTraceElement(new SymbolDeclaration(symbolic));
-        return a;
+        // upcast char to int
+        return new AnnotatedValue(concrete, new ComplexExpression(OperatorComparator.C2I, symbolic));
     }
 
     private static short[] seedsShortValues = new short[] {};
@@ -130,10 +149,10 @@ public class Concolic {
             concrete = seedsShortValues[countShortSeeds];
         }
         Variable symbolic = new Variable(PrimitiveTypes.SHORT, countShortSeeds);
-        AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
         countShortSeeds++;
         addTraceElement(new SymbolDeclaration(symbolic));
-        return a;
+        // upcast short to int
+        return new AnnotatedValue(concrete, new ComplexExpression(OperatorComparator.S2I, symbolic));
     }
 
     private static long[] seedsLongValues = new long[] {};
@@ -507,6 +526,13 @@ public class Concolic {
             return null;
         }
         return new AnnotatedValue( concResult, new ComplexExpression(op, s1.symbolic()));
+    }
+
+    private static AnnotatedValue binarySymbolicOp(OperatorComparator op, Object concResult, AnnotatedValue s1, Constant c) {
+        if (s1 == null) {
+            return null;
+        }
+        return new AnnotatedValue( concResult, new ComplexExpression(op, s1.symbolic(), c));
     }
 
     // case IADD: putInt(stack, top - 2, popInt(stack, top - 1) + popInt(stack, top - 2)); break;
@@ -1011,21 +1037,21 @@ public class Concolic {
     public static void i2b(long[] primitives, Object[] symbolic, int top) {
         byte c1 = (byte) BytecodeNode.popInt(primitives, top - 1);
         BytecodeNode.putInt(primitives, top -1, c1);
-        putSymbolic(symbolic, top-1, unarySymbolicOp(OperatorComparator.I2B, c1, popSymbolic(symbolic, top -1)));
+        putSymbolic(symbolic, top-1, binarySymbolicOp(OperatorComparator.IAND, c1, popSymbolic(symbolic, top -1), Constant.INT_BYTE_MAX));
     }
 
     // case I2C: putInt(stack, top - 1, (char) popInt(stack, top - 1)); break;
     public static void i2c(long[] primitives, Object[] symbolic, int top) {
         char c1 = (char) BytecodeNode.popInt(primitives, top - 1);
         BytecodeNode.putInt(primitives, top -1, c1);
-        putSymbolic(symbolic, top-1, unarySymbolicOp(OperatorComparator.I2C, c1, popSymbolic(symbolic, top -1)));
+        putSymbolic(symbolic, top-1, binarySymbolicOp(OperatorComparator.IAND, c1, popSymbolic(symbolic, top -1), Constant.INT_CHAR_MAX));
     }
 
     // case I2S: putInt(stack, top - 1, (short) popInt(stack, top - 1)); break;
     public static void i2s(long[] primitives, Object[] symbolic, int top) {
         short c1 = (short) BytecodeNode.popInt(primitives, top - 1);
         BytecodeNode.putInt(primitives, top -1, c1);
-        putSymbolic(symbolic, top-1, unarySymbolicOp(OperatorComparator.I2S, c1, popSymbolic(symbolic, top -1)));
+        putSymbolic(symbolic, top-1, binarySymbolicOp(OperatorComparator.IAND, c1, popSymbolic(symbolic, top -1), Constant.INT_SHORT_MAX));
     }
 
     // case LCMP : putInt(stack, top - 4, compareLong(popLong(stack, top - 1), popLong(stack, top - 3))); break;

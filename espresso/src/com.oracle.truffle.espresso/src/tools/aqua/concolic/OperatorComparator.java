@@ -76,10 +76,15 @@ public enum OperatorComparator {
     D2I,
     D2L,
     D2F,
-    I2B,
-    I2C,
-    I2S,
-    // CMP -- never printed
+    // solved through bitmasks
+    //I2B,
+    //I2C,
+    //I2S,
+    // upcast (not in JVM -- for constraint solving)
+    B2I,
+    S2I,
+    C2I,
+    // CMP (In JVM -- eliminated before export)
     LCMP,
     FCMPL,
     FCMPG,
@@ -165,7 +170,12 @@ public enum OperatorComparator {
 
             case BNEG:
                 return "not";
-
+            case BAND:
+                return "and";
+            case BOR:
+                return "or";
+            case BXOR:
+                return "xor";
             case FPEQ:
                 return "fp.eq";
             case FPLT:
@@ -200,7 +210,7 @@ public enum OperatorComparator {
             case L2D:
                 return "(_ to_fp 11 53)";
             case L2I:
-                return "(_ extract 32)"; // FIXME: correct number of bits?
+                return "(_ extract 32)"; // FIXME: signed?
             case F2I:
             case D2I:
                 return "(_ fp.to_sbv 32) (RNE RoundingMode)";
@@ -211,11 +221,12 @@ public enum OperatorComparator {
                 return "(_ to_fp 11 53) (RNE RoundingMode)";
             case D2F:
                 return "(_ to_fp 8 24) (RNE RoundingMode)";
-            case I2B:
-                return "(_ extract 8)"; // FIXME: correct number of bits?
-            case I2C:
-            case I2S:
-                return "(_ extract 16)"; // FIXME: correct number of bits?
+            case B2I:
+                return "(_ sign_extend 24)";
+            case S2I:
+                return "(_ sign_extend 16)";
+            case C2I:
+                return "(_ zero_extend 16)";
             case SLENGTH:
                 return "str.len";
             case SINDEXOF:

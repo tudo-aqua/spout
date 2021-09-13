@@ -13,10 +13,7 @@ public class Target_tools_aqua_concolic_Verifier {
     @Substitution(hasReceiver = false)
     @CompilerDirectives.TruffleBoundary
     public static void assume(@Host(typeName = "Z") Object condition, @InjectMeta Meta meta) {
-        boolean cont = (condition instanceof AnnotatedValue) ? ((AnnotatedValue)condition).asBoolean() : (boolean) condition;
-        if (!cont) {
-            Concolic.stopRecording("assumption violation", meta);
-        }
+        Concolic.assume( condition, meta );
     }
 
     //    public static boolean nondetBoolean()

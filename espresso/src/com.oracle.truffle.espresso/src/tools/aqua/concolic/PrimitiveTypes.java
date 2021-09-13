@@ -18,9 +18,9 @@ public enum PrimitiveTypes {
             case LONG:
                 return "(_ BitVec 64)";
             case FLOAT:
-                return "(Float32 0)";
+                return "(_ FloatingPoint 8 24)";
             case DOUBLE:
-                return "(Float64 0)";
+                return "(_ FloatingPoint 11 53)";
             case STRING:
                 return "String";
             default:

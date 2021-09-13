@@ -3,6 +3,9 @@ package tools.aqua.concolic;
 public abstract class Constant extends Atom {
 
     public final static IntConstant INT_ZERO = new IntConstant(0);
+    public final static IntConstant INT_BYTE_MAX = new IntConstant(127);
+    public final static IntConstant INT_SHORT_MAX = new IntConstant(32767);
+    public final static IntConstant INT_CHAR_MAX = new IntConstant(65535);
 
     public final static LongConstant LONG_ZERO = new LongConstant(0L);
 
