@@ -1,23 +1,24 @@
 package tools.aqua.concolic;
 
+import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 
 public class AnnotatedValue {
-
-    //public static final AnnotatedValue NADA = new AnnotatedValue(null);
-
-    //public static final AnnotatedValue NULL = new AnnotatedValue(StaticObject.NULL);
-    //public static final AnnotatedValue ZERO = new AnnotatedValue( (int) 0);
-
-    // FIXME: change public api!
 
     AnnotatedValue(Object c, Expression s) {
         this.concrete = c;
         this.symbolic = s;
     }
 
-    static AnnotatedValue fromInt(int i) {
-        return new AnnotatedValue(i, Constant.fromConcreteValue(i));
+    static AnnotatedValue fromConstant(PrimitiveTypes type, Object value) {
+        switch (type) {
+            case INT: return new AnnotatedValue(value, Constant.fromConcreteValue( (int) value));
+            case LONG: return new AnnotatedValue(value, Constant.fromConcreteValue( (long) value));
+            case FLOAT: return new AnnotatedValue(value, Constant.fromConcreteValue( (float) value));
+            case DOUBLE: return new AnnotatedValue(value, Constant.fromConcreteValue( (double) value));
+            default:
+                throw EspressoError.shouldNotReachHere("unsupported constant type");
+        }
     }
 
     private Object concrete;
@@ -37,6 +38,18 @@ public class AnnotatedValue {
             return ((Byte)concrete);
         }
         return (int) concrete;
+    }
+
+    public byte asByte() {
+        return (byte) concrete;
+    }
+
+    public char asChar() {
+        return (char) concrete;
+    }
+
+    public short asShort() {
+        return (short) concrete;
     }
 
     public float asFloat() {

@@ -39,6 +39,7 @@ import com.oracle.truffle.espresso.nodes.interop.ToEspressoNode;
 import com.oracle.truffle.espresso.nodes.quick.QuickNode;
 import com.oracle.truffle.espresso.runtime.EspressoContext;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.concolic.Concolic;
 
 public abstract class CharArrayLoadNode extends QuickNode {
     protected static final int LIMIT = 3;
@@ -51,6 +52,7 @@ public abstract class CharArrayLoadNode extends QuickNode {
     public final int execute(VirtualFrame frame, long[] primitives, Object[] refs) {
         StaticObject array = nullCheck(BytecodeNode.popObject(refs, top - 2));
         int index = BytecodeNode.popInt(primitives, top - 1);
+        Concolic.getArrayAnnotation(array, index, refs, top -1, top -2);
         BytecodeNode.putInt(primitives, top - 2, executeLoad(array, index));
         return Bytecodes.stackEffectOf(Bytecodes.CALOAD);
     }

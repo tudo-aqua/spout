@@ -146,8 +146,29 @@ public final class Arguments {
                             case "sun.boot.library.path":
                                 builder.option("java.BootLibraryPath", value);
                                 break;
+                            case "concolic.bools":
+                                concolicOptions.put("concolic.bools", value);
+                                break;
+                            case "concolic.bytes":
+                                concolicOptions.put("concolic.bytes", value);
+                                break;
+                            case "concolic.chars":
+                                concolicOptions.put("concolic.chars", value);
+                                break;
+                            case "concolic.shorts":
+                                concolicOptions.put("concolic.shorts", value);
+                                break;
                             case "concolic.ints":
                                 concolicOptions.put("concolic.ints", value);
+                                break;
+                            case "concolic.longs":
+                                concolicOptions.put("concolic.longs", value);
+                                break;
+                            case "concolic.floats":
+                                concolicOptions.put("concolic.floats", value);
+                                break;
+                            case "concolic.doubles":
+                                concolicOptions.put("concolic.doubles", value);
                                 break;
                             case "concolic.strings":
                                 concolicOptions.put("concolic.strings", value);

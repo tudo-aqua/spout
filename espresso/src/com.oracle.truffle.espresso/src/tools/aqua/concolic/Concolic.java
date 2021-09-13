@@ -2,7 +2,6 @@ package tools.aqua.concolic;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.espresso.bytecode.BytecodeStream;
-import com.oracle.truffle.espresso.impl.ArrayKlass;
 import com.oracle.truffle.espresso.impl.Field;
 import com.oracle.truffle.espresso.impl.ObjectKlass;
 import com.oracle.truffle.espresso.meta.EspressoError;
@@ -77,6 +76,111 @@ public class Concolic {
         return a;
     }
 
+    private static boolean[] seedsBooleanValues = new boolean[] {};
+    private static int countBooleanSeeds = 0;
+
+    public static AnnotatedValue nextSymbolicBoolean() {
+        boolean concrete = false;
+        if (countBooleanSeeds < seedsBooleanValues.length) {
+            concrete = seedsBooleanValues[countBooleanSeeds];
+        }
+        Variable symbolic = new Variable(PrimitiveTypes.BOOL, countBooleanSeeds);
+        AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
+        countBooleanSeeds++;
+        addTraceElement(new SymbolDeclaration(symbolic));
+        return a;
+    }
+
+    private static byte[] seedsByteValues = new byte[] {};
+    private static int countByteSeeds = 0;
+
+    public static AnnotatedValue nextSymbolicByte() {
+        byte concrete = 0;
+        if (countByteSeeds < seedsByteValues.length) {
+            concrete = seedsByteValues[countByteSeeds];
+        }
+        Variable symbolic = new Variable(PrimitiveTypes.BYTE, countByteSeeds);
+        AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
+        countByteSeeds++;
+        addTraceElement(new SymbolDeclaration(symbolic));
+        return a;
+    }
+
+    private static char[] seedsCharValues = new char[] {};
+    private static int countCharSeeds = 0;
+
+    public static AnnotatedValue nextSymbolicChar() {
+        char concrete = 0;
+        if (countCharSeeds < seedsCharValues.length) {
+            concrete = seedsCharValues[countCharSeeds];
+        }
+        Variable symbolic = new Variable(PrimitiveTypes.CHAR, countCharSeeds);
+        AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
+        countCharSeeds++;
+        addTraceElement(new SymbolDeclaration(symbolic));
+        return a;
+    }
+
+    private static short[] seedsShortValues = new short[] {};
+    private static int countShortSeeds = 0;
+
+    public static AnnotatedValue nextSymbolicShort() {
+        short concrete = 0;
+        if (countShortSeeds < seedsShortValues.length) {
+            concrete = seedsShortValues[countShortSeeds];
+        }
+        Variable symbolic = new Variable(PrimitiveTypes.SHORT, countShortSeeds);
+        AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
+        countShortSeeds++;
+        addTraceElement(new SymbolDeclaration(symbolic));
+        return a;
+    }
+
+    private static long[] seedsLongValues = new long[] {};
+    private static int countLongSeeds = 0;
+
+    public static AnnotatedValue nextSymbolicLong() {
+        long concrete = 0L;
+        if (countLongSeeds < seedsLongValues.length) {
+            concrete = seedsLongValues[countLongSeeds];
+        }
+        Variable symbolic = new Variable(PrimitiveTypes.LONG, countLongSeeds);
+        AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
+        countLongSeeds++;
+        addTraceElement(new SymbolDeclaration(symbolic));
+        return a;
+    }
+
+    private static float[] seedsFloatValues = new float[] {};
+    private static int countFloatSeeds = 0;
+
+    public static AnnotatedValue nextSymbolicFloat() {
+        float concrete = 0f;
+        if (countFloatSeeds < seedsFloatValues.length) {
+            concrete = seedsFloatValues[countFloatSeeds];
+        }
+        Variable symbolic = new Variable(PrimitiveTypes.FLOAT, countFloatSeeds);
+        AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
+        countFloatSeeds++;
+        addTraceElement(new SymbolDeclaration(symbolic));
+        return a;
+    }
+
+    private static double[] seedsDoubleValues = new double[] {};
+    private static int countDoubleSeeds = 0;
+
+    public static AnnotatedValue nextSymbolicDouble() {
+        double concrete = 0d;
+        if (countDoubleSeeds < seedsDoubleValues.length) {
+            concrete = seedsDoubleValues[countDoubleSeeds];
+        }
+        Variable symbolic = new Variable(PrimitiveTypes.DOUBLE, countDoubleSeeds);
+        AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
+        countDoubleSeeds++;
+        addTraceElement(new SymbolDeclaration(symbolic));
+        return a;
+    }
+
     private static String[] seedStringValues = new String[] {};
     private static int countStringSeeds = 0;
 
@@ -95,8 +199,6 @@ public class Concolic {
         addTraceElement(new SymbolDeclaration(symbolic));
         return concrete;
     }
-
-    //TODO: add concolic values for all primitive types
 
 
     // --------------------------------------------------------------------------
@@ -136,7 +238,7 @@ public class Concolic {
         putSymbolic(symbolic, to, a);
     }
 
-    public static void setArrayAnnotation(StaticObject array, int concValue, int concIndex, Object[] symbolic, int fromValue, int fromIndex) {
+    public static void setArrayAnnotation(StaticObject array, int concIndex, Object[] symbolic, int fromValue, int fromIndex) {
         AnnotatedValue symbIndex = popSymbolic(symbolic, fromIndex);
         AnnotatedValue symbValue = popSymbolic(symbolic, fromValue);
         if (!checkArrayAccessPathConstraint(array, concIndex, symbIndex) || symbValue == null) {
@@ -221,13 +323,26 @@ public class Concolic {
         traceHead = null;
         traceTail = null;
         recordTrace = true;
+        countBooleanSeeds = 0;
+        countByteSeeds = 0;
+        countCharSeeds = 0;
+        countShortSeeds = 0;
         countIntSeeds = 0;
+        countLongSeeds = 0;
+        countFloatSeeds = 0;
+        countDoubleSeeds = 0;
         countStringSeeds = 0;
         symbolicObjects.clear();
         parseConfig(config);
+        System.out.println("Seeded Bool Values: " + Arrays.toString(seedsBooleanValues));
+        System.out.println("Seeded Byte Values: " + Arrays.toString(seedsByteValues));
+        System.out.println("Seeded Char Values: " + Arrays.toString(seedsCharValues));
+        System.out.println("Seeded Short Values: " + Arrays.toString(seedsShortValues));
         System.out.println("Seeded Int Values: " + Arrays.toString(seedsIntValues));
+        System.out.println("Seeded Long Values: " + Arrays.toString(seedsLongValues));
+        System.out.println("Seeded Float Values: " + Arrays.toString(seedsFloatValues));
+        System.out.println("Seeded Double Values: " + Arrays.toString(seedsDoubleValues));
         System.out.println("Seeded String Values: " + Arrays.toString(seedStringValues));
-        //TODO: init all values
         System.out.println("======================== START PATH [END].");
     }
 
@@ -238,19 +353,40 @@ public class Concolic {
         String[] paramsGroups = config.trim().split(" "); // not in base64
         for (String paramGroup : paramsGroups) {
             String[] keyValue = paramGroup.split(":"); // not in base64
+            String[] vals = splitVals(keyValue[1]);
             switch (keyValue[0]) {
+                case "concolic.bools":
+                    parseBools(vals);
+                    break;
+                case "concolic.bytes":
+                    parseBytes(vals);
+                    break;
+                case "concolic.chars":
+                    parseChars(vals);
+                    break;
+                case "concolic.shorts":
+                    parseShorts(vals);
+                    break;
                 case "concolic.ints":
-                    parseInts(keyValue[1]);
+                    parseInts(vals);
+                    break;
+                case "concolic.longs":
+                    parseLongs(vals);
+                    break;
+                case "concolic.floats":
+                    parseFloats(vals);
+                    break;
+                case "concolic.doubles":
+                    parseDoubles(vals);
                     break;
                 case "concolic.strings":
-                    parseStrings(keyValue[1]);
+                    parseStrings(vals);
                     break;
-                //TODO: add all classes
             }
         }
     }
 
-    private static void parseInts(String config) {
+    private static String[] splitVals(String config) {
         String[] valsAsStr;
         if (config.trim().length() > 0) {
             valsAsStr = config.split(",");
@@ -258,28 +394,71 @@ public class Concolic {
         else {
             valsAsStr = new String[] {};
         }
-
-        int[] vals = new int[valsAsStr.length];
-        for (int i=0; i<valsAsStr.length; i++) {
-            vals[i] = Integer.valueOf(valsAsStr[i].trim());
-        }
-        seedsIntValues = vals;
+        return valsAsStr;
     }
 
-    private static void parseStrings(String config) {
-        String[] valsAsStr;
-        if (config.trim().length() > 0) {
-            valsAsStr = config.split(",");
-        }
-        else {
-            valsAsStr = new String[] {};
-        }
-
-        String[] vals = new String[valsAsStr.length];
+    private static void parseBools(String[] valsAsStr) {
+        seedsBooleanValues = new boolean[valsAsStr.length];
         for (int i=0; i<valsAsStr.length; i++) {
-            vals[i] = valsAsStr[i].trim();
+            seedsBooleanValues[i] = Boolean.valueOf(valsAsStr[i].trim());
         }
-        seedStringValues = vals;
+    }
+
+    private static void parseBytes(String[] valsAsStr) {
+        seedsByteValues = new byte[valsAsStr.length];
+        for (int i=0; i<valsAsStr.length; i++) {
+            seedsByteValues[i] = Byte.valueOf(valsAsStr[i].trim());
+        }
+    }
+
+    private static void parseChars(String[] valsAsStr) {
+        seedsCharValues = new char[valsAsStr.length];
+        for (int i=0; i<valsAsStr.length; i++) {
+            //TODO: not sure if this is correct
+            seedsCharValues[i] = valsAsStr[i].trim().charAt(0);
+        }
+    }
+
+    private static void parseShorts(String[] valsAsStr) {
+        seedsShortValues = new short[valsAsStr.length];
+        for (int i=0; i<valsAsStr.length; i++) {
+            seedsShortValues[i] = Short.valueOf(valsAsStr[i].trim());
+        }
+    }
+
+    private static void parseInts(String[] valsAsStr) {
+        seedsIntValues = new int[valsAsStr.length];
+        for (int i=0; i<valsAsStr.length; i++) {
+            seedsIntValues[i] = Integer.valueOf(valsAsStr[i].trim());
+        }
+    }
+
+    private static void parseLongs(String[] valsAsStr) {
+        seedsLongValues = new long[valsAsStr.length];
+        for (int i=0; i<valsAsStr.length; i++) {
+            seedsLongValues[i] = Long.valueOf(valsAsStr[i].trim());
+        }
+    }
+
+    private static void parseFloats(String[] valsAsStr) {
+        seedsFloatValues = new float[valsAsStr.length];
+        for (int i=0; i<valsAsStr.length; i++) {
+            seedsFloatValues[i] = Float.valueOf(valsAsStr[i].trim());
+        }
+    }
+
+    private static void parseDoubles(String[] valsAsStr) {
+        seedsDoubleValues = new double[valsAsStr.length];
+        for (int i=0; i<valsAsStr.length; i++) {
+            seedsDoubleValues[i] = Double.valueOf(valsAsStr[i].trim());
+        }
+    }
+
+    private static void parseStrings(String[] valsAsStr) {
+        seedStringValues = new String[valsAsStr.length];
+        for (int i=0; i<valsAsStr.length; i++) {
+            seedStringValues[i] = valsAsStr[i].trim();
+        }
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -306,36 +485,28 @@ public class Concolic {
     //
     // bytecode functions
 
-    private static void symbolicIntOp(OperatorComparator op, Object[] symbolic,
-                                       int top, int c1, int c2, int concResult) {
-        symbolicIntOp(op, symbolic, top, c1, c2, concResult, false);
+    private static AnnotatedValue binarySymbolicOp(OperatorComparator op, PrimitiveTypes type,
+                                                   Object cLeft, Object cRight, Object concResult, AnnotatedValue sLeft, AnnotatedValue sRight) {
+
+        return binarySymbolicOp(op, type, type, cLeft, cRight, concResult, sLeft, sRight);
     }
 
-    private static void symbolicIntOp(OperatorComparator op, Object[] symbolic,
-                                       int top, int c1, int c2, int concResult, boolean reverse) {
+    private static AnnotatedValue binarySymbolicOp(OperatorComparator op, PrimitiveTypes typeLeft, PrimitiveTypes typeRight,
+                Object cLeft, Object cRight, Object concResult, AnnotatedValue sLeft, AnnotatedValue sRight) {
 
-        AnnotatedValue s1 = popSymbolic(symbolic, reverse ? top -2 : top -1);
-        AnnotatedValue s2 = popSymbolic(symbolic, reverse ? top -1 : top -2);
-        if (s1 == null && s2 == null) {
-            return;
+        if (sLeft == null && sRight == null) {
+            return null;
         }
-
-        if (s1 == null) s1 = AnnotatedValue.fromInt(c1);
-        if (s2 == null) s2 = AnnotatedValue.fromInt(c2);
-
-        AnnotatedValue result = new AnnotatedValue( concResult, new ComplexExpression(op, s1.symbolic(), s2.symbolic() ));
-        putSymbolic(symbolic,top - 2, result);
+        if (sLeft == null) sLeft = AnnotatedValue.fromConstant(typeLeft, cLeft);
+        if (sRight == null) sRight = AnnotatedValue.fromConstant(typeRight, cRight);
+        return new AnnotatedValue( concResult, new ComplexExpression(op, sLeft.symbolic(), sRight.symbolic() ));
     }
 
-    private static void unarySymbolicIntOp(OperatorComparator op, Object[] symbolic,
-                                            int top, int c1, int concResult) {
-
-        AnnotatedValue s1 = popSymbolic(symbolic, top -1);
+    private static AnnotatedValue unarySymbolicOp(OperatorComparator op, Object concResult, AnnotatedValue s1) {
         if (s1 == null) {
-            return;
+            return null;
         }
-        AnnotatedValue result = new AnnotatedValue( concResult, new ComplexExpression(op, s1.symbolic()));
-        putSymbolic(symbolic,top - 1, result);
+        return new AnnotatedValue( concResult, new ComplexExpression(op, s1.symbolic()));
     }
 
     // case IADD: putInt(stack, top - 2, popInt(stack, top - 1) + popInt(stack, top - 2)); break;
@@ -344,13 +515,39 @@ public class Concolic {
         int c2 = BytecodeNode.popInt(primitives, top - 2);
         int concResult = c1 + c2;
         BytecodeNode.putInt(primitives, top - 2, concResult);
-        symbolicIntOp(OperatorComparator.IADD, symbolic, top, c1, c2, concResult);
+        putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.IADD, PrimitiveTypes.INT,
+                c1, c2, concResult, popSymbolic(symbolic, top-1), popSymbolic(symbolic,top-2)));
     }
 
     // case LADD: putLong(stack, top - 4, popLong(stack, top - 1) + popLong(stack, top - 3)); break;
-    // case FADD: putFloat(stack, top - 2, popFloat(stack, top - 1) + popFloat(stack, top - 2)); break;
-    // case DADD: putDouble(stack, top - 4, popDouble(stack, top - 1) + popDouble(stack, top - 3)); break;
+    public static void ladd(long[] primitives,  Object[] symbolic, int top) {
+        long c1 = BytecodeNode.popLong(primitives, top - 1);
+        long c2 = BytecodeNode.popLong(primitives, top - 3);
+        long concResult = c1 + c2;
+        BytecodeNode.putLong(primitives, top - 4, concResult);
+        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.LADD, PrimitiveTypes.LONG,
+                c1, c2, concResult, popSymbolic(symbolic, top-1), popSymbolic(symbolic,top-3)));
+    }
 
+    // case FADD: putFloat(stack, top - 2, popFloat(stack, top - 1) + popFloat(stack, top - 2)); break;
+    public static void fadd(long[] primitives,  Object[] symbolic, int top) {
+        float c1 = BytecodeNode.popFloat(primitives, top - 1);
+        float c2 = BytecodeNode.popFloat(primitives, top - 2);
+        float concResult = c1 + c2;
+        BytecodeNode.putFloat(primitives, top - 2, concResult);
+        putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.FADD, PrimitiveTypes.FLOAT,
+                c1, c2, concResult, popSymbolic(symbolic, top-1), popSymbolic(symbolic,top-2)));
+    }
+
+    // case DADD: putDouble(stack, top - 4, popDouble(stack, top - 1) + popDouble(stack, top - 3)); break;
+    public static void dadd(long[] primitives,  Object[] symbolic, int top) {
+        double c1 = BytecodeNode.popDouble(primitives, top - 1);
+        double c2 = BytecodeNode.popDouble(primitives, top - 3);
+        double concResult = c1 + c2;
+        BytecodeNode.putDouble(primitives, top - 4, concResult);
+        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.DADD, PrimitiveTypes.DOUBLE,
+                c1, c2, concResult, popSymbolic(symbolic, top-1), popSymbolic(symbolic,top-3)));
+    }
 
     //case ISUB: putInt(stack, top - 2, -popInt(stack, top - 1) + popInt(stack, top - 2)); break;
     public static void isub(long[] primitives, Object[] symbolic, int top) {
@@ -358,12 +555,39 @@ public class Concolic {
         int c2 = BytecodeNode.popInt(primitives, top - 2);
         int concResult = c2 - c1;
         BytecodeNode.putInt(primitives, top - 2, concResult);
-        symbolicIntOp(OperatorComparator.ISUB, symbolic, top, c2, c1, concResult, true);
+        putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.ISUB, PrimitiveTypes.INT,
+                c2, c1, concResult, popSymbolic(symbolic, top-2), popSymbolic(symbolic,top-1)));
     }
 
     //case LSUB: putLong(stack, top - 4, -popLong(stack, top - 1) + popLong(stack, top - 3)); break;
+    public static void lsub(long[] primitives,  Object[] symbolic, int top) {
+        long c1 = BytecodeNode.popLong(primitives, top - 1);
+        long c2 = BytecodeNode.popLong(primitives, top - 3);
+        long concResult = c2 - c1;
+        BytecodeNode.putLong(primitives, top - 4, concResult);
+        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.LSUB, PrimitiveTypes.LONG,
+                c2, c1, concResult, popSymbolic(symbolic, top-3), popSymbolic(symbolic,top-1)));
+    }
+
     //case FSUB: putFloat(stack, top - 2, -popFloat(stack, top - 1) + popFloat(stack, top - 2)); break;
+    public static void fsub(long[] primitives,  Object[] symbolic, int top) {
+        float c1 = BytecodeNode.popFloat(primitives, top - 1);
+        float c2 = BytecodeNode.popFloat(primitives, top - 2);
+        float concResult = c2 - c1;
+        BytecodeNode.putFloat(primitives, top - 2, concResult);
+        putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.FSUB, PrimitiveTypes.FLOAT,
+                c2, c1, concResult, popSymbolic(symbolic, top-2), popSymbolic(symbolic,top-1)));
+    }
+
     //case DSUB: putDouble(stack, top - 4, -popDouble(stack, top - 1) + popDouble(stack, top - 3)); break;
+    public static void dsub(long[] primitives,  Object[] symbolic, int top) {
+        double c1 = BytecodeNode.popDouble(primitives, top - 1);
+        double c2 = BytecodeNode.popDouble(primitives, top - 3);
+        double concResult = c2 - c1;
+        BytecodeNode.putDouble(primitives, top - 4, concResult);
+        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.DSUB, PrimitiveTypes.DOUBLE,
+                c2, c1, concResult, popSymbolic(symbolic, top-3), popSymbolic(symbolic,top-1)));
+    }
 
     // case IMUL: putInt(stack, top - 2, popInt(stack, top - 1) * popInt(stack, top - 2)); break;
     public static void imul(long[] primitives,  Object[] symbolic, int top) {
@@ -371,13 +595,39 @@ public class Concolic {
         int c2 = BytecodeNode.popInt(primitives, top - 2);
         int concResult = c1 * c2;
         BytecodeNode.putInt(primitives, top - 2, concResult);
-        symbolicIntOp(OperatorComparator.IMUL, symbolic, top, c1, c2, concResult);
+        putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.IMUL, PrimitiveTypes.INT,
+                c1, c2, concResult, popSymbolic(symbolic, top-1), popSymbolic(symbolic,top-2)));
     }
 
     // case LMUL: putLong(stack, top - 4, popLong(stack, top - 1) * popLong(stack, top - 3)); break;
-    // case FMUL: putFloat(stack, top - 2, popFloat(stack, top - 1) * popFloat(stack, top - 2)); break;
-    // case DMUL: putDouble(stack, top - 4, popDouble(stack, top - 1) * popDouble(stack, top - 3)); break;
+    public static void lmul(long[] primitives,  Object[] symbolic, int top) {
+        long c1 = BytecodeNode.popLong(primitives, top - 1);
+        long c2 = BytecodeNode.popLong(primitives, top - 3);
+        long concResult = c1 * c2;
+        BytecodeNode.putLong(primitives, top - 4, concResult);
+        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.LMUL, PrimitiveTypes.LONG,
+                c1, c2, concResult, popSymbolic(symbolic, top-1), popSymbolic(symbolic,top-3)));
+    }
 
+    // case FMUL: putFloat(stack, top - 2, popFloat(stack, top - 1) * popFloat(stack, top - 2)); break;
+    public static void fmul(long[] primitives,  Object[] symbolic, int top) {
+        float c1 = BytecodeNode.popFloat(primitives, top - 1);
+        float c2 = BytecodeNode.popFloat(primitives, top - 2);
+        float concResult = c1 * c2;
+        BytecodeNode.putFloat(primitives, top - 2, concResult);
+        putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.FMUL, PrimitiveTypes.FLOAT,
+                c1, c2, concResult, popSymbolic(symbolic, top-1), popSymbolic(symbolic,top-2)));
+    }
+
+    // case DMUL: putDouble(stack, top - 4, popDouble(stack, top - 1) * popDouble(stack, top - 3)); break;
+    public static void dmul(long[] primitives,  Object[] symbolic, int top) {
+        double c1 = BytecodeNode.popDouble(primitives, top - 1);
+        double c2 = BytecodeNode.popDouble(primitives, top - 3);
+        double concResult = c1 * c2;
+        BytecodeNode.putDouble(primitives, top - 4, concResult);
+        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.DMUL, PrimitiveTypes.DOUBLE,
+                c1, c2, concResult, popSymbolic(symbolic, top-1), popSymbolic(symbolic,top-3)));
+    }
 
     private static void checkNonZero(int value, AnnotatedValue a, BytecodeNode bn) {
         if (value != 0) {
@@ -397,6 +647,24 @@ public class Concolic {
         }
     }
 
+    private static void checkNonZero(long value, AnnotatedValue a, BytecodeNode bn) {
+        if (value != 0L) {
+            if (a != null) {
+                addTraceElement(new PathCondition( new ComplexExpression(
+                        OperatorComparator.NE, a.symbolic(), Constant.LONG_ZERO),0, 2));
+            }
+        }
+        else {
+            if (a != null) {
+                addTraceElement(new PathCondition(new ComplexExpression(
+                        OperatorComparator.EQ, a.symbolic(), Constant.LONG_ZERO), 1, 2));
+            }
+            bn.enterImplicitExceptionProfile();
+            Meta meta = bn.getMeta();
+            throw meta.throwExceptionWithMessage(meta.java_lang_ArithmeticException, "/ by zero");
+        }
+    }
+
     // case IDIV: putInt(stack, top - 2, divInt(checkNonZero(popInt(stack, top - 1)), popInt(stack, top - 2))); break;
     public static void idiv(long[] primitives, Object[] symbolic, int top, BytecodeNode bn) {
         int c1 = BytecodeNode.popInt(primitives, top - 1);
@@ -404,12 +672,40 @@ public class Concolic {
         checkNonZero(c1, peekSymbolic(symbolic, top -1), bn);
         int concResult = c2 / c1;
         BytecodeNode.putInt(primitives, top - 2, concResult);
-        symbolicIntOp(OperatorComparator.IDIV, symbolic, top, c2, c1, concResult, true);
+        putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.IDIV, PrimitiveTypes.INT,
+                c2, c1, concResult, popSymbolic(symbolic, top-2), popSymbolic(symbolic,top-1)));
     }
 
     // case LDIV: putLong(stack, top - 4, divLong(checkNonZero(popLong(stack, top - 1)), popLong(stack, top - 3))); break;
+    public static void ldiv(long[] primitives,  Object[] symbolic, int top, BytecodeNode bn) {
+        long c1 = BytecodeNode.popLong(primitives, top - 1);
+        long c2 = BytecodeNode.popLong(primitives, top - 3);
+        checkNonZero(c1, peekSymbolic(symbolic, top -1), bn);
+        long concResult = c2 / c1;
+        BytecodeNode.putLong(primitives, top - 4, concResult);
+        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.LDIV, PrimitiveTypes.LONG,
+                c2, c1, concResult, popSymbolic(symbolic, top-3), popSymbolic(symbolic,top-1)));
+    }
+
     // case FDIV: putFloat(stack, top - 2, divFloat(popFloat(stack, top - 1), popFloat(stack, top - 2))); break;
+    public static void fdiv(long[] primitives,  Object[] symbolic, int top) {
+        float c1 = BytecodeNode.popFloat(primitives, top - 1);
+        float c2 = BytecodeNode.popFloat(primitives, top - 2);
+        float concResult = c2 / c1;
+        BytecodeNode.putFloat(primitives, top - 2, concResult);
+        putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.FDIV, PrimitiveTypes.FLOAT,
+                c2, c1, concResult, popSymbolic(symbolic, top-2), popSymbolic(symbolic,top-1)));
+    }
+
     // case DDIV: putDouble(stack, top - 4, divDouble(popDouble(stack, top - 1), popDouble(stack, top - 3))); break;
+    public static void ddiv(long[] primitives,  Object[] symbolic, int top) {
+        double c1 = BytecodeNode.popDouble(primitives, top - 1);
+        double c2 = BytecodeNode.popDouble(primitives, top - 3);
+        double concResult = c2 / c1;
+        BytecodeNode.putDouble(primitives, top - 4, concResult);
+        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.DDIV, PrimitiveTypes.DOUBLE,
+                c2, c1, concResult, popSymbolic(symbolic, top-3), popSymbolic(symbolic,top-1)));
+    }
 
     // case IREM: putInt(stack, top - 2, remInt(checkNonZero(popInt(stack, top - 1)), popInt(stack, top - 2))); break;
     public static void irem(long[] primitives, Object[] symbolic, int top, BytecodeNode bn) {
@@ -418,24 +714,72 @@ public class Concolic {
         checkNonZero(c1, peekSymbolic(symbolic, top -1), bn);
         int concResult = c2 % c1;
         BytecodeNode.putInt(primitives, top - 2, concResult);
-        symbolicIntOp(OperatorComparator.IREM, symbolic, top, c2, c1, concResult, true);
+        putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.IREM, PrimitiveTypes.INT,
+                c2, c1, concResult, popSymbolic(symbolic, top-2), popSymbolic(symbolic,top-1)));
     }
 
     // case LREM: putLong(stack, top - 4, remLong(checkNonZero(popLong(stack, top - 1)), popLong(stack, top - 3))); break;
+    public static void lrem(long[] primitives,  Object[] symbolic, int top, BytecodeNode bn) {
+        long c1 = BytecodeNode.popLong(primitives, top - 1);
+        long c2 = BytecodeNode.popLong(primitives, top - 3);
+        checkNonZero(c1, peekSymbolic(symbolic, top -1), bn);
+        long concResult = c2 % c1;
+        BytecodeNode.putLong(primitives, top - 4, concResult);
+        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.LREM, PrimitiveTypes.LONG,
+                c2, c1, concResult, popSymbolic(symbolic, top-3), popSymbolic(symbolic,top-1)));
+    }
+
     // case FREM: putFloat(stack, top - 2, remFloat(popFloat(stack, top - 1), popFloat(stack, top - 2))); break;
+    public static void frem(long[] primitives,  Object[] symbolic, int top) {
+        float c1 = BytecodeNode.popFloat(primitives, top - 1);
+        float c2 = BytecodeNode.popFloat(primitives, top - 2);
+        float concResult = c2 % c1;
+        BytecodeNode.putFloat(primitives, top - 2, concResult);
+        putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.FREM, PrimitiveTypes.FLOAT,
+                c2, c1, concResult, popSymbolic(symbolic, top-2), popSymbolic(symbolic,top-1)));
+    }
+
     // case DREM: putDouble(stack, top - 4, remDouble(popDouble(stack, top - 1), popDouble(stack, top - 3))); break;
+    public static void drem(long[] primitives,  Object[] symbolic, int top) {
+        double c1 = BytecodeNode.popDouble(primitives, top - 1);
+        double c2 = BytecodeNode.popDouble(primitives, top - 3);
+        double concResult = c2 % c1;
+        BytecodeNode.putDouble(primitives, top - 4, concResult);
+        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.DREM, PrimitiveTypes.DOUBLE,
+                c2, c1, concResult, popSymbolic(symbolic, top-3), popSymbolic(symbolic,top-1)));
+    }
 
     // case INEG: putInt(stack, top - 1, -popInt(stack, top - 1)); break;
     public static void ineg(long[] primitives, Object[] symbolic, int top) {
         int c1 = BytecodeNode.popInt(primitives, top - 1);
         int concResult = -c1;
         BytecodeNode.putInt(primitives, top - 1, concResult);
-        unarySymbolicIntOp(OperatorComparator.INEG, symbolic, top, c1, concResult);
+        putSymbolic(symbolic, top-1, unarySymbolicOp(OperatorComparator.INEG, concResult, popSymbolic(symbolic, top-1)));
     }
 
     // case LNEG: putLong(stack, top - 2, -popLong(stack, top - 1)); break;
+    public static void lneg(long[] primitives, Object[] symbolic, int top) {
+        long c1 = BytecodeNode.popLong(primitives, top - 1);
+        long concResult = -c1;
+        BytecodeNode.putLong(primitives, top - 2, concResult);
+        putSymbolic(symbolic, top-2, unarySymbolicOp(OperatorComparator.LNEG, concResult, popSymbolic(symbolic, top-1)));
+    }
+
     // case FNEG: putFloat(stack, top - 1, -popFloat(stack, top - 1)); break;
+    public static void fneg(long[] primitives, Object[] symbolic, int top) {
+        float c1 = BytecodeNode.popFloat(primitives, top - 1);
+        float concResult = -c1;
+        BytecodeNode.putFloat(primitives, top - 1, concResult);
+        putSymbolic(symbolic, top-1, unarySymbolicOp(OperatorComparator.FNEG, concResult, popSymbolic(symbolic, top-1)));
+    }
+
     // case DNEG: putDouble(stack, top - 2, -popDouble(stack, top - 1)); break;
+    public static void dneg(long[] primitives, Object[] symbolic, int top) {
+        double c1 = BytecodeNode.popDouble(primitives, top - 1);
+        double concResult = -c1;
+        BytecodeNode.putDouble(primitives, top - 2, concResult);
+        putSymbolic(symbolic, top-2, unarySymbolicOp(OperatorComparator.DNEG, concResult, popSymbolic(symbolic, top-1)));
+    }
 
     // case ISHL: putInt(stack, top - 2, shiftLeftInt(popInt(stack, top - 1), popInt(stack, top - 2))); break;
     public static void ishl(long[] primitives, Object[] symbolic, int top) {
@@ -443,10 +787,19 @@ public class Concolic {
         int c2 = BytecodeNode.popInt(primitives, top - 2);
         int concResult = c2 << c1;
         BytecodeNode.putInt(primitives, top - 2, concResult);
-        symbolicIntOp(OperatorComparator.ISHL, symbolic, top, c2, c1, concResult, true);
+        putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.ISHL, PrimitiveTypes.INT,
+                c2, c1, concResult, popSymbolic(symbolic, top-2), popSymbolic(symbolic,top-1)));
     }
 
     // case LSHL: putLong(stack, top - 3, shiftLeftLong(popInt(stack, top - 1), popLong(stack, top - 2))); break;
+    public static void lshl(long[] primitives,  Object[] symbolic, int top) {
+        int c1 = BytecodeNode.popInt(primitives, top - 1);
+        long c2 = BytecodeNode.popLong(primitives, top - 2);
+        long concResult = c2 << c1;
+        BytecodeNode.putLong(primitives, top - 3, concResult);
+        putSymbolic(symbolic, top -3, binarySymbolicOp(OperatorComparator.LSHL, PrimitiveTypes.LONG, PrimitiveTypes.INT,
+                c2, c1, concResult, popSymbolic(symbolic, top-2), popSymbolic(symbolic,top-1)));
+    }
 
     // case ISHR: putInt(stack, top - 2, shiftRightSignedInt(popInt(stack, top - 1), popInt(stack, top - 2))); break;
     public static void ishr(long[] primitives, Object[] symbolic, int top) {
@@ -454,10 +807,19 @@ public class Concolic {
         int c2 = BytecodeNode.popInt(primitives, top - 2);
         int concResult = c2 >> c1;
         BytecodeNode.putInt(primitives, top - 2, concResult);
-        symbolicIntOp(OperatorComparator.ISHR, symbolic, top, c2, c1, concResult, true);
+        putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.ISHR, PrimitiveTypes.INT,
+                c2, c1, concResult, popSymbolic(symbolic, top-2), popSymbolic(symbolic,top-1)));
     }
 
     // case LSHR: putLong(stack, top - 3, shiftRightSignedLong(popInt(stack, top - 1), popLong(stack, top - 2))); break;
+    public static void lshr(long[] primitives,  Object[] symbolic, int top) {
+        int c1 = BytecodeNode.popInt(primitives, top - 1);
+        long c2 = BytecodeNode.popLong(primitives, top - 2);
+        long concResult = c2 >> c1;
+        BytecodeNode.putLong(primitives, top - 3, concResult);
+        putSymbolic(symbolic, top -3, binarySymbolicOp(OperatorComparator.LSHR, PrimitiveTypes.LONG, PrimitiveTypes.INT,
+                c2, c1, concResult, popSymbolic(symbolic, top-2), popSymbolic(symbolic,top-1)));
+    }
 
     // case IUSHR: putInt(stack, top - 2, shiftRightUnsignedInt(popInt(stack, top - 1), popInt(stack, top - 2))); break;
     public static void iushr(long[] primitives, Object[] symbolic, int top) {
@@ -465,10 +827,19 @@ public class Concolic {
         int c2 = BytecodeNode.popInt(primitives, top - 2);
         int concResult = c2 >>> c1;
         BytecodeNode.putInt(primitives, top - 2, concResult);
-        symbolicIntOp(OperatorComparator.IUSHR, symbolic, top, c2, c1, concResult, true);
+        putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.IUSHR, PrimitiveTypes.INT,
+                c2, c1, concResult, popSymbolic(symbolic, top-2), popSymbolic(symbolic,top-1)));
     }
 
     // case LUSHR: putLong(stack, top - 3, shiftRightUnsignedLong(popInt(stack, top - 1), popLong(stack, top - 2))); break;
+    public static void lushr(long[] primitives,  Object[] symbolic, int top) {
+        int c1 = BytecodeNode.popInt(primitives, top - 1);
+        long c2 = BytecodeNode.popLong(primitives, top - 2);
+        long concResult = c2 >>> c1;
+        BytecodeNode.putLong(primitives, top - 3, concResult);
+        putSymbolic(symbolic, top -3, binarySymbolicOp(OperatorComparator.LUSHR, PrimitiveTypes.LONG, PrimitiveTypes.INT,
+                c2, c1, concResult, popSymbolic(symbolic, top-2), popSymbolic(symbolic,top-1)));
+    }
 
     // case IAND: putInt(stack, top - 2, popInt(stack, top - 1) & popInt(stack, top - 2)); break;
     public static void iand(long[] primitives, Object[] symbolic, int top) {
@@ -476,10 +847,19 @@ public class Concolic {
         int c2 = BytecodeNode.popInt(primitives, top - 2);
         int concResult = c1 & c2;
         BytecodeNode.putInt(primitives, top - 2, concResult);
-        symbolicIntOp(OperatorComparator.IAND, symbolic, top, c1, c2, concResult);
+        putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.IAND, PrimitiveTypes.INT,
+                c1, c2, concResult, popSymbolic(symbolic, top-1), popSymbolic(symbolic,top-2)));
     }
 
     // case LAND: putLong(stack, top - 4, popLong(stack, top - 1) & popLong(stack, top - 3)); break;
+    public static void land(long[] primitives,  Object[] symbolic, int top) {
+        long c1 = BytecodeNode.popLong(primitives, top - 1);
+        long c2 = BytecodeNode.popLong(primitives, top - 3);
+        long concResult = c1 & c2;
+        BytecodeNode.putLong(primitives, top - 4, concResult);
+        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.LAND, PrimitiveTypes.LONG,
+                c1, c2, concResult, popSymbolic(symbolic, top-1), popSymbolic(symbolic,top-3)));
+    }
 
     //  case IOR: putInt(stack, top - 2, popInt(stack, top - 1) | popInt(stack, top - 2)); break;
     public static void ior(long[] primitives, Object[] symbolic, int top) {
@@ -487,10 +867,19 @@ public class Concolic {
         int c2 = BytecodeNode.popInt(primitives, top - 2);
         int concResult = c1 | c2;
         BytecodeNode.putInt(primitives, top - 2, concResult);
-        symbolicIntOp(OperatorComparator.IOR, symbolic, top, c1, c2, concResult);
+        putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.IOR, PrimitiveTypes.INT,
+                c1, c2, concResult, popSymbolic(symbolic, top-1), popSymbolic(symbolic,top-2)));
     }
 
     // case LOR: putLong(stack, top - 4, popLong(stack, top - 1) | popLong(stack, top - 3)); break;
+    public static void lor(long[] primitives,  Object[] symbolic, int top) {
+        long c1 = BytecodeNode.popLong(primitives, top - 1);
+        long c2 = BytecodeNode.popLong(primitives, top - 3);
+        long concResult = c1 | c2;
+        BytecodeNode.putLong(primitives, top - 4, concResult);
+        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.LOR, PrimitiveTypes.LONG,
+                c1, c2, concResult, popSymbolic(symbolic, top-1), popSymbolic(symbolic,top-3)));
+    }
 
     // case IXOR: putInt(stack, top - 2, popInt(stack, top - 1) ^ popInt(stack, top - 2)); break;
     public static void ixor(long[] primitives, Object[] symbolic, int top) {
@@ -498,10 +887,19 @@ public class Concolic {
         int c2 = BytecodeNode.popInt(primitives, top - 2);
         int concResult = c1 ^ c2;
         BytecodeNode.putInt(primitives, top - 2, concResult);
-        symbolicIntOp(OperatorComparator.IXOR, symbolic, top, c1, c2, concResult);
+        putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.IXOR, PrimitiveTypes.INT,
+                c1, c2, concResult, popSymbolic(symbolic, top-1), popSymbolic(symbolic,top-2)));
     }
 
     // case LXOR: putLong(stack, top - 4, popLong(stack, top - 1) ^ popLong(stack, top - 3)); break;
+    public static void lxor(long[] primitives,  Object[] symbolic, int top) {
+        long c1 = BytecodeNode.popLong(primitives, top - 1);
+        long c2 = BytecodeNode.popLong(primitives, top - 3);
+        long concResult = c1 ^ c2;
+        BytecodeNode.putLong(primitives, top - 4, concResult);
+        putSymbolic(symbolic, top -4, binarySymbolicOp(OperatorComparator.LXOR, PrimitiveTypes.LONG,
+                c1, c2, concResult, popSymbolic(symbolic, top-1), popSymbolic(symbolic,top-3)));
+    }
 
     // case IINC: setLocalInt(stack, bs.readLocalIndex(curBCI), getLocalInt(stack, bs.readLocalIndex(curBCI)) + bs.readIncrement(curBCI)); break;
     public static void iinc(long[] primitives, Object[] symbolic, BytecodeStream bs, int curBCI) {
@@ -628,8 +1026,8 @@ public class Concolic {
 
         // symbolic
         if (s1 != null || s2 != null) {
-            if (s1 == null) s1 = AnnotatedValue.fromInt(c1);
-            if (s2 == null) s2 = AnnotatedValue.fromInt(c2);
+            if (s1 == null) s1 = AnnotatedValue.fromConstant(PrimitiveTypes.INT, c1);
+            if (s2 == null) s2 = AnnotatedValue.fromConstant(PrimitiveTypes.INT, c2);
 
             Expression expr = null;
             switch (opcode) {

@@ -54,8 +54,7 @@ public abstract class IntArrayLoadNode extends QuickNode {
         StaticObject array = nullCheck(BytecodeNode.popObject(refs, top - 2));
         int index = BytecodeNode.popInt(primitives, top - 1);
         Concolic.getArrayAnnotation(array, index, refs, top -1, top -2);
-        int intValue = executeLoad(array, index);
-        BytecodeNode.putInt(primitives, top - 2, intValue);
+        BytecodeNode.putInt(primitives, top - 2, executeLoad(array, index));
         return Bytecodes.stackEffectOf(Bytecodes.IALOAD);
     }
 

@@ -36,6 +36,7 @@ import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.nodes.quick.QuickNode;
 import com.oracle.truffle.espresso.runtime.EspressoContext;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.concolic.Concolic;
 
 public abstract class LongArrayStoreNode extends QuickNode {
     protected static final int LIMIT = 3;
@@ -48,8 +49,8 @@ public abstract class LongArrayStoreNode extends QuickNode {
     public final int execute(VirtualFrame frame, long[] primitives, Object[] refs) {
         StaticObject array = nullCheck(BytecodeNode.popObject(refs, top - 4));
         int index = BytecodeNode.popInt(primitives, top - 3);
-        long value = BytecodeNode.popLong(primitives, top - 1);
-        executeStore(array, index, value);
+        Concolic.setArrayAnnotation(array, index, refs, top -1, top -3);
+        executeStore(array, index, BytecodeNode.popLong(primitives, top - 1));
         return Bytecodes.stackEffectOf(Bytecodes.LASTORE);
     }
 

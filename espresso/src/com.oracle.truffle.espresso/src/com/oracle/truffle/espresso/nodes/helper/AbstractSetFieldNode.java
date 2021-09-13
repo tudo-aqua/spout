@@ -135,8 +135,10 @@ abstract class BooleanSetFieldNode extends AbstractSetFieldNode {
     @Override
     public void setField(VirtualFrame frame, long[] primitives, Object[] refs, BytecodeNode root, StaticObject receiver, int top, int statementIndex) {
         boolean value = BytecodeNode.popInt(primitives, top - 1) != 0;
+        AnnotatedValue a = Concolic.popSymbolic( refs,top -1);
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        Concolic.setFieldAnnotation(receiver, field, a);
     }
 
     abstract void executeSetField(StaticObject receiver, boolean value);
@@ -164,8 +166,10 @@ abstract class CharSetFieldNode extends AbstractSetFieldNode {
     @Override
     public void setField(VirtualFrame frame, long[] primitives, Object[] refs, BytecodeNode root, StaticObject receiver, int top, int statementIndex) {
         char value = (char) BytecodeNode.popInt(primitives, top - 1);
+        AnnotatedValue a = Concolic.popSymbolic( refs,top -1);
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        Concolic.setFieldAnnotation(receiver, field, a);
     }
 
     abstract void executeSetField(StaticObject receiver, char value);
@@ -193,8 +197,10 @@ abstract class ShortSetFieldNode extends AbstractSetFieldNode {
     @Override
     public void setField(VirtualFrame frame, long[] primitives, Object[] refs, BytecodeNode root, StaticObject receiver, int top, int statementIndex) {
         short value = (short) BytecodeNode.popInt(primitives, top - 1);
+        AnnotatedValue a = Concolic.popSymbolic( refs,top -1);
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        Concolic.setFieldAnnotation(receiver, field, a);
     }
 
     abstract void executeSetField(StaticObject receiver, short value);
@@ -222,8 +228,10 @@ abstract class ByteSetFieldNode extends AbstractSetFieldNode {
     @Override
     public void setField(VirtualFrame frame, long[] primitives, Object[] refs, BytecodeNode root, StaticObject receiver, int top, int statementIndex) {
         byte value = (byte) BytecodeNode.popInt(primitives, top - 1);
+        AnnotatedValue a = Concolic.popSymbolic( refs,top -1);
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        Concolic.setFieldAnnotation(receiver, field, a);
     }
 
     abstract void executeSetField(StaticObject receiver, byte value);
@@ -251,8 +259,10 @@ abstract class LongSetFieldNode extends AbstractSetFieldNode {
     @Override
     public void setField(VirtualFrame frame, long[] primitives, Object[] refs, BytecodeNode root, StaticObject receiver, int top, int statementIndex) {
         long value = BytecodeNode.popLong(primitives, top - 1);
+        AnnotatedValue a = Concolic.popSymbolic( refs,top -1);
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        Concolic.setFieldAnnotation(receiver, field, a);
     }
 
     abstract void executeSetField(StaticObject receiver, long value);
@@ -280,8 +290,10 @@ abstract class FloatSetFieldNode extends AbstractSetFieldNode {
     @Override
     public void setField(VirtualFrame frame, long[] primitives, Object[] refs, BytecodeNode root, StaticObject receiver, int top, int statementIndex) {
         float value = BytecodeNode.popFloat(primitives, top - 1);
+        AnnotatedValue a = Concolic.popSymbolic( refs,top -1);
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        Concolic.setFieldAnnotation(receiver, field, a);
     }
 
     abstract void executeSetField(StaticObject receiver, float value);
@@ -309,8 +321,10 @@ abstract class DoubleSetFieldNode extends AbstractSetFieldNode {
     @Override
     public void setField(VirtualFrame frame, long[] primitives, Object[] refs, BytecodeNode root, StaticObject receiver, int top, int statementIndex) {
         double value = BytecodeNode.popDouble(primitives, top - 1);
+        AnnotatedValue a = Concolic.popSymbolic( refs,top -1);
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        Concolic.setFieldAnnotation(receiver, field, a);
     }
 
     abstract void executeSetField(StaticObject receiver, double value);

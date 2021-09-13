@@ -81,8 +81,29 @@ public class LibEspresso {
 
         Map<String,String> concolicOptions = Arguments.getConcolicOptions();
         String params = "";
+        if (concolicOptions.containsKey("concolic.bools")) {
+            params += " concolic.bools:" + concolicOptions.get("concolic.bools");
+        }
+        if (concolicOptions.containsKey("concolic.bytes")) {
+            params += " concolic.bytes:" + concolicOptions.get("concolic.bytes");
+        }
+        if (concolicOptions.containsKey("concolic.chars")) {
+            params += " concolic.chars:" + concolicOptions.get("concolic.chars");
+        }
+        if (concolicOptions.containsKey("concolic.shorts")) {
+            params += " concolic.shorts:" + concolicOptions.get("concolic.shorts");
+        }
         if (concolicOptions.containsKey("concolic.ints")) {
             params += " concolic.ints:" + concolicOptions.get("concolic.ints");
+        }
+        if (concolicOptions.containsKey("concolic.longs")) {
+            params += " concolic.longs:" + concolicOptions.get("concolic.longs");
+        }
+        if (concolicOptions.containsKey("concolic.floats")) {
+            params += " concolic.floats:" + concolicOptions.get("concolic.floats");
+        }
+        if (concolicOptions.containsKey("concolic.doubles")) {
+            params += " concolic.doubles:" + concolicOptions.get("concolic.doubles");
         }
         if (concolicOptions.containsKey("concolic.strings")) {
             params += " concolic.strings:" + concolicOptions.get("concolic.strings");
