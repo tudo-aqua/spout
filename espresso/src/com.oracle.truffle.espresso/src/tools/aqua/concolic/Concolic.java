@@ -58,7 +58,7 @@ public class Concolic {
             AnnotatedValue a = (AnnotatedValue) condition;
             cont = a.asBoolean();
             //FIXME: can be more optimal by making a path element "assumption"
-            addTraceElement(new PathCondition(a.symbolic(), cont ? 1 : 0, 2 ));
+            addTraceElement(new Assumption(a.symbolic(), a.asBoolean()));
         }
         else {
             cont = (boolean) condition;
@@ -485,6 +485,7 @@ public class Concolic {
         System.out.println("======================== END PATH [BEGIN].");
         printTrace();
         System.out.println("======================== END PATH [END].");
+        System.out.println("[ENDOFTRACE]");
     }
 
     @CompilerDirectives.TruffleBoundary
