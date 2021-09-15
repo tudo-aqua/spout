@@ -12,8 +12,10 @@ import com.oracle.truffle.espresso.runtime.EspressoContext;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import com.oracle.truffle.espresso.vm.InterpreterToVM;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFEQ;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFGE;
@@ -372,34 +374,40 @@ public class Concolic {
         String[] paramsGroups = config.trim().split(" "); // not in base64
         for (String paramGroup : paramsGroups) {
             String[] keyValue = paramGroup.split(":"); // not in base64
-            String[] vals = splitVals(keyValue[1]);
+            boolean b64 = false;
+            String paramList = keyValue[1].trim();
+            if (paramList.startsWith("[b64]")) {
+                paramList = paramList.substring("[b64]".length());
+                b64 = true;
+            }
+            String[] vals = splitVals(paramList);
             switch (keyValue[0]) {
                 case "concolic.bools":
-                    parseBools(vals);
+                    parseBools(vals, b64);
                     break;
                 case "concolic.bytes":
-                    parseBytes(vals);
+                    parseBytes(vals, b64);
                     break;
                 case "concolic.chars":
-                    parseChars(vals);
+                    parseChars(vals, b64);
                     break;
                 case "concolic.shorts":
-                    parseShorts(vals);
+                    parseShorts(vals, b64);
                     break;
                 case "concolic.ints":
-                    parseInts(vals);
+                    parseInts(vals, b64);
                     break;
                 case "concolic.longs":
-                    parseLongs(vals);
+                    parseLongs(vals, b64);
                     break;
                 case "concolic.floats":
-                    parseFloats(vals);
+                    parseFloats(vals, b64);
                     break;
                 case "concolic.doubles":
-                    parseDoubles(vals);
+                    parseDoubles(vals, b64);
                     break;
                 case "concolic.strings":
-                    parseStrings(vals);
+                    parseStrings(vals, b64);
                     break;
             }
         }
@@ -416,21 +424,27 @@ public class Concolic {
         return valsAsStr;
     }
 
-    private static void parseBools(String[] valsAsStr) {
+    private static String b64decode(String str) {
+        byte[] in = str.getBytes(StandardCharsets.UTF_8);
+        byte[] out = Base64.getDecoder().decode(in);
+        return new String(out);
+    }
+
+    private static void parseBools(String[] valsAsStr, boolean b64) {
         seedsBooleanValues = new boolean[valsAsStr.length];
         for (int i=0; i<valsAsStr.length; i++) {
-            seedsBooleanValues[i] = Boolean.valueOf(valsAsStr[i].trim());
+            seedsBooleanValues[i] = Boolean.valueOf(b64 ? b64decode(valsAsStr[i].trim()) :  valsAsStr[i].trim());
         }
     }
 
-    private static void parseBytes(String[] valsAsStr) {
+    private static void parseBytes(String[] valsAsStr, boolean b64) {
         seedsByteValues = new byte[valsAsStr.length];
         for (int i=0; i<valsAsStr.length; i++) {
-            seedsByteValues[i] = Byte.valueOf(valsAsStr[i].trim());
+            seedsByteValues[i] = Byte.valueOf(b64 ? b64decode(valsAsStr[i].trim()) :  valsAsStr[i].trim());
         }
     }
 
-    private static void parseChars(String[] valsAsStr) {
+    private static void parseChars(String[] valsAsStr, boolean b64) {
         seedsCharValues = new char[valsAsStr.length];
         for (int i=0; i<valsAsStr.length; i++) {
             //TODO: not sure if this is correct
@@ -438,45 +452,45 @@ public class Concolic {
         }
     }
 
-    private static void parseShorts(String[] valsAsStr) {
+    private static void parseShorts(String[] valsAsStr, boolean b64) {
         seedsShortValues = new short[valsAsStr.length];
         for (int i=0; i<valsAsStr.length; i++) {
-            seedsShortValues[i] = Short.valueOf(valsAsStr[i].trim());
+            seedsShortValues[i] = Short.valueOf(b64 ? b64decode(valsAsStr[i].trim()) :  valsAsStr[i].trim());
         }
     }
 
-    private static void parseInts(String[] valsAsStr) {
+    private static void parseInts(String[] valsAsStr, boolean b64) {
         seedsIntValues = new int[valsAsStr.length];
         for (int i=0; i<valsAsStr.length; i++) {
-            seedsIntValues[i] = Integer.valueOf(valsAsStr[i].trim());
+            seedsIntValues[i] = Integer.valueOf(b64 ? b64decode(valsAsStr[i].trim()) :  valsAsStr[i].trim());
         }
     }
 
-    private static void parseLongs(String[] valsAsStr) {
+    private static void parseLongs(String[] valsAsStr, boolean b64) {
         seedsLongValues = new long[valsAsStr.length];
         for (int i=0; i<valsAsStr.length; i++) {
-            seedsLongValues[i] = Long.valueOf(valsAsStr[i].trim());
+            seedsLongValues[i] = Long.valueOf(b64 ? b64decode(valsAsStr[i].trim()) :  valsAsStr[i].trim());
         }
     }
 
-    private static void parseFloats(String[] valsAsStr) {
+    private static void parseFloats(String[] valsAsStr, boolean b64) {
         seedsFloatValues = new float[valsAsStr.length];
         for (int i=0; i<valsAsStr.length; i++) {
-            seedsFloatValues[i] = Float.valueOf(valsAsStr[i].trim());
+            seedsFloatValues[i] = Float.valueOf(b64 ? b64decode(valsAsStr[i].trim()) :  valsAsStr[i].trim());
         }
     }
 
-    private static void parseDoubles(String[] valsAsStr) {
+    private static void parseDoubles(String[] valsAsStr, boolean b64) {
         seedsDoubleValues = new double[valsAsStr.length];
         for (int i=0; i<valsAsStr.length; i++) {
-            seedsDoubleValues[i] = Double.valueOf(valsAsStr[i].trim());
+            seedsDoubleValues[i] = Double.valueOf(b64 ? b64decode(valsAsStr[i].trim()) :  valsAsStr[i].trim());
         }
     }
 
-    private static void parseStrings(String[] valsAsStr) {
+    private static void parseStrings(String[] valsAsStr, boolean b64) {
         seedStringValues = new String[valsAsStr.length];
         for (int i=0; i<valsAsStr.length; i++) {
-            seedStringValues[i] = valsAsStr[i].trim();
+            seedStringValues[i] = b64 ? b64decode(valsAsStr[i].trim()) :  valsAsStr[i].trim();
         }
     }
 
