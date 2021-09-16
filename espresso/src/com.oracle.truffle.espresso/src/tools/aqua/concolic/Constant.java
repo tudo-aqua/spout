@@ -39,8 +39,7 @@ public abstract class Constant extends Atom {
 
         @Override
         public String toString() {
-            // FIXME: correct format for number
-            return "" + getValue();
+            return "#x" + String.format("%1$016x", getValue());
         }
     }
 
@@ -57,9 +56,27 @@ public abstract class Constant extends Atom {
 
         @Override
         public String toString() {
-            // FIXME: correct format for number
-            return "" + getValue();
+            Float f = getValue();
+            if (f.isNaN()) {
+                return "(_ NaN 8 24)";
+            }
+            else if (f.isInfinite()) {
+                return "(_ " + (Float.POSITIVE_INFINITY == f ? "+" : "-") + "oo 8 24)";
+            }
+            else {
+                // rep. is (_ b1 b2 b3) three bitvectors of size 1 8 23
+                int bits = Float.floatToIntBits(f);
+                int sign =  (bits & 0x80000000) >>> 31;
+                int expn =  (bits & 0x7f800000) >>> 23;
+                int mtsa =  (bits & 0x007fffff);
+
+                return "(fp" +
+                        " #b" + String.format("%1s",  Long.toBinaryString(sign)) +
+                        " #b" + String.format("%8s", Long.toBinaryString(expn)).replaceAll(" ", "0") +
+                        " #b" + String.format("%23s", Long.toBinaryString(mtsa)).replaceAll(" ", "0") + ")";
+            }
         }
+
     }
 
     private final static class DoubleConstant extends Constant {
@@ -75,8 +92,25 @@ public abstract class Constant extends Atom {
 
         @Override
         public String toString() {
-            // FIXME: correct format for number
-            return "" + getValue();
+            Double d = getValue();
+            if (d.isNaN()) {
+                return "(_ NaN 11 53)";
+            }
+            else if (d.isInfinite()) {
+                return "(_ " + (Double.POSITIVE_INFINITY == d ? "+" : "-") + "oo 11 53)";
+            }
+            else {
+                // rep. is (_ b1 b2 b3) three bitvectors of size 1 11 52
+                long bits = Double.doubleToLongBits(d);
+                long sign =  (bits & 0x8000000000000000L) >>> 63;
+                long expn =  (bits & 0x7ff0000000000000L) >>> 52;
+                long mtsa =  (bits & 0x000fffffffffffffL);
+
+                return "(fp" +
+                    " #b" + String.format("%1s",  Long.toBinaryString(sign)) +
+                    " #b" + String.format("%11s", Long.toBinaryString(expn)).replaceAll(" ", "0") +
+                    " #b" + String.format("%52s", Long.toBinaryString(mtsa)).replaceAll(" ", "0") + ")";
+            }
         }
     }
 
