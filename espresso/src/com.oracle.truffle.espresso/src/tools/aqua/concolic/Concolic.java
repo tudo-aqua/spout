@@ -1147,10 +1147,11 @@ public class Concolic {
 
             if (Expression.isBoolean(s1.symbolic())) {
                 switch (opcode) {
-                    case IFEQ      : expr = !takeBranch ? s1.symbolic() : new ComplexExpression(OperatorComparator.BNEG, s1.symbolic()); break;
-                    default        :
+                    case IFEQ: expr = !takeBranch ? s1.symbolic() : new ComplexExpression(OperatorComparator.BNEG, s1.symbolic()); break;
+                    case IFNE: expr =  takeBranch ? s1.symbolic() : new ComplexExpression(OperatorComparator.BNEG, s1.symbolic()); break;
+                    default:
                         CompilerDirectives.transferToInterpreter();
-                        throw EspressoError.shouldNotReachHere("only defined for IFEQ so far");
+                        throw EspressoError.shouldNotReachHere("only defined for IFEQ and IFNE so far");
                 }
             }
             else if (Expression.isCmpExpression(s1.symbolic())) {
@@ -1258,6 +1259,7 @@ public class Concolic {
                         OperatorComparator.BVLT, s1.symbolic(), s2.symbolic()); break;
                 default        :
                     CompilerDirectives.transferToInterpreter();
+                    // FIXME: replace EspressoError.shouldNotReachHere calls with stoprecording(...) to make analysis shut down properly
                     throw EspressoError.shouldNotReachHere("non-branching bytecode");
             }
 
