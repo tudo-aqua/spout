@@ -828,8 +828,16 @@ public class Concolic {
         int c2 = BytecodeNode.popInt(primitives, top - 2);
         int concResult = c2 << c1;
         BytecodeNode.putInt(primitives, top - 2, concResult);
+
+        AnnotatedValue sRight = popSymbolic(symbolic,top-1);
+        AnnotatedValue sLeft = popSymbolic(symbolic, top-2);
+        if (sLeft != null || sRight != null) {
+            sRight = new AnnotatedValue(c1, new ComplexExpression(OperatorComparator.IAND,
+                    sRight != null ? sRight.symbolic() : Constant.fromConcreteValue(c1),
+                    Constant.INT_0x1F));
+        }
         putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.ISHL, PrimitiveTypes.INT,
-                c2, c1, concResult, popSymbolic(symbolic, top-2), popSymbolic(symbolic,top-1)));
+                c2, c1, concResult, sLeft, sRight));
     }
 
     // case LSHL: putLong(stack, top - 3, shiftLeftLong(popInt(stack, top - 1), popLong(stack, top - 2))); break;
@@ -838,8 +846,16 @@ public class Concolic {
         long c2 = BytecodeNode.popLong(primitives, top - 2);
         long concResult = c2 << c1;
         BytecodeNode.putLong(primitives, top - 3, concResult);
+
+        AnnotatedValue sRight = popSymbolic(symbolic,top-1);
+        AnnotatedValue sLeft = popSymbolic(symbolic, top-2);
+        if (sLeft != null || sRight != null) {
+            sRight = new AnnotatedValue(c1, new ComplexExpression(OperatorComparator.IAND,
+                    sRight != null ? sRight.symbolic() : Constant.fromConcreteValue(c1),
+                    Constant.INT_0x3F));
+        }
         putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.LSHL, PrimitiveTypes.LONG, PrimitiveTypes.INT,
-                c2, c1, concResult, popSymbolic(symbolic, top-2), popSymbolic(symbolic,top-1)));
+                c2, c1, concResult, sLeft, sRight));
     }
 
     // case ISHR: putInt(stack, top - 2, shiftRightSignedInt(popInt(stack, top - 1), popInt(stack, top - 2))); break;
@@ -848,8 +864,16 @@ public class Concolic {
         int c2 = BytecodeNode.popInt(primitives, top - 2);
         int concResult = c2 >> c1;
         BytecodeNode.putInt(primitives, top - 2, concResult);
+
+        AnnotatedValue sRight = popSymbolic(symbolic,top-1);
+        AnnotatedValue sLeft = popSymbolic(symbolic, top-2);
+        if (sLeft != null || sRight != null) {
+            sRight = new AnnotatedValue(c1, new ComplexExpression(OperatorComparator.IAND,
+                    sRight != null ? sRight.symbolic() : Constant.fromConcreteValue(c1),
+                    Constant.INT_0x1F));
+        }
         putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.ISHR, PrimitiveTypes.INT,
-                c2, c1, concResult, popSymbolic(symbolic, top-2), popSymbolic(symbolic,top-1)));
+                c2, c1, concResult, sLeft, sRight));
     }
 
     // case LSHR: putLong(stack, top - 3, shiftRightSignedLong(popInt(stack, top - 1), popLong(stack, top - 2))); break;
@@ -858,8 +882,16 @@ public class Concolic {
         long c2 = BytecodeNode.popLong(primitives, top - 2);
         long concResult = c2 >> c1;
         BytecodeNode.putLong(primitives, top - 3, concResult);
+
+        AnnotatedValue sRight = popSymbolic(symbolic,top-1);
+        AnnotatedValue sLeft = popSymbolic(symbolic, top-2);
+        if (sLeft != null || sRight != null) {
+            sRight = new AnnotatedValue(c1, new ComplexExpression(OperatorComparator.IAND,
+                    sRight != null ? sRight.symbolic() : Constant.fromConcreteValue(c1),
+                    Constant.INT_0x3F));
+        }
         putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.LSHR, PrimitiveTypes.LONG, PrimitiveTypes.INT,
-                c2, c1, concResult, popSymbolic(symbolic, top-2), popSymbolic(symbolic,top-1)));
+                c2, c1, concResult, sLeft, sRight));
     }
 
     // case IUSHR: putInt(stack, top - 2, shiftRightUnsignedInt(popInt(stack, top - 1), popInt(stack, top - 2))); break;
@@ -868,8 +900,17 @@ public class Concolic {
         int c2 = BytecodeNode.popInt(primitives, top - 2);
         int concResult = c2 >>> c1;
         BytecodeNode.putInt(primitives, top - 2, concResult);
+
+        AnnotatedValue sRight = popSymbolic(symbolic,top-1);
+        AnnotatedValue sLeft = popSymbolic(symbolic, top-2);
+        if (sLeft != null || sRight != null) {
+            sRight = new AnnotatedValue(c1, new ComplexExpression(OperatorComparator.IAND,
+                    sRight != null ? sRight.symbolic() : Constant.fromConcreteValue(c1),
+                    Constant.INT_0x1F));
+        }
+
         putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.IUSHR, PrimitiveTypes.INT,
-                c2, c1, concResult, popSymbolic(symbolic, top-2), popSymbolic(symbolic,top-1)));
+                c2, c1, concResult, sLeft, sRight));
     }
 
     // case LUSHR: putLong(stack, top - 3, shiftRightUnsignedLong(popInt(stack, top - 1), popLong(stack, top - 2))); break;
@@ -878,8 +919,17 @@ public class Concolic {
         long c2 = BytecodeNode.popLong(primitives, top - 2);
         long concResult = c2 >>> c1;
         BytecodeNode.putLong(primitives, top - 3, concResult);
+
+        AnnotatedValue sRight = popSymbolic(symbolic,top-1);
+        AnnotatedValue sLeft = popSymbolic(symbolic, top-2);
+        if (sLeft != null || sRight != null) {
+            sRight = new AnnotatedValue(c1, new ComplexExpression(OperatorComparator.IAND,
+                    sRight != null ? sRight.symbolic() : Constant.fromConcreteValue(c1),
+                    Constant.INT_0x3F));
+        }
+
         putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.LUSHR, PrimitiveTypes.LONG, PrimitiveTypes.INT,
-                c2, c1, concResult, popSymbolic(symbolic, top-2), popSymbolic(symbolic,top-1)));
+                c2, c1, concResult, sLeft, sRight));
     }
 
     // case IAND: putInt(stack, top - 2, popInt(stack, top - 1) & popInt(stack, top - 2)); break;
