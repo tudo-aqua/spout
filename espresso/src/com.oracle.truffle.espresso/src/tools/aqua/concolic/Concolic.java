@@ -245,8 +245,10 @@ public class Concolic {
             return;
         }
         AnnotatedValue[] annotations = symbolicObjects.get(obj.getConcolicId());
-        AnnotatedValue a = annotations[f.getSlot()];
-        putSymbolic(symbolic, at, a);
+        if (f.getSlot() < annotations.length) {
+            AnnotatedValue a = annotations[f.getSlot()];
+            putSymbolic(symbolic, at, a);
+        }
     }
 
     public static void getArrayAnnotation(StaticObject array, int concIndex, Object[] symbolic, int from, int to) {
@@ -500,6 +502,7 @@ public class Concolic {
         printTrace();
         System.out.println("======================== END PATH [END].");
         System.out.println("[ENDOFTRACE]");
+        System.out.flush();
     }
 
     @CompilerDirectives.TruffleBoundary
