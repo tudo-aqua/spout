@@ -850,9 +850,10 @@ public class Concolic {
         AnnotatedValue sRight = popSymbolic(symbolic,top-1);
         AnnotatedValue sLeft = popSymbolic(symbolic, top-2);
         if (sLeft != null || sRight != null) {
-            sRight = new AnnotatedValue(c1, new ComplexExpression(OperatorComparator.IAND,
-                    sRight != null ? sRight.symbolic() : Constant.fromConcreteValue(c1),
-                    Constant.INT_0x3F));
+            sRight = new AnnotatedValue(c1, new ComplexExpression(OperatorComparator.I2L,
+                    new ComplexExpression(OperatorComparator.IAND,
+                            sRight != null ? sRight.symbolic() : Constant.fromConcreteValue(c1),
+                            Constant.INT_0x3F)));
         }
         putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.LSHL, PrimitiveTypes.LONG, PrimitiveTypes.INT,
                 c2, c1, concResult, sLeft, sRight));
@@ -886,9 +887,10 @@ public class Concolic {
         AnnotatedValue sRight = popSymbolic(symbolic,top-1);
         AnnotatedValue sLeft = popSymbolic(symbolic, top-2);
         if (sLeft != null || sRight != null) {
-            sRight = new AnnotatedValue(c1, new ComplexExpression(OperatorComparator.IAND,
-                    sRight != null ? sRight.symbolic() : Constant.fromConcreteValue(c1),
-                    Constant.INT_0x3F));
+            sRight = new AnnotatedValue(c1, new ComplexExpression(OperatorComparator.I2L,
+                    new ComplexExpression(OperatorComparator.IAND,
+                            sRight != null ? sRight.symbolic() : Constant.fromConcreteValue(c1),
+                            Constant.INT_0x3F)));
         }
         putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.LSHR, PrimitiveTypes.LONG, PrimitiveTypes.INT,
                 c2, c1, concResult, sLeft, sRight));
@@ -923,9 +925,10 @@ public class Concolic {
         AnnotatedValue sRight = popSymbolic(symbolic,top-1);
         AnnotatedValue sLeft = popSymbolic(symbolic, top-2);
         if (sLeft != null || sRight != null) {
-            sRight = new AnnotatedValue(c1, new ComplexExpression(OperatorComparator.IAND,
-                    sRight != null ? sRight.symbolic() : Constant.fromConcreteValue(c1),
-                    Constant.INT_0x3F));
+            sRight = new AnnotatedValue(c1, new ComplexExpression(OperatorComparator.I2L,
+                    new ComplexExpression(OperatorComparator.IAND,
+                        sRight != null ? sRight.symbolic() : Constant.fromConcreteValue(c1),
+                        Constant.INT_0x3F)));
         }
 
         putSymbolic(symbolic, top -2, binarySymbolicOp(OperatorComparator.LUSHR, PrimitiveTypes.LONG, PrimitiveTypes.INT,
