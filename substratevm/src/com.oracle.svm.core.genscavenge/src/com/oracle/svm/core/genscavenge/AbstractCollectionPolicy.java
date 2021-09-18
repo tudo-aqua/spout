@@ -95,23 +95,28 @@ abstract class AbstractCollectionPolicy implements CollectionPolicy {
     }
 
     @Fold
-    static UnsignedWord minSpaceSize() {
+    static UnsignedWord getAlignment() {
         return HeapParameters.getAlignedHeapChunkSize();
     }
 
     @Uninterruptible(reason = "Used in uninterruptible code.", mayBeInlined = true)
     static UnsignedWord alignUp(UnsignedWord size) {
-        return UnsignedUtils.roundUp(size, minSpaceSize());
+        return UnsignedUtils.roundUp(size, getAlignment());
     }
 
     @Uninterruptible(reason = "Used in uninterruptible code.", mayBeInlined = true)
     static UnsignedWord alignDown(UnsignedWord size) {
-        return UnsignedUtils.roundDown(size, minSpaceSize());
+        return UnsignedUtils.roundDown(size, getAlignment());
     }
 
     @Uninterruptible(reason = "Used in uninterruptible code.", mayBeInlined = true)
     static boolean isAligned(UnsignedWord size) {
-        return UnsignedUtils.isAMultiple(size, minSpaceSize());
+        return UnsignedUtils.isAMultiple(size, getAlignment());
+    }
+
+    @Fold
+    static UnsignedWord minSpaceSize() {
+        return getAlignment().multiply(8);
     }
 
     @Uninterruptible(reason = "Used in uninterruptible code.", mayBeInlined = true)
@@ -319,7 +324,10 @@ abstract class AbstractCollectionPolicy implements CollectionPolicy {
              */
             initialSurvivor = minSpaceSize(alignUp(initialYoung.unsignedDivide(AbstractCollectionPolicy.INITIAL_SURVIVOR_RATIO)));
         }
-        UnsignedWord initialEden = minSpaceSize(alignUp(initialYoung.subtract(initialSurvivor.multiply(2))));
+        UnsignedWord initialEden = minSpaceSize();
+        if (initialYoung.aboveThan(initialSurvivor.multiply(2))) {
+            initialEden = minSpaceSize(alignUp(initialYoung.subtract(initialSurvivor.multiply(2))));
+        }
 
         return new SizeParameters(maxHeap, maxYoung, initialHeap, initialEden, initialSurvivor, minHeap);
     }
