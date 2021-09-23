@@ -620,4 +620,7 @@ public class SubstrateOptions {
     @APIOption(name = "configure-reflection-metadata")//
     @Option(help = "Limit method reflection metadata to configuration entries instead of including it for all reachable methods")//
     public static final HostedOptionKey<Boolean> ConfigureReflectionMetadata = new HostedOptionKey<>(true);
+
+    @Option(help = "Verify type states computed by the static analysis at run time", type = Debug)//
+    public static final HostedOptionKey<Boolean> VerifyTypes = new HostedOptionKey<>(true);
 }
