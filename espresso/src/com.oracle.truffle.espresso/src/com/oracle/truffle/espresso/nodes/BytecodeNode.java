@@ -1766,6 +1766,7 @@ public final class BytecodeNode extends EspressoMethodNode {
         StaticObject array = nullCheck(popObject(refs, top - 1));
         if (noForeignObjects.isValid() || array.isEspressoObject()) {
             putInt(primitives, top - 1, InterpreterToVM.arrayLength(array));
+            Concolic.putSymbolic(refs, top-1, Concolic.arrayLength(array));
         } else {
             CompilerDirectives.transferToInterpreterAndInvalidate();
             // The array was released, it must be restored for the quickening.

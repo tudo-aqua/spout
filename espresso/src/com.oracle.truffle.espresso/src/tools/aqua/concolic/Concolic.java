@@ -270,7 +270,7 @@ public class Concolic {
 
         if (array.getConcolicId() < 0) {
             array.setConcolicId(symbolicObjects.size());
-            symbolicObjects.add(new AnnotatedValue[ arrayLength(array) + 1]);
+            symbolicObjects.add(new AnnotatedValue[ array.length() + 1]);
         }
         AnnotatedValue[] annotations = symbolicObjects.get(array.getConcolicId());
         annotations[concIndex] = symbValue;
@@ -278,7 +278,7 @@ public class Concolic {
 
     private static boolean checkArrayAccessPathConstraint(StaticObject array, int concIndex, AnnotatedValue annotatedIndex) {
         assert array.isArray();
-        int concLen = arrayLength(array);
+        int concLen = array.length();
         boolean safe = 0 <= concIndex && concIndex < concLen;
         if ((array.getConcolicId() >= 0 && symbolicObjects.get(array.getConcolicId())[concLen] != null) || annotatedIndex != null) {
 
@@ -303,8 +303,12 @@ public class Concolic {
         return safe;
     }
 
-    private static int arrayLength(StaticObject array) {
-        return array.length();
+    public static AnnotatedValue arrayLength(StaticObject array) {
+        if (array.getConcolicId() < 0) {
+            return null;
+        }
+        AnnotatedValue[] annotatedValues = symbolicObjects.get(array.getConcolicId());
+        return annotatedValues[annotatedValues.length-1];
     }
 
     // --------------------------------------------------------------------------
