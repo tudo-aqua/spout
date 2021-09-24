@@ -56,7 +56,7 @@ public class LibEspresso {
             return result;
         }
         // Use the nuclear option for System.exit
-        builder.option("java.ExitHost", "true");
+        builder.option("java.ExitHost", "false");
         builder.option("java.EnableSignals", "true");
         builder.option("java.ExposeNativeJavaVM", "true");
         Context context = builder.build();

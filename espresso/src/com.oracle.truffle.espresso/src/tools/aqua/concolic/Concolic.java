@@ -4,15 +4,18 @@ import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.espresso.EspressoLanguage;
 import com.oracle.truffle.espresso.bytecode.BytecodeStream;
+import com.oracle.truffle.espresso.descriptors.Symbol;
 import com.oracle.truffle.espresso.impl.ArrayKlass;
 import com.oracle.truffle.espresso.impl.Field;
 import com.oracle.truffle.espresso.impl.Klass;
+import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.impl.ObjectKlass;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
-import com.oracle.truffle.espresso.runtime.EspressoContext;
+import com.oracle.truffle.espresso.nodes.EspressoRootNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import com.oracle.truffle.espresso.substitutions.Substitutions;
 import com.oracle.truffle.espresso.vm.InterpreterToVM;
 
 import java.nio.charset.StandardCharsets;
@@ -221,7 +224,11 @@ public class Concolic {
         Variable symbolic = new Variable(PrimitiveTypes.STRING, countStringSeeds);
         AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
         concrete.setConcolicId(symbolicObjects.size());
-        symbolicObjects.add(new AnnotatedValue[] { a });
+
+        int length = ((ObjectKlass)concrete.getKlass()).getFieldTable().length + 1;
+        AnnotatedValue[] annotation = new AnnotatedValue[length];
+        annotation[length-1] = a;
+        symbolicObjects.add(annotation);
         countStringSeeds++;
         addTraceElement(new SymbolDeclaration(symbolic));
         return concrete;
@@ -1443,7 +1450,6 @@ public class Concolic {
     public static Object stringEquals(StaticObject self, StaticObject other, Meta meta) {
         // FIXME: we currently do not track conditions for exceptions inside equals!
         // FIXME: could be better to use method handle from meta?
-        //boolean areEqual = (boolean) meta.java_lang_String_equals.invokeDirect(self, other);
         boolean areEqual = meta.toHostString(self).equals(meta.toHostString(other));
         if (self.getConcolicId() < 0 && other.getConcolicId() < 0) {
             return areEqual;
@@ -1451,10 +1457,10 @@ public class Concolic {
 
         Expression exprSelf = (self.getConcolicId() < 0) ?
                 Constant.fromConcreteValue(meta.toHostString(self)) :
-                symbolicObjects.get(self.getConcolicId())[0].symbolic();
+                symbolicObjects.get(self.getConcolicId())[ symbolicObjects.get(self.getConcolicId()).length -1 ].symbolic();
         Expression exprOther = (other.getConcolicId() < 0) ?
                 Constant.fromConcreteValue(meta.toHostString(other)) :
-                symbolicObjects.get(other.getConcolicId())[0].symbolic();
+                symbolicObjects.get(other.getConcolicId())[ symbolicObjects.get(other.getConcolicId()).length -1 ].symbolic();
 
         Expression symbolic = new ComplexExpression(OperatorComparator.STRINGEQ, exprSelf, exprOther);
 

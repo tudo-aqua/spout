@@ -31,12 +31,20 @@ import tools.aqua.concolic.Concolic;
 @EspressoSubstitutions
 public class Target_java_lang_String {
 
-    @CompilerDirectives.TruffleBoundary
     @Substitution(hasReceiver = true)
     public static @Host(typeName = "Z") Object equals(
             @Host(String.class) StaticObject self,
             @Host(Object.class) StaticObject other,
             @InjectMeta Meta meta) {
+
+        // TODO: not sure if this check is necessary?
+        // if (StaticObject.isNull(self)) {
+        //     meta.throwNullPointerException();
+        // }
+        // TODO: afaik, nothing we can do here symbolically?
+        if (StaticObject.isNull(other) || !self.getKlass().equals(other.getKlass())) {
+            return false;
+        }
 
         return Concolic.stringEquals(self, other, meta);
     }
