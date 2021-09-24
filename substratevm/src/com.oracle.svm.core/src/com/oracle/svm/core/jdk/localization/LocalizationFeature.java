@@ -29,6 +29,7 @@ package com.oracle.svm.core.jdk.localization;
 import java.lang.reflect.Field;
 import java.nio.charset.Charset;
 import java.nio.charset.IllegalCharsetNameException;
+import java.nio.charset.StandardCharsets;
 import java.nio.charset.UnsupportedCharsetException;
 import java.text.spi.BreakIteratorProvider;
 import java.text.spi.CollatorProvider;
@@ -336,12 +337,12 @@ public abstract class LocalizationFeature implements Feature {
             }
         } else {
             addCharset(defaultCharset);
-            addCharset(Charset.forName("US-ASCII"));
-            addCharset(Charset.forName("ISO-8859-1"));
-            addCharset(Charset.forName("UTF-8"));
-            addCharset(Charset.forName("UTF-16BE"));
-            addCharset(Charset.forName("UTF-16LE"));
-            addCharset(Charset.forName("UTF-16"));
+            addCharset(StandardCharsets.US_ASCII);
+            addCharset(StandardCharsets.ISO_8859_1);
+            addCharset(StandardCharsets.UTF_8);
+            addCharset(StandardCharsets.UTF_16BE);
+            addCharset(StandardCharsets.UTF_16LE);
+            addCharset(StandardCharsets.UTF_16);
         }
     }
 
