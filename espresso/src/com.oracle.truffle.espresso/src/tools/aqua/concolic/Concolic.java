@@ -235,26 +235,34 @@ public class Concolic {
     private static ArrayList<AnnotatedValue[]> symbolicObjects = new ArrayList<>();
 
     public static void setFieldAnnotation(StaticObject obj, Field f, AnnotatedValue a) {
+        if (f.isStatic()) {
+            obj = f.getDeclaringKlass().getStatics();
+        }
+
         if (obj.getConcolicId() < 0 && a == null) {
             return;
         }
         if (obj.getConcolicId() < 0) {
             obj.setConcolicId(symbolicObjects.size());
-            symbolicObjects.add(new AnnotatedValue[ ((ObjectKlass)obj.getKlass()).getFieldTable().length ]);
+            symbolicObjects.add(new AnnotatedValue[ f.isStatic() ?
+                    f.getDeclaringKlass().getStaticFieldTable().length :
+                    ((ObjectKlass)obj.getKlass()).getFieldTable().length ]);
         }
         AnnotatedValue[] annotations = symbolicObjects.get(obj.getConcolicId());
         annotations[f.getSlot()] = a;
     }
 
     public static void getFieldAnnotation(StaticObject obj, Field f, Object[] symbolic, int at) {
+        if (f.isStatic()) {
+            obj = f.getDeclaringKlass().getStatics();
+        }
+
         if (obj.getConcolicId() < 0) {
             return;
         }
         AnnotatedValue[] annotations = symbolicObjects.get(obj.getConcolicId());
-        if (f.getSlot() < annotations.length) {
-            AnnotatedValue a = annotations[f.getSlot()];
-            putSymbolic(symbolic, at, a);
-        }
+        AnnotatedValue a = annotations[f.getSlot()];
+        putSymbolic(symbolic, at, a);
     }
 
     public static void getArrayAnnotation(StaticObject array, int concIndex, Object[] symbolic, int from, int to) {
