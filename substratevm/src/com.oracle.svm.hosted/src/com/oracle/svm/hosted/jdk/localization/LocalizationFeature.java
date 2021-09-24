@@ -57,6 +57,7 @@ import java.util.spi.LocaleNameProvider;
 import java.util.spi.LocaleServiceProvider;
 import java.util.spi.TimeZoneNameProvider;
 
+import com.oracle.svm.hosted.NativeImageOptions;
 import com.oracle.svm.hosted.jdk.localization.compression.GzipBundleCompression;
 import com.oracle.svm.hosted.jdk.localization.substitutions.Target_sun_util_locale_provider_LocaleServiceProviderPool_OptimizedLocaleMode;
 import org.graalvm.collections.Pair;
@@ -125,7 +126,7 @@ public abstract class LocalizationFeature implements Feature {
 
     protected final boolean trace = Options.TraceLocalizationFeature.getValue();
 
-    private final ForkJoinPool compressionPool = Options.LocalizationCompressInParallel.getValue() ? new ForkJoinPool(Runtime.getRuntime().availableProcessors()) : null;
+    private final ForkJoinPool compressionPool = Options.LocalizationCompressInParallel.getValue() ? new ForkJoinPool(NativeImageOptions.NumberOfThreads.getValue()) : null;
 
     /**
      * The Locale that the native image is built for. Currently, switching the Locale at run time is
