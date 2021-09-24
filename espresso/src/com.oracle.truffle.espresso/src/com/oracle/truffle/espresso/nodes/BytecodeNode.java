@@ -1448,7 +1448,10 @@ public final class BytecodeNode extends EspressoMethodNode {
                         continue loop;
                     }
 
-                    case MULTIANEWARRAY: top += allocateMultiArray(primitives, refs, top, resolveType(MULTIANEWARRAY, readCPI(curBCI)), bs.readUByte(curBCI + 3)); break;
+                    case MULTIANEWARRAY:
+                        // top += allocateMultiArray(primitives, refs, top, resolveType(MULTIANEWARRAY, readCPI(curBCI)), bs.readUByte(curBCI + 3));
+                        top += Concolic.newMultiArray(primitives, refs, top, resolveType(MULTIANEWARRAY, readCPI(curBCI)), bs.readUByte(curBCI + 3), getInterpreterToVM());
+                        break;
 
                     case BREAKPOINT:
                         CompilerDirectives.transferToInterpreter();

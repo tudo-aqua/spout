@@ -1,9 +1,12 @@
 package tools.aqua.concolic;
 
+import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.espresso.EspressoLanguage;
 import com.oracle.truffle.espresso.bytecode.BytecodeStream;
+import com.oracle.truffle.espresso.impl.ArrayKlass;
 import com.oracle.truffle.espresso.impl.Field;
+import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.impl.ObjectKlass;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
@@ -16,6 +19,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
 
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFEQ;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFGE;
@@ -328,7 +334,53 @@ public class Concolic {
         BytecodeNode.putObject(symbolic, top - 1, array);
     }
 
-    private static void addArrayCreationPathConstraint(int conclen, AnnotatedValue symbLen) {
+    @CompilerDirectives.TruffleBoundary
+    public static int newMultiArray(long[] primitives, Object[] refs, int top, Klass klass, int allocatedDimensions, InterpreterToVM ivm) {
+        assert klass.isArray();
+        CompilerAsserts.partialEvaluationConstant(allocatedDimensions);
+        CompilerAsserts.partialEvaluationConstant(klass);
+        int[] dimensions = new int[allocatedDimensions];
+        AnnotatedValue[] symdim = new AnnotatedValue[allocatedDimensions];
+        int zeroDimOrError = allocatedDimensions;
+        for (int i = 0; i < allocatedDimensions; ++i) {
+            dimensions[i] = BytecodeNode.popInt(primitives, top - allocatedDimensions + i);
+            symdim[i] = Concolic.popSymbolic(refs, top - allocatedDimensions + i);
+            if (i < zeroDimOrError) {
+                Concolic.addArrayCreationPathConstraint(dimensions[i], symdim[i]);
+                if (dimensions[i] <= 0) {
+                    zeroDimOrError = i;
+                }
+            }
+        }
+        StaticObject array = ivm.newMultiArray(((ArrayKlass) klass).getComponentType(), dimensions);
+        for (int i = 0; i < zeroDimOrError; ++i) {
+            if (symdim[i] != null) {
+                List<StaticObject> arrays = getAllArraysAtDepth(array, i);
+                for (StaticObject arr : arrays) {
+                    arr.setConcolicId(symbolicObjects.size());
+                    int dLength = dimensions[i];
+                    symbolicObjects.add(new AnnotatedValue[dLength + 1]);
+                    symbolicObjects.get(arr.getConcolicId())[dLength] = symdim[i];
+                }
+            }
+        }
+        BytecodeNode.putObject(refs, top - allocatedDimensions, array);
+        return -allocatedDimensions; // Does not include the created (pushed) array.
+    }
+
+    private static List<StaticObject> getAllArraysAtDepth(StaticObject array, int depth) {
+        if (depth == 0) {
+            return Collections.singletonList(array);
+        }
+        List<StaticObject> lower = getAllArraysAtDepth(array, depth -1);
+        List<StaticObject> arrays = new LinkedList<>();
+        for (StaticObject a : lower) {
+            arrays.addAll(Arrays.asList(a.unwrap()));
+        }
+        return arrays;
+    }
+
+    public static void addArrayCreationPathConstraint(int conclen, AnnotatedValue symbLen) {
         if (symbLen == null) {
             return;
         }
