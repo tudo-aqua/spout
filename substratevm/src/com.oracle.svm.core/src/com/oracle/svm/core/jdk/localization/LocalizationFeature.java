@@ -28,6 +28,7 @@ package com.oracle.svm.core.jdk.localization;
 
 import java.lang.reflect.Field;
 import java.nio.charset.Charset;
+import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.UnsupportedCharsetException;
 import java.text.spi.BreakIteratorProvider;
 import java.text.spi.CollatorProvider;
@@ -59,6 +60,7 @@ import java.util.spi.TimeZoneNameProvider;
 
 import org.graalvm.collections.Pair;
 import org.graalvm.compiler.nodes.ValueNode;
+import org.graalvm.compiler.nodes.calc.IntegerDivRemNode;
 import org.graalvm.compiler.nodes.graphbuilderconf.GraphBuilderContext;
 import org.graalvm.compiler.nodes.graphbuilderconf.NodePlugin;
 import org.graalvm.compiler.options.Option;
@@ -134,6 +136,8 @@ public abstract class LocalizationFeature implements Feature {
      */
     protected Locale defaultLocale = Locale.getDefault();
 
+    private Charset defaultCharset;
+
     protected Set<Locale> allLocales;
 
     protected LocalizationSupport support;
@@ -149,6 +153,9 @@ public abstract class LocalizationFeature implements Feature {
 
         @Option(help = "Default locale of the image, by the default it is the same as the default locale of the image builder.", type = OptionType.User)//
         public static final HostedOptionKey<String> DefaultLocale = new HostedOptionKey<>(Locale.getDefault().toLanguageTag());
+
+        @Option(help = "Default charser of the image, by the default it is the same as the default charset of the image builder.", type = OptionType.User)//
+        public static final HostedOptionKey<String> DefaultCharset = new HostedOptionKey<>(Charset.defaultCharset().name());
 
         @Option(help = "Comma separated list of locales to be included into the image. The default locale is included in the list automatically if not present.", type = OptionType.User)//
         public static final HostedOptionKey<LocatableMultiOptionValue.Strings> IncludeLocales = new HostedOptionKey<>(new LocatableMultiOptionValue.Strings());
@@ -228,6 +235,11 @@ public abstract class LocalizationFeature implements Feature {
         allLocales = processLocalesOption();
         defaultLocale = parseLocaleFromTag(Options.DefaultLocale.getValue());
         UserError.guarantee(defaultLocale != null, "Invalid default locale %s", Options.DefaultLocale.getValue());
+        try {
+            defaultCharset = Charset.forName(Options.DefaultCharset.getValue());
+        } catch (IllegalCharsetNameException | UnsupportedCharsetException ex) {
+            throw UserError.abort(ex, "Invalid default charset %s", Options.DefaultCharset.getValue());
+        }
         allLocales.add(defaultLocale);
         support = selectLocalizationSupport();
         ImageSingletons.add(LocalizationSupport.class, support);
@@ -245,12 +257,12 @@ public abstract class LocalizationFeature implements Feature {
     @Platforms(Platform.HOSTED_ONLY.class)
     private LocalizationSupport selectLocalizationSupport() {
         if (optimizedMode) {
-            return new OptimizedLocalizationSupport(defaultLocale, allLocales);
+            return new OptimizedLocalizationSupport(defaultLocale, allLocales, defaultCharset);
         } else if (substituteLoadLookup) {
             List<String> requestedPatterns = Options.LocalizationCompressBundles.getValue().values();
-            return new BundleContentSubstitutedLocalizationSupport(defaultLocale, allLocales, requestedPatterns, compressionPool);
+            return new BundleContentSubstitutedLocalizationSupport(defaultLocale, allLocales, defaultCharset, requestedPatterns, compressionPool);
         }
-        return new LocalizationSupport(defaultLocale, allLocales);
+        return new LocalizationSupport(defaultLocale, allLocales, defaultCharset);
     }
 
     @Override
@@ -317,13 +329,13 @@ public abstract class LocalizationFeature implements Feature {
      * more than this can add additional charsets.
      */
     @Platforms(Platform.HOSTED_ONLY.class)
-    private static void addCharsets() {
+    private void addCharsets() {
         if (Options.AddAllCharsets.getValue()) {
             for (Charset c : Charset.availableCharsets().values()) {
                 addCharset(c);
             }
         } else {
-            addCharset(Charset.defaultCharset());
+            addCharset(defaultCharset);
             addCharset(Charset.forName("US-ASCII"));
             addCharset(Charset.forName("ISO-8859-1"));
             addCharset(Charset.forName("UTF-8"));
