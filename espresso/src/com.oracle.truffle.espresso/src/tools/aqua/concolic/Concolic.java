@@ -1381,6 +1381,57 @@ public class Concolic {
         return takeBranch;
     }
 
+    public static void tableSwitch(int concIndex, AnnotatedValue symbIndex, int low, int high) {
+        if (symbIndex == null) {
+            return;
+        }
+        Expression expr;
+        int bId;
+        if (low <= concIndex && concIndex <= high) {
+            Constant idx = Constant.fromConcreteValue(concIndex);
+            expr = new ComplexExpression(OperatorComparator.BVEQ, symbIndex.symbolic(), idx);
+            bId = concIndex - low;
+        }
+        else {
+            Constant sLow = Constant.fromConcreteValue(low);
+            Constant sHigh = Constant.fromConcreteValue(high);
+            expr = new ComplexExpression(OperatorComparator.BOR,
+                    new ComplexExpression(OperatorComparator.BVLT, symbIndex.symbolic(), sLow),
+                    new ComplexExpression(OperatorComparator.BVGT, symbIndex.symbolic(), sHigh));
+            bId = high - low + 1;
+        }
+
+        PathCondition pc = new PathCondition(expr, bId, high - low + 2);
+        addTraceElement(pc);
+    }
+
+    public static void lookupSwitch(int key, AnnotatedValue symbKey, int ... vals) {
+        if (symbKey == null) {
+            return;
+        }
+
+        for (int i=0; i<vals.length; i++) {
+            if (vals[i] == key) {
+                Constant idxVal = Constant.fromConcreteValue(key);
+                addTraceElement(new PathCondition(
+                        new ComplexExpression(OperatorComparator.BVEQ, symbKey.symbolic(), idxVal),
+                        i, vals.length +1));
+                return;
+            }
+        }
+
+        ComplexExpression[] subExpr = new ComplexExpression[vals.length];
+        for (int i=0; i<vals.length; i++) {
+            Constant idxVal = Constant.fromConcreteValue(vals[i]);
+            subExpr[i] = new ComplexExpression(OperatorComparator.BVNE, symbKey.symbolic(), idxVal);
+        }
+
+        addTraceElement(new PathCondition(
+                new ComplexExpression(OperatorComparator.BAND, subExpr),
+                vals.length, vals.length +1));
+    }
+
+
     public static Object stringEquals(StaticObject self, StaticObject other, Meta meta) {
         // FIXME: we currently do not track conditions for exceptions inside equals!
         // FIXME: could be better to use method handle from meta?

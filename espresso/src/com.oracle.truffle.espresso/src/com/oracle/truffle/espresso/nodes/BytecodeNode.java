@@ -1277,6 +1277,8 @@ public final class BytecodeNode extends EspressoMethodNode {
                         int high = switchHelper.highKey(bs, curBCI);
                         assert low <= high;
 
+                        Concolic.tableSwitch(index, Concolic.popSymbolic(refs, top -1), low, high);
+
                         // Interpreter uses direct lookup.
                         if (CompilerDirectives.inInterpreter()) {
                             int targetBCI;
@@ -1316,6 +1318,16 @@ public final class BytecodeNode extends EspressoMethodNode {
                         BytecodeLookupSwitch switchHelper = BytecodeLookupSwitch.INSTANCE;
                         int low = 0;
                         int high = switchHelper.numberOfCases(bs, curBCI) - 1;
+
+                        AnnotatedValue symbKey = Concolic.popSymbolic(refs, top -1);
+                        if (symbKey != null) {
+                            int[] vals = new int[high - low + 1];
+                            for (int i = 0; i < vals.length; i++) {
+                                vals[i] = switchHelper.keyAt(bs, curBCI, low + i);
+                            }
+                            Concolic.lookupSwitch(key, symbKey, vals);
+                        }
+
                         while (low <= high) {
                             int mid = (low + high) >>> 1;
                             int midVal = switchHelper.keyAt(bs, curBCI, mid);
