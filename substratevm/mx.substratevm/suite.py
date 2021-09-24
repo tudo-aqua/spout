@@ -431,7 +431,11 @@ suite = {
             "requires" : ["java.instrument"],
             "requiresConcealed" : {
                 "jdk.internal.vm.ci": ["jdk.vm.ci.meta"],
-                "java.base" : ["jdk.internal.module"],
+                "java.base": [
+                    "jdk.internal.module",
+                    "sun.text.spi",
+                    "sun.util.resources"
+                ],
             },
             "javaCompliance": "11+",
             "checkstyle" : "com.oracle.svm.hosted",
