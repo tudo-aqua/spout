@@ -57,6 +57,8 @@ public class ArgumentsHandler {
     private final PolyglotArgs polyglotAccess;
     private final ModulePropertyCounter modulePropertyCounter;
 
+    private final ConcolicArgs concolicArgs;
+
     private final boolean experimental;
 
     private boolean helpVM = false;
@@ -67,11 +69,14 @@ public class ArgumentsHandler {
     private boolean helpExpert = false;
     private boolean helpInternal = false;
 
+    private boolean helpConcolic = false;
+
     public ArgumentsHandler(Context.Builder builder, JNIJavaVMInitArgs args) {
         this.nativeAccess = new Native(this);
         this.modulePropertyCounter = new ModulePropertyCounter(builder);
         this.polyglotAccess = new PolyglotArgs(builder, this);
         this.experimental = checkExperimental(args);
+        this.concolicArgs = new ConcolicArgs(this);
     }
 
     private static boolean checkExperimental(JNIJavaVMInitArgs args) {
@@ -189,6 +194,9 @@ public class ArgumentsHandler {
             case "--help:expert":
                 helpExpert = true;
                 break;
+            case "--help:concolic":
+                helpConcolic = true;
+                break;
             default:
                 abort("Unrecognized option: '" + arg + "'.");
         }
@@ -226,6 +234,10 @@ public class ArgumentsHandler {
         }
         if (helpLanguages) {
             printHelp(polyglotAccess::printLanguageHelp);
+            help = true;
+        }
+        if (helpConcolic) {
+            printHelp(concolicArgs::printConcolicHelp);
             help = true;
         }
         if ((helpExpert || helpInternal) && !help) {
