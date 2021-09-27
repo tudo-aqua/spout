@@ -1,3 +1,9 @@
+
+# SPouT
+
+SPouT stands for **S**ymbolic **P**ath L**o**gging d**u**ring **T**esting. 
+
+
 # GraalVM
 
 [![https://graalvm.slack.com](https://img.shields.io/badge/slack-join%20channel-active)](https://www.graalvm.org/slack-invitation/)
