@@ -24,7 +24,7 @@
  */
 
 @Platforms(Platform.HOSTED_ONLY.class)
-package com.oracle.svm.hosted.jdk;
+package com.oracle.svm.hosted.jdk.init;
 
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;

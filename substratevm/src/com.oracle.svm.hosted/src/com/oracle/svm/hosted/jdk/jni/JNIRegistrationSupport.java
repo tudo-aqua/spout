@@ -22,7 +22,7 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package com.oracle.svm.hosted.jdk;
+package com.oracle.svm.hosted.jdk.jni;
 
 import static com.oracle.svm.core.BuildArtifacts.ArtifactType;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
