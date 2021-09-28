@@ -48,7 +48,7 @@ import com.oracle.svm.core.util.VMError;
  * Holder for localization information that is computed during image generation and used at run
  * time.
  *
- * @see LocalizationFeature
+ * For more details, see LocalizationFeature
  */
 public class LocalizationSupport {
 
