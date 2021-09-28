@@ -237,6 +237,8 @@ public abstract class LocalizationFeature implements Feature {
         UserError.guarantee(defaultLocale != null, "Invalid default locale %s", Options.DefaultLocale.getValue());
         try {
             defaultCharset = Charset.forName(Options.DefaultCharset.getValue());
+            VMError.guarantee(defaultCharset.name().equals(Options.DefaultCharset.getValue()),
+                            "Failed to locate charset " + Options.DefaultCharset.getValue() + ", instead " + defaultCharset.name() + " was provided");
         } catch (IllegalCharsetNameException | UnsupportedCharsetException ex) {
             throw UserError.abort(ex, "Invalid default charset %s", Options.DefaultCharset.getValue());
         }
