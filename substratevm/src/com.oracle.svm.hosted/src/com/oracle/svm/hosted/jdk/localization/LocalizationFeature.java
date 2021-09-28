@@ -57,9 +57,12 @@ import java.util.spi.LocaleNameProvider;
 import java.util.spi.LocaleServiceProvider;
 import java.util.spi.TimeZoneNameProvider;
 
+import com.oracle.svm.core.jdk.localization.BundleContentSubstitutedLocalizationSupport;
+import com.oracle.svm.core.jdk.localization.LocalizationSupport;
+import com.oracle.svm.core.jdk.localization.OptimizedLocalizationSupport;
 import com.oracle.svm.hosted.NativeImageOptions;
-import com.oracle.svm.hosted.jdk.localization.compression.GzipBundleCompression;
-import com.oracle.svm.hosted.jdk.localization.substitutions.Target_sun_util_locale_provider_LocaleServiceProviderPool_OptimizedLocaleMode;
+import com.oracle.svm.core.jdk.localization.compression.GzipBundleCompression;
+import com.oracle.svm.core.jdk.localization.substitutions.Target_sun_util_locale_provider_LocaleServiceProviderPool_OptimizedLocaleMode;
 import org.graalvm.collections.Pair;
 import org.graalvm.compiler.nodes.ValueNode;
 import org.graalvm.compiler.nodes.graphbuilderconf.GraphBuilderContext;

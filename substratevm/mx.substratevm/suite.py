@@ -398,6 +398,9 @@ suite = {
                 "com.oracle.svm.core",
                 "com.oracle.graal.pointsto",
             ],
+            "requiresConcealed" : {
+                "java.base": ["sun.util.resources"],
+            },
             "javaCompliance": "8+",
             "checkstyleVersion" : "8.36.1",
             "annotationProcessors": [
