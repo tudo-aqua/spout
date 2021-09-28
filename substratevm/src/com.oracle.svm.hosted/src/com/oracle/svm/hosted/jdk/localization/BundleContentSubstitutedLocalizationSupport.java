@@ -71,6 +71,11 @@ public class BundleContentSubstitutedLocalizationSupport extends LocalizationSup
     }
 
     @Override
+    public boolean substituteLoadLookup() {
+        return true;
+    }
+
+    @Override
     @Platforms(Platform.HOSTED_ONLY.class)
     protected void onBundlePrepared(ResourceBundle bundle) {
         if (isBundleSupported(bundle)) {

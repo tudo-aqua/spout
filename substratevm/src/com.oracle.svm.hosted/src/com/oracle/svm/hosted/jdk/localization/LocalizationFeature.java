@@ -120,7 +120,7 @@ import sun.util.resources.LocaleData;
  */
 public abstract class LocalizationFeature implements Feature {
 
-    protected final boolean optimizedMode = LocalizationSupport.optimizedMode();
+    protected final boolean optimizedMode = Options.LocalizationOptimizedMode.getValue();
 
     private final boolean substituteLoadLookup = Options.LocalizationSubstituteLoadLookup.getValue();
 

@@ -69,14 +69,16 @@ public class LocalizationSupport {
         this.supportedLanguageTags = locales.stream().map(Locale::toString).collect(Collectors.toSet());
     }
 
-    @Fold
-    public static boolean optimizedMode() {
-        return LocalizationFeature.Options.LocalizationOptimizedMode.getValue();
+    public boolean optimizedMode() {
+        return false;
     }
 
-    @Fold
-    public static boolean jvmMode() {
+    public boolean jvmMode() {
         return !optimizedMode();
+    }
+
+    public boolean substituteLoadLookup() {
+        return false;
     }
 
     public OptimizedLocalizationSupport asOptimizedSupport() {

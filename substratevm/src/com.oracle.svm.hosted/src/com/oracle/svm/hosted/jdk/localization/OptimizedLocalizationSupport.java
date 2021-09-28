@@ -54,6 +54,11 @@ public class OptimizedLocalizationSupport extends LocalizationSupport {
         super(defaultLocale, locales);
     }
 
+    @Override
+    public boolean optimizedMode() {
+        return true;
+    }
+
     /**
      * Get cached resource bundle.
      *

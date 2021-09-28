@@ -27,10 +27,11 @@ package com.oracle.svm.hosted.jdk.localization.substitutions.modes;
 import java.util.function.BooleanSupplier;
 
 import com.oracle.svm.hosted.jdk.localization.LocalizationSupport;
+import org.graalvm.nativeimage.ImageSingletons;
 
 public class OptimizedLocaleMode implements BooleanSupplier {
     @Override
     public boolean getAsBoolean() {
-        return LocalizationSupport.optimizedMode();
+        return ImageSingletons.lookup(LocalizationSupport.class).optimizedMode();
     }
 }
