@@ -85,8 +85,6 @@ import jdk.vm.ci.meta.ResolvedJavaType;
 import sun.util.locale.provider.LocaleProviderAdapter;
 import sun.util.locale.provider.ResourceBundleBasedAdapter;
 import sun.util.resources.LocaleData;
-
-import static com.oracle.svm.core.jdk.localization.LocalizationSupport.parseLocaleFromTag;
 // Checkstyle: resume
 
 /**
@@ -170,7 +168,7 @@ public abstract class LocalizationFeature implements Feature {
         public static final HostedOptionKey<Boolean> LocalizationCompressInParallel = new HostedOptionKey<>(true);
 
         @Option(help = "When enabled, localization feature details are printed.", type = OptionType.Debug)//
-        public static final HostedOptionKey<Boolean> TraceLocalizationFeature = new HostedOptionKey<>(true);
+        public static final HostedOptionKey<Boolean> TraceLocalizationFeature = new HostedOptionKey<>(false);
     }
 
     /**
@@ -227,7 +225,7 @@ public abstract class LocalizationFeature implements Feature {
     public void afterRegistration(AfterRegistrationAccess access) {
         findClassByName = access::findClassByName;
         allLocales = processLocalesOption();
-        defaultLocale = parseLocaleFromTag(Options.DefaultLocale.getValue());
+        defaultLocale = LocalizationSupport.parseLocaleFromTag(Options.DefaultLocale.getValue());
         UserError.guarantee(defaultLocale != null, "Invalid default locale %s", Options.DefaultLocale.getValue());
         allLocales.add(defaultLocale);
         support = selectLocalizationSupport();
@@ -411,7 +409,7 @@ public abstract class LocalizationFeature implements Feature {
             prepareBundle(input, allLocales);
             return;
         }
-        Locale locale = splitIndex + 1 < input.length() ? parseLocaleFromTag(input.substring(splitIndex + 1)) : Locale.ROOT;
+        Locale locale = splitIndex + 1 < input.length() ? LocalizationSupport.parseLocaleFromTag(input.substring(splitIndex + 1)) : Locale.ROOT;
         if (locale == null) {
             trace("Cannot parse wanted locale " + input.substring(splitIndex + 1) + ", default will be used instead.");
             locale = defaultLocale;
