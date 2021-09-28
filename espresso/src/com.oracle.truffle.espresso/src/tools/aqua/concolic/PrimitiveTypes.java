@@ -24,7 +24,7 @@
 package tools.aqua.concolic;
 
 public enum PrimitiveTypes {
-    INT, BOOL, CHAR, BYTE, SHORT, LONG, FLOAT, DOUBLE, STRING;
+    INT, BOOL, CHAR, BYTE, SHORT, LONG, FLOAT, DOUBLE, STRING, NAT;
 
     @Override
     public String toString() {
@@ -46,6 +46,11 @@ public enum PrimitiveTypes {
                 return "(_ FloatingPoint 11 53)";
             case STRING:
                 return "String";
+            // Strictly the NAT type is no primitive type for Java,
+            // but sometimes we need Variables that are Integer in the SMT-Lib theory to encode string constraints.
+            // I call them NAT as this is sometimes used in the SMT-Lib context to distinguish Integer and BV representations.
+            case NAT:
+                return "Integer";
             default:
                 return super.toString();
         }

@@ -37,9 +37,9 @@ public class Target_java_lang_String {
 
     //@Substitution(hasReceiver = true)
     public static @Host(typeName = "Z") Object equals(
-            @Host(String.class) StaticObject self,
-            @Host(Object.class) StaticObject other,
-            @InjectMeta Meta meta) {
+        @Host(String.class) StaticObject self,
+        @Host(Object.class) StaticObject other,
+        @InjectMeta Meta meta) {
 
         // TODO: not sure if this check is necessary?
         // if (StaticObject.isNull(self)) {
@@ -131,6 +131,23 @@ public class Target_java_lang_String {
         }
         String ret = "" + (double) v;
         return meta.toGuestString(ret);
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    @Substitution(hasReceiver = true)
+    public static @Host(typeName = "C") Object charAt(
+        @Host(String.class) StaticObject self,
+        @Host(typeName = "I") Object index,
+        @InjectMeta Meta meta) {
+        return Concolic.stringCharAt(self, index, meta);
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    @Substitution(hasReceiver = true)
+    public static @Host(typeName = "I") Object length(
+        @Host(String.class) StaticObject self,
+        @InjectMeta Meta meta) {
+        return Concolic.stringLength(self, meta);
     }
 
 }

@@ -25,32 +25,6 @@
 package tools.aqua.concolic;
 
 import com.oracle.truffle.api.CompilerAsserts;
-import com.oracle.truffle.api.CompilerDirectives;
-import com.oracle.truffle.espresso.EspressoLanguage;
-import com.oracle.truffle.espresso.bytecode.BytecodeStream;
-import com.oracle.truffle.espresso.descriptors.Symbol;
-import com.oracle.truffle.espresso.impl.ArrayKlass;
-import com.oracle.truffle.espresso.impl.Field;
-import com.oracle.truffle.espresso.impl.Klass;
-import com.oracle.truffle.espresso.impl.Method;
-import com.oracle.truffle.espresso.impl.ObjectKlass;
-import com.oracle.truffle.espresso.meta.EspressoError;
-import com.oracle.truffle.espresso.meta.Meta;
-import com.oracle.truffle.espresso.nodes.BytecodeNode;
-import com.oracle.truffle.espresso.nodes.EspressoRootNode;
-import com.oracle.truffle.espresso.runtime.StaticObject;
-import com.oracle.truffle.espresso.substitutions.SubstitutionProfiler;
-import com.oracle.truffle.espresso.substitutions.Substitutions;
-import com.oracle.truffle.espresso.vm.InterpreterToVM;
-
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Base64;
-import java.util.Collections;
-import java.util.LinkedList;
-import java.util.List;
-
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFEQ;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFGE;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFGT;
@@ -63,6 +37,36 @@ import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPGT;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPLE;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPLT;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPNE;
+import static tools.aqua.concolic.OperatorComparator.BV2NAT;
+import static tools.aqua.concolic.OperatorComparator.LE;
+import static tools.aqua.concolic.OperatorComparator.LT;
+import static tools.aqua.concolic.OperatorComparator.SAT;
+import static tools.aqua.concolic.OperatorComparator.SLENGTH;
+
+import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.espresso.bytecode.BytecodeStream;
+import com.oracle.truffle.espresso.descriptors.Symbol;
+import com.oracle.truffle.espresso.impl.ArrayKlass;
+import com.oracle.truffle.espresso.impl.Field;
+import com.oracle.truffle.espresso.impl.Klass;
+import com.oracle.truffle.espresso.impl.Method;
+import com.oracle.truffle.espresso.impl.ObjectKlass;
+import com.oracle.truffle.espresso.meta.EspressoError;
+import com.oracle.truffle.espresso.meta.Meta;
+import com.oracle.truffle.espresso.nodes.BytecodeNode;
+import com.oracle.truffle.espresso.nodes.EspressoRootNode;
+
+import com.oracle.truffle.espresso.runtime.StaticObject;
+import com.oracle.truffle.espresso.substitutions.SubstitutionProfiler;
+import com.oracle.truffle.espresso.substitutions.Substitutions;
+import com.oracle.truffle.espresso.vm.InterpreterToVM;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
 
 public class Concolic {
 
@@ -252,12 +256,15 @@ public class Concolic {
         StaticObject concrete = meta.toGuestString(concreteHost);
         Variable symbolic = new Variable(PrimitiveTypes.STRING, countStringSeeds);
         AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
+        AnnotatedValue length = new AnnotatedValue(concreteHost.length(), new ComplexExpression(OperatorComparator.NAT2BV32, new ComplexExpression(
+            SLENGTH, symbolic)));
         concrete.setConcolicId(symbolicObjects.size());
 
-        int length = ((ObjectKlass)concrete.getKlass()).getFieldTable().length + 1;
-        AnnotatedValue[] annotation = new AnnotatedValue[length];
-        annotation[length-1] = a;
-        symbolicObjects.add(annotation);
+//        int lengthAnnotations = ((ObjectKlass)concrete.getKlass()).getFieldTable().length + 1;
+//        AnnotatedValue[] annotation = new AnnotatedValue[lengthAnnotations];
+//        annotation[length-1] = a;
+//        symbolicObjects.add(annotation);
+        symbolicObjects.add(new AnnotatedValue[] { a , length });
         countStringSeeds++;
         addTraceElement(new SymbolDeclaration(symbolic));
         return concrete;
@@ -1643,6 +1650,7 @@ public class Concolic {
         return takeBranch;
     }
 
+
     public static void tableSwitch(int concIndex, AnnotatedValue symbIndex, int low, int high) {
         if (symbIndex == null) {
             return;
@@ -1714,6 +1722,7 @@ public class Concolic {
         return new AnnotatedValue(areEqual, symbolic);
     }
 
+
     // --------------------------------------------------------------------------
     //
     // symbolic stack and var functions
@@ -1781,6 +1790,69 @@ public class Concolic {
             }
         }
 
+    public static Object stringCharAt(StaticObject self, Object index, Meta meta) {
+        String concreteString = meta.toHostString(self);
+        int concreteIndex = 0;
+        Expression indexExpr;
+        boolean concolicIndex = false;
+        if(index instanceof AnnotatedValue){
+            AnnotatedValue a= (AnnotatedValue) index;
+            concreteIndex = a.asInt();
+            indexExpr = a.symbolic();
+            concolicIndex = true;
+        }else{
+            concreteIndex = (int) index;
+             indexExpr = Constant.fromConcreteValue(concreteIndex);
+        }
+        if (!self.isConcolic() ) { //&& !index.isConcolic()) {
+            return concreteString.charAt(concreteIndex);
+        }
+        Expression symbolicString = makeStringToExpr(self, meta);
+
+        Expression intIndexExpr = new ComplexExpression(BV2NAT, indexExpr);
+        Expression symbolicStrLen = new ComplexExpression(SLENGTH, symbolicString);
+
+        boolean sat1 = (0 <= concreteIndex);
+        boolean sat2 = (concreteIndex < concreteString.length());
+        if(!sat1 && !concolicIndex){
+             //index is negative
+            meta.throwException(meta.java_lang_StringIndexOutOfBoundsException);
+            return null;
+        }
+        else if(concolicIndex){
+            Expression indexGreaterEqualsZero = new ComplexExpression(LE, Constant.NAT_ZERO, symbolicStrLen);
+            PathCondition pc = new PathCondition(indexGreaterEqualsZero, sat1 ? 0 : 1, 2);
+            addTraceElement(pc);
+        }
+
+        Expression indexLTSymbolicStringLength = new ComplexExpression(LT, intIndexExpr, symbolicStrLen);
+        PathCondition pc2 = new PathCondition(indexLTSymbolicStringLength, sat2? 0:1, 2);
+        addTraceElement(pc2);
+
+        if(!sat2){
+            // index is greater than string length
+            meta.throwException(meta.java_lang_StringIndexOutOfBoundsException);
+            return null;
+        }
+        Expression charAtExpr = new ComplexExpression(SAT, symbolicString, intIndexExpr);
+        return new AnnotatedValue(concreteString.charAt(concreteIndex), charAtExpr);
+    }
+
+    public static Object stringLength(StaticObject self, Meta meta) {
+        String concreteString = meta.toHostString(self);
+        int cLength = concreteString.length();
+        if (!self.isConcolic() ) {
+            return cLength;
+        }
+        AnnotatedValue[] a = symbolicObjects.get(self.getConcolicId());
+        return new AnnotatedValue(cLength, a[a.length - 1].symbolic());
+    }
+
+    private static Expression makeStringToExpr(StaticObject string, Meta meta){
+        assert string.isString();
+        return string.isConcolic() ?
+            Constant.fromConcreteValue(meta.toHostString(string)) :
+            symbolicObjects.get(string.getConcolicId())[0].symbolic();
     }
 
     private static Field integer_value = null;

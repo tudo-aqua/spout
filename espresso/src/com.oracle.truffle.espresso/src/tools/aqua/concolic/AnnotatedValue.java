@@ -94,6 +94,21 @@ public class AnnotatedValue {
         throw EspressoError.shouldNotReachHere("unexpected int type: " +
                 concrete.getClass().getSimpleName());
     }
+    
+    public byte asByte() {
+        if (concrete instanceof  Integer){
+            return ((Integer) concrete).byteValue();
+        }
+        return (byte) concrete;
+    }
+
+    public char asChar() {
+        return (char) concrete;
+    }
+
+    public short asShort() {
+        return (short) concrete;
+    }
 
     public float asFloat() {
         return (float) concrete;

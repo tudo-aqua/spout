@@ -27,6 +27,11 @@ package tools.aqua.concolic;
 import java.util.EnumSet;
 
 public enum OperatorComparator {
+    // Integer theory
+    LE,
+    LT,
+    GT,
+    GE,
     // int
     IADD,
     ISUB,
@@ -140,8 +145,11 @@ public enum OperatorComparator {
     STOUPPER,
     SLENGTH,
     SINDEXOF,
-    STOINT
+    STOINT,
+    NAT2BV32,
+    BV2NAT
     ;
+
 
     @Override
     public String toString() {
@@ -298,6 +306,20 @@ public enum OperatorComparator {
                 return "str.indexof";
             case STOINT:
                 return "str.to.int";
+            case SAT:
+                return "str.at";
+            case NAT2BV32:
+                return "(_ int2bv 32)";
+            case BV2NAT:
+                return "bv2int";
+            case LT:
+                return "<";
+            case GT:
+                return ">";
+            case LE:
+                return "<=";
+            case GE:
+                return ">=";
 
             default:
                 return super.toString();

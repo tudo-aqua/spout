@@ -41,6 +41,15 @@ public abstract class Constant extends Atom {
 
     public final static LongConstant LONG_ZERO = new LongConstant(0L);
 
+    public final static NatConstant NAT_ZERO = new NatConstant(0);
+
+
+    private final static class NatConstant extends Constant {
+        NatConstant(int value){
+            super(PrimitiveTypes.NAT, value);
+        }
+    }
+
     private final static class IntConstant extends Constant {
 
         IntConstant(int value) {
@@ -198,5 +207,7 @@ public abstract class Constant extends Atom {
     public static Constant fromConcreteValue(String s) {
         return new StringConstant(s);
     }
+
+    public static Constant createNatConstant(int value) { return new NatConstant(value);}
 
 }
