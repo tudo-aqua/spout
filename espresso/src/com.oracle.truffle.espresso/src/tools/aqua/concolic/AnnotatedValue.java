@@ -40,18 +40,6 @@ public class AnnotatedValue {
         return (int) concrete;
     }
 
-    public byte asByte() {
-        return (byte) concrete;
-    }
-
-    public char asChar() {
-        return (char) concrete;
-    }
-
-    public short asShort() {
-        return (short) concrete;
-    }
-
     public float asFloat() {
         return (float) concrete;
     }

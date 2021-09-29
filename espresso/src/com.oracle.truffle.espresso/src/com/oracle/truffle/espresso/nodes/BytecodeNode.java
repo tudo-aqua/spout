@@ -3026,7 +3026,7 @@ public final class BytecodeNode extends EspressoMethodNode {
                 if (value instanceof AnnotatedValue) {
                     AnnotatedValue a = (AnnotatedValue) value;
                     Concolic.putSymbolic(refs, top, a);
-                    putInt(primitives, top, a.asByte());
+                    putInt(primitives, top, (byte) a.asInt());
                 }
                 else {
                     putInt(primitives, top, (byte) value);
@@ -3037,7 +3037,7 @@ public final class BytecodeNode extends EspressoMethodNode {
                 if (value instanceof AnnotatedValue) {
                     AnnotatedValue a = (AnnotatedValue) value;
                     Concolic.putSymbolic(refs, top, a);
-                    putInt(primitives, top, a.asShort());
+                    putInt(primitives, top, (short) a.asInt());
                 }
                 else {
                     putInt(primitives, top, (short) value);
@@ -3048,7 +3048,7 @@ public final class BytecodeNode extends EspressoMethodNode {
                 if (value instanceof AnnotatedValue) {
                     AnnotatedValue a = (AnnotatedValue) value;
                     Concolic.putSymbolic(refs, top, a);
-                    putInt(primitives, top, a.asChar());
+                    putInt(primitives, top, (char) a.asInt());
                 }
                 else {
                     putInt(primitives, top, (char) value);

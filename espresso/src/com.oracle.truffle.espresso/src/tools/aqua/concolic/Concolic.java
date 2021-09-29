@@ -121,11 +121,11 @@ public class Concolic {
         return a;
     }
 
-    private static byte[] seedsByteValues = new byte[] {};
+    private static int[] seedsByteValues = new int[] {};
     private static int countByteSeeds = 0;
 
     public static AnnotatedValue nextSymbolicByte() {
-        byte concrete = 0;
+        int concrete = 0;
         if (countByteSeeds < seedsByteValues.length) {
             concrete = seedsByteValues[countByteSeeds];
         }
@@ -136,11 +136,11 @@ public class Concolic {
         return new AnnotatedValue(concrete, new ComplexExpression(OperatorComparator.B2I, symbolic));
     }
 
-    private static char[] seedsCharValues = new char[] {};
+    private static int[] seedsCharValues = new int[] {};
     private static int countCharSeeds = 0;
 
     public static AnnotatedValue nextSymbolicChar() {
-        char concrete = 0;
+        int concrete = 0;
         if (countCharSeeds < seedsCharValues.length) {
             concrete = seedsCharValues[countCharSeeds];
         }
@@ -151,11 +151,11 @@ public class Concolic {
         return new AnnotatedValue(concrete, new ComplexExpression(OperatorComparator.C2I, symbolic));
     }
 
-    private static short[] seedsShortValues = new short[] {};
+    private static int[] seedsShortValues = new int[] {};
     private static int countShortSeeds = 0;
 
     public static AnnotatedValue nextSymbolicShort() {
-        short concrete = 0;
+        int concrete = 0;
         if (countShortSeeds < seedsShortValues.length) {
             concrete = seedsShortValues[countShortSeeds];
         }
@@ -511,14 +511,14 @@ public class Concolic {
     }
 
     private static void parseBytes(String[] valsAsStr, boolean b64) {
-        seedsByteValues = new byte[valsAsStr.length];
+        seedsByteValues = new int[valsAsStr.length];
         for (int i=0; i<valsAsStr.length; i++) {
-            seedsByteValues[i] = Byte.valueOf(b64 ? b64decode(valsAsStr[i].trim()) :  valsAsStr[i].trim());
+            seedsByteValues[i] = Integer.valueOf(b64 ? b64decode(valsAsStr[i].trim()) :  valsAsStr[i].trim());
         }
     }
 
     private static void parseChars(String[] valsAsStr, boolean b64) {
-        seedsCharValues = new char[valsAsStr.length];
+        seedsCharValues = new int[valsAsStr.length];
         for (int i=0; i<valsAsStr.length; i++) {
             //TODO: not sure if this is correct
             seedsCharValues[i] = valsAsStr[i].trim().charAt(0);
@@ -526,9 +526,9 @@ public class Concolic {
     }
 
     private static void parseShorts(String[] valsAsStr, boolean b64) {
-        seedsShortValues = new short[valsAsStr.length];
+        seedsShortValues = new int[valsAsStr.length];
         for (int i=0; i<valsAsStr.length; i++) {
-            seedsShortValues[i] = Short.valueOf(b64 ? b64decode(valsAsStr[i].trim()) :  valsAsStr[i].trim());
+            seedsShortValues[i] = Integer.valueOf(b64 ? b64decode(valsAsStr[i].trim()) :  valsAsStr[i].trim());
         }
     }
 
@@ -1361,33 +1361,81 @@ public class Concolic {
 
         // symbolic
         if (s1 != null || s2 != null) {
-            if (s1 == null) s1 = AnnotatedValue.fromConstant(PrimitiveTypes.INT, c1);
-            if (s2 == null) s2 = AnnotatedValue.fromConstant(PrimitiveTypes.INT, c2);
 
             Expression expr = null;
-            switch (opcode) {
-                case IF_ICMPEQ : expr = new ComplexExpression(takeBranch ?
-                        OperatorComparator.BVEQ :
-                        OperatorComparator.BVNE, s1.symbolic(), s2.symbolic()); break;
-                case IF_ICMPNE : expr = new ComplexExpression(takeBranch ?
-                        OperatorComparator.BVNE :
-                        OperatorComparator.BVEQ, s1.symbolic(), s2.symbolic()); break;
-                case IF_ICMPLT : expr = new ComplexExpression(takeBranch ?
-                        OperatorComparator.BVGT :
-                        OperatorComparator.BVLE, s1.symbolic(), s2.symbolic()); break;
-                case IF_ICMPGE : expr = new ComplexExpression(takeBranch ?
-                        OperatorComparator.BVLE :
-                        OperatorComparator.BVGT, s1.symbolic(), s2.symbolic()); break;
-                case IF_ICMPGT : expr = new ComplexExpression(takeBranch ?
-                        OperatorComparator.BVLT :
-                        OperatorComparator.BVGE, s1.symbolic(), s2.symbolic()); break;
-                case IF_ICMPLE : expr = new ComplexExpression(takeBranch ?
-                        OperatorComparator.BVGE :
-                        OperatorComparator.BVLT, s1.symbolic(), s2.symbolic()); break;
-                default        :
-                    CompilerDirectives.transferToInterpreter();
-                    // FIXME: replace EspressoError.shouldNotReachHere calls with stoprecording(...) to make analysis shut down properly
+
+            // boolean
+            if ((s1 == null || Expression.isBoolean(s1.symbolic())) &&
+                    (s2 == null || Expression.isBoolean(s2.symbolic()))) {
+
+                // assume that one is a constant.
+                if (s1 != null && s2 != null) {
                     throw EspressoError.shouldNotReachHere("non-branching bytecode");
+                }
+
+                expr = (s1 != null) ? s1.symbolic() : s2.symbolic();
+                int c = (s1 != null) ? c2 : c1;
+
+                switch (opcode) {
+                    case IF_ICMPEQ:
+                        expr = (c != 0) ? new ComplexExpression(OperatorComparator.BNEG, expr) : expr;
+                        break;
+                    case IF_ICMPNE:
+                        expr = (c == 0) ? new ComplexExpression(OperatorComparator.BNEG, expr) : expr;
+                        break;
+                    default:
+                        CompilerDirectives.transferToInterpreter();
+                        // FIXME: replace EspressoError.shouldNotReachHere calls with stoprecording(...) to make analysis shut down properly
+                        throw EspressoError.shouldNotReachHere("non-branching bytecode");
+                }
+
+                if (takeBranch) {
+                    expr = new ComplexExpression(OperatorComparator.BNEG, expr);
+                }
+
+            }
+            // numeric
+            else {
+
+                if (s1 == null) s1 = AnnotatedValue.fromConstant(PrimitiveTypes.INT, c1);
+                if (s2 == null) s2 = AnnotatedValue.fromConstant(PrimitiveTypes.INT, c2);
+
+                switch (opcode) {
+                    case IF_ICMPEQ:
+                        expr = new ComplexExpression(takeBranch ?
+                                OperatorComparator.BVEQ :
+                                OperatorComparator.BVNE, s1.symbolic(), s2.symbolic());
+                        break;
+                    case IF_ICMPNE:
+                        expr = new ComplexExpression(takeBranch ?
+                                OperatorComparator.BVNE :
+                                OperatorComparator.BVEQ, s1.symbolic(), s2.symbolic());
+                        break;
+                    case IF_ICMPLT:
+                        expr = new ComplexExpression(takeBranch ?
+                                OperatorComparator.BVGT :
+                                OperatorComparator.BVLE, s1.symbolic(), s2.symbolic());
+                        break;
+                    case IF_ICMPGE:
+                        expr = new ComplexExpression(takeBranch ?
+                                OperatorComparator.BVLE :
+                                OperatorComparator.BVGT, s1.symbolic(), s2.symbolic());
+                        break;
+                    case IF_ICMPGT:
+                        expr = new ComplexExpression(takeBranch ?
+                                OperatorComparator.BVLT :
+                                OperatorComparator.BVGE, s1.symbolic(), s2.symbolic());
+                        break;
+                    case IF_ICMPLE:
+                        expr = new ComplexExpression(takeBranch ?
+                                OperatorComparator.BVGE :
+                                OperatorComparator.BVLT, s1.symbolic(), s2.symbolic());
+                        break;
+                    default:
+                        CompilerDirectives.transferToInterpreter();
+                        // FIXME: replace EspressoError.shouldNotReachHere calls with stoprecording(...) to make analysis shut down properly
+                        throw EspressoError.shouldNotReachHere("non-branching bytecode");
+                }
             }
 
             PathCondition pc = new PathCondition(expr, takeBranch ? 1 : 0, 2);
