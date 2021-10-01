@@ -32,7 +32,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import com.oracle.svm.hosted.c.info.RawPointerToInfo;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.c.CContext;
 
@@ -43,6 +42,7 @@ import com.oracle.svm.hosted.c.info.EnumConstantInfo;
 import com.oracle.svm.hosted.c.info.InfoTreeVisitor;
 import com.oracle.svm.hosted.c.info.NativeCodeInfo;
 import com.oracle.svm.hosted.c.info.PointerToInfo;
+import com.oracle.svm.hosted.c.info.RawPointerToInfo;
 import com.oracle.svm.hosted.c.info.RawStructureInfo;
 import com.oracle.svm.hosted.c.info.SizableInfo.ElementKind;
 import com.oracle.svm.hosted.c.info.SizableInfo.SignednessValue;
@@ -148,6 +148,14 @@ public class QueryCodeWriter extends InfoTreeVisitor {
             writer.includeFiles(headerFiles);
             writer.appendln();
         }
+
+        /* Used in isConstUnsigned(String) to prevent tautological-compare warnings */
+        writer.appendln("int _svm_query_code_compilation_get_int_zero() {");
+        writer.indent();
+        writer.indents().appendln("return 0;");
+        writer.outdent();
+        writer.appendln("}");
+        writer.appendln();
 
         /* Write query code for nativeCodeInfo. */
         String functionName = nativeCodeInfo.getName().replaceAll("\\W", "_");
@@ -374,7 +382,7 @@ public class QueryCodeWriter extends InfoTreeVisitor {
     }
 
     private static String isConstUnsigned(String symbolName) {
-        return "(" + symbolName + ">=0 ? 1 : 0)";
+        return "(" + symbolName + ">=_svm_query_code_compilation_get_int_zero() ? 1 : 0)";
     }
 
     private void registerElementForCurrentLine(Object element) {
