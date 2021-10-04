@@ -1,70 +1,39 @@
 
 # SPouT
 
-SPouT stands for **S**ymbolic **P**ath L**o**gging d**u**ring **T**esting. 
+SPouT (Symbolic Path Recording During Testing) is a concolic execution engine
+for the Espresso JVM implementation.
+
+This project is a fork of [graal/espresso](https://github.com/oracle/graal/)
+
+## Installation
+
+- You need [mx](https://github.com/graalvm/mx) on the path
+- You need [GraalVM](https://github.com/graalvm/graalvm-ce-builds/releases). Tested to work with 21.1.0 and 21.2.0
+- Can only run on Linux currently
+
+## Building
+
+```bash
+$ cd graal/espresso 
+$ export JAVA_HOME=[PATH-TO-GRAALVM]
+$ mx --env native-ce build 
+```
+
+## Running
+
+- Concolic Values are seeded using ```-Dconcolic.ints=[comma separated list of ints]```
+- Espresso native image is built as ```java```with truffle extension into a folder in ```graal/sdk/mxbuild``` e.g. ```graal/sdk/mxbuild/linux-amd64/GRAALVM_ESPRESSO_NATIVE_CE_JAVA11/graalvm-espresso-native-ce-java11-21.2.0``` 
+- Concolic value are seeded as return values of calls to methods of the ```tools.aqua.concolic.Verifier``` in the SUT code.
+
+```bash
+$ [path-to-native-espresso]/bin/java -truffle ...
+```
 
 
-# GraalVM
+## Output
 
-[![https://graalvm.slack.com](https://img.shields.io/badge/slack-join%20channel-active)](https://www.graalvm.org/slack-invitation/)
+SpouT records symbolic constraints during execution
 
-GraalVM is a universal virtual machine for running applications written in JavaScript, Python, Ruby, R, JVM-based languages like Java, Scala, Clojure, Kotlin, and LLVM-based languages such as C and C++.
+## Example
 
-The project website at [https://www.graalvm.org](https://www.graalvm.org) describes how to [get started](https://www.graalvm.org/docs/getting-started/), how to [stay connected](https://www.graalvm.org/community/), and how to [contribute](https://www.graalvm.org/community/contributors/).
-
-## Repository Structure
-
-The GraalVM main source repository includes the components listed below. The documentation for each component includes
-developer instructions for the component.
-
-* [GraalVM SDK](sdk/README.md) contains long term supported APIs of GraalVM.
-
-* [GraalVM compiler](compiler/README.md) written in Java that supports both dynamic and static compilation and can integrate with
-the Java HotSpot VM or run standalone.
-
-* [Truffle](truffle/README.md) language implementation framework for creating languages and instrumentations for GraalVM.
-
-* [Tools](tools/README.md) contains a set of tools for GraalVM languages
-implemented with the instrumentation framework.
-
-* [Substrate VM](substratevm/README.md) framework that allows ahead-of-time (AOT)
-compilation of Java applications under closed-world assumption into executable
-images or shared objects.
-
-* [Sulong](sulong/README.md) is an engine for running LLVM bitcode on GraalVM.
-
-* [GraalWasm](wasm/README.md) is an engine for running WebAssembly programs on GraalVM.
-
-* [TRegex](regex/README.md) is an implementation of regular expressions which leverages GraalVM for efficient compilation of automata.
-
-* [VM](vm/README.md) includes the components to build a modular GraalVM image.
-
-* [VS Code](/vscode/README.md) provides extensions to Visual Studio Code that support development of polyglot applications using GraalVM.
-
-## Get Support
-
-* Open a [GitHub issue](https://github.com/oracle/graal/issues) for bug reports, questions, or requests for enhancements.
-* Report a security vulnerability according to the [Reporting Vulnerabilities guide](https://www.oracle.com/corporate/security-practices/assurance/vulnerability/reporting.html).
-
-## Related Repositories
-
-GraalVM allows running of following languages which are being developed and tested in related repositories with GraalVM core to run on top of it using Truffle and the GraalVM compiler. These are:
-* [GraalJS](https://github.com/oracle/graaljs) - JavaScript and Node.js
-* [FastR](https://github.com/oracle/fastr) - R Language
-* [GraalPython](https://github.com/oracle/graalpython) - Python
-* [TruffleRuby](https://github.com/oracle/truffleruby) - Ruby
-* [SimpleLanguage](https://github.com/graalvm/simplelanguage) - A simple demonstration language for the GraalVM.
-
-
-## License
-
-Each GraalVM component is licensed:
-* [Truffle Framework](/truffle/) and its dependency [GraalVM SDK](/sdk/) are licensed under the [Universal Permissive License](truffle/LICENSE.md).
-* [Tools](/tools/) project is licensed under the [GPL 2 with Classpath exception](tools/LICENSE).
-* [TRegex](/regex/) project is licensed under the [Universal Permissive License](regex/LICENSE.md).
-* [GraalVM compiler](/compiler/) is licensed under the [GPL 2 with Classpath exception](compiler/LICENSE.md).
-* [Substrate VM](/substratevm/) is licensed under the [GPL 2 with Classpath exception](substratevm/LICENSE).
-* [Sulong](/sulong/) is licensed under [3-clause BSD](sulong/LICENSE).
-* [GraalWasm](/wasm/) is licensed under the [Universal Permissive License](wasm/LICENSE).
-* [VM](/vm/) is licensed under the [GPL 2 with Classpath exception](vm/LICENSE_GRAALVM_CE).
-* [VS Code](/vscode/) extensions are distributed under the [UPL 1.0 license](/vscode/graalvm/LICENSE.txt).
