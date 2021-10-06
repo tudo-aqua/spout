@@ -106,7 +106,7 @@ Seeded Bool Values: []
 Seeded Byte Values: []
 Seeded Char Values: []
 Seeded Short Values: []
-Seeded Int Values: [9]
+Seeded Int Values: [10]
 Seeded Long Values: []
 Seeded Float Values: []
 Seeded Double Values: []
@@ -116,7 +116,7 @@ Exception in thread "main" java.lang.AssertionError
 	at Main.main(Main.java:11)
 ======================== END PATH [BEGIN].
 [DECLARE] (declare-fun __int_0 () (_ BitVec 32))
-[DECISION] (assert (and (bvsle #x00000000 __int_0) (bvslt __int_0 #x0000000a))) // branchCount=2, branchId=1
+[DECISION] (assert (bvslt __int_0 #x00000028)) // branchCount=2, branchId=0
 [ERROR] java/lang/AssertionError
 ======================== END PATH [END].
 [ENDOFTRACE]
