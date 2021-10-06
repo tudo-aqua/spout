@@ -4,6 +4,12 @@
 SPouT (Symbolic Path Recording During Testing) is a concolic execution engine
 for the Espresso JVM implementation.
 
+In an espresso maker, the spout directs the flow of the outpouring espresso, 
+which was the inspiration for the name of the tool as well as for the logo.
+The image used in the logo is taken from [here](https://www.flickr.com/photos/john_mcclumpha/4158407875/in/photolist-o1Tksq-nLrps7-oe9B3a-pEAxnm-nY8MUm-CecoHg-nwkFMh-oceZVB-rggX2c-o3NPui-HNLwMF-od4zL4-o3PF81-2jdww3n-q7wA1g-Cecm2K-qoN6br-9fnNMP-q7pzBo-5TsCsJ-CMGuhP-psdon4-kK4b19-q7yk58-nTtKGq-2kFipfF-GqnAAF-7ksWfZ-7kwQjS-7kwQvJ-7ksVTR-7ksVoV-7ksVMv-7kwQAJ-7ksVJx-cfEqN5-7pVcap-qmFWnd-qBpdJf-Ed3Liw-67ZdSn-7UMuv-9RaDD4-2fwfTAc-GvkSyf-5yMhh4-E7mqpg-DEeWHN-E7mgux-ceMe6f)
+and is work by [john_mcclumpha](https://www.flickr.com/photos/john_mcclumpha/),
+licensed under the [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/) license.
+
 This project is a fork of [graal/espresso](https://github.com/oracle/graal/)
 
 ## Installation
