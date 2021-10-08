@@ -39,6 +39,7 @@ import com.oracle.truffle.espresso.perf.DebugCounter;
 import com.oracle.truffle.espresso.runtime.EspressoException;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import com.oracle.truffle.espresso.vm.VM;
+import tools.aqua.concolic.Concolic;
 
 @EspressoSubstitutions
 public final class Target_java_lang_System {
@@ -76,6 +77,7 @@ public final class Target_java_lang_System {
         SYSTEM_ARRAYCOPY_COUNT.inc();
         try {
             doArrayCopy(src, srcPos, dest, destPos, length, meta, profiler);
+            Concolic.doArrayCopy(src, srcPos, dest, destPos, length);
         } catch (NullPointerException e) {
             throw throwNullPointerEx(meta, profiler);
         } catch (ArrayStoreException e) {

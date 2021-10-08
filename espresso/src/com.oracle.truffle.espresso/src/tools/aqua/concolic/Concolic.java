@@ -39,6 +39,7 @@ import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.nodes.EspressoRootNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import com.oracle.truffle.espresso.substitutions.SubstitutionProfiler;
 import com.oracle.truffle.espresso.substitutions.Substitutions;
 import com.oracle.truffle.espresso.vm.InterpreterToVM;
 
@@ -1573,4 +1574,38 @@ public class Concolic {
         return (AnnotatedValue) symbolic[symbolic.length - 1 - slot];
     }
 
+    // --------------------------------------------------------------------------
+    //
+    // propagation of concolic values
+
+    public static void doArrayCopy(StaticObject src, int srcPos, StaticObject dest, int destPos, int length) {
+
+        if (src.getConcolicId() < 0 && dest.getConcolicId() < 0) {
+            return;
+        }
+
+        AnnotatedValue[] destAnnotations;
+        if (dest.getConcolicId() >= 0) {
+            destAnnotations = symbolicObjects.get(dest.getConcolicId());
+        }
+        else {
+            // TODO: organize code and wrap annotation creation in a method?
+            destAnnotations = new AnnotatedValue[dest.length() + 1]; // + 1 for length
+            dest.setConcolicId(symbolicObjects.size());
+            symbolicObjects.add(destAnnotations);
+        }
+
+        if (src.getConcolicId() < 0) {
+            for (int i=0; i<length; i++) {
+                destAnnotations[destPos + i] = null;
+            }
+        }
+        else {
+            AnnotatedValue[] srcAnnotations = symbolicObjects.get(src.getConcolicId());
+            for (int i=0; i<length; i++) {
+                destAnnotations[destPos + i] = srcAnnotations[srcPos + i];
+            }
+        }
+
+    }
 }
