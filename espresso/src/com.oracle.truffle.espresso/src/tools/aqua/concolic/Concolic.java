@@ -1608,4 +1608,28 @@ public class Concolic {
         }
 
     }
+
+    public static StaticObject boxInteger(Object unboxed, Meta meta) {
+        StaticObject boxed = meta.java_lang_Integer.allocateInstance();
+        // FIXME: do this only once!
+        Field value = meta.java_lang_Integer.lookupField(Symbol.Name.value, Symbol.Type._int);
+        if (unboxed instanceof AnnotatedValue) {
+            AnnotatedValue[] annotations = new AnnotatedValue[meta.java_lang_Integer.getFieldTable().length];
+            AnnotatedValue a = (AnnotatedValue) unboxed;
+            annotations[value.getSlot()] = a;
+            unboxed = a.asInt();
+            boxed.setConcolicId(symbolicObjects.size());
+            symbolicObjects.add(annotations);
+        }
+        value.set(boxed, unboxed);
+        return boxed;
+    }
+
+    public static Object unboxInteger(StaticObject self, Meta meta) {
+        Field value = meta.java_lang_Integer.lookupField(Symbol.Name.value, Symbol.Type._int);
+        if (self.getConcolicId() < 0) {
+            return value.get(self);
+        }
+        return symbolicObjects.get(self.getConcolicId())[value.getSlot()];
+    }
 }
