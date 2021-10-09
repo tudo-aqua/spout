@@ -75,7 +75,7 @@ public class AnnotatedValue {
             return ((Boolean)concrete) ? 1 : 0;
         }
         if (concrete instanceof Byte) {
-            return ((Byte)concrete);
+            return (int) ((Byte)concrete);
         }
         if (concrete instanceof Character) {
             return ((Character)concrete);
@@ -98,16 +98,7 @@ public class AnnotatedValue {
     public byte asByte() {
         if (concrete instanceof  Integer){
             return ((Integer) concrete).byteValue();
-        }
-        return (byte) concrete;
-    }
-
-    public char asChar() {
-        return (char) concrete;
-    }
-
-    public short asShort() {
-        return (short) concrete;
+        return (int) concrete;
     }
 
     public float asFloat() {

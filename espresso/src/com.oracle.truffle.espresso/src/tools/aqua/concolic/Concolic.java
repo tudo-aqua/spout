@@ -24,7 +24,6 @@
 
 package tools.aqua.concolic;
 
-import com.oracle.truffle.api.CompilerAsserts;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFEQ;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFGE;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IFGT;
@@ -40,25 +39,22 @@ import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPNE;
 import static tools.aqua.concolic.OperatorComparator.BV2NAT;
 import static tools.aqua.concolic.OperatorComparator.LE;
 import static tools.aqua.concolic.OperatorComparator.LT;
+import static tools.aqua.concolic.OperatorComparator.NAT2BV32;
 import static tools.aqua.concolic.OperatorComparator.SAT;
 import static tools.aqua.concolic.OperatorComparator.SLENGTH;
 
+import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.espresso.bytecode.BytecodeStream;
-import com.oracle.truffle.espresso.descriptors.Symbol;
 import com.oracle.truffle.espresso.impl.ArrayKlass;
 import com.oracle.truffle.espresso.impl.Field;
 import com.oracle.truffle.espresso.impl.Klass;
-import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.impl.ObjectKlass;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
-import com.oracle.truffle.espresso.nodes.EspressoRootNode;
-
 import com.oracle.truffle.espresso.runtime.StaticObject;
-import com.oracle.truffle.espresso.substitutions.SubstitutionProfiler;
-import com.oracle.truffle.espresso.substitutions.Substitutions;
 import com.oracle.truffle.espresso.vm.InterpreterToVM;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -260,11 +256,11 @@ public class Concolic {
             SLENGTH, symbolic)));
         concrete.setConcolicId(symbolicObjects.size());
 
-//        int lengthAnnotations = ((ObjectKlass)concrete.getKlass()).getFieldTable().length + 1;
-//        AnnotatedValue[] annotation = new AnnotatedValue[lengthAnnotations];
-//        annotation[length-1] = a;
-//        symbolicObjects.add(annotation);
-        symbolicObjects.add(new AnnotatedValue[] { a , length });
+        int lengthAnnotations = ((ObjectKlass)concrete.getKlass()).getFieldTable().length + 2;
+        AnnotatedValue[] annotation = new AnnotatedValue[lengthAnnotations];
+        annotation[annotation.length - 2] = a;
+        annotation[annotation.length - 1] = length;
+        symbolicObjects.add(annotation);
         countStringSeeds++;
         addTraceElement(new SymbolDeclaration(symbolic));
         return concrete;
@@ -1515,7 +1511,7 @@ public class Concolic {
                             case IFGT      : op = takeBranch ? OperatorComparator.FPGT : OperatorComparator.FPLE; break;
                             case IFLE      : op = takeBranch ? OperatorComparator.FPLE : OperatorComparator.FPGT; break;
                         }
-                        break;                
+                        break;
                 }
                 expr = new ComplexExpression(op, ce.getSubExpressions());
                 if (!ce.getOperator().equals(OperatorComparator.LCMP) && (
@@ -1736,6 +1732,24 @@ public class Concolic {
         return result;
     }
 
+    public static AnnotatedValue popSymbolicAsInt(Object[] symbolic, int slot) {
+        if (symbolic[slot] == null || !(symbolic[slot] instanceof AnnotatedValue)) {
+            return null;
+        }
+        AnnotatedValue result = (AnnotatedValue) symbolic[slot];
+        symbolic[slot] = null;
+        return result == null? result: new AnnotatedValue(result.asInt(), result.symbolic());
+    }
+
+    public static AnnotatedValue popSymbolicAsChar(Object[] symbolic, int slot) {
+        if (symbolic[slot] == null || !(symbolic[slot] instanceof AnnotatedValue)) {
+            return null;
+        }
+        AnnotatedValue result = (AnnotatedValue) symbolic[slot];
+        symbolic[slot] = null;
+        return result == null? result: new AnnotatedValue((char) result.asInt(), result.symbolic());
+    }
+
     public static AnnotatedValue peekSymbolic(Object[] symbolic, int slot) {
         if (symbolic[slot] == null || !(symbolic[slot] instanceof AnnotatedValue)) {
             return null;
@@ -1757,102 +1771,128 @@ public class Concolic {
         return (AnnotatedValue) symbolic[symbolic.length - 1 - slot];
     }
 
-    // --------------------------------------------------------------------------
-    //
-    // propagation of concolic values
+    public static AnnotatedValue getLocalSymbolicAsInt(Object[] symbolic, int slot) {
+        assert symbolic[symbolic.length - 1 - slot] instanceof AnnotatedValue;
+        AnnotatedValue av = (AnnotatedValue) symbolic[symbolic.length - 1 - slot];
+        return av == null ? av: new AnnotatedValue(av.asInt(), av.symbolic());
+    }
 
-    public static void doArrayCopy(StaticObject src, int srcPos, StaticObject dest, int destPos, int length) {
+  // --------------------------------------------------------------------------
+  //
+  // propagation of concolic values
 
-        if (src.getConcolicId() < 0 && dest.getConcolicId() < 0) {
-            return;
-        }
+  public static void doArrayCopy(
+      StaticObject src, int srcPos, StaticObject dest, int destPos, int length) {
 
-        AnnotatedValue[] destAnnotations;
-        if (dest.getConcolicId() >= 0) {
-            destAnnotations = symbolicObjects.get(dest.getConcolicId());
-        }
-        else {
-            // TODO: organize code and wrap annotation creation in a method?
-            destAnnotations = new AnnotatedValue[dest.length() + 1]; // + 1 for length
-            dest.setConcolicId(symbolicObjects.size());
-            symbolicObjects.add(destAnnotations);
-        }
+    if (src.getConcolicId() < 0 && dest.getConcolicId() < 0) {
+      return;
+    }
 
-        if (src.getConcolicId() < 0) {
-            for (int i=0; i<length; i++) {
-                destAnnotations[destPos + i] = null;
-            }
-        }
-        else {
-            AnnotatedValue[] srcAnnotations = symbolicObjects.get(src.getConcolicId());
-            for (int i=0; i<length; i++) {
-                destAnnotations[destPos + i] = srcAnnotations[srcPos + i];
-            }
-        }
+    AnnotatedValue[] destAnnotations;
+    if (dest.getConcolicId() >= 0) {
+      destAnnotations = symbolicObjects.get(dest.getConcolicId());
+    } else {
+      // TODO: organize code and wrap annotation creation in a method?
+      destAnnotations = new AnnotatedValue[dest.length() + 1]; // + 1 for length
+      dest.setConcolicId(symbolicObjects.size());
+      symbolicObjects.add(destAnnotations);
+    }
 
-    public static Object stringCharAt(StaticObject self, Object index, Meta meta) {
-        String concreteString = meta.toHostString(self);
-        int concreteIndex = 0;
-        Expression indexExpr;
-        boolean concolicIndex = false;
-        if(index instanceof AnnotatedValue){
-            AnnotatedValue a= (AnnotatedValue) index;
-            concreteIndex = a.asInt();
-            indexExpr = a.symbolic();
-            concolicIndex = true;
+    if (src.getConcolicId() < 0) {
+      for (int i = 0; i < length; i++) {
+        destAnnotations[destPos + i] = null;
+      }
+    } else {
+      AnnotatedValue[] srcAnnotations = symbolicObjects.get(src.getConcolicId());
+      for (int i = 0; i < length; i++) {
+        destAnnotations[destPos + i] = srcAnnotations[srcPos + i];
+      }
+    }
+  }
+
+  public static Object stringCharAt(StaticObject self, Object index, Meta meta) {
+    String concreteString = meta.toHostString(self);
+    int concreteIndex = 0;
+    Expression indexExpr;
+    boolean concolicIndex = false;
+      System.out.println("Char At started on: " + concreteString);
+    if (index instanceof AnnotatedValue) {
+      AnnotatedValue a = (AnnotatedValue) index;
+      concreteIndex = a.asInt();
+      indexExpr = a.symbolic();
+      concolicIndex = true;
+    } else {
+      concreteIndex = (int) index;
+      indexExpr = Constant.fromConcreteValue(concreteIndex);
+    }
+    if (!self.isConcolic()) { // && !index.isConcolic()) {
+      return  concreteString.charAt(concreteIndex);
+    }
+    Expression symbolicString = makeStringToExpr(self, meta);
+
+    Expression intIndexExpr = new ComplexExpression(BV2NAT, indexExpr);
+    Expression symbolicStrLen = new ComplexExpression(SLENGTH, symbolicString);
+    Expression bvSymbolicStrLen = new ComplexExpression(NAT2BV32, symbolicStrLen);
+
+    boolean sat1 = (0 <= concreteIndex);
+    boolean sat2 = (concreteIndex < concreteString.length());
+    if (!sat1 && !concolicIndex) {
+      // index is negative
+      meta.throwException(meta.java_lang_StringIndexOutOfBoundsException);
+      return null;
+    } else if (concolicIndex) {
+      Expression indexGreaterEqualsZero =
+          new ComplexExpression(LE, Constant.NAT_ZERO, symbolicStrLen);
+      PathCondition pc = new PathCondition(indexGreaterEqualsZero, sat1 ? 0 : 1, 2);
+      addTraceElement(pc);
+    }
+
+    Expression indexLTSymbolicStringLength = new ComplexExpression(LT, indexExpr, bvSymbolicStrLen);
+    PathCondition pc2 = new PathCondition(indexLTSymbolicStringLength, sat2 ? 0 : 1, 2);
+    addTraceElement(pc2);
+
+    if (!sat2) {
+      // index is greater than string length
+      meta.throwException(meta.java_lang_StringIndexOutOfBoundsException);
+      return null;
+    }
+    Expression charAtExpr = new ComplexExpression(SAT, symbolicString, intIndexExpr);
+    System.out.println("Char At done");
+    return new AnnotatedValue(concreteString.charAt(concreteIndex), charAtExpr);
+  }
+
+  public static Object stringLength(StaticObject self, Meta meta) {
+    String concreteString = meta.toHostString(self);
+    int cLength = concreteString.length();
+    if (!self.isConcolic()) {
+      return cLength;
+    }
+    AnnotatedValue[] a = symbolicObjects.get(self.getConcolicId());
+    return new AnnotatedValue(cLength, a[a.length - 1].symbolic());
+  }
+
+  private static Expression makeStringToExpr(StaticObject string, Meta meta) {
+    assert string.isString();
+    return string.isConcolic()
+        ? extractStringVarFromArray(string.getConcolicId())
+        : Constant.fromConcreteValue(meta.toHostString(string));
+  }
+
+  private static Expression extractStringVarFromArray(int concolicId) {
+    AnnotatedValue[] vals = symbolicObjects.get(concolicId);
+    return vals[vals.length - 2].symbolic();
+  }
+    @TruffleBoundary
+    public static Object characterToUpperCase(StaticObject self, Object c, Meta meta) {
+        System.out.println("CharacterToUpperCase called");
+        char convC;
+        if(c instanceof AnnotatedValue){
+            convC = (char) (int) ((AnnotatedValue) c).asRaw();
         }else{
-            concreteIndex = (int) index;
-             indexExpr = Constant.fromConcreteValue(concreteIndex);
+            convC = (char)(int) c;
         }
-        if (!self.isConcolic() ) { //&& !index.isConcolic()) {
-            return concreteString.charAt(concreteIndex);
-        }
-        Expression symbolicString = makeStringToExpr(self, meta);
-
-        Expression intIndexExpr = new ComplexExpression(BV2NAT, indexExpr);
-        Expression symbolicStrLen = new ComplexExpression(SLENGTH, symbolicString);
-
-        boolean sat1 = (0 <= concreteIndex);
-        boolean sat2 = (concreteIndex < concreteString.length());
-        if(!sat1 && !concolicIndex){
-             //index is negative
-            meta.throwException(meta.java_lang_StringIndexOutOfBoundsException);
-            return null;
-        }
-        else if(concolicIndex){
-            Expression indexGreaterEqualsZero = new ComplexExpression(LE, Constant.NAT_ZERO, symbolicStrLen);
-            PathCondition pc = new PathCondition(indexGreaterEqualsZero, sat1 ? 0 : 1, 2);
-            addTraceElement(pc);
-        }
-
-        Expression indexLTSymbolicStringLength = new ComplexExpression(LT, intIndexExpr, symbolicStrLen);
-        PathCondition pc2 = new PathCondition(indexLTSymbolicStringLength, sat2? 0:1, 2);
-        addTraceElement(pc2);
-
-        if(!sat2){
-            // index is greater than string length
-            meta.throwException(meta.java_lang_StringIndexOutOfBoundsException);
-            return null;
-        }
-        Expression charAtExpr = new ComplexExpression(SAT, symbolicString, intIndexExpr);
-        return new AnnotatedValue(concreteString.charAt(concreteIndex), charAtExpr);
-    }
-
-    public static Object stringLength(StaticObject self, Meta meta) {
-        String concreteString = meta.toHostString(self);
-        int cLength = concreteString.length();
-        if (!self.isConcolic() ) {
-            return cLength;
-        }
-        AnnotatedValue[] a = symbolicObjects.get(self.getConcolicId());
-        return new AnnotatedValue(cLength, a[a.length - 1].symbolic());
-    }
-
-    private static Expression makeStringToExpr(StaticObject string, Meta meta){
-        assert string.isString();
-        return string.isConcolic() ?
-            Constant.fromConcreteValue(meta.toHostString(string)) :
-            symbolicObjects.get(string.getConcolicId())[0].symbolic();
+        System.out.println("ConcreteChar = " + convC);
+        return (int) Character.toUpperCase(convC);
     }
 
     private static Field integer_value = null;
