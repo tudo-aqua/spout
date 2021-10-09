@@ -9,7 +9,7 @@ public class Target_java_lang_Integer {
 
     @Substitution
     public static @Host(Integer.class) StaticObject valueOf(@Host(typeName = "I")  Object unboxed, @InjectMeta Meta meta) {
-        StaticObject boxed = meta.java_lang_Integer.allocateInstance();
+        // FIXME: better solution might be to simply call constructor Integer(int), which will not use cached values
         return Concolic.boxInteger(unboxed, meta);
     }
 
