@@ -306,6 +306,10 @@ public enum OperatorComparator {
                 return "str.indexof";
             case STOINT:
                 return "str.to.int";
+            case STOLOWER:
+                return "str.lower";
+            case STOUPPER:
+                return "str.upper";
             case SAT:
                 return "str.at";
             case NAT2BV32:

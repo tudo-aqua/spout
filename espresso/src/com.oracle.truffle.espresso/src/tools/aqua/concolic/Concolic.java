@@ -42,6 +42,8 @@ import static tools.aqua.concolic.OperatorComparator.LT;
 import static tools.aqua.concolic.OperatorComparator.NAT2BV32;
 import static tools.aqua.concolic.OperatorComparator.SAT;
 import static tools.aqua.concolic.OperatorComparator.SLENGTH;
+import static tools.aqua.concolic.OperatorComparator.STOLOWER;
+import static tools.aqua.concolic.OperatorComparator.STOUPPER;
 
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
@@ -1815,7 +1817,6 @@ public class Concolic {
     int concreteIndex = 0;
     Expression indexExpr;
     boolean concolicIndex = false;
-      System.out.println("Char At started on: " + concreteString);
     if (index instanceof AnnotatedValue) {
       AnnotatedValue a = (AnnotatedValue) index;
       concreteIndex = a.asInt();
@@ -1857,7 +1858,6 @@ public class Concolic {
       return null;
     }
     Expression charAtExpr = new ComplexExpression(SAT, symbolicString, intIndexExpr);
-    System.out.println("Char At done");
     return new AnnotatedValue(concreteString.charAt(concreteIndex), charAtExpr);
   }
 
@@ -1883,16 +1883,28 @@ public class Concolic {
     return vals[vals.length - 2].symbolic();
   }
     @TruffleBoundary
-    public static Object characterToUpperCase(StaticObject self, Object c, Meta meta) {
-        System.out.println("CharacterToUpperCase called");
+    public static Object characterToUpperCase(Object c, Meta meta) {
         char convC;
         if(c instanceof AnnotatedValue){
             convC = (char) (int) ((AnnotatedValue) c).asRaw();
+            Expression symbolic = ((AnnotatedValue) c).symbolic();
+            return new AnnotatedValue(Character.toUpperCase(convC), new ComplexExpression(STOUPPER, symbolic));
         }else{
-            convC = (char)(int) c;
+            convC = (char) c;
+            return Character.toUpperCase(convC);
         }
-        System.out.println("ConcreteChar = " + convC);
-        return (int) Character.toUpperCase(convC);
+    }
+    @TruffleBoundary
+    public static Object characterToLowerCase(Object c, Meta meta) {
+        char convC;
+        if(c instanceof AnnotatedValue){
+            convC = (char) (int) ((AnnotatedValue) c).asRaw();
+            Expression symbolic = ((AnnotatedValue) c).symbolic();
+            return new AnnotatedValue(Character.toLowerCase(convC), new ComplexExpression(STOLOWER, symbolic));
+        }else{
+            convC = (char) c;
+            return Character.toLowerCase(convC);
+        }
     }
 
     private static Field integer_value = null;
@@ -2002,4 +2014,7 @@ public class Concolic {
 
         return boxed;
     }
+
+
+
 }
