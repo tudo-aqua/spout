@@ -12,10 +12,5 @@ public class Target_java_lang_Integer {
         // FIXME: better solution might be to simply call constructor Integer(int), which will not use cached values
         return Concolic.boxInteger(unboxed, meta);
     }
-
-    // TODO: probably not needed!
-    @Substitution(hasReceiver = true)
-    public static @Host(typeName = "I") Object valueOf(@Host(Integer.class) StaticObject self, @InjectMeta Meta meta) {
-        return Concolic.unboxInteger(self, meta);
-    }
+    
 }
