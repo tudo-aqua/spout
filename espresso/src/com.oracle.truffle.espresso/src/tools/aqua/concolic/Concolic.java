@@ -1176,7 +1176,7 @@ public class Concolic {
     public static void f2d(long[] primitives, Object[] symbolic, int top) {
         double c1 = BytecodeNode.popFloat(primitives, top - 1);
         BytecodeNode.putDouble(primitives, top -1, c1);
-        putSymbolic(symbolic, top, unarySymbolicOp(OperatorComparator.I2L, c1, popSymbolic(symbolic, top -1)));
+        putSymbolic(symbolic, top, unarySymbolicOp(OperatorComparator.F2D, c1, popSymbolic(symbolic, top -1)));
     }
 
     // case D2I: putInt(stack, top - 2, (int) popDouble(stack, top - 1)); break;
