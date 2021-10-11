@@ -1642,7 +1642,7 @@ public class Concolic {
         if (unboxed instanceof AnnotatedValue) {
             AnnotatedValue a = (AnnotatedValue) unboxed;
             setFieldAnnotation(boxed, byte_value, a);
-            unboxed = a.asInt();
+            unboxed = (byte) a.asInt();
         }
 
         // concrete part
@@ -1651,4 +1651,69 @@ public class Concolic {
         return boxed;
     }
 
+
+    private static Field char_value = null;
+
+    public static StaticObject boxChar(Object unboxed, Meta meta) {
+        if (char_value == null) {
+            char_value = meta.java_lang_Character.lookupField(Symbol.Name.value, Symbol.Type._char);
+        }
+        StaticObject boxed = meta.java_lang_Character.allocateInstance();
+
+        // concolic part
+        if (unboxed instanceof AnnotatedValue) {
+            AnnotatedValue a = (AnnotatedValue) unboxed;
+            setFieldAnnotation(boxed, char_value, a);
+            unboxed = (char) a.asInt();
+        }
+
+        // concrete part
+        char_value.set(boxed, unboxed);
+
+        return boxed;
+    }
+
+
+    private static Field short_value = null;
+
+    public static StaticObject boxShort(Object unboxed, Meta meta) {
+        if (short_value == null) {
+            short_value = meta.java_lang_Short.lookupField(Symbol.Name.value, Symbol.Type._short);
+        }
+        StaticObject boxed = meta.java_lang_Short.allocateInstance();
+
+        // concolic part
+        if (unboxed instanceof AnnotatedValue) {
+            AnnotatedValue a = (AnnotatedValue) unboxed;
+            setFieldAnnotation(boxed, short_value, a);
+            unboxed = (short) a.asInt();
+        }
+
+        // concrete part
+        short_value.set(boxed, unboxed);
+
+        return boxed;
+    }
+
+
+    private static Field long_value = null;
+
+    public static StaticObject boxLong(Object unboxed, Meta meta) {
+        if (long_value == null) {
+            long_value = meta.java_lang_Long.lookupField(Symbol.Name.value, Symbol.Type._long);
+        }
+        StaticObject boxed = meta.java_lang_Long.allocateInstance();
+
+        // concolic part
+        if (unboxed instanceof AnnotatedValue) {
+            AnnotatedValue a = (AnnotatedValue) unboxed;
+            setFieldAnnotation(boxed, long_value, a);
+            unboxed = a.asLong();
+        }
+
+        // concrete part
+        long_value.set(boxed, unboxed);
+
+        return boxed;
+    }
 }
