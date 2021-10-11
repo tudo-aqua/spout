@@ -29,12 +29,13 @@ package com.oracle.truffle.espresso.substitutions;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.concolic.AnnotatedValue;
 import tools.aqua.concolic.Concolic;
 
 @EspressoSubstitutions
 public class Target_java_lang_String {
 
-    @Substitution(hasReceiver = true)
+    //@Substitution(hasReceiver = true)
     public static @Host(typeName = "Z") Object equals(
             @Host(String.class) StaticObject self,
             @Host(Object.class) StaticObject other,
@@ -51,4 +52,85 @@ public class Target_java_lang_String {
 
         return Concolic.stringEquals(self, other, meta);
     }
+
+    @Substitution(methodName = "valueOf")
+    @CompilerDirectives.TruffleBoundary
+    public static @Host(String.class) StaticObject valueOf_bool(@Host(typeName = "Z") Object v, @InjectMeta Meta meta) {
+        if (v instanceof AnnotatedValue) {
+            Concolic.stopRecording("concolic type conversion to string not supported, yet.", meta);
+        }
+        String ret = "" + (boolean) v;
+        return meta.toGuestString(ret);
+    }
+
+    @Substitution(methodName = "valueOf")
+    @CompilerDirectives.TruffleBoundary
+    public static @Host(String.class) StaticObject valueOf_byte(@Host(typeName = "B") Object v, @InjectMeta Meta meta) {
+        if (v instanceof AnnotatedValue) {
+            Concolic.stopRecording("concolic type conversion to string not supported, yet.", meta);
+        }
+        String ret = "" + (byte) v;
+        return meta.toGuestString(ret);
+    }
+
+    @Substitution(methodName = "valueOf")
+    @CompilerDirectives.TruffleBoundary
+    public static @Host(String.class) StaticObject valueOf_char(@Host(typeName = "C") Object v, @InjectMeta Meta meta) {
+        if (v instanceof AnnotatedValue) {
+            Concolic.stopRecording("concolic type conversion to string not supported, yet.", meta);
+        }
+        String ret = "" + (char) v;
+        return meta.toGuestString(ret);
+    }
+
+    @Substitution(methodName = "valueOf")
+    @CompilerDirectives.TruffleBoundary
+    public static @Host(String.class) StaticObject valueOf_short(@Host(typeName = "S") Object v, @InjectMeta Meta meta) {
+        if (v instanceof AnnotatedValue) {
+            Concolic.stopRecording("concolic type conversion to string not supported, yet.", meta);
+        }
+        String ret = "" + (short) v;
+        return meta.toGuestString(ret);
+    }
+
+    @Substitution(methodName = "valueOf")
+    @CompilerDirectives.TruffleBoundary
+    public static @Host(String.class) StaticObject valueOf_int(@Host(typeName = "I") Object v, @InjectMeta Meta meta) {
+        if (v instanceof AnnotatedValue) {
+            Concolic.stopRecording("concolic type conversion to string not supported, yet.", meta);
+        }
+        String ret = "" + (int) v;
+        return meta.toGuestString(ret);
+    }
+
+    @Substitution(methodName = "valueOf")
+    @CompilerDirectives.TruffleBoundary
+    public static @Host(String.class) StaticObject valueOf_long(@Host(typeName = "J") Object v, @InjectMeta Meta meta) {
+        if (v instanceof AnnotatedValue) {
+            Concolic.stopRecording("concolic type conversion to string not supported, yet.", meta);
+        }
+        String ret = "" + (long) v;
+        return meta.toGuestString(ret);
+    }
+
+    @Substitution(methodName = "valueOf")
+    @CompilerDirectives.TruffleBoundary
+    public static @Host(String.class) StaticObject valueOf_float(@Host(typeName = "F") Object v, @InjectMeta Meta meta) {
+        if (v instanceof AnnotatedValue) {
+            Concolic.stopRecording("concolic type conversion to string not supported, yet.", meta);
+        }
+        String ret = "" + (float) v;
+        return meta.toGuestString(ret);
+    }
+
+    @Substitution(methodName = "valueOf")
+    @CompilerDirectives.TruffleBoundary
+    public static @Host(String.class) StaticObject valueOf_double(@Host(typeName = "D") Object v, @InjectMeta Meta meta) {
+        if (v instanceof AnnotatedValue) {
+            Concolic.stopRecording("concolic type conversion to string not supported, yet.", meta);
+        }
+        String ret = "" + (double) v;
+        return meta.toGuestString(ret);
+    }
+
 }
