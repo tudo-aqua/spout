@@ -39,6 +39,7 @@ import com.oracle.truffle.espresso.perf.DebugCounter;
 import com.oracle.truffle.espresso.runtime.EspressoException;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import com.oracle.truffle.espresso.vm.VM;
+import tools.aqua.concolic.AnnotatedValue;
 import tools.aqua.concolic.Concolic;
 
 @EspressoSubstitutions
@@ -72,8 +73,34 @@ public final class Target_java_lang_System {
     }
 
     @Substitution
-    public static void arraycopy(@Host(Object.class) StaticObject src, int srcPos, @Host(Object.class) StaticObject dest, int destPos, int length,
+    public static void arraycopy(@Host(Object.class) StaticObject src, @Host(typeName = "I") Object oSrcPos,
+                                 @Host(Object.class) StaticObject dest, @Host(typeName = "I") Object oDestPos,
+                                 @Host(typeName = "I") Object oLength,
                     @InjectMeta Meta meta, @InjectProfile SubstitutionProfiler profiler) {
+
+        int srcPos = 0;
+        int destPos = 0;
+        int length = 0;
+
+        if (oSrcPos instanceof AnnotatedValue) {
+              Concolic.stopRecording("concolic System.arraycopy not supported, yet.", meta);
+        }
+        else {
+            srcPos = (int) oSrcPos;
+        }
+        if (oDestPos instanceof AnnotatedValue) {
+            Concolic.stopRecording("concolic System.arraycopy not supported, yet.", meta);
+        }
+        else {
+            destPos = (int) oDestPos;
+        }
+        if (oLength instanceof AnnotatedValue) {
+            Concolic.stopRecording("concolic System.arraycopy not supported, yet.", meta);
+        }
+        else {
+            length = (int) oLength;
+        }
+
         SYSTEM_ARRAYCOPY_COUNT.inc();
         try {
             doArrayCopy(src, srcPos, dest, destPos, length, meta, profiler);
