@@ -241,6 +241,10 @@ public class Concolic {
 
     @CompilerDirectives.TruffleBoundary
     public static StaticObject nextSymbolicString(Meta meta) {
+        if (true) {
+            stopRecording("Analysis of String constraints is not supported, yet.", meta);
+        }
+
         String concreteHost = "";
         if (countStringSeeds < seedStringValues.length) {
             concreteHost = seedStringValues[countStringSeeds];
