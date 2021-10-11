@@ -312,6 +312,8 @@ public enum OperatorComparator {
                 return "str.upper";
             case SAT:
                 return "str.at";
+            case SCONCAT:
+                return "str.++";
             case NAT2BV32:
                 return "(_ int2bv 32)";
             case BV2NAT:

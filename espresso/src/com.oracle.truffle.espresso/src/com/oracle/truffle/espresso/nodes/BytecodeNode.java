@@ -475,7 +475,7 @@ public final class BytecodeNode extends EspressoMethodNode {
                     Concolic.setLocalSymbolic(refs, curSlot, a);
                     arguments[i + receiverSlot] = a.asType(argType.byteAt(0));
                 }
-                switch (argType.byteAt(0)) {
+                switch (s) {
                     case 'Z' : setLocalInt(primitives, curSlot, ((boolean) arguments[i + receiverSlot]) ? 1 : 0); break;
                     case 'B' : setLocalInt(primitives, curSlot, ((byte) arguments[i + receiverSlot]));            break;
                     case 'S' : setLocalInt(primitives, curSlot, ((short) arguments[i + receiverSlot]));           break;
@@ -488,6 +488,7 @@ public final class BytecodeNode extends EspressoMethodNode {
                         CompilerDirectives.transferToInterpreter();
                         throw EspressoError.shouldNotReachHere("unexpected kind");
                 }
+
                 // @formatter:on
             } else {
                 // Reference type.
@@ -1520,6 +1521,7 @@ public final class BytecodeNode extends EspressoMethodNode {
                 }
                 // @formatter:on
             } catch (EspressoException | AbstractTruffleException | StackOverflowError | OutOfMemoryError e) {
+                print(e);
                 if (instrument != null && e instanceof EspressoException) {
                     instrument.notifyExceptionAt(frame, e, statementIndex);
                 }
@@ -1628,6 +1630,10 @@ public final class BytecodeNode extends EspressoMethodNode {
             top += Bytecodes.stackEffectOf(curOpcode);
             curBCI = targetBCI;
         }
+    }
+    @TruffleBoundary
+    private static void print(Throwable e){
+        e.printStackTrace();
     }
 
     private Object getReturnValueAsObject(long[] primitives, Object[] refs, int top) {

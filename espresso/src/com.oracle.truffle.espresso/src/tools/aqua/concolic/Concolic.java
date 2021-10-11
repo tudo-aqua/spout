@@ -41,13 +41,14 @@ import static tools.aqua.concolic.OperatorComparator.LE;
 import static tools.aqua.concolic.OperatorComparator.LT;
 import static tools.aqua.concolic.OperatorComparator.NAT2BV32;
 import static tools.aqua.concolic.OperatorComparator.SAT;
+import static tools.aqua.concolic.OperatorComparator.SCONCAT;
 import static tools.aqua.concolic.OperatorComparator.SLENGTH;
 import static tools.aqua.concolic.OperatorComparator.STOLOWER;
 import static tools.aqua.concolic.OperatorComparator.STOUPPER;
 
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
-import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.espresso.bytecode.BytecodeStream;
 import com.oracle.truffle.espresso.descriptors.Symbol;
 import com.oracle.truffle.espresso.impl.ArrayKlass;
@@ -1701,27 +1702,6 @@ public class Concolic {
     }
 
 
-    public static Object stringEquals(StaticObject self, StaticObject other, Meta meta) {
-        // FIXME: we currently do not track conditions for exceptions inside equals!
-        // FIXME: could be better to use method handle from meta?
-        boolean areEqual = meta.toHostString(self).equals(meta.toHostString(other));
-        if (self.getConcolicId() < 0 && other.getConcolicId() < 0) {
-            return areEqual;
-        }
-
-        Expression exprSelf = (self.getConcolicId() < 0) ?
-                Constant.fromConcreteValue(meta.toHostString(self)) :
-                symbolicObjects.get(self.getConcolicId())[ symbolicObjects.get(self.getConcolicId()).length -1 ].symbolic();
-        Expression exprOther = (other.getConcolicId() < 0) ?
-                Constant.fromConcreteValue(meta.toHostString(other)) :
-                symbolicObjects.get(other.getConcolicId())[ symbolicObjects.get(other.getConcolicId()).length -1 ].symbolic();
-
-        Expression symbolic = new ComplexExpression(OperatorComparator.STRINGEQ, exprSelf, exprOther);
-
-        return new AnnotatedValue(areEqual, symbolic);
-    }
-
-
     // --------------------------------------------------------------------------
     //
     // symbolic stack and var functions
@@ -1813,6 +1793,34 @@ public class Concolic {
     }
   }
 
+  // ---------------------- Symbolic Strings
+  // ----------------------------------------------------------
+  public static Object stringEquals(StaticObject self, StaticObject other, Meta meta) {
+    // FIXME: we currently do not track conditions for exceptions inside equals!
+    // FIXME: could be better to use method handle from meta?
+    boolean areEqual = meta.toHostString(self).equals(meta.toHostString(other));
+    if (self.getConcolicId() < 0 && other.getConcolicId() < 0) {
+      return areEqual;
+    }
+
+    Expression exprSelf =
+        (self.getConcolicId() < 0)
+            ? Constant.fromConcreteValue(meta.toHostString(self))
+            : symbolicObjects
+                .get(self.getConcolicId())[symbolicObjects.get(self.getConcolicId()).length - 2]
+                .symbolic();
+    Expression exprOther =
+        (other.getConcolicId() < 0)
+            ? Constant.fromConcreteValue(meta.toHostString(other))
+            : symbolicObjects
+                .get(other.getConcolicId())[symbolicObjects.get(other.getConcolicId()).length - 2]
+                .symbolic();
+
+    Expression symbolic = new ComplexExpression(OperatorComparator.STRINGEQ, exprSelf, exprOther);
+
+    return new AnnotatedValue(areEqual, symbolic);
+  }
+
   public static Object stringCharAt(StaticObject self, Object index, Meta meta) {
     String concreteString = meta.toHostString(self);
     int concreteIndex = 0;
@@ -1828,7 +1836,7 @@ public class Concolic {
       indexExpr = Constant.fromConcreteValue(concreteIndex);
     }
     if (!self.isConcolic()) { // && !index.isConcolic()) {
-      return  concreteString.charAt(concreteIndex);
+      return concreteString.charAt(concreteIndex);
     }
     Expression symbolicString = makeStringToExpr(self, meta);
 
@@ -1883,30 +1891,76 @@ public class Concolic {
     AnnotatedValue[] vals = symbolicObjects.get(concolicId);
     return vals[vals.length - 2].symbolic();
   }
-    @TruffleBoundary
-    public static Object characterToUpperCase(Object c, Meta meta) {
-        char convC;
-        if(c instanceof AnnotatedValue){
-            convC = (char) (int) ((AnnotatedValue) c).asRaw();
-            Expression symbolic = ((AnnotatedValue) c).symbolic();
-            return new AnnotatedValue(Character.toUpperCase(convC), new ComplexExpression(STOUPPER, symbolic));
-        }else{
-            convC = (char) c;
-            return Character.toUpperCase(convC);
-        }
+
+  public static Object characterToUpperCase(Object c, Meta meta) {
+    char convC;
+    if (c instanceof AnnotatedValue) {
+      convC = (char) (int) ((AnnotatedValue) c).asRaw();
+      Expression symbolic = ((AnnotatedValue) c).symbolic();
+      return new AnnotatedValue(
+          Character.toUpperCase(convC), new ComplexExpression(STOUPPER, symbolic));
+    } else {
+      convC = (char) c;
+      return Character.toUpperCase(convC);
     }
-    @TruffleBoundary
-    public static Object characterToLowerCase(Object c, Meta meta) {
-        char convC;
-        if(c instanceof AnnotatedValue){
-            convC = (char) (int) ((AnnotatedValue) c).asRaw();
-            Expression symbolic = ((AnnotatedValue) c).symbolic();
-            return new AnnotatedValue(Character.toLowerCase(convC), new ComplexExpression(STOLOWER, symbolic));
-        }else{
-            convC = (char) c;
-            return Character.toLowerCase(convC);
-        }
+
+  public static Object characterToLowerCase(Object c, Meta meta) {
+    char convC;
+    if (c instanceof AnnotatedValue) {
+      convC = (char) (int) ((AnnotatedValue) c).asRaw();
+      Expression symbolic = ((AnnotatedValue) c).symbolic();
+      return new AnnotatedValue(
+          Character.toLowerCase(convC), new ComplexExpression(STOLOWER, symbolic));
+    } else {
+      convC = (char) c;
+      return Character.toLowerCase(convC);
     }
+  }
+
+  public static void stringBuilderAppendString(
+      StaticObject self, StaticObject string, DirectCallNode originalToString, Meta meta) {
+    if (!self.isConcolic() && !string.isConcolic()) {
+      // Nothing to do for pure concrete execution
+      return;
+    }
+    Expression strAddition = makeStringToExpr(string, meta);
+    Expression strBuilder;
+    if (self.isConcolic()) {
+      AnnotatedValue[] a = symbolicObjects.get(self.getConcolicId());
+      strBuilder = a[a.length - 1].symbolic();
+      a[a.length - 1] =
+          new AnnotatedValue(null, new ComplexExpression(SCONCAT, strBuilder, strAddition));
+      symbolicObjects.set(self.getConcolicId(), a);
+    } else {
+      String content = meta.toHostString((StaticObject) originalToString.call(self));
+      strBuilder = Constant.fromConcreteValue(content);
+      int lengthAnnotations = ((ObjectKlass) self.getKlass()).getFieldTable().length + 1;
+      AnnotatedValue[] annotation = new AnnotatedValue[lengthAnnotations];
+      annotation[lengthAnnotations - 1] =
+          new AnnotatedValue(null, new ComplexExpression(SCONCAT, strBuilder, strAddition));
+      self.setConcolicId(symbolicObjects.size());
+      symbolicObjects.add(annotation);
+    }
+    return;
+  }
+
+  public static Object stringBuilderToString(StaticObject self, String concrete, Meta meta) {
+    StaticObject gConcrete = meta.toGuestString(concrete);
+    if (self.isConcolic()) {
+      AnnotatedValue[] annotationsBuilder = symbolicObjects.get(self.getConcolicId());
+      Expression symbolicString = annotationsBuilder[annotationsBuilder.length - 1].symbolic();
+      Expression symbolicStringLength =
+          new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, symbolicString));
+      int lengthAnnotations = ((ObjectKlass) self.getKlass()).getFieldTable().length + 2;
+      AnnotatedValue[] annotationsString = new AnnotatedValue[lengthAnnotations];
+      annotationsString[lengthAnnotations - 2] = new AnnotatedValue(gConcrete, symbolicString);
+      annotationsString[lengthAnnotations - 1] =
+          new AnnotatedValue(concrete.length(), symbolicStringLength);
+      gConcrete.setConcolicId(symbolicObjects.size());
+      symbolicObjects.add(annotationsString);
+    }
+    return gConcrete;
+  }
 
     private static Field integer_value = null;
 
@@ -2015,7 +2069,6 @@ public class Concolic {
 
         return boxed;
     }
-
 
 
 }

@@ -105,6 +105,13 @@ public final class Target_java_lang_System {
         }
 
         SYSTEM_ARRAYCOPY_COUNT.inc();
+        int length;
+        if(olength instanceof AnnotatedValue){
+            //For the concrete Execution, we do not need a symbolic array??
+            length = ((AnnotatedValue) olength).asInt();
+        }else{
+            length = (int) olength;
+        }
         try {
             doArrayCopy(src, srcPos, dest, destPos, length, meta, profiler);
             Concolic.doArrayCopy(src, srcPos, dest, destPos, length);

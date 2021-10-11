@@ -182,6 +182,19 @@ public final class Meta implements ContextAccess {
             java_lang_String_COMPACT_STRINGS = null;
         }
 
+        java_lang_StringBuilder = knownKlass(Type.java_lang_StringBuilder);
+        java_lang_AbstractStringBuilder = knownKlass(Type.java_lang_AbstractStringBuilder);
+        java_lang_AbstractStringBuilder_append_string = java_lang_AbstractStringBuilder.requireDeclaredMethod(Name.append, Signature.AbstractStringBuilder_String);
+        java_lang_AbstractStringBuilder_getValue = java_lang_AbstractStringBuilder.requireDeclaredMethod(Name.getValue, Signature._byte_array);
+        java_lang_AbstractStringBuilder_length = java_lang_AbstractStringBuilder.requireDeclaredMethod(Name.length, Signature._int);
+        java_lang_AbstractStringBuilder_isLatin1 = java_lang_AbstractStringBuilder.requireDeclaredMethod(Name.isLatin1, Signature._boolean);
+        java_lang_StringBuilder_toString = java_lang_StringBuilder.requireDeclaredMethod(Name.toString, Signature.String);
+
+        java_lang_StringLatin1 = knownKlass(Type.java_lang_StringLatin1);
+        java_lang_StringLatin1_newString = java_lang_StringLatin1.requireDeclaredMethod(Name.newString, Signature.String_byte_array_int_int);
+        java_lang_StringUTF16 = knownKlass(Type.java_lang_StringUTF16);
+        java_lang_StringUTF16_newString = java_lang_StringUTF16.requireDeclaredMethod(Name.newString, Signature.String_byte_array_int_int);
+
         java_lang_Throwable = knownKlass(Type.java_lang_Throwable);
         java_lang_Throwable_getStackTrace = java_lang_Throwable.requireDeclaredMethod(Name.getStackTrace, Signature.StackTraceElement_array);
         HIDDEN_FRAMES = java_lang_Throwable.requireHiddenField(Name.HIDDEN_FRAMES);
@@ -801,6 +814,10 @@ public final class Meta implements ContextAccess {
     public final ArrayKlass java_lang_Object_array;
 
     public final ObjectKlass java_lang_String;
+    public final ObjectKlass java_lang_StringBuilder;
+    public final ObjectKlass java_lang_AbstractStringBuilder;
+    public final ObjectKlass java_lang_StringLatin1;
+    public final ObjectKlass java_lang_StringUTF16;
     public final ObjectKlass java_lang_Class;
     public final Field HIDDEN_MIRROR_KLASS;
     public final Field HIDDEN_PROTECTION_DOMAIN;
@@ -885,6 +902,17 @@ public final class Meta implements ContextAccess {
     public final Method java_lang_String_equals;
     public final Method java_lang_String_indexOf;
     public final Method java_lang_String_init_char_array;
+
+    //Guest StringBuilder
+
+    public final Method java_lang_AbstractStringBuilder_append_string;
+    public final Method java_lang_AbstractStringBuilder_isLatin1;
+    public final Method java_lang_AbstractStringBuilder_getValue;
+    public final Method java_lang_AbstractStringBuilder_length;
+    public final Method java_lang_StringBuilder_toString;
+    public final Method java_lang_StringLatin1_newString;
+    public final Method java_lang_StringUTF16_newString;
+
 
     public final ObjectKlass java_lang_ClassLoader;
     public final Field java_lang_ClassLoader_parent;
