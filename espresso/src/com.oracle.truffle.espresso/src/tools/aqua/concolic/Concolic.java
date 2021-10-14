@@ -549,8 +549,7 @@ public class Concolic {
     private static void parseChars(String[] valsAsStr, boolean b64) {
         seedsCharValues = new int[valsAsStr.length];
         for (int i=0; i<valsAsStr.length; i++) {
-            //TODO: not sure if this is correct
-            seedsCharValues[i] = valsAsStr[i].trim().charAt(0);
+            seedsCharValues[i] = Integer.valueOf(b64 ? b64decode(valsAsStr[i].trim()) :  valsAsStr[i].trim());
         }
     }
 
