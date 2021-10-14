@@ -472,7 +472,7 @@ public final class BytecodeNode extends EspressoMethodNode {
                 if (arguments[i + receiverSlot] instanceof AnnotatedValue) {
                     AnnotatedValue a = (AnnotatedValue) arguments[i + receiverSlot];
                     Concolic.setLocalSymbolic(refs, curSlot, a);
-                    arguments[i + receiverSlot] = a.asRaw();
+                    arguments[i + receiverSlot] = a.asType(argType.byteAt(0));
                 }
                 switch (argType.byteAt(0)) {
                     case 'Z' : setLocalInt(primitives, curSlot, ((boolean) arguments[i + receiverSlot]) ? 1 : 0); break;

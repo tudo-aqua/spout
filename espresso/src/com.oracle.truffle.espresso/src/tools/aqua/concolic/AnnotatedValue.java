@@ -23,6 +23,7 @@
  */
 package tools.aqua.concolic;
 
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 
@@ -52,6 +53,22 @@ public class AnnotatedValue {
         return (long) concrete;
     }
 
+    public Object asType(byte b) {
+        switch (b) {
+            case 'Z' : return asRaw(); //FIXME: MAGIC???
+            case 'B' : return (byte) asInt();
+            case 'S' : return (short) asInt();
+            case 'C' : return (char) asInt();
+            case 'I' : return asInt();
+            case 'F' : return asFloat();
+            case 'J' : return asLong();
+            case 'D' : return asDouble();
+            default      :
+                CompilerDirectives.transferToInterpreter();
+                throw EspressoError.shouldNotReachHere("unexpected kind");
+        }
+    }
+
     public int asInt() {
         if (concrete instanceof Boolean) {
             // FIXME: should never happen!
@@ -60,7 +77,22 @@ public class AnnotatedValue {
         if (concrete instanceof Byte) {
             return ((Byte)concrete);
         }
-        return (int) concrete;
+        if (concrete instanceof Character) {
+            return ((Character)concrete);
+        }
+        if (concrete instanceof Short) {
+            return ((Short)concrete);
+        }
+        if (concrete instanceof  Integer) {
+            return ((Integer) concrete);
+        }
+        return error();
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public int error() {
+        throw EspressoError.shouldNotReachHere("unexpected int type: " +
+                concrete.getClass().getSimpleName());
     }
 
     public float asFloat() {
