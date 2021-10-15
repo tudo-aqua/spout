@@ -88,6 +88,9 @@ public enum OperatorComparator {
     BEQUIV,
     BIMPLIES,
     // Casting
+    I2B,
+    I2S,
+    I2C,
     I2L,
     I2F,
     I2D,
@@ -225,6 +228,11 @@ public enum OperatorComparator {
                 return "bvslt";
             case BVLE:
                 return "bvsle";
+            case I2B:
+                return "(_ extract 7 0)";
+            case I2C:
+            case I2S:
+                return "(_ extract 15 0)";
             case I2L:
                 return "(_ sign_extend 32)";
             case I2F:
@@ -234,7 +242,7 @@ public enum OperatorComparator {
             case L2D:
                 return "(_ to_fp 11 53)";
             case L2I:
-                return "(_ extract 32)"; // FIXME: signed?
+                return "(_ extract 31 0)";
             case F2I:
             case D2I:
                 return "(_ fp.to_sbv 32) (RNE RoundingMode)";

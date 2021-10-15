@@ -1119,13 +1119,15 @@ public class Concolic {
         setLocalSymbolic(symbolic, index, symbResult);
     }
 
+    // TODO: Should be correct
     // case I2L: putLong(stack, top - 1, popInt(stack, top - 1)); break;
     public static void i2l(long[] primitives, Object[] symbolic, int top) {
         int c1 = BytecodeNode.popInt(primitives, top - 1);
         BytecodeNode.putLong(primitives, top -1, c1);
-        putSymbolic(symbolic, top-1, unarySymbolicOp(OperatorComparator.I2L, c1, popSymbolic(symbolic, top -1)));
+        putSymbolic(symbolic, top, unarySymbolicOp(OperatorComparator.I2L, c1, popSymbolic(symbolic, top -1)));
     }
 
+    // TODO: Should be correct
     // case I2F: putFloat(stack, top - 1, popInt(stack, top - 1)); break;
     public static void i2f(long[] primitives, Object[] symbolic, int top) {
         float c1 = BytecodeNode.popInt(primitives, top - 1);
@@ -1133,13 +1135,17 @@ public class Concolic {
         putSymbolic(symbolic, top-1, unarySymbolicOp(OperatorComparator.I2F, c1, popSymbolic(symbolic, top -1)));
     }
 
+    // TODO: Should be correct
     // case I2D: putDouble(stack, top - 1, popInt(stack, top - 1)); break;
     public static void i2d(long[] primitives, Object[] symbolic, int top) {
         double c1 = BytecodeNode.popInt(primitives, top - 1);
         BytecodeNode.putDouble(primitives, top -1, c1);
-        putSymbolic(symbolic, top, unarySymbolicOp(OperatorComparator.I2D, c1, popSymbolic(symbolic, top -1)));
+        putSymbolic(symbolic, top,
+                unarySymbolicOp(OperatorComparator.L2D, c1, unarySymbolicOp(
+                        OperatorComparator.I2L, c1, popSymbolic(symbolic, top -1))));
     }
 
+    // TODO: Should be correct
     // case L2I: putInt(stack, top - 2, (int) popLong(stack, top - 1)); break;
     public static void l2i(long[] primitives, Object[] symbolic, int top) {
         int c1 = (int) BytecodeNode.popLong(primitives, top - 1);
@@ -1147,13 +1153,23 @@ public class Concolic {
         putSymbolic(symbolic, top-2, unarySymbolicOp(OperatorComparator.L2I, c1, popSymbolic(symbolic, top -1)));
     }
 
+    // TODO: needs to be tested. Likely incorrect
+    /*
+    The value on the top of the operand stack must be of type long.
+    It is popped from the operand stack and converted to a float result
+    using IEEE 754 round to nearest mode. The result is pushed onto the
+    operand stack.
+     */
     // case L2F: putFloat(stack, top - 2, popLong(stack, top - 1)); break;
     public static void l2f(long[] primitives, Object[] symbolic, int top) {
         float c1 = (float) BytecodeNode.popLong(primitives, top - 1);
         BytecodeNode.putFloat(primitives, top -2, c1);
-        putSymbolic(symbolic, top-2, unarySymbolicOp(OperatorComparator.L2F, c1, popSymbolic(symbolic, top -1)));
+        putSymbolic(symbolic, top-2,
+                unarySymbolicOp(OperatorComparator.D2F, c1, unarySymbolicOp(
+                        OperatorComparator.L2D, c1, popSymbolic(symbolic, top -1))));
     }
 
+    // TODO: Should be correct
     // case L2D: putDouble(stack, top - 2, popLong(stack, top - 1)); break;
     public static void l2d(long[] primitives, Object[] symbolic, int top) {
         double c1 = (double) BytecodeNode.popLong(primitives, top - 1);
@@ -1162,6 +1178,19 @@ public class Concolic {
     }
 
     // case F2I: putInt(stack, top - 1, (int) popFloat(stack, top - 1)); break;
+    // TODO: needs to be tested. Likely incorrect
+    /*
+    If the value' is NaN, the result of the conversion is an int 0.
+    Otherwise, if the value' is not an infinity, it is rounded to an
+    integer value V, rounding towards zero using IEEE 754 round towards
+    zero mode. If this integer value V can be represented as an int, then
+    the result is the int value V.
+    Otherwise, either the value' must be too small (a negative value of
+    large magnitude or negative infinity), and the result is the smallest
+    representable value of type int, or the value' must be too large
+    (a positive value of large magnitude or positive infinity), and the
+    result is the largest representable value of type int.
+    */
     public static void f2i(long[] primitives, Object[] symbolic, int top) {
         int c1 = (int) BytecodeNode.popFloat(primitives, top - 1);
         BytecodeNode.putInt(primitives, top -1, c1);
@@ -1169,12 +1198,27 @@ public class Concolic {
     }
 
     // case F2L: putLong(stack, top - 1, (long) popFloat(stack, top - 1)); break;
+    // TODO: needs to be tested. Likely incorrect
+    /*
+    If the value' is NaN, the result of the conversion is a long 0.
+    Otherwise, if the value' is not an infinity, it is rounded to an
+    integer value V, rounding towards zero using IEEE 754 round towards
+    zero mode. If this integer value V can be represented as a long, then
+    the result is the long value V.
+    Otherwise, either the value' must be too small (a negative value of
+    large magnitude or negative infinity), and the result is the smallest
+    representable value of type long, or the value' must be too large
+    (a positive value of large magnitude or positive infinity), and the
+    result is the largest representable value of type long.
+    */
     public static void f2l(long[] primitives, Object[] symbolic, int top) {
         long c1 = (long) BytecodeNode.popFloat(primitives, top - 1);
         BytecodeNode.putLong(primitives, top -1, c1);
         putSymbolic(symbolic, top, unarySymbolicOp(OperatorComparator.F2L, c1, popSymbolic(symbolic, top -1)));
     }
 
+
+    // TODO: Should be correct
     // case F2D: putDouble(stack, top - 1, popFloat(stack, top - 1)); break;
     public static void f2d(long[] primitives, Object[] symbolic, int top) {
         double c1 = BytecodeNode.popFloat(primitives, top - 1);
@@ -1183,6 +1227,19 @@ public class Concolic {
     }
 
     // case D2I: putInt(stack, top - 2, (int) popDouble(stack, top - 1)); break;
+    // TODO: needs to be tested. Likely incorrect
+    /*
+    If the value' is NaN, the result of the conversion is an int 0.
+    Otherwise, if the value' is not an infinity, it is rounded to
+    an integer value V, rounding towards zero using IEEE 754 round
+    towards zero mode. If this integer value V can be represented
+    as an int, then the result is the int value V.
+    Otherwise, either the value' must be too small (a negative value
+    of large magnitude or negative infinity), and the result is the
+    smallest representable value of type int, or the value' must be
+    too large (a positive value of large magnitude or positive infinity),
+    and the result is the largest representable value of type int.
+    */
     public static void d2i(long[] primitives, Object[] symbolic, int top) {
         int c1 = (int) BytecodeNode.popDouble(primitives, top - 1);
         BytecodeNode.putInt(primitives, top -2, c1);
@@ -1190,6 +1247,19 @@ public class Concolic {
     }
 
     // case D2L: putLong(stack, top - 2, (long) popDouble(stack, top - 1)); break;
+    // TODO: needs to be tested. Likely incorrect
+    /*
+    If the value' is NaN, the result of the conversion is a long 0.
+    Otherwise, if the value' is not an infinity, it is rounded to an
+    integer value V, rounding towards zero using IEEE 754 round towards
+    zero mode. If this integer value V can be represented as a long, then
+    the result is the long value V.
+    Otherwise, either the value' must be too small (a negative value of
+    large magnitude or negative infinity), and the result is the smallest
+    representable value of type long, or the value' must be too large
+    (a positive value of large magnitude or positive infinity), and the
+    result is the largest representable value of type long.
+    */
     public static void d2l(long[] primitives, Object[] symbolic, int top) {
         long c1 = (long) BytecodeNode.popDouble(primitives, top - 1);
         BytecodeNode.putLong(primitives, top -2, c1);
@@ -1197,31 +1267,61 @@ public class Concolic {
     }
 
     // case D2F: putFloat(stack, top - 2, (float) popDouble(stack, top - 1)); break;
+    // TODO: needs to be tested. Likely incorrect
+    /*
+    The value on the top of the operand stack must be of type double.
+    It is popped from the operand stack and undergoes value set conversion
+    (§2.8.3) resulting in value'. Then value' is converted to a float result
+    using IEEE 754 round to nearest mode. The result is pushed onto the
+    operand stack.
+
+    Where an d2f instruction is FP-strict (§2.8.2), the result of the conversion
+    is always rounded to the nearest representable value in the float value set
+    (§2.3.2).
+
+    Where an d2f instruction is not FP-strict, the result of the conversion may
+    be taken from the float-extended-exponent value set (§2.3.2); it is not
+    necessarily rounded to the nearest representable value in the float value set.
+
+    A finite value' too small to be represented as a float is converted to a zero
+    of the same sign; a finite value' too large to be represented as a float is
+    converted to an infinity of the same sign. A double NaN is converted to a
+    float NaN.
+    */
     public static void d2f(long[] primitives, Object[] symbolic, int top) {
         float c1 = (float) BytecodeNode.popDouble(primitives, top - 1);
         BytecodeNode.putFloat(primitives, top -2, c1);
         putSymbolic(symbolic, top-2, unarySymbolicOp(OperatorComparator.D2F, c1, popSymbolic(symbolic, top -1)));
     }
 
+    // TODO: Should be correct
     // case I2B: putInt(stack, top - 1, (byte) popInt(stack, top - 1)); break;
     public static void i2b(long[] primitives, Object[] symbolic, int top) {
         byte c1 = (byte) BytecodeNode.popInt(primitives, top - 1);
         BytecodeNode.putInt(primitives, top -1, c1);
-        putSymbolic(symbolic, top-1, binarySymbolicOp(OperatorComparator.IAND, c1, popSymbolic(symbolic, top -1), Constant.INT_BYTE_MAX));
+        putSymbolic(symbolic, top-1,
+                unarySymbolicOp(OperatorComparator.B2I, c1, unarySymbolicOp(
+                        OperatorComparator.I2B, c1, popSymbolic(symbolic, top -1))));
     }
 
+    // TODO: Should be correct
     // case I2C: putInt(stack, top - 1, (char) popInt(stack, top - 1)); break;
     public static void i2c(long[] primitives, Object[] symbolic, int top) {
         char c1 = (char) BytecodeNode.popInt(primitives, top - 1);
         BytecodeNode.putInt(primitives, top -1, c1);
-        putSymbolic(symbolic, top-1, binarySymbolicOp(OperatorComparator.IAND, c1, popSymbolic(symbolic, top -1), Constant.INT_CHAR_MAX));
+        putSymbolic(symbolic, top-1,
+                unarySymbolicOp(OperatorComparator.C2I, c1, unarySymbolicOp(
+                        OperatorComparator.I2C, c1, popSymbolic(symbolic, top -1))));
     }
 
+    // TODO: Should be correct
     // case I2S: putInt(stack, top - 1, (short) popInt(stack, top - 1)); break;
     public static void i2s(long[] primitives, Object[] symbolic, int top) {
         short c1 = (short) BytecodeNode.popInt(primitives, top - 1);
         BytecodeNode.putInt(primitives, top -1, c1);
-        putSymbolic(symbolic, top-1, binarySymbolicOp(OperatorComparator.IAND, c1, popSymbolic(symbolic, top -1), Constant.INT_SHORT_MAX));
+        putSymbolic(symbolic, top-1,
+                unarySymbolicOp(OperatorComparator.S2I, c1, unarySymbolicOp(
+                        OperatorComparator.I2S, c1, popSymbolic(symbolic, top -1))));
     }
 
     // case LCMP : putInt(stack, top - 4, compareLong(popLong(stack, top - 1), popLong(stack, top - 3))); break;
