@@ -33,6 +33,12 @@ public abstract class Constant extends Atom {
     public final static IntConstant INT_SHORT_MAX = new IntConstant(32767);
     public final static IntConstant INT_CHAR_MAX = new IntConstant(65535);
 
+    public final static IntConstant INT_MIN = new IntConstant(Integer.MIN_VALUE);
+    public final static IntConstant INT_MAX = new IntConstant(Integer.MAX_VALUE);
+    public final static LongConstant LONG_MIN = new LongConstant(Long.MIN_VALUE);
+    public final static LongConstant LONG_MAX = new LongConstant(Long.MAX_VALUE);
+
+
     public final static LongConstant LONG_ZERO = new LongConstant(0L);
 
     private final static class IntConstant extends Constant {

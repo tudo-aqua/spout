@@ -103,14 +103,24 @@ public enum OperatorComparator {
     D2I,
     D2L,
     D2F,
-    // solved through bitmasks
-    //I2B,
-    //I2C,
-    //I2S,
     // upcast (not in JVM -- for constraint solving)
     B2I,
     S2I,
     C2I,
+    // casting helpers
+    FP_ISNAN,
+    FP_ISNEG,
+    FP_MIN,
+    FP_MAX,
+    F2I_RTZ,
+    F2L_RTZ,
+    D2I_RTZ,
+    D2L_RTZ,
+    I2F_RTZ,
+    L2F_RTZ,
+    I2D_RTZ,
+    L2D_RTZ,
+    ITE,
     // CMP (In JVM -- eliminated before export)
     LCMP,
     FCMPL,
@@ -237,10 +247,10 @@ public enum OperatorComparator {
                 return "(_ sign_extend 32)";
             case I2F:
             case L2F:
-                return "(_ to_fp 8 24)";
+                return "(_ to_fp 8 24) (RNE RoundingMode)";
             case I2D:
             case L2D:
-                return "(_ to_fp 11 53)";
+                return "(_ to_fp 11 53) (RNE RoundingMode)";
             case L2I:
                 return "(_ extract 31 0)";
             case F2I:
@@ -253,6 +263,29 @@ public enum OperatorComparator {
                 return "(_ to_fp 11 53) (RNE RoundingMode)";
             case D2F:
                 return "(_ to_fp 8 24) (RNE RoundingMode)";
+
+            case FP_ISNAN:
+                return "fp.isNaN";
+            case FP_ISNEG:
+                return "fp.isNegative";
+            case FP_MIN:
+                return "fp.min";
+            case FP_MAX:
+                return "fp.max";
+            case F2I_RTZ:
+            case D2I_RTZ:
+                return "(_ fp.to_sbv 32) (RTZ RoundingMode)";
+            case F2L_RTZ:
+            case D2L_RTZ:
+                return "(_ fp.to_sbv 64) (RTZ RoundingMode)";
+            case I2F_RTZ:
+            case L2F_RTZ:
+                return "(_ to_fp 8 24) (RTZ RoundingMode)";
+            case I2D_RTZ:
+            case L2D_RTZ:
+                return "(_ to_fp 11 53) (RTZ RoundingMode)";
+            case ITE:
+                return "ite";
             case B2I:
                 return "(_ sign_extend 24)";
             case S2I:
@@ -270,6 +303,8 @@ public enum OperatorComparator {
                 return super.toString();
         }
     }
+
+    // RTZ RoundingMode
 
     static EnumSet<OperatorComparator> boolOps = EnumSet.of(BVEQ, STRINGEQ, BVNE, STRINGNE, BVLT, BVLE, BVGT, BVGE, BNEG, BAND, BOR, BXOR, BEQUIV, BIMPLIES);
 

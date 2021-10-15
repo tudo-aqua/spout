@@ -1119,7 +1119,6 @@ public class Concolic {
         setLocalSymbolic(symbolic, index, symbResult);
     }
 
-    // TODO: Should be correct
     // case I2L: putLong(stack, top - 1, popInt(stack, top - 1)); break;
     public static void i2l(long[] primitives, Object[] symbolic, int top) {
         int c1 = BytecodeNode.popInt(primitives, top - 1);
@@ -1127,7 +1126,6 @@ public class Concolic {
         putSymbolic(symbolic, top, unarySymbolicOp(OperatorComparator.I2L, c1, popSymbolic(symbolic, top -1)));
     }
 
-    // TODO: Should be correct
     // case I2F: putFloat(stack, top - 1, popInt(stack, top - 1)); break;
     public static void i2f(long[] primitives, Object[] symbolic, int top) {
         float c1 = BytecodeNode.popInt(primitives, top - 1);
@@ -1135,17 +1133,13 @@ public class Concolic {
         putSymbolic(symbolic, top-1, unarySymbolicOp(OperatorComparator.I2F, c1, popSymbolic(symbolic, top -1)));
     }
 
-    // TODO: Should be correct
     // case I2D: putDouble(stack, top - 1, popInt(stack, top - 1)); break;
     public static void i2d(long[] primitives, Object[] symbolic, int top) {
         double c1 = BytecodeNode.popInt(primitives, top - 1);
         BytecodeNode.putDouble(primitives, top -1, c1);
-        putSymbolic(symbolic, top,
-                unarySymbolicOp(OperatorComparator.L2D, c1, unarySymbolicOp(
-                        OperatorComparator.I2L, c1, popSymbolic(symbolic, top -1))));
+        putSymbolic(symbolic, top, unarySymbolicOp(OperatorComparator.I2D, c1, popSymbolic(symbolic, top -1)));
     }
 
-    // TODO: Should be correct
     // case L2I: putInt(stack, top - 2, (int) popLong(stack, top - 1)); break;
     public static void l2i(long[] primitives, Object[] symbolic, int top) {
         int c1 = (int) BytecodeNode.popLong(primitives, top - 1);
@@ -1153,23 +1147,13 @@ public class Concolic {
         putSymbolic(symbolic, top-2, unarySymbolicOp(OperatorComparator.L2I, c1, popSymbolic(symbolic, top -1)));
     }
 
-    // TODO: needs to be tested. Likely incorrect
-    /*
-    The value on the top of the operand stack must be of type long.
-    It is popped from the operand stack and converted to a float result
-    using IEEE 754 round to nearest mode. The result is pushed onto the
-    operand stack.
-     */
     // case L2F: putFloat(stack, top - 2, popLong(stack, top - 1)); break;
     public static void l2f(long[] primitives, Object[] symbolic, int top) {
         float c1 = (float) BytecodeNode.popLong(primitives, top - 1);
         BytecodeNode.putFloat(primitives, top -2, c1);
-        putSymbolic(symbolic, top-2,
-                unarySymbolicOp(OperatorComparator.D2F, c1, unarySymbolicOp(
-                        OperatorComparator.L2D, c1, popSymbolic(symbolic, top -1))));
+        putSymbolic(symbolic, top-2, unarySymbolicOp(OperatorComparator.L2F, c1, popSymbolic(symbolic, top -1)));
     }
 
-    // TODO: Should be correct
     // case L2D: putDouble(stack, top - 2, popLong(stack, top - 1)); break;
     public static void l2d(long[] primitives, Object[] symbolic, int top) {
         double c1 = (double) BytecodeNode.popLong(primitives, top - 1);
@@ -1178,7 +1162,7 @@ public class Concolic {
     }
 
     // case F2I: putInt(stack, top - 1, (int) popFloat(stack, top - 1)); break;
-    // TODO: needs to be tested. Likely incorrect
+    // TODO: needs to be tested.
     /*
     If the value' is NaN, the result of the conversion is an int 0.
     Otherwise, if the value' is not an infinity, it is rounded to an
@@ -1194,11 +1178,34 @@ public class Concolic {
     public static void f2i(long[] primitives, Object[] symbolic, int top) {
         int c1 = (int) BytecodeNode.popFloat(primitives, top - 1);
         BytecodeNode.putInt(primitives, top -1, c1);
-        putSymbolic(symbolic, top-1, unarySymbolicOp(OperatorComparator.F2I, c1, popSymbolic(symbolic, top -1)));
+        AnnotatedValue s1 = popSymbolic(symbolic, top -1);
+        if (s1 == null) {
+            return;
+        }
+
+        ComplexExpression intMinAsFloat = new ComplexExpression(OperatorComparator.I2F_RTZ, Constant.INT_MIN);
+        ComplexExpression intMaxAsFloat = new ComplexExpression(OperatorComparator.I2F_RTZ, Constant.INT_MAX);
+        ComplexExpression rtz = new ComplexExpression(OperatorComparator.F2I_RTZ, s1.symbolic());
+
+        ComplexExpression cast = new ComplexExpression(OperatorComparator.ITE,
+            /* cond */ new ComplexExpression(OperatorComparator.FP_ISNAN, s1.symbolic()),
+            /* then */ Constant.INT_ZERO,
+            /* else */ new ComplexExpression(OperatorComparator.ITE,
+                /* cond */ new ComplexExpression(OperatorComparator.FP_ISNEG, s1.symbolic()),
+                /* then */ new ComplexExpression(OperatorComparator.ITE,
+                    /* cond */ new ComplexExpression(OperatorComparator.FPLT , s1.symbolic(), intMinAsFloat),
+                    /* then */ Constant.INT_MIN,
+                    /* else */ rtz),
+                /* else */ new ComplexExpression(OperatorComparator.ITE,
+                    /* cond */ new ComplexExpression(OperatorComparator.FPGT, s1.symbolic(), intMaxAsFloat),
+                    /* then */ Constant.INT_MAX,
+                    /* else */ rtz)));
+
+        putSymbolic(symbolic, top-1, new AnnotatedValue( c1, cast));
     }
 
     // case F2L: putLong(stack, top - 1, (long) popFloat(stack, top - 1)); break;
-    // TODO: needs to be tested. Likely incorrect
+    // TODO: needs to be tested.
     /*
     If the value' is NaN, the result of the conversion is a long 0.
     Otherwise, if the value' is not an infinity, it is rounded to an
@@ -1214,11 +1221,32 @@ public class Concolic {
     public static void f2l(long[] primitives, Object[] symbolic, int top) {
         long c1 = (long) BytecodeNode.popFloat(primitives, top - 1);
         BytecodeNode.putLong(primitives, top -1, c1);
-        putSymbolic(symbolic, top, unarySymbolicOp(OperatorComparator.F2L, c1, popSymbolic(symbolic, top -1)));
+        AnnotatedValue s1 = popSymbolic(symbolic, top -1);
+        if (s1 == null) {
+            return;
+        }
+
+        ComplexExpression longMinAsFloat = new ComplexExpression(OperatorComparator.L2F_RTZ, Constant.LONG_MIN);
+        ComplexExpression longMaxAsFloat = new ComplexExpression(OperatorComparator.L2F_RTZ, Constant.LONG_MAX);
+        ComplexExpression rtz = new ComplexExpression(OperatorComparator.F2L_RTZ, s1.symbolic());
+
+        ComplexExpression cast = new ComplexExpression(OperatorComparator.ITE,
+                /* cond */ new ComplexExpression(OperatorComparator.FP_ISNAN, s1.symbolic()),
+                /* then */ Constant.LONG_ZERO,
+                /* else */ new ComplexExpression(OperatorComparator.ITE,
+                /* cond */ new ComplexExpression(OperatorComparator.FP_ISNEG, s1.symbolic()),
+                /* then */ new ComplexExpression(OperatorComparator.ITE,
+                /* cond */ new ComplexExpression(OperatorComparator.FPLT , s1.symbolic(), longMinAsFloat),
+                /* then */ Constant.LONG_MIN,
+                /* else */ rtz),
+                /* else */ new ComplexExpression(OperatorComparator.ITE,
+                /* cond */ new ComplexExpression(OperatorComparator.FPGT, s1.symbolic(), longMaxAsFloat),
+                /* then */ Constant.LONG_MAX,
+                /* else */ rtz)));
+
+        putSymbolic(symbolic, top, new AnnotatedValue(c1, cast));
     }
 
-
-    // TODO: Should be correct
     // case F2D: putDouble(stack, top - 1, popFloat(stack, top - 1)); break;
     public static void f2d(long[] primitives, Object[] symbolic, int top) {
         double c1 = BytecodeNode.popFloat(primitives, top - 1);
@@ -1227,7 +1255,7 @@ public class Concolic {
     }
 
     // case D2I: putInt(stack, top - 2, (int) popDouble(stack, top - 1)); break;
-    // TODO: needs to be tested. Likely incorrect
+    // TODO: needs to be tested.
     /*
     If the value' is NaN, the result of the conversion is an int 0.
     Otherwise, if the value' is not an infinity, it is rounded to
@@ -1243,11 +1271,34 @@ public class Concolic {
     public static void d2i(long[] primitives, Object[] symbolic, int top) {
         int c1 = (int) BytecodeNode.popDouble(primitives, top - 1);
         BytecodeNode.putInt(primitives, top -2, c1);
-        putSymbolic(symbolic, top-2, unarySymbolicOp(OperatorComparator.D2I, c1, popSymbolic(symbolic, top -1)));
+        AnnotatedValue s1 = popSymbolic(symbolic, top -1);
+        if (s1 == null) {
+            return;
+        }
+
+        ComplexExpression intMinAsFloat = new ComplexExpression(OperatorComparator.I2D_RTZ, Constant.INT_MIN);
+        ComplexExpression intMaxAsFloat = new ComplexExpression(OperatorComparator.I2D_RTZ, Constant.INT_MAX);
+        ComplexExpression rtz = new ComplexExpression(OperatorComparator.D2I_RTZ, s1.symbolic());
+
+        ComplexExpression cast = new ComplexExpression(OperatorComparator.ITE,
+                /* cond */ new ComplexExpression(OperatorComparator.FP_ISNAN, s1.symbolic()),
+                /* then */ Constant.INT_ZERO,
+                /* else */ new ComplexExpression(OperatorComparator.ITE,
+                /* cond */ new ComplexExpression(OperatorComparator.FP_ISNEG, s1.symbolic()),
+                /* then */ new ComplexExpression(OperatorComparator.ITE,
+                /* cond */ new ComplexExpression(OperatorComparator.FPLT , s1.symbolic(), intMinAsFloat),
+                /* then */ Constant.INT_MIN,
+                /* else */ rtz),
+                /* else */ new ComplexExpression(OperatorComparator.ITE,
+                /* cond */ new ComplexExpression(OperatorComparator.FPGT, s1.symbolic(), intMaxAsFloat),
+                /* then */ Constant.INT_MAX,
+                /* else */ rtz)));
+
+        putSymbolic(symbolic, top-2, new AnnotatedValue( c1, cast));
     }
 
     // case D2L: putLong(stack, top - 2, (long) popDouble(stack, top - 1)); break;
-    // TODO: needs to be tested. Likely incorrect
+    // TODO: needs to be tested.
     /*
     If the value' is NaN, the result of the conversion is a long 0.
     Otherwise, if the value' is not an infinity, it is rounded to an
@@ -1263,11 +1314,34 @@ public class Concolic {
     public static void d2l(long[] primitives, Object[] symbolic, int top) {
         long c1 = (long) BytecodeNode.popDouble(primitives, top - 1);
         BytecodeNode.putLong(primitives, top -2, c1);
-        putSymbolic(symbolic, top-1, unarySymbolicOp(OperatorComparator.D2L, c1, popSymbolic(symbolic, top -1)));
+        AnnotatedValue s1 = popSymbolic(symbolic, top -1);
+        if (s1 == null) {
+            return;
+        }
+
+        ComplexExpression longMinAsFloat = new ComplexExpression(OperatorComparator.L2D_RTZ, Constant.LONG_MIN);
+        ComplexExpression longMaxAsFloat = new ComplexExpression(OperatorComparator.L2D_RTZ, Constant.LONG_MAX);
+        ComplexExpression rtz = new ComplexExpression(OperatorComparator.D2L_RTZ, s1.symbolic());
+
+        ComplexExpression cast = new ComplexExpression(OperatorComparator.ITE,
+                /* cond */ new ComplexExpression(OperatorComparator.FP_ISNAN, s1.symbolic()),
+                /* then */ Constant.LONG_ZERO,
+                /* else */ new ComplexExpression(OperatorComparator.ITE,
+                /* cond */ new ComplexExpression(OperatorComparator.FP_ISNEG, s1.symbolic()),
+                /* then */ new ComplexExpression(OperatorComparator.ITE,
+                /* cond */ new ComplexExpression(OperatorComparator.FPLT , s1.symbolic(), longMinAsFloat),
+                /* then */ Constant.LONG_MIN,
+                /* else */ rtz),
+                /* else */ new ComplexExpression(OperatorComparator.ITE,
+                /* cond */ new ComplexExpression(OperatorComparator.FPGT, s1.symbolic(), longMaxAsFloat),
+                /* then */ Constant.LONG_MAX,
+                /* else */ rtz)));
+
+        putSymbolic(symbolic, top-1, new AnnotatedValue( c1, cast));
     }
 
     // case D2F: putFloat(stack, top - 2, (float) popDouble(stack, top - 1)); break;
-    // TODO: needs to be tested. Likely incorrect
+    // TODO: needs to be tested.
     /*
     The value on the top of the operand stack must be of type double.
     It is popped from the operand stack and undergoes value set conversion
@@ -1294,7 +1368,6 @@ public class Concolic {
         putSymbolic(symbolic, top-2, unarySymbolicOp(OperatorComparator.D2F, c1, popSymbolic(symbolic, top -1)));
     }
 
-    // TODO: Should be correct
     // case I2B: putInt(stack, top - 1, (byte) popInt(stack, top - 1)); break;
     public static void i2b(long[] primitives, Object[] symbolic, int top) {
         byte c1 = (byte) BytecodeNode.popInt(primitives, top - 1);
@@ -1304,7 +1377,6 @@ public class Concolic {
                         OperatorComparator.I2B, c1, popSymbolic(symbolic, top -1))));
     }
 
-    // TODO: Should be correct
     // case I2C: putInt(stack, top - 1, (char) popInt(stack, top - 1)); break;
     public static void i2c(long[] primitives, Object[] symbolic, int top) {
         char c1 = (char) BytecodeNode.popInt(primitives, top - 1);
@@ -1314,7 +1386,6 @@ public class Concolic {
                         OperatorComparator.I2C, c1, popSymbolic(symbolic, top -1))));
     }
 
-    // TODO: Should be correct
     // case I2S: putInt(stack, top - 1, (short) popInt(stack, top - 1)); break;
     public static void i2s(long[] primitives, Object[] symbolic, int top) {
         short c1 = (short) BytecodeNode.popInt(primitives, top - 1);
