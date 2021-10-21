@@ -1821,45 +1821,45 @@ public class Concolic {
     return new AnnotatedValue(areEqual, symbolic);
   }
 
-  public static Object stringCharAt(StaticObject self, Object index, Meta meta) {
-    String concreteString = meta.toHostString(self);
-    int concreteIndex = 0;
-    Expression indexExpr;
-    boolean concolicIndex = false;
-    if (index instanceof AnnotatedValue) {
-      AnnotatedValue a = (AnnotatedValue) index;
-      concreteIndex = a.asInt();
-      indexExpr = a.symbolic();
-      concolicIndex = true;
-    } else {
-      concreteIndex = (int) index;
-      indexExpr = Constant.fromConcreteValue(concreteIndex);
-    }
-    if (!self.isConcolic()) { // && !index.isConcolic()) {
-      return concreteString.charAt(concreteIndex);
-    }
-    Expression symbolicString = makeStringToExpr(self, meta);
+public static Object stringCharAt(StaticObject self, Object index, Meta meta) {
+        String concreteString = meta.toHostString(self);
+        int concreteIndex = 0;
+        Expression indexExpr;
+        boolean concolicIndex = false;
+        if(index instanceof AnnotatedValue){
+            AnnotatedValue a= (AnnotatedValue) index;
+            concreteIndex = a.asInt();
+            indexExpr = a.symbolic();
+            concolicIndex = true;
+        }else{
+            concreteIndex = (int) index;
+             indexExpr = Constant.fromConcreteValue(concreteIndex);
+        }
+        if (!self.isConcolic() ) { //&& !index.isConcolic()) {
+            return concreteString.charAt(concreteIndex);
+        }
+        Expression symbolicString = makeStringToExpr(self, meta);
 
-    Expression intIndexExpr = new ComplexExpression(BV2NAT, indexExpr);
-    Expression symbolicStrLen = new ComplexExpression(SLENGTH, symbolicString);
-    Expression bvSymbolicStrLen = new ComplexExpression(NAT2BV32, symbolicStrLen);
+        Expression intIndexExpr = new ComplexExpression(BV2NAT, indexExpr);
+        Expression symbolicStrLen = new ComplexExpression(SLENGTH, symbolicString);
+        Expression bvSymbolicStrLen = new ComplexExpression(NAT2BV32, symbolicStrLen);
 
-    boolean sat1 = (0 <= concreteIndex);
-    boolean sat2 = (concreteIndex < concreteString.length());
-    if (!sat1 && !concolicIndex) {
-      // index is negative
-      meta.throwException(meta.java_lang_StringIndexOutOfBoundsException);
-      return null;
-    } else if (concolicIndex) {
-      Expression indexGreaterEqualsZero =
-          new ComplexExpression(LE, Constant.NAT_ZERO, symbolicStrLen);
-      PathCondition pc = new PathCondition(indexGreaterEqualsZero, sat1 ? 0 : 1, 2);
-      addTraceElement(pc);
-    }
+        boolean sat1 = (0 <= concreteIndex);
+        boolean sat2 = (concreteIndex < concreteString.length());
+        if(!sat1 && !concolicIndex){
+             //index is negative
+            meta.throwException(meta.java_lang_StringIndexOutOfBoundsException);
+            return null;
+        }
+        else if(concolicIndex){
+            Expression indexGreaterEqualsZero = new ComplexExpression(LE, Constant.NAT_ZERO, symbolicStrLen);
+            PathCondition pc = new PathCondition(indexGreaterEqualsZero, sat1 ? 0 : 1, 2);
+            addTraceElement(pc);
+        }
 
-    Expression indexLTSymbolicStringLength = new ComplexExpression(LT, indexExpr, bvSymbolicStrLen);
-    PathCondition pc2 = new PathCondition(indexLTSymbolicStringLength, sat2 ? 0 : 1, 2);
-    addTraceElement(pc2);
+        Expression indexLTSymbolicStringLength = new ComplexExpression(LT, indexExpr, bvSymbolicStrLen);
+        PathCondition pc2 = new PathCondition(indexLTSymbolicStringLength, sat2? 0:1, 2);
+        addTraceElement(pc2);
 
     if (!sat2) {
       // index is greater than string length
@@ -1880,17 +1880,6 @@ public class Concolic {
     return new AnnotatedValue(cLength, a[a.length - 1].symbolic());
   }
 
-  private static Expression makeStringToExpr(StaticObject string, Meta meta) {
-    assert string.isString();
-    return string.isConcolic()
-        ? extractStringVarFromArray(string.getConcolicId())
-        : Constant.fromConcreteValue(meta.toHostString(string));
-  }
-
-  private static Expression extractStringVarFromArray(int concolicId) {
-    AnnotatedValue[] vals = symbolicObjects.get(concolicId);
-    return vals[vals.length - 2].symbolic();
-  }
 
   public static Object characterToUpperCase(Object c, Meta meta) {
     char convC;
@@ -2000,10 +1989,8 @@ public class Concolic {
 
         // concrete part
         byte_value.set(boxed, unboxed);
-
         return boxed;
     }
-
 
     private static Field char_value = null;
 
@@ -2070,5 +2057,15 @@ public class Concolic {
         return boxed;
     }
 
+  private static Expression makeStringToExpr(StaticObject string, Meta meta) {
+    assert string.isString();
+    return string.isConcolic()
+        ? extractStringVarFromArray(string.getConcolicId())
+        : Constant.fromConcreteValue(meta.toHostString(string));
+  }
 
+  private static Expression extractStringVarFromArray(int concolicId){
+      AnnotatedValue[] vals = symbolicObjects.get(concolicId);
+      return vals[vals.length - 2].symbolic();
+  }
 }
