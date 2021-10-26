@@ -105,12 +105,11 @@ public final class Target_java_lang_System {
         }
 
         SYSTEM_ARRAYCOPY_COUNT.inc();
-        int length;
-        if(olength instanceof AnnotatedValue){
+        if(oLength instanceof AnnotatedValue){
             //For the concrete Execution, we do not need a symbolic array??
-            length = ((AnnotatedValue) olength).asInt();
+            length = ((AnnotatedValue) oLength).asInt();
         }else{
-            length = (int) olength;
+            length = (int) oLength;
         }
         try {
             doArrayCopy(src, srcPos, dest, destPos, length, meta, profiler);

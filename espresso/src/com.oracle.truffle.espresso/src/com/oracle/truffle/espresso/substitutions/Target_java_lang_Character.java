@@ -50,4 +50,10 @@ public final class Target_java_lang_Character {
       @InjectMeta Meta meta){
     return Concolic.characterToLowerCase(c, meta);
   }
+
+  @Substitution(methodName = "isDefined")
+  public static @Host(typeName = "Z") Object isDefined_char(@Host(typeName = "C") Object c,
+      @InjectMeta Meta meta){
+      return Concolic.isDefinded(c, meta);
+  }
 }

@@ -96,9 +96,10 @@ public class AnnotatedValue {
     }
     
     public byte asByte() {
-        if (concrete instanceof  Integer){
+        if (concrete instanceof Integer) {
             return ((Integer) concrete).byteValue();
-        return (int) concrete;
+        }
+        return (byte) concrete;
     }
 
     public float asFloat() {

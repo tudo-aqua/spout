@@ -136,6 +136,7 @@ public enum OperatorComparator {
     STRINGEQ,
     STRINGNE,
     SCONCAT,
+    SCONTAINS,
     SSUBSTR,
     SAT,
     STOSTR,
@@ -146,6 +147,7 @@ public enum OperatorComparator {
     SLENGTH,
     SINDEXOF,
     STOINT,
+    STOCODE,
     NAT2BV32,
     BV2NAT
     ;
@@ -231,7 +233,7 @@ public enum OperatorComparator {
                 return "fp.gt";
             case FPGE:
                 return "fp.geq";
-
+            case BEQUIV:
             case BVEQ:
             case STRINGEQ:
                 return "=";
@@ -314,6 +316,10 @@ public enum OperatorComparator {
                 return "str.at";
             case SCONCAT:
                 return "str.++";
+            case SCONTAINS:
+                return "str.contains";
+            case STOCODE:
+                return "str.to_code";
             case NAT2BV32:
                 return "(_ int2bv 32)";
             case BV2NAT:
@@ -334,7 +340,7 @@ public enum OperatorComparator {
 
     // RTZ RoundingMode
 
-    static EnumSet<OperatorComparator> boolOps = EnumSet.of(BVEQ, STRINGEQ, BVNE, STRINGNE, BVLT, BVLE, BVGT, BVGE, BNEG, BAND, BOR, BXOR, BEQUIV, BIMPLIES);
+    static EnumSet<OperatorComparator> boolOps = EnumSet.of(BVEQ, STRINGEQ, BVNE, STRINGNE, BVLT, BVLE, BVGT, BVGE, BNEG, BAND, BOR, BXOR, BEQUIV, BIMPLIES, SCONTAINS);
 
     static EnumSet<OperatorComparator> cmpOps = EnumSet.of(LCMP, FCMPL, FCMPG, DCMPL, DCMPG);
 

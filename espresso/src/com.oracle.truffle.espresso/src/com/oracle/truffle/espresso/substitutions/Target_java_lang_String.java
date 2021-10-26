@@ -133,7 +133,6 @@ public class Target_java_lang_String {
         return meta.toGuestString(ret);
     }
 
-    @CompilerDirectives.TruffleBoundary
     @Substitution(hasReceiver = true)
     public static @Host(typeName = "C") Object charAt(
         @Host(String.class) StaticObject self,
@@ -142,7 +141,6 @@ public class Target_java_lang_String {
         return Concolic.stringCharAt(self, index, meta);
     }
 
-    @CompilerDirectives.TruffleBoundary
     @Substitution(hasReceiver = true)
     public static @Host(typeName = "I") Object length(
         @Host(String.class) StaticObject self,
@@ -150,4 +148,18 @@ public class Target_java_lang_String {
         return Concolic.stringLength(self, meta);
     }
 
+    @Substitution(hasReceiver = true)
+    public static @Host(typeName = "Z") Object contains(@Host(String.class) StaticObject self, @Host(CharSequence.class) StaticObject s, @InjectMeta Meta meta){
+        return Concolic.stringContains(self, s, meta);
+    }
+
+    @Substitution(hasReceiver = true)
+    public static @Host(String.class) Object concat(@Host(String.class) StaticObject self, @Host(String.class) StaticObject s, @InjectMeta Meta meta){
+        return Concolic.stringConcat(self, s, meta);
+    }
+
+    @Substitution(hasReceiver = true)
+    public static @Host(String.class) Object toString(@Host(String.class) StaticObject self, @InjectMeta Meta meta){
+        return Concolic.stringToString(self, meta);
+    }
 }

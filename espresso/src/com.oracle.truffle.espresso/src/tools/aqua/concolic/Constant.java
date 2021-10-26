@@ -67,6 +67,23 @@ public abstract class Constant extends Atom {
         }
     }
 
+    private final static class BoolConstant extends Constant {
+
+        BoolConstant(boolean value) {
+            super(PrimitiveTypes.BOOL, value);
+        }
+
+        @Override
+        Boolean getValue() {
+            return (boolean) super.getValue();
+        }
+
+        @Override
+        public String toString() {
+            return  Boolean.toString(getValue());
+        }
+    }
+
     private final static class LongConstant extends Constant {
 
         LongConstant(long value) {
@@ -208,6 +225,10 @@ public abstract class Constant extends Atom {
         return new StringConstant(s);
     }
 
-    public static Constant createNatConstant(int value) { return new NatConstant(value);}
+    public static Constant fromConcreteValue(boolean b) {
+        return new BoolConstant(b);
+    }
+
+    public static Constant createNatConstant(int value) { return new NatConstant(value); }
 
 }
