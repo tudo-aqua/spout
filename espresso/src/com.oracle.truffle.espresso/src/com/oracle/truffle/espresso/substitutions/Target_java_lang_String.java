@@ -150,6 +150,7 @@ public class Target_java_lang_String {
 
     @Substitution(hasReceiver = true)
     public static @Host(typeName = "Z") Object contains(@Host(String.class) StaticObject self, @Host(CharSequence.class) StaticObject s, @InjectMeta Meta meta){
+
         return Concolic.stringContains(self, s, meta);
     }
 

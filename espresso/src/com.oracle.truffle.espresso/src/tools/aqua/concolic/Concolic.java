@@ -2354,7 +2354,18 @@ public class Concolic {
   // propagation of concolic values
 
   public static void doArrayCopy(
-      StaticObject src, int srcPos, StaticObject dest, int destPos, StaticObject length) {
+      StaticObject src, int srcPos, StaticObject dest, int destPos, Object oLength) {
+
+    int length = 0;
+    Expression symbolicLength;
+    if(oLength instanceof AnnotatedValue){
+      //For the concrete Execution, we do not need a symbolic array??
+      length = ((AnnotatedValue) oLength).asInt();
+      symbolicLength = ((AnnotatedValue) oLength).symbolic();
+    }else{
+      length = (int) oLength;
+      symbolicLength = Constant.fromConcreteValue(length);
+    }
 
     if (src.getConcolicId() < 0 && dest.getConcolicId() < 0) {
       return;
@@ -2366,6 +2377,7 @@ public class Concolic {
     } else {
       // TODO: organize code and wrap annotation creation in a method?
       destAnnotations = new AnnotatedValue[dest.length() + 1]; // + 1 for length
+      destAnnotations[dest.length()] = new AnnotatedValue(length, symbolicLength);
       dest.setConcolicId(symbolicObjects.size());
       symbolicObjects.add(destAnnotations);
     }
@@ -2501,21 +2513,23 @@ public class Concolic {
       // Nothing to do for pure concrete execution
       return;
     }
+    String concreteOther = meta.toHostString(string);
     Expression strAddition = makeStringToExpr(string, meta);
     Expression strBuilder;
+    String content = meta.toHostString((StaticObject) originalToString.call(self));
+    StaticObject result = meta.toGuestString(content + concreteOther);
     if (self.isConcolic()) {
       AnnotatedValue[] a = symbolicObjects.get(self.getConcolicId());
       strBuilder = a[a.length - 1].symbolic();
       a[a.length - 1] =
-          new AnnotatedValue(null, new ComplexExpression(SCONCAT, strBuilder, strAddition));
+          new AnnotatedValue(result , new ComplexExpression(SCONCAT, strBuilder, strAddition));
       symbolicObjects.set(self.getConcolicId(), a);
     } else {
-      String content = meta.toHostString((StaticObject) originalToString.call(self));
       strBuilder = Constant.fromConcreteValue(content);
       int lengthAnnotations = ((ObjectKlass) self.getKlass()).getFieldTable().length + 1;
       AnnotatedValue[] annotation = new AnnotatedValue[lengthAnnotations];
       annotation[lengthAnnotations - 1] =
-          new AnnotatedValue(null, new ComplexExpression(SCONCAT, strBuilder, strAddition));
+          new AnnotatedValue(result, new ComplexExpression(SCONCAT, strBuilder, strAddition));
       self.setConcolicId(symbolicObjects.size());
       symbolicObjects.add(annotation);
     }

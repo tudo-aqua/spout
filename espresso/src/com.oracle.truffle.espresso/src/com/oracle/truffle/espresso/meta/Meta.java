@@ -183,12 +183,14 @@ public final class Meta implements ContextAccess {
         }
 
         java_lang_StringBuilder = knownKlass(Type.java_lang_StringBuilder);
+        java_lang_StringBuffer = knownKlass(Type.java_lang_StringBuffer);
         java_lang_AbstractStringBuilder = knownKlass(Type.java_lang_AbstractStringBuilder);
         java_lang_AbstractStringBuilder_append_string = java_lang_AbstractStringBuilder.requireDeclaredMethod(Name.append, Signature.AbstractStringBuilder_String);
         java_lang_AbstractStringBuilder_getValue = java_lang_AbstractStringBuilder.requireDeclaredMethod(Name.getValue, Signature._byte_array);
         java_lang_AbstractStringBuilder_length = java_lang_AbstractStringBuilder.requireDeclaredMethod(Name.length, Signature._int);
         java_lang_AbstractStringBuilder_isLatin1 = java_lang_AbstractStringBuilder.requireDeclaredMethod(Name.isLatin1, Signature._boolean);
         java_lang_StringBuilder_toString = java_lang_StringBuilder.requireDeclaredMethod(Name.toString, Signature.String);
+        java_lang_StringBuffer_toString = java_lang_StringBuffer.requireDeclaredMethod(Name.toString, Signature.String);
 
         java_lang_StringLatin1 = knownKlass(Type.java_lang_StringLatin1);
         java_lang_StringLatin1_newString = java_lang_StringLatin1.requireDeclaredMethod(Name.newString, Signature.String_byte_array_int_int);
@@ -815,6 +817,7 @@ public final class Meta implements ContextAccess {
 
     public final ObjectKlass java_lang_String;
     public final ObjectKlass java_lang_StringBuilder;
+    public final ObjectKlass java_lang_StringBuffer;
     public final ObjectKlass java_lang_AbstractStringBuilder;
     public final ObjectKlass java_lang_StringLatin1;
     public final ObjectKlass java_lang_StringUTF16;
@@ -910,6 +913,7 @@ public final class Meta implements ContextAccess {
     public final Method java_lang_AbstractStringBuilder_getValue;
     public final Method java_lang_AbstractStringBuilder_length;
     public final Method java_lang_StringBuilder_toString;
+    public final Method java_lang_StringBuffer_toString;
     public final Method java_lang_StringLatin1_newString;
     public final Method java_lang_StringUTF16_newString;
 
