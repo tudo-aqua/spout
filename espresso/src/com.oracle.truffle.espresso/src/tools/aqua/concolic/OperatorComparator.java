@@ -149,7 +149,8 @@ public enum OperatorComparator {
     STOINT,
     STOCODE,
     NAT2BV32,
-    BV2NAT
+    BV2NAT,
+    NATADD
     ;
 
 
@@ -320,6 +321,8 @@ public enum OperatorComparator {
                 return "str.contains";
             case STOCODE:
                 return "str.to_code";
+            case SSUBSTR:
+                return "str.substr";
             case NAT2BV32:
                 return "(_ int2bv 32)";
             case BV2NAT:
@@ -332,6 +335,8 @@ public enum OperatorComparator {
                 return "<=";
             case GE:
                 return ">=";
+            case NATADD:
+                return "+";
 
             default:
                 return super.toString();

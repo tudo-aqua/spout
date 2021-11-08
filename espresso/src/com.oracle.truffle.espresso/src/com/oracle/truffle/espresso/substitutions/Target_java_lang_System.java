@@ -86,13 +86,21 @@ public final class Target_java_lang_System {
         int destPos = 0;
         int length = 0;
         if (oSrcPos instanceof AnnotatedValue) {
-              Concolic.stopRecording("concolic System.arraycopy not supported, yet with oSrcPos.", meta);
+            if(((AnnotatedValue) oSrcPos).symbolic().toString().contains("str.len")){
+                srcPos = ((AnnotatedValue) oSrcPos).asInt();
+            } else {
+                Concolic.stopRecording("concolic System.arraycopy not supported, yet with oSrcPos.", meta);
+            }
         }
         else {
             srcPos = (int) oSrcPos;
         }
         if (oDestPos instanceof AnnotatedValue) {
-            Concolic.stopRecording("concolic System.arraycopy not supported, yet with oDestPos.", meta);
+            if(((AnnotatedValue) oDestPos).symbolic().toString().contains("str.len")){
+                destPos = ((AnnotatedValue) oDestPos).asInt();
+            } else {
+                Concolic.stopRecording("concolic System.arraycopy not supported, yet with oDestPos.", meta);
+            }
         }
         else {
             destPos = (int) oDestPos;

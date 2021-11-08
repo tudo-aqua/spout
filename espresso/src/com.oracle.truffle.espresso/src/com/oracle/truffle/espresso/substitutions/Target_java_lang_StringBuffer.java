@@ -4,6 +4,8 @@ import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import javax.management.OperationsException;
+import javax.print.DocFlavor.STRING;
 import tools.aqua.concolic.Concolic;
 
 @EspressoSubstitutions
@@ -18,7 +20,9 @@ public final class Target_java_lang_StringBuffer {
         @GuestCall(target = "java_lang_StringBuffer_toString")
             DirectCallNode originalToString,
         @InjectMeta Meta meta) {
+      System.out.println("Append called on StringBuffer with symbolic arg: " + string.getConcolicId());
       Concolic.stringBuilderAppendString(self, string, originalToString, meta);
+      System.out.println("String Buffer after concolic: " + self.getConcolicId());
       Object o = originalAppend.call(self, string);
       return o;
     }
@@ -39,4 +43,27 @@ public final class Target_java_lang_StringBuffer {
               : meta.toHostString((StaticObject) newUTF16String.call(getValue.call(self), 0, length.call(self)));
       return Concolic.stringBuilderToString(self, concrete, meta);
     }
+
+    @Substitution(hasReceiver = true, methodName = "insert")
+    @TruffleBoundary
+    public static @Host(StringBuffer.class) Object insert_string(@Host(StringBuffer.class) StaticObject self, @Host(typeName = "I") Object offset, @Host(String.class) StaticObject toInsert,
+        @GuestCall(target="java_lang_AbstractStringBuilder_insert_string") DirectCallNode insert,
+        @GuestCall(target = "java_lang_StringBuffer_toString")
+            DirectCallNode originalToString, @InjectMeta Meta meta){
+      System.out.println("stringBuffer insert called");
+      Concolic.stringBuilderInsert(self, offset, toInsert, insert, originalToString, meta);
+      return self;
+    }
+
+  @Substitution(hasReceiver = true, methodName = "insert")
+  @TruffleBoundary
+  public static @Host(StringBuffer.class) Object insert_char(@Host(StringBuffer.class) StaticObject self, @Host(typeName = "I") Object offset, @Host(typeName = "C") Object toInsert,
+      @GuestCall(target="java_lang_AbstractStringBuilder_insert_string") DirectCallNode insert,
+      @GuestCall(target = "java_lang_StringBuffer_toString")
+          DirectCallNode originalToString, @InjectMeta Meta meta){
+    System.out.println("stringBuffer insert called: " + self.isConcolic() +  "concolicID: " + self.getConcolicId());
+    Concolic.stringBuilderInsert(self, offset, toInsert, insert, originalToString, meta);
+    System.out.println("StringBuffer result: " + originalToString.call(self) + " with ID: " + self.getConcolicId());
+    return self;
+  }
 }

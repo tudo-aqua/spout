@@ -23,6 +23,7 @@
 package com.oracle.truffle.espresso.descriptors;
 
 import java.io.IOException;
+import java.lang.reflect.Type;
 import java.util.Arrays;
 
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
@@ -238,6 +239,7 @@ public final class Symbol<T> extends ByteSequence {
 
         // j.l.StringBuilder
         public static final Symbol<Name> append = StaticSymbols.putName("append");
+        public static final Symbol<Name> insert = StaticSymbols.putName("insert");
         public static final Symbol<Name> isLatin1 = StaticSymbols.putName("isLatin1");
         public static final Symbol<Name> newString = StaticSymbols.putName("newString");
 
@@ -826,7 +828,7 @@ public final class Symbol<T> extends ByteSequence {
      */
     public static final class Signature extends Descriptor {
 
-        public static void ensureInitialized() {
+      public static void ensureInitialized() {
             /* nop */
         }
 
@@ -995,5 +997,9 @@ public final class Symbol<T> extends ByteSequence {
 
         //Used for StringBuilder calls
         public static final Symbol<Signature> AbstractStringBuilder_String = StaticSymbols.putSignature(Type.java_lang_AbstractStringBuilder, Type.java_lang_String);
+        public static final Symbol<Signature> AbstractStringBuilder_int_String = StaticSymbols.putSignature(Type.java_lang_AbstractStringBuilder, Type._int,
+            Type.java_lang_String);
+        public static final Symbol<Signature> AbstractStringBuilder_int_char = StaticSymbols.putSignature(Type.java_lang_AbstractStringBuilder, Type._int,
+            Type._char);
     }
 }

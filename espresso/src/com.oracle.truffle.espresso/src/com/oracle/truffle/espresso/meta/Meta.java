@@ -186,6 +186,8 @@ public final class Meta implements ContextAccess {
         java_lang_StringBuffer = knownKlass(Type.java_lang_StringBuffer);
         java_lang_AbstractStringBuilder = knownKlass(Type.java_lang_AbstractStringBuilder);
         java_lang_AbstractStringBuilder_append_string = java_lang_AbstractStringBuilder.requireDeclaredMethod(Name.append, Signature.AbstractStringBuilder_String);
+        java_lang_AbstractStringBuilder_insert_string = java_lang_AbstractStringBuilder.requireDeclaredMethod(Name.insert, Signature.AbstractStringBuilder_int_String);
+        java_lang_AbstractStringBuilder_insert_char = java_lang_AbstractStringBuilder.requireDeclaredMethod(Name.insert, Signature.AbstractStringBuilder_int_char);
         java_lang_AbstractStringBuilder_getValue = java_lang_AbstractStringBuilder.requireDeclaredMethod(Name.getValue, Signature._byte_array);
         java_lang_AbstractStringBuilder_length = java_lang_AbstractStringBuilder.requireDeclaredMethod(Name.length, Signature._int);
         java_lang_AbstractStringBuilder_isLatin1 = java_lang_AbstractStringBuilder.requireDeclaredMethod(Name.isLatin1, Signature._boolean);
@@ -912,6 +914,8 @@ public final class Meta implements ContextAccess {
     public final Method java_lang_AbstractStringBuilder_isLatin1;
     public final Method java_lang_AbstractStringBuilder_getValue;
     public final Method java_lang_AbstractStringBuilder_length;
+    public final Method java_lang_AbstractStringBuilder_insert_string;
+    public final Method java_lang_AbstractStringBuilder_insert_char;
     public final Method java_lang_StringBuilder_toString;
     public final Method java_lang_StringBuffer_toString;
     public final Method java_lang_StringLatin1_newString;

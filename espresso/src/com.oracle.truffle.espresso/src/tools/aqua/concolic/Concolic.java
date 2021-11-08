@@ -36,6 +36,9 @@ import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPGT;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPLE;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPLT;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPNE;
+import static tools.aqua.concolic.Constant.INT_ZERO;
+import static tools.aqua.concolic.Constant.NAT_ZERO;
+import static tools.aqua.concolic.OperatorComparator.BAND;
 import static tools.aqua.concolic.OperatorComparator.BNEG;
 import static tools.aqua.concolic.OperatorComparator.BOR;
 import static tools.aqua.concolic.OperatorComparator.BV2NAT;
@@ -43,14 +46,17 @@ import static tools.aqua.concolic.OperatorComparator.BVEQ;
 import static tools.aqua.concolic.OperatorComparator.BVGE;
 import static tools.aqua.concolic.OperatorComparator.BVGT;
 import static tools.aqua.concolic.OperatorComparator.BVLE;
+import static tools.aqua.concolic.OperatorComparator.GE;
 import static tools.aqua.concolic.OperatorComparator.IADD;
 import static tools.aqua.concolic.OperatorComparator.LE;
 import static tools.aqua.concolic.OperatorComparator.LT;
 import static tools.aqua.concolic.OperatorComparator.NAT2BV32;
+import static tools.aqua.concolic.OperatorComparator.NATADD;
 import static tools.aqua.concolic.OperatorComparator.SAT;
 import static tools.aqua.concolic.OperatorComparator.SCONCAT;
 import static tools.aqua.concolic.OperatorComparator.SCONTAINS;
 import static tools.aqua.concolic.OperatorComparator.SLENGTH;
+import static tools.aqua.concolic.OperatorComparator.SSUBSTR;
 import static tools.aqua.concolic.OperatorComparator.STOCODE;
 import static tools.aqua.concolic.OperatorComparator.STOLOWER;
 import static tools.aqua.concolic.OperatorComparator.STOUPPER;
@@ -370,14 +376,12 @@ public class Concolic {
       Expression arrayBound =
           new ComplexExpression(
               OperatorComparator.BAND,
-              new ComplexExpression(BVLE, Constant.INT_ZERO, symbIndex),
+              new ComplexExpression(BVLE, INT_ZERO, symbIndex),
               new ComplexExpression(OperatorComparator.BVLT, symbIndex, symbLen));
 
       addTraceElement(
           new PathCondition(
-              safe ? arrayBound : new ComplexExpression(BNEG, arrayBound),
-              safe ? 1 : 0,
-              2));
+              safe ? arrayBound : new ComplexExpression(BNEG, arrayBound), safe ? 1 : 0, 2));
     }
     return safe;
   }
@@ -471,14 +475,11 @@ public class Concolic {
       return;
     }
     boolean holds = (0 <= conclen);
-    Expression lengthConstraint =
-        new ComplexExpression(BVLE, Constant.INT_ZERO, symbLen.symbolic());
+    Expression lengthConstraint = new ComplexExpression(BVLE, INT_ZERO, symbLen.symbolic());
 
     addTraceElement(
         new PathCondition(
-            holds
-                ? lengthConstraint
-                : new ComplexExpression(BNEG, lengthConstraint),
+            holds ? lengthConstraint : new ComplexExpression(BNEG, lengthConstraint),
             holds ? 1 : 0,
             2));
   }
@@ -761,6 +762,7 @@ public class Concolic {
     }
     return new AnnotatedValue(concResult, new ComplexExpression(op, s1.symbolic()));
   }
+
   public static void fadd(long[] primitives, Object[] symbolic, int top) {
     float c1 = BytecodeNode.popFloat(primitives, top - 1);
     float c2 = BytecodeNode.popFloat(primitives, top - 2);
@@ -960,17 +962,13 @@ public class Concolic {
       if (a != null) {
         addTraceElement(
             new PathCondition(
-                new ComplexExpression(OperatorComparator.BVNE, a.symbolic(), Constant.INT_ZERO),
-                0,
-                2));
+                new ComplexExpression(OperatorComparator.BVNE, a.symbolic(), INT_ZERO), 0, 2));
       }
     } else {
       if (a != null) {
         addTraceElement(
             new PathCondition(
-                new ComplexExpression(OperatorComparator.BVEQ, a.symbolic(), Constant.INT_ZERO),
-                1,
-                2));
+                new ComplexExpression(OperatorComparator.BVEQ, a.symbolic(), INT_ZERO), 1, 2));
       }
       bn.enterImplicitExceptionProfile();
       Meta meta = bn.getMeta();
@@ -1605,7 +1603,7 @@ public class Concolic {
         new ComplexExpression(
             OperatorComparator.ITE,
             /* cond */ new ComplexExpression(OperatorComparator.FP_ISNAN, s1.symbolic()),
-            /* then */ Constant.INT_ZERO,
+            /* then */ INT_ZERO,
             /* else */ new ComplexExpression(
                 OperatorComparator.ITE,
                 /* cond */ new ComplexExpression(OperatorComparator.FP_ISNEG, s1.symbolic()),
@@ -1717,7 +1715,7 @@ public class Concolic {
         new ComplexExpression(
             OperatorComparator.ITE,
             /* cond */ new ComplexExpression(OperatorComparator.FP_ISNAN, s1.symbolic()),
-            /* then */ Constant.INT_ZERO,
+            /* then */ INT_ZERO,
             /* else */ new ComplexExpression(
                 OperatorComparator.ITE,
                 /* cond */ new ComplexExpression(OperatorComparator.FP_ISNEG, s1.symbolic()),
@@ -2001,16 +1999,10 @@ public class Concolic {
       if (Expression.isBoolean(s1.symbolic())) {
         switch (opcode) {
           case IFEQ:
-            expr =
-                !takeBranch
-                    ? s1.symbolic()
-                    : new ComplexExpression(BNEG, s1.symbolic());
+            expr = !takeBranch ? s1.symbolic() : new ComplexExpression(BNEG, s1.symbolic());
             break;
           case IFNE:
-            expr =
-                takeBranch
-                    ? s1.symbolic()
-                    : new ComplexExpression(BNEG, s1.symbolic());
+            expr = takeBranch ? s1.symbolic() : new ComplexExpression(BNEG, s1.symbolic());
             break;
           default:
             CompilerDirectives.transferToInterpreter();
@@ -2076,22 +2068,22 @@ public class Concolic {
       } else {
         switch (opcode) {
           case IFEQ:
-            expr = new ComplexExpression(OperatorComparator.BVEQ, s1.symbolic(), Constant.INT_ZERO);
+            expr = new ComplexExpression(OperatorComparator.BVEQ, s1.symbolic(), INT_ZERO);
             break;
           case IFNE:
-            expr = new ComplexExpression(OperatorComparator.BVNE, s1.symbolic(), Constant.INT_ZERO);
+            expr = new ComplexExpression(OperatorComparator.BVNE, s1.symbolic(), INT_ZERO);
             break;
           case IFLT:
-            expr = new ComplexExpression(OperatorComparator.BVLT, s1.symbolic(), Constant.INT_ZERO);
+            expr = new ComplexExpression(OperatorComparator.BVLT, s1.symbolic(), INT_ZERO);
             break;
           case IFGE:
-            expr = new ComplexExpression(BVGE, s1.symbolic(), Constant.INT_ZERO);
+            expr = new ComplexExpression(BVGE, s1.symbolic(), INT_ZERO);
             break;
           case IFGT:
-            expr = new ComplexExpression(BVGT, s1.symbolic(), Constant.INT_ZERO);
+            expr = new ComplexExpression(BVGT, s1.symbolic(), INT_ZERO);
             break;
           case IFLE:
-            expr = new ComplexExpression(BVLE, s1.symbolic(), Constant.INT_ZERO);
+            expr = new ComplexExpression(BVLE, s1.symbolic(), INT_ZERO);
             break;
           default:
             CompilerDirectives.transferToInterpreter();
@@ -2197,32 +2189,20 @@ public class Concolic {
                     s2.symbolic());
             break;
           case IF_ICMPLT:
-            expr =
-                new ComplexExpression(
-                    takeBranch ? BVGT : BVLE,
-                    s1.symbolic(),
-                    s2.symbolic());
+            expr = new ComplexExpression(takeBranch ? BVGT : BVLE, s1.symbolic(), s2.symbolic());
             break;
           case IF_ICMPGE:
-            expr =
-                new ComplexExpression(
-                    takeBranch ? BVLE : BVGT,
-                    s1.symbolic(),
-                    s2.symbolic());
+            expr = new ComplexExpression(takeBranch ? BVLE : BVGT, s1.symbolic(), s2.symbolic());
             break;
           case IF_ICMPGT:
             expr =
                 new ComplexExpression(
-                    takeBranch ? OperatorComparator.BVLT : BVGE,
-                    s1.symbolic(),
-                    s2.symbolic());
+                    takeBranch ? OperatorComparator.BVLT : BVGE, s1.symbolic(), s2.symbolic());
             break;
           case IF_ICMPLE:
             expr =
                 new ComplexExpression(
-                    takeBranch ? BVGE : OperatorComparator.BVLT,
-                    s1.symbolic(),
-                    s2.symbolic());
+                    takeBranch ? BVGE : OperatorComparator.BVLT, s1.symbolic(), s2.symbolic());
             break;
           default:
             CompilerDirectives.transferToInterpreter();
@@ -2358,11 +2338,11 @@ public class Concolic {
 
     int length = 0;
     Expression symbolicLength;
-    if(oLength instanceof AnnotatedValue){
-      //For the concrete Execution, we do not need a symbolic array??
+    if (oLength instanceof AnnotatedValue) {
+      // For the concrete Execution, we do not need a symbolic array??
       length = ((AnnotatedValue) oLength).asInt();
       symbolicLength = ((AnnotatedValue) oLength).symbolic();
-    }else{
+    } else {
       length = (int) oLength;
       symbolicLength = Constant.fromConcreteValue(length);
     }
@@ -2517,19 +2497,28 @@ public class Concolic {
     Expression strAddition = makeStringToExpr(string, meta);
     Expression strBuilder;
     String content = meta.toHostString((StaticObject) originalToString.call(self));
-    StaticObject result = meta.toGuestString(content + concreteOther);
+    String hostResult = content + concreteOther;
+    StaticObject result = meta.toGuestString(hostResult);
     if (self.isConcolic()) {
       AnnotatedValue[] a = symbolicObjects.get(self.getConcolicId());
-      strBuilder = a[a.length - 1].symbolic();
+      strBuilder = a[a.length - 2].symbolic();
+      Expression valueExpr = new ComplexExpression(SCONCAT, strBuilder, strAddition);
+      a[a.length - 2] = new AnnotatedValue(result, valueExpr);
       a[a.length - 1] =
-          new AnnotatedValue(result , new ComplexExpression(SCONCAT, strBuilder, strAddition));
+          new AnnotatedValue(
+              hostResult.length(),
+              new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, valueExpr)));
       symbolicObjects.set(self.getConcolicId(), a);
     } else {
       strBuilder = Constant.fromConcreteValue(content);
-      int lengthAnnotations = ((ObjectKlass) self.getKlass()).getFieldTable().length + 1;
+      int lengthAnnotations = ((ObjectKlass) self.getKlass()).getFieldTable().length + 2;
       AnnotatedValue[] annotation = new AnnotatedValue[lengthAnnotations];
-      annotation[lengthAnnotations - 1] =
-          new AnnotatedValue(result, new ComplexExpression(SCONCAT, strBuilder, strAddition));
+      Expression valueExpr = new ComplexExpression(SCONCAT, strBuilder, strAddition);
+      annotation[annotation.length - 2] = new AnnotatedValue(result, valueExpr);
+      annotation[annotation.length - 1] =
+          new AnnotatedValue(
+              hostResult.length(),
+              new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, valueExpr)));
       self.setConcolicId(symbolicObjects.size());
       symbolicObjects.add(annotation);
     }
@@ -2539,17 +2528,12 @@ public class Concolic {
   public static Object stringBuilderToString(StaticObject self, String concrete, Meta meta) {
     StaticObject gConcrete = meta.toGuestString(concrete);
     if (self.isConcolic()) {
-      AnnotatedValue[] annotationsBuilder = symbolicObjects.get(self.getConcolicId());
-      Expression symbolicString = annotationsBuilder[annotationsBuilder.length - 1].symbolic();
-      Expression symbolicStringLength =
-          new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, symbolicString));
-      int lengthAnnotations = ((ObjectKlass) self.getKlass()).getFieldTable().length + 2;
-      AnnotatedValue[] annotationsString = new AnnotatedValue[lengthAnnotations];
-      annotationsString[lengthAnnotations - 2] = new AnnotatedValue(gConcrete, symbolicString);
-      annotationsString[lengthAnnotations - 1] =
-          new AnnotatedValue(concrete.length(), symbolicStringLength);
-      gConcrete.setConcolicId(symbolicObjects.size());
-      symbolicObjects.add(annotationsString);
+      Expression symbolicString = extractStringVarFromArray(self.getConcolicId());
+      Expression symbolicStringLength = extractStringLengthFromArray(self.getConcolicId());
+      updateStringAnnoations(
+          gConcrete,
+          new AnnotatedValue(gConcrete, symbolicString),
+          new AnnotatedValue(concrete.length(), symbolicStringLength));
     }
     return gConcrete;
   }
@@ -2666,10 +2650,16 @@ public class Concolic {
   }
 
   private static Expression makeStringLengthToExpr(StaticObject string, Meta meta) {
+    return makeStringLengthToExpr(string, meta, true);
+  }
+
+  private static Expression makeStringLengthToExpr(StaticObject string, Meta meta, boolean bv) {
     assert string.isString();
     return string.isConcolic()
         ? extractStringLengthFromArray(string.getConcolicId())
-        : Constant.fromConcreteValue(meta.toHostString(string).length());
+        : bv
+            ? Constant.fromConcreteValue(meta.toHostString(string).length())
+            : Constant.createNatConstant(meta.toHostString(string).length());
   }
 
   private static Expression extractStringVarFromArray(int concolicId) {
@@ -2685,31 +2675,40 @@ public class Concolic {
   public static Object isDefinded(Object c, Meta meta) {
     int CODEPOINT_BOUND = 1000;
     char value;
-    if(c instanceof AnnotatedValue){
+    if (c instanceof AnnotatedValue) {
       value = (char) ((AnnotatedValue) c).asInt();
       Expression symbolic = ((AnnotatedValue) c).symbolic();
       Expression cAsInt = new ComplexExpression(NAT2BV32, new ComplexExpression(STOCODE, symbolic));
-      Expression codepointLT5000 = new ComplexExpression(BVLE, cAsInt, Constant.fromConcreteValue(CODEPOINT_BOUND));
+      Expression codepointLT5000 =
+          new ComplexExpression(BVLE, cAsInt, Constant.fromConcreteValue(CODEPOINT_BOUND));
       boolean isDef = Character.isDefined(value);
 
       if (value > CODEPOINT_BOUND) {
-        PathCondition pc = new PathCondition(new ComplexExpression(BVGT, cAsInt, Constant.fromConcreteValue(CODEPOINT_BOUND)), 1, 2);
+        PathCondition pc =
+            new PathCondition(
+                new ComplexExpression(BVGT, cAsInt, Constant.fromConcreteValue(CODEPOINT_BOUND)),
+                1,
+                2);
         addTraceElement(pc);
         stopRecording("Analysis of defined code points over 1000 is not supported.", meta);
       }
       PathCondition pc = new PathCondition(codepointLT5000, 0, 2);
       addTraceElement(pc);
       Expression undefined = Constant.fromConcreteValue(false);
-      for(int i = 0; i <= CODEPOINT_BOUND; i++){
-        if(!Character.isDefined(i)){
-          undefined = new ComplexExpression(BOR, undefined, new ComplexExpression(BVEQ, cAsInt, Constant.fromConcreteValue(i)));
+      for (int i = 0; i <= CODEPOINT_BOUND; i++) {
+        if (!Character.isDefined(i)) {
+          undefined =
+              new ComplexExpression(
+                  BOR,
+                  undefined,
+                  new ComplexExpression(BVEQ, cAsInt, Constant.fromConcreteValue(i)));
         }
       }
-      if(isDef){
+      if (isDef) {
         undefined = new ComplexExpression(BNEG, undefined);
       }
       return new AnnotatedValue(isDef, undefined);
-    }else{
+    } else {
       value = (char) c;
     }
 
@@ -2721,7 +2720,7 @@ public class Concolic {
     String concreteSelf = meta.toHostString(self);
     String other = meta.toHostString(s);
     boolean concreteRes = concreteSelf.contains(other);
-    if(!self.isConcolic() && !s.isConcolic()){
+    if (!self.isConcolic() && !s.isConcolic()) {
       return concreteRes;
     }
     Expression symbolicSelf = makeStringToExpr(self, meta);
@@ -2759,5 +2758,117 @@ public class Concolic {
   @TruffleBoundary
   public static Object stringToString(StaticObject self, Meta meta) {
     return self;
+  }
+
+  public static void stringBuilderInsert(
+      StaticObject self,
+      Object offset,
+      Object toInsert,
+      DirectCallNode insert,
+      DirectCallNode originalToString,
+      Meta meta) {
+    if (toInsert instanceof AnnotatedValue) {
+      Concolic.stopRecording("Cannot insert symbolic chars to StringBuffer", meta);
+    }
+    StaticObject toInsertCasted = meta.toGuestString(String.valueOf((char) toInsert));
+    stringBuilderInsert(self, offset, toInsertCasted, insert, originalToString, meta);
+  }
+
+  public static void stringBuilderInsert(
+      StaticObject self,
+      Object offset,
+      StaticObject toInsert,
+      DirectCallNode insert,
+      DirectCallNode originalToString,
+      Meta meta) {
+    if (offset instanceof AnnotatedValue) {
+      Concolic.stopRecording("Cannot handle symbolic insert into string buffer yet.", meta);
+    }
+    int concreteOffset = (int) offset;
+    Expression symbolicOffset = Constant.createNatConstant(concreteOffset);
+    if (self.isConcolic() || toInsert.isConcolic()) {
+      String conreteSelf = meta.toHostString((StaticObject) originalToString.call(self));
+
+      Expression symbolicSelf = makeStringToExpr(self, meta);
+      Expression symbolicToInsert = makeStringToExpr(toInsert, meta);
+
+      ComplexExpression outerSelf = (ComplexExpression) makeStringLengthToExpr(self, meta);
+      Expression symbolicSelfLength = outerSelf.getSubExpressions()[0];
+      Expression symbolicToInsertLenght = makeStringLengthToExpr(toInsert, meta, false);
+
+      boolean validOffset = 0 <= concreteOffset && concreteOffset < conreteSelf.length();
+      if (!validOffset) {
+        Expression lengthCheck =
+            new ComplexExpression(
+                BNEG,
+                new ComplexExpression(
+                    BAND,
+                    new ComplexExpression(GE, NAT_ZERO, symbolicOffset),
+                    new ComplexExpression(LT, symbolicOffset, symbolicSelfLength)));
+        PathCondition pc = new PathCondition(lengthCheck, 1, 2);
+        addTraceElement(pc);
+        meta.throwException(meta.java_lang_StringIndexOutOfBoundsException);
+      } else {
+        Expression lengthCheck =
+            new ComplexExpression(
+                BAND,
+                new ComplexExpression(GE, NAT_ZERO, symbolicOffset),
+                new ComplexExpression(LT, symbolicOffset, symbolicSelfLength));
+        PathCondition pc = new PathCondition(lengthCheck, 0, 2);
+        addTraceElement(pc);
+      }
+      Expression symbolicLeft =
+          new ComplexExpression(SSUBSTR, symbolicSelf, NAT_ZERO, symbolicOffset);
+      Expression symbolicRight =
+          new ComplexExpression(
+              SSUBSTR,
+              symbolicSelf,
+              new ComplexExpression(NATADD, symbolicOffset, symbolicToInsertLenght),
+              symbolicSelfLength);
+      Expression resultingSymbolicValue =
+          new ComplexExpression(
+              SCONCAT,
+              symbolicLeft,
+              new ComplexExpression(SCONCAT, symbolicToInsert, symbolicRight));
+      Expression resultingSymbolicLength =
+          new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, resultingSymbolicValue));
+      insert.call(self, concreteOffset, toInsert);
+      StaticObject concretRes = (StaticObject) originalToString.call(self);
+      AnnotatedValue newContent = new AnnotatedValue(concretRes, resultingSymbolicValue);
+      AnnotatedValue newLength =
+          new AnnotatedValue(meta.toHostString(concretRes).length(), resultingSymbolicLength);
+      updateStringAnnoations(self, newContent, newLength);
+    }
+  }
+
+  private static void updateStringAnnoations(
+      StaticObject string, AnnotatedValue content, AnnotatedValue length) {
+    if (string.isConcolic()) {
+      AnnotatedValue[] annotations = symbolicObjects.get(string.getConcolicId());
+      annotations[annotations.length - 2] = content;
+      annotations[annotations.length - 1] = length;
+    } else {
+      int lengthAnnotations = ((ObjectKlass) string.getKlass()).getFieldTable().length + 2;
+      AnnotatedValue[] annotationsString = new AnnotatedValue[lengthAnnotations];
+      annotationsString[lengthAnnotations - 2] = content;
+      annotationsString[lengthAnnotations - 1] = length;
+      string.setConcolicId(symbolicObjects.size());
+      symbolicObjects.add(annotationsString);
+    }
+  }
+
+  public static Object stringToLowercase(StaticObject self, Meta meta) {
+    String concreteHost = meta.toHostString(self).toLowerCase();
+    StaticObject result = meta.toGuestString(concreteHost);
+    if (self.isConcolic()) {
+      result.setConcolicId(symbolicObjects.size());
+      AnnotatedValue[] annotations = symbolicObjects.get(self.getConcolicId());
+      annotations[annotations.length - 2] =
+          new AnnotatedValue(
+              result,
+              new ComplexExpression(STOLOWER, annotations[annotations.length - 2].symbolic()));
+      symbolicObjects.add(result.getConcolicId(), annotations);
+    }
+    return result;
   }
 }

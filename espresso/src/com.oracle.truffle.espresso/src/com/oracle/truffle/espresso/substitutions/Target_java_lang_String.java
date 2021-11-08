@@ -27,6 +27,7 @@
 package com.oracle.truffle.espresso.substitutions;
 
 import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.concolic.AnnotatedValue;
@@ -162,5 +163,14 @@ public class Target_java_lang_String {
     @Substitution(hasReceiver = true)
     public static @Host(String.class) Object toString(@Host(String.class) StaticObject self, @InjectMeta Meta meta){
         return Concolic.stringToString(self, meta);
+    }
+
+    @Substitution(hasReceiver = true, methodName = "toLowerCase")
+    @TruffleBoundary
+    public static @Host(String.class) Object toLowerCase(@Host(String.class) StaticObject self, @InjectMeta Meta meta){
+        System.out.println("toLowarCase is called" + self.getConcolicId());
+        StaticObject res = (StaticObject) Concolic.stringToLowercase(self, meta);
+        System.out.println("After to LowerCase: " + res.getConcolicId());
+        return res;
     }
 }
