@@ -1121,7 +1121,7 @@ public class Concolic {
 
     // case I2L: putLong(stack, top - 1, popInt(stack, top - 1)); break;
     public static void i2l(long[] primitives, Object[] symbolic, int top) {
-        int c1 = BytecodeNode.popInt(primitives, top - 1);
+        long c1 = BytecodeNode.popInt(primitives, top - 1);
         BytecodeNode.putLong(primitives, top -1, c1);
         putSymbolic(symbolic, top, unarySymbolicOp(OperatorComparator.I2L, c1, popSymbolic(symbolic, top -1)));
     }
