@@ -36,7 +36,11 @@ import tools.aqua.concolic.Concolic;
 @EspressoSubstitutions
 public class Target_java_lang_String {
 
-    //@Substitution(hasReceiver = true)
+    //TODO: String Constructor mit new String.
+
+
+    @Substitution(hasReceiver = true)
+    @TruffleBoundary
     public static @Host(typeName = "Z") Object equals(
         @Host(String.class) StaticObject self,
         @Host(Object.class) StaticObject other,
@@ -168,9 +172,7 @@ public class Target_java_lang_String {
     @Substitution(hasReceiver = true, methodName = "toLowerCase")
     @TruffleBoundary
     public static @Host(String.class) Object toLowerCase(@Host(String.class) StaticObject self, @InjectMeta Meta meta){
-        System.out.println("toLowarCase is called" + self.getConcolicId());
         StaticObject res = (StaticObject) Concolic.stringToLowercase(self, meta);
-        System.out.println("After to LowerCase: " + res.getConcolicId());
         return res;
     }
 }

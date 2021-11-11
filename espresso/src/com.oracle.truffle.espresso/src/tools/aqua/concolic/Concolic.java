@@ -2380,6 +2380,7 @@ public class Concolic {
     // FIXME: we currently do not track conditions for exceptions inside equals!
     // FIXME: could be better to use method handle from meta?
     boolean areEqual = meta.toHostString(self).equals(meta.toHostString(other));
+    System.out.println("Are equal?" + areEqual + "ConcolicIds: " + self.getConcolicId() + " nother: "  + other.getConcolicId());
     if (self.getConcolicId() < 0 && other.getConcolicId() < 0) {
       return areEqual;
     }
