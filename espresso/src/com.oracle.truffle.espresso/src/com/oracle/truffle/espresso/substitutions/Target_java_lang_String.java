@@ -28,7 +28,17 @@ package com.oracle.truffle.espresso.substitutions;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.interop.InvalidArrayIndexException;
+import com.oracle.truffle.api.interop.UnsupportedMessageException;
+import com.oracle.truffle.api.interop.UnsupportedTypeException;
+import com.oracle.truffle.espresso.descriptors.Symbol.Type;
+import com.oracle.truffle.espresso.impl.Field;
+import com.oracle.truffle.espresso.impl.Klass;
+import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
+import com.oracle.truffle.espresso.nodes.interop.ToEspressoNode;
+import com.oracle.truffle.espresso.nodes.interop.ToEspressoNodeGen;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.concolic.AnnotatedValue;
 import tools.aqua.concolic.Concolic;
@@ -36,8 +46,32 @@ import tools.aqua.concolic.Concolic;
 @EspressoSubstitutions
 public class Target_java_lang_String {
 
-    //TODO: String Constructor mit new String.
-
+    @Substitution(hasReceiver = true, methodName = "<init>")
+    public static void init(@Host(String.class) StaticObject self, @Host(String.class) StaticObject other, @InjectMeta Meta meta){
+        Field[] fields = other.getKlass().getDeclaredFields();
+        Field value = null, coder = null, hash = null;
+        for(Field f: fields){
+            if(f.getNameAsString().equals("value")){
+                value = f;
+            }else if(f.getNameAsString().equals("coder")){
+                coder = f;
+            }else if(f.getNameAsString().equals("hash")){
+                hash = f;
+            }
+        }
+        for(Field f: self.getKlass().getDeclaredFields()){
+            if(f.getNameAsString().equals("value")){
+                f.setObject(self, value.getObject(other).copy());
+            }else if(f.getNameAsString().equals("coder")){
+                f.setByte(self, coder.getByte(other));
+            }else if(f.getNameAsString().equals("hash")){
+                f.setInt(self, hash.getInt(other));
+            }
+        }
+        if(other.isConcolic()){
+            Concolic.stringConstructor(self, other, meta);
+        }
+    }
 
     @Substitution(hasReceiver = true)
     @TruffleBoundary
@@ -82,7 +116,7 @@ public class Target_java_lang_String {
     @CompilerDirectives.TruffleBoundary
     public static @Host(String.class) StaticObject valueOf_char(@Host(typeName = "C") Object v, @InjectMeta Meta meta) {
         if (v instanceof AnnotatedValue) {
-            Concolic.stopRecording("concolic type conversion to string not supported, yet.", meta);
+            Concolic.stopRecording("concolic type char conversion to string not supported, yet.", meta);
         }
         String ret = "" + (char) v;
         return meta.toGuestString(ret);
@@ -155,7 +189,9 @@ public class Target_java_lang_String {
 
     @Substitution(hasReceiver = true)
     public static @Host(typeName = "Z") Object contains(@Host(String.class) StaticObject self, @Host(CharSequence.class) StaticObject s, @InjectMeta Meta meta){
-
+        if(StaticObject.isNull(self) || StaticObject.isNull(s)){
+            return false;
+        }
         return Concolic.stringContains(self, s, meta);
     }
 
@@ -175,4 +211,22 @@ public class Target_java_lang_String {
         StaticObject res = (StaticObject) Concolic.stringToLowercase(self, meta);
         return res;
     }
+
+    @Substitution(hasReceiver = true)
+    @TruffleBoundary
+    public static @Host(String[].class) Object split(@Host(String.class) StaticObject self, @Host(String.class) StaticObject regex, @InjectMeta Meta meta){
+        if(self.isConcolic() || regex.isConcolic()){
+            Concolic.stopRecording("Cannot split symbolic strings yet", meta);
+        }
+        String s = meta.toHostString(self);
+        String r = meta.toHostString(regex);
+        String[] res = s.split(r);
+        StaticObject[] resSO = new StaticObject[res.length];
+        for(int i = 0; i < res.length; i++){
+            resSO[i] = meta.toGuestString(res[i]);
+        }
+        return StaticObject.createArray(self.getKlass().getArrayClass(), resSO);
+    }
+
+
 }
