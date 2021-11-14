@@ -28,18 +28,10 @@ package com.oracle.truffle.espresso.substitutions;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
-import com.oracle.truffle.api.interop.InteropLibrary;
-import com.oracle.truffle.api.interop.InvalidArrayIndexException;
-import com.oracle.truffle.api.interop.UnsupportedMessageException;
-import com.oracle.truffle.api.interop.UnsupportedTypeException;
-import com.oracle.truffle.espresso.descriptors.Symbol.Type;
 import com.oracle.truffle.espresso.impl.Field;
-import com.oracle.truffle.espresso.impl.Klass;
-import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
-import com.oracle.truffle.espresso.nodes.interop.ToEspressoNode;
-import com.oracle.truffle.espresso.nodes.interop.ToEspressoNodeGen;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import java.util.Arrays;
 import tools.aqua.concolic.AnnotatedValue;
 import tools.aqua.concolic.Concolic;
 
@@ -121,6 +113,31 @@ public class Target_java_lang_String {
         String ret = "" + (char) v;
         return meta.toGuestString(ret);
     }
+
+  @Substitution(methodName = "valueOf")
+  @CompilerDirectives.TruffleBoundary
+  public static @Host(String.class) StaticObject valueOf_char_array(
+      @Host(typeName = "[C") StaticObject v, @InjectMeta Meta meta) {
+    if (v.isConcolic()) {
+      Concolic.stopRecording("concolic type char array conversion to string not supported, yet.", meta);
+    }
+    char[] value = v.unwrap();
+    return meta.toGuestString(new String(value));
+  }
+
+  @Substitution(methodName = "valueOf")
+  @CompilerDirectives.TruffleBoundary
+  public static @Host(String.class) StaticObject valueOf_char_array(
+      @Host(typeName = "[C") StaticObject v,
+      @Host(typeName = "I") Object offset,
+      @Host(typeName = "I") Object count,
+      @InjectMeta Meta meta) {
+    if (v.isConcolic() || offset instanceof AnnotatedValue || count instanceof AnnotatedValue) {
+      Concolic.stopRecording("concolic type char array conversion to string not supported, yet.", meta);
+    }
+    char[] value = Arrays.copyOfRange((char[]) v.unwrap(), (int) offset, (int) count);
+    return meta.toGuestString(new String(value));
+  }
 
     @Substitution(methodName = "valueOf")
     @CompilerDirectives.TruffleBoundary

@@ -47,6 +47,7 @@ import static tools.aqua.concolic.OperatorComparator.BVGE;
 import static tools.aqua.concolic.OperatorComparator.BVGT;
 import static tools.aqua.concolic.OperatorComparator.BVLE;
 import static tools.aqua.concolic.OperatorComparator.GE;
+import static tools.aqua.concolic.OperatorComparator.GT;
 import static tools.aqua.concolic.OperatorComparator.IADD;
 import static tools.aqua.concolic.OperatorComparator.LE;
 import static tools.aqua.concolic.OperatorComparator.LT;
@@ -2447,21 +2448,29 @@ public class Concolic {
       // index is negative
       meta.throwException(meta.java_lang_StringIndexOutOfBoundsException);
       return null;
-    } else if (concolicIndex) {
+    } else if(!sat1 && concolicIndex) {
       Expression indexGreaterEqualsZero =
-          new ComplexExpression(LE, Constant.NAT_ZERO, symbolicStrLen);
-      PathCondition pc = new PathCondition(indexGreaterEqualsZero, sat1 ? 0 : 1, 2);
+          new ComplexExpression(GT, INT_ZERO, indexExpr);
+      PathCondition pc = new PathCondition(indexGreaterEqualsZero, 1, 2);
+      addTraceElement(pc);
+    } else if (sat1 && concolicIndex) {
+      Expression indexGreaterEqualsZero =
+          new ComplexExpression(LE, INT_ZERO, indexExpr);
+      PathCondition pc = new PathCondition(indexGreaterEqualsZero, 0, 2);
       addTraceElement(pc);
     }
 
-    Expression indexLTSymbolicStringLength = new ComplexExpression(LT, indexExpr, bvSymbolicStrLen);
-    PathCondition pc2 = new PathCondition(indexLTSymbolicStringLength, sat2 ? 0 : 1, 2);
-    addTraceElement(pc2);
-
     if (!sat2) {
+      Expression indexLTSymbolicStringLength = new ComplexExpression(GE, indexExpr, bvSymbolicStrLen);
+      PathCondition pc2 = new PathCondition(indexLTSymbolicStringLength,  1, 2);
+      addTraceElement(pc2);
       // index is greater than string length
       meta.throwException(meta.java_lang_StringIndexOutOfBoundsException);
       return null;
+    }else{
+      Expression indexLTSymbolicStringLength = new ComplexExpression(LT, indexExpr, bvSymbolicStrLen);
+      PathCondition pc2 = new PathCondition(indexLTSymbolicStringLength,  0, 2);
+      addTraceElement(pc2);
     }
     Expression charAtExpr = new ComplexExpression(SAT, symbolicString, intIndexExpr);
     return new AnnotatedValue(concreteString.charAt(concreteIndex), charAtExpr);
@@ -2546,7 +2555,7 @@ public class Concolic {
     if (self.isConcolic()) {
       Expression symbolicString = extractStringVarFromArray(self.getConcolicId());
       Expression symbolicStringLength = extractStringLengthFromArray(self.getConcolicId());
-      updateStringAnnoations(
+      updateStringAnnotations(
           gConcrete,
           new AnnotatedValue(gConcrete, symbolicString),
           new AnnotatedValue(concrete.length(), symbolicStringLength));
@@ -2803,16 +2812,19 @@ public class Concolic {
     int concreteOffset = (int) offset;
     Expression symbolicOffset = Constant.createNatConstant(concreteOffset);
     if (self.isConcolic() || toInsert.isConcolic()) {
-      String conreteSelf = meta.toHostString((StaticObject) originalToString.call(self));
+      String concreteSelf = meta.toHostString((StaticObject) originalToString.call(self));
 
       Expression symbolicSelf = makeStringToExpr(self, meta);
       Expression symbolicToInsert = makeStringToExpr(toInsert, meta);
 
-      ComplexExpression outerSelf = (ComplexExpression) makeStringLengthToExpr(self, meta);
-      Expression symbolicSelfLength = outerSelf.getSubExpressions()[0];
-      Expression symbolicToInsertLenght = makeStringLengthToExpr(toInsert, meta, false);
+      Expression outerSelf = makeStringLengthToExpr(self, meta);
+      Expression symbolicSelfLength = outerSelf;
+      if(outerSelf instanceof ComplexExpression) {
+        symbolicSelfLength = ((ComplexExpression) outerSelf).getSubExpressions()[0];
+      }
+      Expression symbolicToInsertLength = makeStringLengthToExpr(toInsert, meta, false);
 
-      boolean validOffset = 0 <= concreteOffset && concreteOffset < conreteSelf.length();
+      boolean validOffset = 0 <= concreteOffset && concreteOffset <= concreteSelf.length();
       if (!validOffset) {
         Expression lengthCheck =
             new ComplexExpression(
@@ -2820,7 +2832,7 @@ public class Concolic {
                 new ComplexExpression(
                     BAND,
                     new ComplexExpression(GE, NAT_ZERO, symbolicOffset),
-                    new ComplexExpression(LT, symbolicOffset, symbolicSelfLength)));
+                    new ComplexExpression(LE, symbolicOffset, symbolicSelfLength)));
         PathCondition pc = new PathCondition(lengthCheck, 1, 2);
         addTraceElement(pc);
         meta.throwException(meta.java_lang_StringIndexOutOfBoundsException);
@@ -2829,35 +2841,42 @@ public class Concolic {
             new ComplexExpression(
                 BAND,
                 new ComplexExpression(GE, NAT_ZERO, symbolicOffset),
-                new ComplexExpression(LT, symbolicOffset, symbolicSelfLength));
+                new ComplexExpression(LE, symbolicOffset, symbolicSelfLength));
         PathCondition pc = new PathCondition(lengthCheck, 0, 2);
         addTraceElement(pc);
       }
-      Expression symbolicLeft =
-          new ComplexExpression(SSUBSTR, symbolicSelf, NAT_ZERO, symbolicOffset);
-      Expression symbolicRight =
-          new ComplexExpression(
-              SSUBSTR,
-              symbolicSelf,
-              new ComplexExpression(NATADD, symbolicOffset, symbolicToInsertLenght),
-              symbolicSelfLength);
-      Expression resultingSymbolicValue =
-          new ComplexExpression(
-              SCONCAT,
-              symbolicLeft,
-              new ComplexExpression(SCONCAT, symbolicToInsert, symbolicRight));
+      Expression resultingSymbolicValue;
+      if(concreteSelf.isEmpty()){
+        resultingSymbolicValue = symbolicToInsert;
+      } else {
+        Expression symbolicLeft =
+            new ComplexExpression(SSUBSTR, symbolicSelf, NAT_ZERO, symbolicOffset);
+        Expression symbolicRight =
+            new ComplexExpression(
+                SSUBSTR,
+                symbolicSelf,
+                new ComplexExpression(NATADD, symbolicOffset, symbolicToInsertLength),
+                symbolicSelfLength);
+        resultingSymbolicValue =
+            new ComplexExpression(
+                SCONCAT,
+                symbolicLeft,
+                new ComplexExpression(SCONCAT, symbolicToInsert, symbolicRight));
+      }
       Expression resultingSymbolicLength =
           new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, resultingSymbolicValue));
+      int concoliID = self.getConcolicId();
       insert.call(self, concreteOffset, toInsert);
+      self.setConcolicId(concoliID);
       StaticObject concretRes = (StaticObject) originalToString.call(self);
       AnnotatedValue newContent = new AnnotatedValue(concretRes, resultingSymbolicValue);
       AnnotatedValue newLength =
           new AnnotatedValue(meta.toHostString(concretRes).length(), resultingSymbolicLength);
-      updateStringAnnoations(self, newContent, newLength);
+      updateStringAnnotations(self, newContent, newLength);
     }
   }
 
-  private static void updateStringAnnoations(
+  private static void updateStringAnnotations(
       StaticObject string, AnnotatedValue content, AnnotatedValue length) {
     if (string.isConcolic()) {
       AnnotatedValue[] annotations = symbolicObjects.get(string.getConcolicId());
@@ -2892,7 +2911,7 @@ public class Concolic {
     String val = meta.toHostString(self);
     Expression str = makeStringToExpr(other, meta);
     Expression strLen = makeStringLengthToExpr(other, meta);
-    updateStringAnnoations(
+    updateStringAnnotations(
         self,
         new AnnotatedValue(meta.toGuestString(val), str),
         new AnnotatedValue(val.length(), strLen));

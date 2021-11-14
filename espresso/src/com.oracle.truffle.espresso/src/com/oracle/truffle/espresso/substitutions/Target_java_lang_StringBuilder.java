@@ -40,4 +40,16 @@ public class Target_java_lang_StringBuilder {
             : meta.toHostString((StaticObject) newUTF16String.call(getValue.call(self), 0, length.call(self)));
     return Concolic.stringBuilderToString(self, concrete, meta);
   }
+
+  @Substitution(hasReceiver = true, methodName = "insert")
+  public static @Host(StringBuilder.class) Object insert_string(
+      @Host(StringBuilder.class) StaticObject self,
+      @Host(typeName = "I") Object offset,
+      @Host(String.class) StaticObject toInsert,
+      @GuestCall(target = "java_lang_AbstractStringBuilder_insert_string") DirectCallNode insert,
+      @GuestCall(target = "java_lang_StringBuilder_toString") DirectCallNode originalToString,
+      @InjectMeta Meta meta) {
+    Concolic.stringBuilderInsert(self, offset, toInsert, insert, originalToString, meta);
+    return self;
+  }
 }
