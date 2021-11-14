@@ -60,6 +60,7 @@ import static tools.aqua.concolic.OperatorComparator.SSUBSTR;
 import static tools.aqua.concolic.OperatorComparator.STOCODE;
 import static tools.aqua.concolic.OperatorComparator.STOLOWER;
 import static tools.aqua.concolic.OperatorComparator.STOUPPER;
+import static tools.aqua.concolic.OperatorComparator.STRINGEQ;
 
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
@@ -1523,75 +1524,90 @@ public class Concolic {
       return;
     }
 
-        Constant symbIncr = Constant.fromConcreteValue(incr);
-        AnnotatedValue symbResult = new AnnotatedValue(concResult,
-                new ComplexExpression(OperatorComparator.IADD, s1.symbolic(), symbIncr));
-        setLocalSymbolic(symbolic, index, symbResult);
-    }
+    Constant symbIncr = Constant.fromConcreteValue(incr);
+    AnnotatedValue symbResult =
+        new AnnotatedValue(
+            concResult, new ComplexExpression(OperatorComparator.IADD, s1.symbolic(), symbIncr));
+    setLocalSymbolic(symbolic, index, symbResult);
+  }
 
-    // case I2L: putLong(stack, top - 1, popInt(stack, top - 1)); break;
-    public static void i2l(long[] primitives, Object[] symbolic, int top) {
-        long c1 = BytecodeNode.popInt(primitives, top - 1);
-        BytecodeNode.putLong(primitives, top -1, c1);
-        putSymbolic(symbolic, top, unarySymbolicOp(OperatorComparator.I2L, c1, popSymbolic(symbolic, top -1)));
-    }
+  // case I2L: putLong(stack, top - 1, popInt(stack, top - 1)); break;
+  public static void i2l(long[] primitives, Object[] symbolic, int top) {
+    long c1 = BytecodeNode.popInt(primitives, top - 1);
+    BytecodeNode.putLong(primitives, top - 1, c1);
+    putSymbolic(
+        symbolic, top, unarySymbolicOp(OperatorComparator.I2L, c1, popSymbolic(symbolic, top - 1)));
+  }
 
-    // case I2F: putFloat(stack, top - 1, popInt(stack, top - 1)); break;
-    public static void i2f(long[] primitives, Object[] symbolic, int top) {
-        float c1 = BytecodeNode.popInt(primitives, top - 1);
-        BytecodeNode.putFloat(primitives, top -1, c1);
-        putSymbolic(symbolic, top-1, unarySymbolicOp(OperatorComparator.I2F, c1, popSymbolic(symbolic, top -1)));
-    }
+  // case I2F: putFloat(stack, top - 1, popInt(stack, top - 1)); break;
+  public static void i2f(long[] primitives, Object[] symbolic, int top) {
+    float c1 = BytecodeNode.popInt(primitives, top - 1);
+    BytecodeNode.putFloat(primitives, top - 1, c1);
+    putSymbolic(
+        symbolic,
+        top - 1,
+        unarySymbolicOp(OperatorComparator.I2F, c1, popSymbolic(symbolic, top - 1)));
+  }
 
-    // case I2D: putDouble(stack, top - 1, popInt(stack, top - 1)); break;
-    public static void i2d(long[] primitives, Object[] symbolic, int top) {
-        double c1 = BytecodeNode.popInt(primitives, top - 1);
-        BytecodeNode.putDouble(primitives, top -1, c1);
-        putSymbolic(symbolic, top, unarySymbolicOp(OperatorComparator.I2D, c1, popSymbolic(symbolic, top -1)));
-    }
+  // case I2D: putDouble(stack, top - 1, popInt(stack, top - 1)); break;
+  public static void i2d(long[] primitives, Object[] symbolic, int top) {
+    double c1 = BytecodeNode.popInt(primitives, top - 1);
+    BytecodeNode.putDouble(primitives, top - 1, c1);
+    putSymbolic(
+        symbolic, top, unarySymbolicOp(OperatorComparator.I2D, c1, popSymbolic(symbolic, top - 1)));
+  }
 
-    // case L2I: putInt(stack, top - 2, (int) popLong(stack, top - 1)); break;
-    public static void l2i(long[] primitives, Object[] symbolic, int top) {
-        int c1 = (int) BytecodeNode.popLong(primitives, top - 1);
-        BytecodeNode.putInt(primitives, top -2, c1);
-        putSymbolic(symbolic, top-2, unarySymbolicOp(OperatorComparator.L2I, c1, popSymbolic(symbolic, top -1)));
-    }
+  // case L2I: putInt(stack, top - 2, (int) popLong(stack, top - 1)); break;
+  public static void l2i(long[] primitives, Object[] symbolic, int top) {
+    int c1 = (int) BytecodeNode.popLong(primitives, top - 1);
+    BytecodeNode.putInt(primitives, top - 2, c1);
+    putSymbolic(
+        symbolic,
+        top - 2,
+        unarySymbolicOp(OperatorComparator.L2I, c1, popSymbolic(symbolic, top - 1)));
+  }
 
-    // case L2F: putFloat(stack, top - 2, popLong(stack, top - 1)); break;
-    public static void l2f(long[] primitives, Object[] symbolic, int top) {
-        float c1 = (float) BytecodeNode.popLong(primitives, top - 1);
-        BytecodeNode.putFloat(primitives, top -2, c1);
-        putSymbolic(symbolic, top-2, unarySymbolicOp(OperatorComparator.L2F, c1, popSymbolic(symbolic, top -1)));
-    }
+  // case L2F: putFloat(stack, top - 2, popLong(stack, top - 1)); break;
+  public static void l2f(long[] primitives, Object[] symbolic, int top) {
+    float c1 = (float) BytecodeNode.popLong(primitives, top - 1);
+    BytecodeNode.putFloat(primitives, top - 2, c1);
+    putSymbolic(
+        symbolic,
+        top - 2,
+        unarySymbolicOp(OperatorComparator.L2F, c1, popSymbolic(symbolic, top - 1)));
+  }
 
-    // case L2D: putDouble(stack, top - 2, popLong(stack, top - 1)); break;
-    public static void l2d(long[] primitives, Object[] symbolic, int top) {
-        double c1 = (double) BytecodeNode.popLong(primitives, top - 1);
-        BytecodeNode.putDouble(primitives, top -2, c1);
-        putSymbolic(symbolic, top-1, unarySymbolicOp(OperatorComparator.L2D, c1, popSymbolic(symbolic, top -1)));
-    }
+  // case L2D: putDouble(stack, top - 2, popLong(stack, top - 1)); break;
+  public static void l2d(long[] primitives, Object[] symbolic, int top) {
+    double c1 = (double) BytecodeNode.popLong(primitives, top - 1);
+    BytecodeNode.putDouble(primitives, top - 2, c1);
+    putSymbolic(
+        symbolic,
+        top - 1,
+        unarySymbolicOp(OperatorComparator.L2D, c1, popSymbolic(symbolic, top - 1)));
+  }
 
-    // case F2I: putInt(stack, top - 1, (int) popFloat(stack, top - 1)); break;
-    // TODO: needs to be tested.
-    /*
-    If the value' is NaN, the result of the conversion is an int 0.
-    Otherwise, if the value' is not an infinity, it is rounded to an
-    integer value V, rounding towards zero using IEEE 754 round towards
-    zero mode. If this integer value V can be represented as an int, then
-    the result is the int value V.
-    Otherwise, either the value' must be too small (a negative value of
-    large magnitude or negative infinity), and the result is the smallest
-    representable value of type int, or the value' must be too large
-    (a positive value of large magnitude or positive infinity), and the
-    result is the largest representable value of type int.
-    */
-    public static void f2i(long[] primitives, Object[] symbolic, int top) {
-        int c1 = (int) BytecodeNode.popFloat(primitives, top - 1);
-        BytecodeNode.putInt(primitives, top -1, c1);
-        AnnotatedValue s1 = popSymbolic(symbolic, top -1);
-        if (s1 == null) {
-            return;
-        }
+  // case F2I: putInt(stack, top - 1, (int) popFloat(stack, top - 1)); break;
+  // TODO: needs to be tested.
+  /*
+  If the value' is NaN, the result of the conversion is an int 0.
+  Otherwise, if the value' is not an infinity, it is rounded to an
+  integer value V, rounding towards zero using IEEE 754 round towards
+  zero mode. If this integer value V can be represented as an int, then
+  the result is the int value V.
+  Otherwise, either the value' must be too small (a negative value of
+  large magnitude or negative infinity), and the result is the smallest
+  representable value of type int, or the value' must be too large
+  (a positive value of large magnitude or positive infinity), and the
+  result is the largest representable value of type int.
+  */
+  public static void f2i(long[] primitives, Object[] symbolic, int top) {
+    int c1 = (int) BytecodeNode.popFloat(primitives, top - 1);
+    BytecodeNode.putInt(primitives, top - 1, c1);
+    AnnotatedValue s1 = popSymbolic(symbolic, top - 1);
+    if (s1 == null) {
+      return;
+    }
 
     ComplexExpression intMinAsFloat =
         new ComplexExpression(OperatorComparator.I2F_RTZ, Constant.INT_MIN);
@@ -2725,8 +2741,8 @@ public class Concolic {
     }
     Expression symbolicSelf = makeStringToExpr(self, meta);
     Expression symbolicOther = makeStringToExpr(s, meta);
-    Expression result = new ComplexExpression(SCONTAINS, symbolicSelf, symbolicOther);
-    return new AnnotatedValue(concreteRes, result);
+    return new AnnotatedValue(
+        concreteRes, new ComplexExpression(SCONTAINS, symbolicSelf, symbolicOther));
   }
 
   @TruffleBoundary
@@ -2880,5 +2896,153 @@ public class Concolic {
         self,
         new AnnotatedValue(meta.toGuestString(val), str),
         new AnnotatedValue(val.length(), strLen));
+  }
+
+  public static Object regionMatches(
+      StaticObject self,
+      StaticObject other,
+      boolean ignore,
+      int ctoffset,
+      int cooffset,
+      int clen,
+      Meta meta) {
+    String cSelf = meta.toHostString(self);
+    String cOther = meta.toHostString(self);
+    boolean boundsCheck =
+        evaluateBoundRegionMatches(
+            cooffset,
+            ctoffset,
+            clen,
+            cOther.length(),
+            cSelf.length(),
+            makeStringLengthToExpr(other, meta),
+            makeStringLengthToExpr(self, meta));
+    if (!boundsCheck) {
+      return false;
+    }
+    boolean cRes = cSelf.regionMatches(ignore, ctoffset, cOther, cooffset, clen);
+    if (self.isConcolic() && !other.isConcolic()) {
+      return regionMatchesSymbolic(
+          makeStringToExpr(self, meta),
+          Constant.fromConcreteValue(cOther),
+          ctoffset,
+          cooffset,
+          clen,
+          ignore,
+          cRes);
+    } else if (!self.isConcolic() && other.isConcolic()) {
+      return regionMatchesSymbolic(
+          makeStringToExpr(other, meta),
+          Constant.fromConcreteValue(cSelf),
+          cooffset,
+          ctoffset,
+          clen,
+          ignore,
+          cRes);
+    } else {
+      return regionMatchesSymbolic(
+          makeStringToExpr(self, meta),
+          makeStringToExpr(other, meta),
+          ctoffset,
+          cooffset,
+          clen,
+          ignore,
+          cRes);
+    }
+  }
+
+  private static Object regionMatchesSymbolic(
+      Expression symbolicSelf,
+      Expression symbolicOther,
+      int ctoffset,
+      int cooffset,
+      int clen,
+      boolean ignore,
+      boolean cRes) {
+    Expression symbolicSubSelf =
+        new ComplexExpression(
+            SSUBSTR,
+            symbolicSelf,
+            Constant.createNatConstant(ctoffset),
+            Constant.createNatConstant(clen));
+    Expression symbolicSubOther =
+        new ComplexExpression(
+            SSUBSTR,
+            symbolicOther,
+            Constant.createNatConstant(cooffset),
+            Constant.createNatConstant(clen));
+    if (ignore) {
+      symbolicSubSelf = new ComplexExpression(STOLOWER, symbolicSubSelf);
+      symbolicSubOther = new ComplexExpression(STOLOWER, symbolicSubOther);
+    }
+    PathCondition pc;
+    if (cRes) {
+      pc =
+          new PathCondition(
+              new ComplexExpression(STRINGEQ, symbolicSubSelf, symbolicSubOther), 0, 2);
+    } else {
+      pc =
+          new PathCondition(
+              new ComplexExpression(
+                  BNEG, new ComplexExpression(STRINGEQ, symbolicSubSelf, symbolicSubOther)),
+              1,
+              2);
+    }
+    addTraceElement(pc);
+    return cRes;
+  }
+
+  private static boolean evaluateBoundRegionMatches(
+      int ooffset,
+      int toffset,
+      int len,
+      int olen,
+      int tlen,
+      Expression otherSymLen,
+      Expression tSymLen) {
+    boolean upperOBound = (ooffset + len) > olen;
+    Expression upperOBoundE =
+        new ComplexExpression(LT, otherSymLen, Constant.fromConcreteValue(ooffset + len));
+
+    boolean lowerOBound = (ooffset + len) < 0;
+
+    boolean lowerTBound = (toffset + len) < 0;
+
+    boolean upperTBound = (toffset + len) > tlen;
+    Expression upperTBoundE =
+        new ComplexExpression(LT, tSymLen, Constant.fromConcreteValue(toffset + len));
+    Expression check0 = new ComplexExpression(BAND, upperOBoundE, upperTBoundE);
+    Expression check1 =
+        new ComplexExpression(BAND, upperOBoundE, new ComplexExpression(BNEG, upperTBoundE));
+    Expression check2 =
+        new ComplexExpression(BAND, new ComplexExpression(BNEG, upperOBoundE), upperTBoundE);
+    Expression check3 =
+        new ComplexExpression(
+            BAND,
+            new ComplexExpression(BNEG, upperOBoundE),
+            new ComplexExpression(BNEG, upperTBoundE));
+    Expression effective = null;
+    int branchIdx = -1;
+    if (upperOBound) {
+      if (upperTBound) {
+        effective = check0;
+        branchIdx = 0;
+
+      } else {
+        effective = check1;
+        branchIdx = 1;
+      }
+    } else {
+      if (upperTBound) {
+        effective = check2;
+        branchIdx = 2;
+      } else {
+        effective = check3;
+        branchIdx = 3;
+      }
+    }
+    PathCondition pc = new PathCondition(effective, branchIdx, 4);
+    addTraceElement(pc);
+    return !(upperOBound || lowerOBound || lowerTBound || upperTBound);
   }
 }

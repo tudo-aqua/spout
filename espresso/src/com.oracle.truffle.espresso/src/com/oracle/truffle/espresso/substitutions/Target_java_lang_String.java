@@ -228,5 +228,39 @@ public class Target_java_lang_String {
         return StaticObject.createArray(self.getKlass().getArrayClass(), resSO);
     }
 
+    @Substitution(hasReceiver = true, methodName = "regionMatches")
+    public static @Host(typeName = "Z") Object regionMatches_ignoreCase(@Host(String.class) StaticObject self, @Host(typeName = "Z") Object ignoreCase, @Host(typeName = "I") Object toffset, @Host(String.class) StaticObject other,
+        @Host(typeName = "I") Object ooffset, @Host(typeName = "I") Object len,@InjectMeta Meta meta){
+        boolean ignore = false;
+        if(ignoreCase instanceof AnnotatedValue){
+            Concolic.stopRecording("Cannot deal with symbolic ignore case for regionMatches yet", meta);
+        }else{
+            ignore =(boolean) ignoreCase;
+        }
+        int ctoffset= -1, cooffset=-1, clen=-1;
+        if(toffset instanceof AnnotatedValue){
+            Concolic.stopRecording("Cannot deal with symbolic toffset for regionMatches yet", meta);
+        }
+        else{
+            ctoffset = (int) toffset;
+        }
+        if(ooffset instanceof AnnotatedValue){
+            Concolic.stopRecording("Cannot deal with symbolic ooffset for regionMatches yet", meta);
+        }
+        else{
+            cooffset = (int) ooffset;
+        }
+        if(len instanceof AnnotatedValue){
+            Concolic.stopRecording("Cannot deal with symbolic len for regionMatches yet", meta);
+        }
+        else{
+            clen = (int) len;
+        }
+        if(self.isConcolic() || other.isConcolic()){
+            return  Concolic.regionMatches(self, other, ignore, ctoffset, cooffset, clen, meta);
+        }else{
+            return meta.toHostString(self).regionMatches(ignore, ctoffset, meta.toHostString(other), cooffset, clen);
+        }
+    }
 
 }
