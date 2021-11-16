@@ -469,13 +469,12 @@ public final class BytecodeNode extends EspressoMethodNode {
             Symbol<Type> argType = Signatures.parameterType(methodSignature, i);
             if (argType.length() == 1) {
                 // @formatter:off
-                byte s = argType.byteAt(0);
                 if (arguments[i + receiverSlot] instanceof AnnotatedValue) {
                     AnnotatedValue a = (AnnotatedValue) arguments[i + receiverSlot];
                     Concolic.setLocalSymbolic(refs, curSlot, a);
                     arguments[i + receiverSlot] = a.asType(argType.byteAt(0));
                 }
-                switch (s) {
+                switch (argType.byteAt(0)) {
                     case 'Z' : setLocalInt(primitives, curSlot, ((boolean) arguments[i + receiverSlot]) ? 1 : 0); break;
                     case 'B' : setLocalInt(primitives, curSlot, ((byte) arguments[i + receiverSlot]));            break;
                     case 'S' : setLocalInt(primitives, curSlot, ((short) arguments[i + receiverSlot]));           break;
@@ -743,7 +742,7 @@ public final class BytecodeNode extends EspressoMethodNode {
                     case ILOAD:
                         putInt(primitives, top, getLocalInt(primitives, bs.readLocalIndex(curBCI)));
                         livenessAnalysis.performPostBCI(primitives, refs, curBCI);
-                        Concolic.putSymbolic(refs, top, Concolic.getLocalSymbolicAsInt(refs, bs.readLocalIndex(curBCI)));
+                        Concolic.putSymbolic(refs, top, Concolic.getLocalSymbolic(refs, bs.readLocalIndex(curBCI)));
                         break;
                     case LLOAD:
                         putLong(primitives, top, getLocalLong(primitives, bs.readLocalIndex(curBCI)));
@@ -772,7 +771,7 @@ public final class BytecodeNode extends EspressoMethodNode {
                     case ILOAD_3:
                         putInt(primitives, top, getLocalInt(primitives, curOpcode - ILOAD_0));
                         livenessAnalysis.performPostBCI(primitives, refs, curBCI);
-                        Concolic.putSymbolic(refs, top, Concolic.getLocalSymbolicAsInt(refs,curOpcode - ILOAD_0));
+                        Concolic.putSymbolic(refs, top, Concolic.getLocalSymbolic(refs,curOpcode - ILOAD_0));
                         break;
                     case LLOAD_0: // fall through
                     case LLOAD_1: // fall through
@@ -826,7 +825,7 @@ public final class BytecodeNode extends EspressoMethodNode {
                     case ISTORE:
                         setLocalInt(primitives, bs.readLocalIndex(curBCI), popInt(primitives, top - 1));
                         livenessAnalysis.performPostBCI(primitives, refs, curBCI);
-                        Concolic.setLocalSymbolic(refs, bs.readLocalIndex(curBCI), Concolic.popSymbolicAsInt(refs,top - 1));
+                        Concolic.setLocalSymbolic(refs, bs.readLocalIndex(curBCI), Concolic.popSymbolic(refs,top - 1));
                         break;
                     case LSTORE:
                         setLocalLong(primitives, bs.readLocalIndex(curBCI), popLong(primitives, top - 1));
@@ -855,7 +854,7 @@ public final class BytecodeNode extends EspressoMethodNode {
                     case ISTORE_3:
                         setLocalInt(primitives, curOpcode - ISTORE_0, popInt(primitives, top - 1));
                         livenessAnalysis.performPostBCI(primitives, refs, curBCI);
-                        Concolic.setLocalSymbolic(refs,curOpcode - ISTORE_0, Concolic.popSymbolicAsInt(refs,top - 1));
+                        Concolic.setLocalSymbolic(refs,curOpcode - ISTORE_0, Concolic.popSymbolic(refs,top - 1));
                         break;
                     case LSTORE_0: // fall through
                     case LSTORE_1: // fall through
@@ -1654,11 +1653,11 @@ public final class BytecodeNode extends EspressoMethodNode {
                 if (rShort != null) return rShort;
                 return (short) popInt(primitives, top - 1);
             case 'C' :
-                Object rChar = Concolic.popSymbolicAsChar(refs, top -1);
+                Object rChar = Concolic.popSymbolic(refs, top -1);
                 if (rChar != null) return rChar;
                 return (char) popInt(primitives, top - 1);
             case 'I' :
-                Object rInt = Concolic.popSymbolicAsInt(refs, top -1);
+                Object rInt = Concolic.popSymbolic(refs, top -1);
                 if (rInt != null) return rInt;
                 return popInt(primitives, top - 1);
             case 'J' :
@@ -2677,7 +2676,7 @@ public final class BytecodeNode extends EspressoMethodNode {
                 break;
             case Char:
                 char charValue = (char) popInt(primitives, top - 1);
-                AnnotatedValue charSymbolic = Concolic.popSymbolicAsChar(refs,top -1);
+                AnnotatedValue charSymbolic = Concolic.popSymbolic(refs,top -1);
                 if (instrumentation != null) {
                     instrumentation.notifyFieldModification(frame, statementIndex, field, receiver, charValue);
                 }
@@ -2695,7 +2694,7 @@ public final class BytecodeNode extends EspressoMethodNode {
                 break;
             case Int:
                 int intValue = popInt(primitives, top - 1);
-                AnnotatedValue intSymbolic = Concolic.popSymbolicAsInt(refs,top -1);
+                AnnotatedValue intSymbolic = Concolic.popSymbolic(refs,top -1);
                 if (instrumentation != null) {
                     instrumentation.notifyFieldModification(frame, statementIndex, field, receiver, intValue);
                 }
@@ -2987,7 +2986,7 @@ public final class BytecodeNode extends EspressoMethodNode {
                         case 'C' : // fall through
                         case 'I' :
                             // args[i + start] = popInt(primitives, argAt);    break;
-                            args[i + start] = (Concolic.peekSymbolic(refs, argAt) == null) ? popInt(primitives, argAt) : Concolic.popSymbolicAsInt(refs, argAt); break;
+                            args[i + start] = (Concolic.peekSymbolic(refs, argAt) == null) ? popInt(primitives, argAt) : Concolic.popSymbolic(refs, argAt); break;
                         case 'F' :
                             // args[i + start] = popFloat(primitives, argAt);  break;
                             args[i + start] = (Concolic.peekSymbolic(refs, argAt) == null) ? popFloat(primitives, argAt) : Concolic.popSymbolic(refs, argAt); break;
