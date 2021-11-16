@@ -2489,7 +2489,7 @@ public class Concolic {
   public static Object characterToUpperCase(Object c, Meta meta) {
     char convC;
     if (c instanceof AnnotatedValue) {
-      convC = (char) (int) ((AnnotatedValue) c).asRaw();
+      convC = (char) ((AnnotatedValue) c).asRaw();
       Expression symbolic = ((AnnotatedValue) c).symbolic();
       return new AnnotatedValue(
           Character.toUpperCase(convC), new ComplexExpression(STOUPPER, symbolic));
@@ -2502,7 +2502,7 @@ public class Concolic {
   public static Object characterToLowerCase(Object c, Meta meta) {
     char convC;
     if (c instanceof AnnotatedValue) {
-      convC = (char) (int) ((AnnotatedValue) c).asRaw();
+      convC = (char) ((AnnotatedValue) c).asRaw();
       Expression symbolic = ((AnnotatedValue) c).symbolic();
       return new AnnotatedValue(
           Character.toLowerCase(convC), new ComplexExpression(STOLOWER, symbolic));
