@@ -2849,19 +2849,27 @@ public class Concolic {
       if(concreteSelf.isEmpty()){
         resultingSymbolicValue = symbolicToInsert;
       } else {
-        Expression symbolicLeft =
-            new ComplexExpression(SSUBSTR, symbolicSelf, NAT_ZERO, symbolicOffset);
-        Expression symbolicRight =
-            new ComplexExpression(
-                SSUBSTR,
-                symbolicSelf,
-                new ComplexExpression(NATADD, symbolicOffset, symbolicToInsertLength),
-                symbolicSelfLength);
-        resultingSymbolicValue =
-            new ComplexExpression(
-                SCONCAT,
-                symbolicLeft,
-                new ComplexExpression(SCONCAT, symbolicToInsert, symbolicRight));
+        if (concreteOffset != 0) {
+          Expression symbolicLeft =
+              new ComplexExpression(SSUBSTR, symbolicSelf, NAT_ZERO, symbolicOffset);
+          Expression symbolicRight =
+              new ComplexExpression(
+                  SSUBSTR,
+                  symbolicSelf,
+                  new ComplexExpression(NATADD, symbolicOffset, symbolicToInsertLength),
+                  symbolicSelfLength);
+          resultingSymbolicValue =
+              new ComplexExpression(
+                  SCONCAT,
+                  symbolicLeft,
+                  new ComplexExpression(SCONCAT, symbolicToInsert, symbolicRight));
+        }else{
+          resultingSymbolicValue =
+              new ComplexExpression(
+                  SCONCAT,
+                  symbolicToInsert,
+                  symbolicSelf);
+        }
       }
       Expression resultingSymbolicLength =
           new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, resultingSymbolicValue));
@@ -2873,6 +2881,8 @@ public class Concolic {
       AnnotatedValue newLength =
           new AnnotatedValue(meta.toHostString(concretRes).length(), resultingSymbolicLength);
       updateStringAnnotations(self, newContent, newLength);
+    }else{
+      insert.call(self, concreteOffset, toInsert);
     }
   }
 

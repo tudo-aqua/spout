@@ -135,8 +135,10 @@ public class Target_java_lang_String {
     if (v.isConcolic() || offset instanceof AnnotatedValue || count instanceof AnnotatedValue) {
       Concolic.stopRecording("concolic type char array conversion to string not supported, yet.", meta);
     }
-    char[] value = Arrays.copyOfRange((char[]) v.unwrap(), (int) offset, (int) count);
-    return meta.toGuestString(new String(value));
+    int coffset = (int) offset;
+    int ccount = (int) count;
+    char [] value = v.unwrap();
+    return meta.toGuestString(new String(Arrays.copyOfRange(value, coffset, coffset+ccount)));
   }
 
     @Substitution(methodName = "valueOf")
