@@ -29,11 +29,31 @@ import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.concolic.Concolic;
 
 @EspressoSubstitutions
-public class Target_java_lang_Character {
+public final class Target_java_lang_Character {
 
     @Substitution
     public static @Host(Short.class) StaticObject valueOf(@Host(typeName = "C")  Object unboxed, @InjectMeta Meta meta) {
         return Concolic.boxChar(unboxed, meta);
     }
     
+
+  @Substitution(methodName = "toUpperCase")
+  public static @Host(typeName = "C") Object toUpperCase_char(
+      @Host(typeName = "C") Object c,
+      @InjectMeta Meta meta){
+    return Concolic.characterToUpperCase(c, meta);
+  }
+
+  @Substitution(methodName = "toLowerCase")
+  public static @Host(typeName = "C") Object toLowerCase_char(
+      @Host(typeName = "C") Object c,
+      @InjectMeta Meta meta){
+    return Concolic.characterToLowerCase(c, meta);
+  }
+
+  @Substitution(methodName = "isDefined")
+  public static @Host(typeName = "Z") Object isDefined_char(@Host(typeName = "C") Object c,
+      @InjectMeta Meta meta){
+      return Concolic.isDefinded(c, meta);
+  }
 }

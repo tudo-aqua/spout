@@ -597,6 +597,10 @@ public class StaticObject implements TruffleObject, Cloneable {
 
     private int concolicId = -1;
 
+    public boolean isConcolic(){
+        return  concolicId != -1;
+    }
+
     public void setConcolicId(int id) {
         this.concolicId = id;
     }

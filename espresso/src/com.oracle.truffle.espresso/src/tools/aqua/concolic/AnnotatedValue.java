@@ -75,7 +75,7 @@ public class AnnotatedValue {
             return ((Boolean)concrete) ? 1 : 0;
         }
         if (concrete instanceof Byte) {
-            return ((Byte)concrete);
+            return (int) ((Byte)concrete);
         }
         if (concrete instanceof Character) {
             return ((Character)concrete);
@@ -93,6 +93,13 @@ public class AnnotatedValue {
     public int error() {
         throw EspressoError.shouldNotReachHere("unexpected int type: " +
                 concrete.getClass().getSimpleName());
+    }
+    
+    public byte asByte() {
+        if (concrete instanceof Integer) {
+            return ((Integer) concrete).byteValue();
+        }
+        return (byte) concrete;
     }
 
     public float asFloat() {

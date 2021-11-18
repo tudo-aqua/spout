@@ -487,6 +487,7 @@ public final class BytecodeNode extends EspressoMethodNode {
                         CompilerDirectives.transferToInterpreter();
                         throw EspressoError.shouldNotReachHere("unexpected kind");
                 }
+
                 // @formatter:on
             } else {
                 // Reference type.
@@ -1519,6 +1520,7 @@ public final class BytecodeNode extends EspressoMethodNode {
                 }
                 // @formatter:on
             } catch (EspressoException | AbstractTruffleException | StackOverflowError | OutOfMemoryError e) {
+                print(e);
                 if (instrument != null && e instanceof EspressoException) {
                     instrument.notifyExceptionAt(frame, e, statementIndex);
                 }
@@ -1628,6 +1630,10 @@ public final class BytecodeNode extends EspressoMethodNode {
             curBCI = targetBCI;
         }
     }
+    @TruffleBoundary
+    private static void print(Throwable e){
+        e.printStackTrace();
+    }
 
     private Object getReturnValueAsObject(long[] primitives, Object[] refs, int top) {
         Symbol<Type> returnType = Signatures.returnType(getMethod().getParsedSignature());
@@ -1642,6 +1648,7 @@ public final class BytecodeNode extends EspressoMethodNode {
                 if (rByte != null) return rByte;
                 return (byte) popInt(primitives, top - 1);
             case 'S' :
+                //FIXME: ??
                 Object rShort = Concolic.popSymbolic(refs, top -1);
                 if (rShort != null) return rShort;
                 return (short) popInt(primitives, top - 1);
