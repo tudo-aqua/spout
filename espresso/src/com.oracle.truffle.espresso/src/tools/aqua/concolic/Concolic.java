@@ -66,18 +66,34 @@ import static tools.aqua.concolic.OperatorComparator.STRINGEQ;
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.Truffle;
+import com.oracle.truffle.api.TruffleFile;
+import com.oracle.truffle.api.frame.FrameInstance;
+import com.oracle.truffle.api.frame.FrameInstanceVisitor;
 import com.oracle.truffle.api.nodes.DirectCallNode;
+import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.nodes.RootNode;
+import com.oracle.truffle.api.source.Source;
+import com.oracle.truffle.api.source.SourceSection;
 import com.oracle.truffle.espresso.bytecode.BytecodeStream;
 import com.oracle.truffle.espresso.descriptors.Symbol;
 import com.oracle.truffle.espresso.impl.ArrayKlass;
 import com.oracle.truffle.espresso.impl.Field;
 import com.oracle.truffle.espresso.impl.Klass;
+import com.oracle.truffle.espresso.impl.LinkedKlass;
+import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.impl.ObjectKlass;
+import com.oracle.truffle.espresso.impl.ParserKlass;
+import com.oracle.truffle.espresso.impl.ParserMethod;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
+import com.oracle.truffle.espresso.runtime.Attribute;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import com.oracle.truffle.espresso.vm.InterpreterToVM;
+import com.oracle.truffle.espresso.vm.VM;
+import org.graalvm.polyglot.Context;
+
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -139,6 +155,41 @@ public class Concolic {
   private static int[] seedsIntValues = new int[] {};
   private static int countIntSeeds = 0;
 
+  @TruffleBoundary
+  private static void trackLocationForWitness(String value) {
+    FrameInstance callerFrame = Truffle.getRuntime().iterateFrames(
+            new FrameInstanceVisitor<FrameInstance>() {
+              private int n;
+
+              @Override
+              public FrameInstance visitFrame(FrameInstance frameInstance) {
+                //System.out.println(frameInstance.toString());
+                Node n = frameInstance.getCallNode();
+                if (n != null) {
+                  return frameInstance;
+                }
+                return null;
+              }
+            });
+
+    if (callerFrame != null) {
+      Node n = callerFrame.getCallNode();
+      RootNode rn = callerFrame.getCallNode().getRootNode();
+      for ( Node c : rn.getChildren()) {
+        if (c instanceof BytecodeNode) {
+          BytecodeNode bn = (BytecodeNode) c;
+          int bci = bn.getBci(callerFrame.getFrame(FrameInstance.FrameAccess.READ_ONLY));
+          SourceSection sourceSection = bn.getSourceSectionAtBCI(bci);
+          assert sourceSection != null;
+          Method m = bn.getMethod();
+          String scope = m.getDeclaringKlass().getType() + "." + m.getName() + m.getRawSignature();
+          addTraceElement(new WitnessAssumption(scope, value, sourceSection.getSource().getPath(), sourceSection.getStartLine()));
+          return;
+        }
+      }
+    }
+  }
+
   public static AnnotatedValue nextSymbolicInt() {
     int concrete = 0;
     if (countIntSeeds < seedsIntValues.length) {
@@ -148,6 +199,7 @@ public class Concolic {
     AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
     countIntSeeds++;
     addTraceElement(new SymbolDeclaration(symbolic));
+    trackLocationForWitness("" + concrete);
     return a;
   }
 
@@ -163,6 +215,7 @@ public class Concolic {
     AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
     countBooleanSeeds++;
     addTraceElement(new SymbolDeclaration(symbolic));
+    trackLocationForWitness("" + concrete);
     return a;
   }
 
