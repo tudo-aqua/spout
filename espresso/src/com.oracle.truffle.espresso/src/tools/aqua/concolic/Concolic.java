@@ -190,6 +190,7 @@ public class Concolic {
     }
   }
 
+  @TruffleBoundary
   public static AnnotatedValue nextSymbolicInt() {
     int concrete = 0;
     if (countIntSeeds < seedsIntValues.length) {
@@ -206,6 +207,7 @@ public class Concolic {
   private static boolean[] seedsBooleanValues = new boolean[] {};
   private static int countBooleanSeeds = 0;
 
+  @TruffleBoundary
   public static AnnotatedValue nextSymbolicBoolean() {
     boolean concrete = false;
     if (countBooleanSeeds < seedsBooleanValues.length) {
@@ -222,6 +224,7 @@ public class Concolic {
   private static int[] seedsByteValues = new int[] {};
   private static int countByteSeeds = 0;
 
+  @TruffleBoundary
   public static AnnotatedValue nextSymbolicByte() {
     int concrete = 0;
     if (countByteSeeds < seedsByteValues.length) {
@@ -230,6 +233,7 @@ public class Concolic {
     Variable symbolic = new Variable(PrimitiveTypes.BYTE, countByteSeeds);
     countByteSeeds++;
     addTraceElement(new SymbolDeclaration(symbolic));
+    trackLocationForWitness("" + concrete);
     // upcast byte to int
     return new AnnotatedValue(concrete, new ComplexExpression(OperatorComparator.B2I, symbolic));
   }
@@ -237,6 +241,7 @@ public class Concolic {
   private static int[] seedsCharValues = new int[] {};
   private static int countCharSeeds = 0;
 
+  @TruffleBoundary
   public static AnnotatedValue nextSymbolicChar() {
     int concrete = 0;
     if (countCharSeeds < seedsCharValues.length) {
@@ -245,6 +250,7 @@ public class Concolic {
     Variable symbolic = new Variable(PrimitiveTypes.CHAR, countCharSeeds);
     countCharSeeds++;
     addTraceElement(new SymbolDeclaration(symbolic));
+    trackLocationForWitness("" + concrete);
     // upcast char to int
     return new AnnotatedValue(concrete, new ComplexExpression(OperatorComparator.C2I, symbolic));
   }
@@ -252,6 +258,7 @@ public class Concolic {
   private static int[] seedsShortValues = new int[] {};
   private static int countShortSeeds = 0;
 
+  @TruffleBoundary
   public static AnnotatedValue nextSymbolicShort() {
     int concrete = 0;
     if (countShortSeeds < seedsShortValues.length) {
@@ -260,6 +267,7 @@ public class Concolic {
     Variable symbolic = new Variable(PrimitiveTypes.SHORT, countShortSeeds);
     countShortSeeds++;
     addTraceElement(new SymbolDeclaration(symbolic));
+    trackLocationForWitness("" + concrete);
     // upcast short to int
     return new AnnotatedValue(concrete, new ComplexExpression(OperatorComparator.S2I, symbolic));
   }
@@ -267,6 +275,7 @@ public class Concolic {
   private static long[] seedsLongValues = new long[] {};
   private static int countLongSeeds = 0;
 
+  @TruffleBoundary
   public static AnnotatedValue nextSymbolicLong() {
     long concrete = 0L;
     if (countLongSeeds < seedsLongValues.length) {
@@ -276,12 +285,14 @@ public class Concolic {
     AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
     countLongSeeds++;
     addTraceElement(new SymbolDeclaration(symbolic));
+    trackLocationForWitness("" + concrete);
     return a;
   }
 
   private static float[] seedsFloatValues = new float[] {};
   private static int countFloatSeeds = 0;
 
+  @TruffleBoundary
   public static AnnotatedValue nextSymbolicFloat() {
     float concrete = 0f;
     if (countFloatSeeds < seedsFloatValues.length) {
@@ -291,12 +302,14 @@ public class Concolic {
     AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
     countFloatSeeds++;
     addTraceElement(new SymbolDeclaration(symbolic));
+    trackLocationForWitness("" + concrete);
     return a;
   }
 
   private static double[] seedsDoubleValues = new double[] {};
   private static int countDoubleSeeds = 0;
 
+  @TruffleBoundary
   public static AnnotatedValue nextSymbolicDouble() {
     double concrete = 0d;
     if (countDoubleSeeds < seedsDoubleValues.length) {
@@ -306,13 +319,14 @@ public class Concolic {
     AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
     countDoubleSeeds++;
     addTraceElement(new SymbolDeclaration(symbolic));
+    trackLocationForWitness("" + concrete);
     return a;
   }
 
   private static String[] seedStringValues = new String[] {};
   private static int countStringSeeds = 0;
 
-  @CompilerDirectives.TruffleBoundary
+  @TruffleBoundary
   public static StaticObject nextSymbolicString(Meta meta) {
     if (false) {
       stopRecording("Analysis of String constraints is not supported, yet.", meta);
@@ -339,6 +353,7 @@ public class Concolic {
     symbolicObjects.add(annotation);
     countStringSeeds++;
     addTraceElement(new SymbolDeclaration(symbolic));
+    trackLocationForWitness("\"" + concrete + "\"");
     return concrete;
   }
 
