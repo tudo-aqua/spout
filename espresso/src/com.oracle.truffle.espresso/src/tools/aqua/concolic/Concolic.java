@@ -285,7 +285,7 @@ public class Concolic {
     AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
     countLongSeeds++;
     addTraceElement(new SymbolDeclaration(symbolic));
-    trackLocationForWitness("" + concrete);
+    trackLocationForWitness("" + concrete + "L");
     return a;
   }
 
@@ -302,7 +302,7 @@ public class Concolic {
     AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
     countFloatSeeds++;
     addTraceElement(new SymbolDeclaration(symbolic));
-    trackLocationForWitness("" + concrete);
+    trackLocationForWitness("Float.parseFloat(\"" + concrete + "\")");
     return a;
   }
 
@@ -319,7 +319,7 @@ public class Concolic {
     AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
     countDoubleSeeds++;
     addTraceElement(new SymbolDeclaration(symbolic));
-    trackLocationForWitness("" + concrete);
+    trackLocationForWitness("Double.parseDouble(\"" + concrete + "\")");
     return a;
   }
 
