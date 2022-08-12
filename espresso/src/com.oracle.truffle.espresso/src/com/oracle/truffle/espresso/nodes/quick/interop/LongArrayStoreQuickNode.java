@@ -29,6 +29,8 @@ import com.oracle.truffle.espresso.nodes.bytecodes.LongArrayStore;
 import com.oracle.truffle.espresso.nodes.bytecodes.LongArrayStoreNodeGen;
 import com.oracle.truffle.espresso.nodes.quick.QuickNode;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
+import com.oracle.truffle.espresso.EspressoLanguage;
+import tools.aqua.spout.SPouT;
 
 /**
  * @see LongArrayStore
@@ -49,6 +51,7 @@ public final class LongArrayStoreQuickNode extends QuickNode {
         long value = EspressoFrame.popLong(frame, top - 1);
         int index = EspressoFrame.popInt(frame, top - 3);
         StaticObject array = nullCheck(EspressoFrame.popObject(frame, top - 4));
+        SPouT.setArrayAnnotations(frame, getBytecodeNode(), getBci(frame), array, index, top -1, top - 3, EspressoLanguage.get(this));
         longArrayStore.execute(array, index, value);
         return stackEffectOf_LASTORE;
     }

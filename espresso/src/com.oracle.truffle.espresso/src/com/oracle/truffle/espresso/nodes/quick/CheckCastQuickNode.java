@@ -31,6 +31,7 @@ import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.nodes.EspressoFrame;
 import com.oracle.truffle.espresso.nodes.bytecodes.InstanceOf;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
+import tools.aqua.spout.SPouT;
 
 public final class CheckCastQuickNode extends QuickNode {
 
@@ -51,8 +52,10 @@ public final class CheckCastQuickNode extends QuickNode {
         BytecodeNode root = getBytecodeNode();
         StaticObject receiver = EspressoFrame.peekObject(frame, top - 1);
         if (StaticObject.isNull(receiver) || instanceOf.execute(receiver.getKlass())) {
+            SPouT.checkcast(frame, receiver, root, root.getBci(frame), false);
             return stackEffectOf_CHECKCAST;
         }
+        SPouT.checkcast(frame, receiver, root, root.getBci(frame), true);
         root.enterImplicitExceptionProfile();
         EspressoFrame.popObject(frame, top - 1);
         Meta meta = typeToCheck.getMeta();

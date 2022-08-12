@@ -29,6 +29,7 @@ import com.oracle.truffle.espresso.nodes.bytecodes.ArrayLength;
 import com.oracle.truffle.espresso.nodes.bytecodes.ArrayLengthFactory;
 import com.oracle.truffle.espresso.nodes.quick.QuickNode;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
+import tools.aqua.spout.SPouT;
 
 /**
  * @see ArrayLength
@@ -48,6 +49,7 @@ public final class ArrayLengthQuickNode extends QuickNode {
     public int execute(VirtualFrame frame, boolean isContinuationResume) {
         StaticObject array = nullCheck(EspressoFrame.popObject(frame, top - 1));
         EspressoFrame.putInt(frame, top - 1, arrayLength.executeAsInt(array));
+        SPouT.arrayLength(frame, top -1, array);
         return stackEffectOf_ARRAYLENGTH;
     }
 }

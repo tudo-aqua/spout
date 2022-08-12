@@ -30,6 +30,7 @@ import com.oracle.truffle.api.library.ExportMessage;
 import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.substitutions.CallableFromNative;
 import com.oracle.truffle.espresso.vm.VM;
+import tools.aqua.spout.AnnotatedVM;
 
 @ExportLibrary(NodeLibrary.class)
 final class IntrinsifiedNativeMethodNode extends EspressoInstrumentableRootNodeImpl {
@@ -54,6 +55,7 @@ final class IntrinsifiedNativeMethodNode extends EspressoInstrumentableRootNodeI
             System.arraycopy(args, 0, newArgs, 1, parameterCount);
             args = newArgs;
         }
+        args = AnnotatedVM.deAnnotateArguments(args, getMethodVersion().getMethod());
         return nativeMethod.invokeDirect(env, args);
     }
 

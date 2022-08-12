@@ -132,7 +132,7 @@ public final class Substitutions extends ContextAccessImpl {
         EspressoRootNode createNodeIfValid(Method method, boolean forceValid);
 
         default EspressoRootNode createNodeIfValid(Method method) {
-            return createNodeIfValid(method, false);
+            return createNodeIfValid(method, true);
         }
     }
 
@@ -232,7 +232,9 @@ public final class Substitutions extends ContextAccessImpl {
     private static EspressoRootNode createRootNodeFromSubstitution(Method method, JavaSubstitution.Factory staticSubstitutionFactory) {
         StaticObject classLoader = method.getDeclaringKlass().getDefiningClassLoader();
         ClassLoadingEnv env = method.getContext().getClassLoadingEnv();
-        if (env.loaderIsBootOrPlatform(classLoader)) {
+
+        // TODO: make this more precise. Should only work for Verifier and Taint
+        if (true || env.loaderIsBootOrPlatform(classLoader)) {
             return EspressoRootNode.createSubstitution(method.getMethodVersion(), staticSubstitutionFactory);
         }
         getLogger().warning(new Supplier<String>() {

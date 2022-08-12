@@ -39,6 +39,9 @@ import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.runtime.ReturnAddress;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
 import com.oracle.truffle.espresso.vm.continuation.HostFrameRecord;
+import tools.aqua.spout.AnnotatedVM;
+import tools.aqua.spout.AnnotatedValue;
+import tools.aqua.spout.Annotations;
 
 /**
  * Exposes accessors to the Espresso frame e.g. operand stack, locals and current BCI.
@@ -56,7 +59,8 @@ public final class EspressoFrame {
      * ("values").
      */
     private static final int BCI_SLOT = 0;
-    private static final int VALUES_START = 1;
+    static int ANNOTATION_SLOT = 1;
+    static final int VALUES_START = 2;
 
     public static FrameDescriptor createFrameDescriptor(int locals, int stack) {
         // at least one stack slot for the return / exception value
@@ -64,6 +68,8 @@ public final class EspressoFrame {
         FrameDescriptor.Builder builder = FrameDescriptor.newBuilder(slotCount + VALUES_START);
         int bciSlot = builder.addSlot(FrameSlotKind.Static, null, null); // BCI
         assert bciSlot == BCI_SLOT;
+        int aSlot = builder.addSlot(FrameSlotKind.Object, null, null);
+        assert aSlot == ANNOTATION_SLOT;
         int valuesStart = builder.addSlots(slotCount, FrameSlotKind.Static); // locals + stack
         assert valuesStart == VALUES_START;
         return builder.build();
@@ -74,52 +80,74 @@ public final class EspressoFrame {
     public static void dup1(Frame frame, int top) {
         // value1 -> value1, value1
         copyStatic(frame, top - 1, top);
+        AnnotatedVM.copy(frame, top - 1, top);
     }
 
     public static void dupx1(Frame frame, int top) {
         // value2, value1 -> value1, value2, value1
         copyStatic(frame, top - 1, top);
+        AnnotatedVM.copy(frame, top - 1, top);
         copyStatic(frame, top - 2, top - 1);
+        AnnotatedVM.copy(frame, top - 2, top -1);
         copyStatic(frame, top, top - 2);
+        AnnotatedVM.copy(frame, top, top - 2);
     }
 
     public static void dupx2(Frame frame, int top) {
         // value3, value2, value1 -> value1, value3, value2, value1
         copyStatic(frame, top - 1, top);
+        AnnotatedVM.copy(frame, top - 1, top);
         copyStatic(frame, top - 2, top - 1);
+        AnnotatedVM.copy(frame, top - 2, top - 1);
         copyStatic(frame, top - 3, top - 2);
+        AnnotatedVM.copy(frame, top - 3, top - 2);
         copyStatic(frame, top, top - 3);
+        AnnotatedVM.copy(frame, top, top - 3);
     }
 
     public static void dup2(Frame frame, int top) {
         // {value2, value1} -> {value2, value1}, {value2, value1}
         copyStatic(frame, top - 2, top);
+        AnnotatedVM.copy(frame, top - 2, top);
         copyStatic(frame, top - 1, top + 1);
+        AnnotatedVM.copy(frame, top - 1, top + 1);
     }
 
     public static void swapSingle(Frame frame, int top) {
         // value2, value1 -> value1, value2
         swapStatic(frame, top);
+        AnnotatedVM.swap(frame,top - 1, top -2);
     }
 
     public static void dup2x1(Frame frame, int top) {
         // value3, {value2, value1} -> {value2, value1}, value3, {value2, value1}
         copyStatic(frame, top - 2, top);
+        AnnotatedVM.copy(frame, top - 2, top);
         copyStatic(frame, top - 1, top + 1);
+        AnnotatedVM.copy(frame, top - 1, top + 1);
         copyStatic(frame, top - 3, top - 1);
+        AnnotatedVM.copy(frame, top - 3, top - 1);
         copyStatic(frame, top, top - 3);
+        AnnotatedVM.copy(frame, top, top - 3);
         copyStatic(frame, top + 1, top - 2);
+        AnnotatedVM.copy(frame, top + 1, top - 2);
     }
 
     public static void dup2x2(Frame frame, int top) {
         // {value4, value3}, {value2, value1} -> {value2, value1}, {value4, value3}, {value2,
         // value1}
         copyStatic(frame, top - 1, top + 1);
+        AnnotatedVM.copy(frame, top - 1, top + 1);
         copyStatic(frame, top - 2, top);
+        AnnotatedVM.copy(frame, top - 2, top);
         copyStatic(frame, top - 3, top - 1);
+        AnnotatedVM.copy(frame, top - 3, top - 1);
         copyStatic(frame, top - 4, top - 2);
+        AnnotatedVM.copy(frame, top - 4, top - 2);
         copyStatic(frame, top, top - 4);
+        AnnotatedVM.copy(frame, top, top - 4);
         copyStatic(frame, top + 1, top - 3);
+        AnnotatedVM.copy(frame, top + 1, top - 3);
     }
 
     private static void swapStatic(Frame frame, int top) {
@@ -355,16 +383,18 @@ public final class EspressoFrame {
         int argAt = top - 1;
         for (int i = argCount - 1; i >= 0; --i) {
             Symbol<Type> argType = SignatureSymbols.parameterType(signature, i);
+            Annotations a = AnnotatedVM.popAnnotations(frame, argAt);
             // @formatter:off
             switch (argType.byteAt(0)) {
-                case 'Z' : args[i + extraParam] = (popInt(frame, argAt) != 0);  break;
-                case 'B' : args[i + extraParam] = (byte) popInt(frame, argAt);  break;
-                case 'S' : args[i + extraParam] = (short) popInt(frame, argAt); break;
-                case 'C' : args[i + extraParam] = (char) popInt(frame, argAt);  break;
-                case 'I' : args[i + extraParam] = popInt(frame, argAt);         break;
-                case 'F' : args[i + extraParam] = popFloat(frame, argAt);       break;
-                case 'J' : args[i + extraParam] = popLong(frame, argAt);   --argAt; break;
-                case 'D' : args[i + extraParam] = popDouble(frame, argAt); --argAt; break;
+                case 'Z' : args[i + extraParam] = (a == null) ? (popInt(frame, argAt) != 0) : new AnnotatedValue((popInt(frame, argAt) != 0) , a); break;
+                case 'B' : args[i + extraParam] = (a == null) ? (byte) popInt(frame, argAt) : new AnnotatedValue((byte) popInt(frame, argAt) , a); break;
+                case 'S' : args[i + extraParam] = (a == null) ? (short) popInt(frame, argAt) : new AnnotatedValue((short) popInt(frame, argAt) , a); break;
+                case 'C' : args[i + extraParam] = (a == null) ? (char) popInt(frame, argAt) : new AnnotatedValue((char) popInt(frame, argAt) , a);  break;
+                case 'I' : args[i + extraParam] = (a == null) ? popInt(frame, argAt) : new AnnotatedValue(popInt(frame, argAt) , a); break;
+                case 'F' : args[i + extraParam] = (a == null) ? popFloat(frame, argAt) : new AnnotatedValue(popFloat(frame, argAt) , a); break;
+                case 'J' : args[i + extraParam] = (a == null) ? popLong(frame, argAt) : new AnnotatedValue(popLong(frame, argAt) , a);   --argAt; break;
+                case 'D' : args[i + extraParam] = (a == null) ? popDouble(frame, argAt) : new AnnotatedValue(popDouble(frame, argAt) , a); --argAt; break;
+
                 case '[' : // fall through
                 case 'L' : args[i + extraParam] = popObject(frame, argAt);      break;
                 default  :
@@ -391,16 +421,17 @@ public final class EspressoFrame {
         int argAt = top - 1;
         for (int i = SignatureSymbols.parameterCount(signature) - 1; i >= 0; --i) {
             Symbol<Type> argType = SignatureSymbols.parameterType(signature, i);
+            Annotations a = AnnotatedVM.popAnnotations(frame, argAt);
             // @formatter:off
             switch (argType.byteAt(0)) {
                 case 'Z' : // fall through
                 case 'B' : // fall through
                 case 'S' : // fall through
                 case 'C' : // fall through
-                case 'I' : args[i + extraParam] = popInt(frame, argAt);    break;
-                case 'F' : args[i + extraParam] = popFloat(frame, argAt);  break;
-                case 'J' : args[i + extraParam] = popLong(frame, argAt);   --argAt; break;
-                case 'D' : args[i + extraParam] = popDouble(frame, argAt); --argAt; break;
+                case 'I' : args[i + extraParam] = (a == null) ? popInt(frame, argAt) : new AnnotatedValue(popInt(frame, argAt) , a); break;
+                case 'F' : args[i + extraParam] = (a == null) ? popFloat(frame, argAt) : new AnnotatedValue(popFloat(frame, argAt) , a); break;
+                case 'J' : args[i + extraParam] = (a == null) ? popLong(frame, argAt) : new AnnotatedValue(popLong(frame, argAt) , a);   --argAt; break;
+                case 'D' : args[i + extraParam] = (a == null) ? popDouble(frame, argAt) : new AnnotatedValue(popDouble(frame, argAt) , a); --argAt; break;
                 case '[' : // fall through
                 case 'L' : args[i + extraParam] = popObject(frame, argAt); break;
                 default  :
@@ -427,18 +458,72 @@ public final class EspressoFrame {
      */
     public static int putKind(VirtualFrame frame, int top, Object value, JavaKind kind) {
         assert top >= 0;
+        if (value instanceof AnnotatedValue) {
+            int index = top;
+            if(kind.equals(JavaKind.Long) || kind.equals(JavaKind.Double)){
+                index++;
+            }
+            AnnotatedVM.putAnnotations(frame, index, (Annotations) value);
+            value = ((AnnotatedValue) value).getValue();
+        }
+        int value2;
+        if (value instanceof Integer) {
+            value2 = ((Integer) value).intValue();
+        }else if(value instanceof Character){
+            value2 = ((Character) value).charValue();
+        } else if(value instanceof Byte){
+            value2 = ((Byte) value).byteValue();
+        } else if (value instanceof Short){
+            value2 = ((Short) value).shortValue();
+        } else if(value instanceof Long)
+        {
+            value2 = (int) ((Long) value).longValue();
+        } else if(value instanceof Double){
+            value2 = (int) ((Double) value).doubleValue();
+        } else if(value instanceof Float){
+            value2 = (int) ((Float) value).floatValue();
+        }else{
+            value2 = 0;
+        }
+        //FIXME, without concolic execution, the unboxing is broken? Check this.
         // @formatter:off
         switch (kind) {
-            case Boolean : putInt(frame, top, ((boolean) value) ? 1 : 0); break;
-            case Byte    : putInt(frame, top, (byte) value);              break;
-            case Short   : putInt(frame, top, (short) value);             break;
-            case Char    : putInt(frame, top, (char) value);              break;
-            case Int     : putInt(frame, top, (int) value);               break;
+            case Boolean :
+                //FIXME: we have to fix boolean representation. It should not be possible that different representations edn up here
+                if (value instanceof Integer) {
+                    putInt(frame, top, ((int) value > 0) ? 1 : 0);
+                }
+                else {
+                    putInt(frame, top, ((boolean) value) ? 1 : 0);
+                }
+                break;
+            case Byte    :
+                if(value instanceof Character){
+                    putInt(frame, top, (byte) value);
+                }else {
+                    putInt(frame, top, (byte) value2);
+                }
+                break;
+            case Short   :
+                if(value instanceof Character){
+                    putInt(frame, top, (short) value);
+                }else {
+                    putInt(frame, top, (short) value2);
+                }
+                break;
+            case Char    :
+                if(value instanceof Character){
+                    putInt(frame, top, (char) value);
+                }else {
+                    putInt(frame, top, (char) value2);
+                }
+                break;
+            case Int     : putInt(frame, top, value2);               break;
             case Float   : putFloat(frame, top, (float) value);           break;
             case Long    : putLong(frame, top, (long) value);             break;
             case Double  : putDouble(frame, top, (double) value);         break;
-            case Object  : putObject(frame, top, (StaticObject) value);   break;
-            case Void    : /* ignore */                                   break;
+            case Object  : putObject(frame, top, (StaticObject) value);         break;
+            case Void    : /* ignore */                                        break;
             default      :
                 CompilerDirectives.transferToInterpreterAndInvalidate();
                 throw EspressoError.shouldNotReachHere();

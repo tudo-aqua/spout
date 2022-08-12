@@ -29,6 +29,8 @@ import com.oracle.truffle.espresso.nodes.bytecodes.FloatArrayStore;
 import com.oracle.truffle.espresso.nodes.bytecodes.FloatArrayStoreNodeGen;
 import com.oracle.truffle.espresso.nodes.quick.QuickNode;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
+import com.oracle.truffle.espresso.EspressoLanguage;
+import tools.aqua.spout.SPouT;
 
 /**
  * @see FloatArrayStore
@@ -49,6 +51,7 @@ public final class FloatArrayStoreQuickNode extends QuickNode {
         float value = EspressoFrame.popFloat(frame, top - 1);
         int index = EspressoFrame.popInt(frame, top - 2);
         StaticObject array = nullCheck(EspressoFrame.popObject(frame, top - 3));
+        SPouT.setArrayAnnotations(frame, getBytecodeNode(), getBci(frame), array, index, top -1, top - 2, EspressoLanguage.get(this));
         floatArrayStore.execute(array, index, value);
         return stackEffectOf_FASTORE;
     }

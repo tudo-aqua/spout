@@ -48,6 +48,7 @@ import com.oracle.truffle.espresso.runtime.EspressoContext;
 import com.oracle.truffle.espresso.runtime.GuestAllocator;
 import com.oracle.truffle.espresso.runtime.dispatch.staticobject.BaseInterop;
 import com.oracle.truffle.espresso.runtime.dispatch.staticobject.SharedInterop;
+import tools.aqua.spout.Annotations;
 
 /**
  * Implementation of the Espresso object model.
@@ -457,4 +458,18 @@ public class StaticObject implements TruffleObject, Cloneable {
         StaticObject create(Klass klass, boolean isForeign);
     }
     // endregion Factory interface.
+
+    private Annotations[] annotations = null;
+
+    public Annotations[] getAnnotations() {
+        return annotations;
+    }
+
+    public void setAnnotations(Annotations[] annotations) {
+        this.annotations = annotations;
+    }
+
+    public boolean hasAnnotations() {
+        return annotations != null;
+    }
 }

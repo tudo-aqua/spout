@@ -25,6 +25,7 @@ package com.oracle.truffle.espresso.nodes;
 import java.util.Arrays;
 
 import com.oracle.truffle.api.frame.Frame;
+import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.interop.NodeLibrary;
 import com.oracle.truffle.api.library.ExportLibrary;
@@ -37,10 +38,14 @@ import com.oracle.truffle.espresso.runtime.EspressoThreadLocalState;
 import com.oracle.truffle.espresso.substitutions.JavaSubstitution;
 import com.oracle.truffle.espresso.threads.ThreadState;
 import com.oracle.truffle.espresso.vm.VM;
+import tools.aqua.spout.AnnotatedVM;
+
 
 @ExportLibrary(NodeLibrary.class)
 public final class IntrinsicSubstitutorNode extends EspressoInstrumentableRootNodeImpl {
     @Child private JavaSubstitution substitution;
+
+    private final boolean passAnnotations;
 
     // Truffle does not want to report split on first call. Delay until the second.
     private final DebugCounter nbSplits;
@@ -48,6 +53,7 @@ public final class IntrinsicSubstitutorNode extends EspressoInstrumentableRootNo
     IntrinsicSubstitutorNode(Method.MethodVersion methodVersion, JavaSubstitution.Factory factory) {
         super(methodVersion);
         this.substitution = factory.create();
+        this.passAnnotations = factory.passAnnotations();
 
         EspressoError.guarantee(!substitution.isTrivial() || !methodVersion.isSynchronized(),
                         "Substitution for synchronized method cannot be marked as trivial", methodVersion);
@@ -64,6 +70,7 @@ public final class IntrinsicSubstitutorNode extends EspressoInstrumentableRootNo
         assert toSplit.substitution.canSplit();
         this.substitution = toSplit.substitution.split();
         this.nbSplits = toSplit.nbSplits;
+        this.passAnnotations = toSplit.passAnnotations;
     }
 
     @Override
@@ -73,6 +80,11 @@ public final class IntrinsicSubstitutorNode extends EspressoInstrumentableRootNo
         try {
             // We consider substitutions non-native, as they are in Espresso's control.
             assert ThreadState.currentThreadInEspresso(getContext());
+            if (!passAnnotations) {
+                Object[] args = frame.getArguments();
+                CompilerAsserts.partialEvaluationConstant(args);
+                return substitution.invoke(AnnotatedVM.deAnnotateArguments(args, getMethodVersion().getMethod()));
+            }
             return substitution.invoke(frame.getArguments());
         } finally {
             tls.unblockContinuationSuspension();

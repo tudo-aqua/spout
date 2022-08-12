@@ -526,6 +526,15 @@ public class EspressoSymbols {
         public static final Symbol<Type> jdk_internal_foreign_abi_NativeEntryPoint = SYMBOLS.putType("Ljdk/internal/foreign/abi/NativeEntryPoint;");
         public static final Symbol<Type> jdk_internal_foreign_abi_UpcallLinker_CallRegs = SYMBOLS.putType("Ljdk/internal/foreign/abi/UpcallLinker$CallRegs;");
         public static final Symbol<Type> jdk_internal_foreign_abi_VMStorage_array = SYMBOLS.putType("[Ljdk/internal/foreign/abi/VMStorage;");
+
+        // Spout
+        //public static final Symbol<Type> java_lang_Character_CharacterCache = SYMBOLS.putType("Ljava/lang/Character/CharacterCache;");
+        public static final Symbol<Type> java_lang_StringLatin1 =  SYMBOLS.putType("Ljava/lang/StringLatin1;");
+        public static final Symbol<Type> java_lang_StringUTF16 =  SYMBOLS.putType("Ljava/lang/StringUTF16;");
+        public static final Symbol<Type> java_lang_Runtime =  SYMBOLS.putType("Ljava/lang/Runtime;");
+        public static Symbol<Type> java_lang_AbstractStringBuilder = SYMBOLS.putType("Ljava/lang/AbstractStringBuilder;");
+
+
     }
 
     /**
@@ -1069,6 +1078,9 @@ public class EspressoSymbols {
         public static final Symbol<Name> HIDDEN_METHOD_MIRROR = SYMBOLS.putName("0HIDDEN_METHOD_MIRROR");
         public static final Symbol<Name> HIDDEN_OBJECT_CONSTANT = SYMBOLS.putName("0HIDDEN_OBJECT_CONSTANT");
 
+        // Spout
+        public static final Symbol<Name> getRuntime = SYMBOLS.putName("getRuntime");
+
         public static void ensureInitialized() {
             assert _init_ == ParserSymbols.ParserNames._init_;
         }
@@ -1421,6 +1433,15 @@ public class EspressoSymbols {
                         Types._int,
                         Types._int,
                         Types.java_lang_Object);
+
+        // Spout
+
+        public static final Symbol<Signature> String_byte_array_int_int = SYMBOLS.putSignature(Types.java_lang_String, Types._byte_array, Types._int, Types._int);
+        public static final Symbol<Signature> Runtime = SYMBOLS.putSignature(Types.java_lang_Runtime);
+        public static Symbol<Signature> java_lang_AbstractStringBuilder_java_lang_String = SYMBOLS.putSignature(Types.java_lang_AbstractStringBuilder, Types.java_lang_String);
+        public static Symbol<Signature> java_lang_AbstractStringBuilder_int_java_lang_String = SYMBOLS.putSignature(Types.java_lang_AbstractStringBuilder, Types._int, Types.java_lang_String);
+        public static Symbol<Signature> _void_int_char = SYMBOLS.putSignature(Types._void, Types._int, Types._char);
+        public static Symbol<Signature> _void_int_int_char_array_int = SYMBOLS.putSignature(Types._void, Types._int, Types._int, Types._char_array, Types._int);;
 
         public static void ensureInitialized() {
             assert _void == ParserSymbols.ParserSignatures._void;

@@ -118,6 +118,8 @@ import com.oracle.truffle.espresso.substitutions.JavaType;
 import com.oracle.truffle.espresso.substitutions.SubstitutionProfiler;
 import com.oracle.truffle.espresso.substitutions.Substitutions;
 import com.oracle.truffle.espresso.vm.InterpreterToVM;
+import tools.aqua.spout.AnnotatedValue;
+import tools.aqua.spout.SPouT;
 
 @GenerateNativeEnv(target = JniImpl.class)
 public final class JniEnv extends NativeEnv {
@@ -1517,6 +1519,7 @@ public final class JniEnv extends NativeEnv {
         if (StaticObject.isNull(string)) {
             return 0;
         }
+        SPouT.log("Warning: removing annotations after call to String length in JniEnv");
         return (int) getMeta().java_lang_String_length.invokeDirectSpecial(string);
     }
 

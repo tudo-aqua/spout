@@ -54,6 +54,7 @@ import com.oracle.truffle.espresso.runtime.EspressoException;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
 import com.oracle.truffle.espresso.threads.Transition;
 import com.oracle.truffle.espresso.vm.VM;
+import tools.aqua.spout.AnnotatedVM;
 
 /**
  * Represents a native Java method.
@@ -84,6 +85,7 @@ final class NativeMethodNode extends EspressoInstrumentableRootNodeImpl {
     private Object[] preprocessArgs(JNIHandles handles, Object[] args) {
         Symbol<Type>[] parsedSignature = getMethodVersion().getMethod().getParsedSignature();
         int paramCount = SignatureSymbols.parameterCount(parsedSignature);
+        args = AnnotatedVM.deAnnotateArguments(args, getMethodVersion().getMethod());
         Object[] nativeArgs = new Object[2 /* JNIEnv* + class or receiver */ + paramCount];
 
         assert !InteropLibrary.getUncached().isNull(env.getNativePointer());

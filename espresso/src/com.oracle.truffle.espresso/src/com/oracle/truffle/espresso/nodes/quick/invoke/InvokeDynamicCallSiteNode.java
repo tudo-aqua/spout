@@ -37,6 +37,7 @@ import com.oracle.truffle.espresso.nodes.EspressoFrame;
 import com.oracle.truffle.espresso.nodes.quick.QuickNode;
 import com.oracle.truffle.espresso.runtime.EspressoThreadLocalState;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
+import tools.aqua.spout.SPouT;
 
 public final class InvokeDynamicCallSiteNode extends QuickNode {
 
@@ -47,6 +48,8 @@ public final class InvokeDynamicCallSiteNode extends QuickNode {
     @Child private DirectCallNode callNode;
     final int resultAt;
     final boolean returnsPrimitiveType;
+
+    final Symbol originalLinkName;
 
     @CompilerDirectives.CompilationFinal(dimensions = 1) private Symbol<Type>[] parsedSignature;
 
@@ -61,22 +64,45 @@ public final class InvokeDynamicCallSiteNode extends QuickNode {
         this.callNode = DirectCallNode.create(target.getCallTarget());
         this.resultAt = top - SignatureSymbols.slotsForParameters(parsedSignature); // no receiver
         this.returnsPrimitiveType = TypeSymbols.isPrimitive(returnType);
+        this.originalLinkName = null;
+    }
+    public InvokeDynamicCallSiteNode(StaticObject memberName, StaticObject appendix, Symbol<Type>[] parsedSignature, Meta meta, int top, int curBCI, Symbol originalLinkName) {
+        super(top, curBCI);
+        Method target = (Method) meta.HIDDEN_VMTARGET.getHiddenObject(memberName);
+        this.appendix = appendix;
+        this.parsedSignature = parsedSignature;
+        this.returnType = SignatureSymbols.returnType(parsedSignature);
+        this.returnKind = SignatureSymbols.returnKind(parsedSignature);
+        this.hasAppendix = !StaticObject.isNull(appendix);
+        this.callNode = DirectCallNode.create(target.getCallTarget());
+        this.resultAt = top - SignatureSymbols.slotsForParameters(parsedSignature); // no receiver
+        this.returnsPrimitiveType = TypeSymbols.isPrimitive(returnType);
+        this.originalLinkName = originalLinkName;
     }
 
     @Override
     public int execute(VirtualFrame frame, boolean isContinuationResume) {
         int argCount = SignatureSymbols.parameterCount(parsedSignature);
         Object[] args = EspressoFrame.popBasicArgumentsWithArray(frame, top, parsedSignature, false, new Object[argCount + (hasAppendix ? 1 : 0)]);
+        Object[] args2 = null;
+        if(originalLinkName.equals(getNames().getOrCreate("makeConcatWithConstants"))) {
+            SPouT.pauseAnalyze();
+            args2 = args.clone();
+        }
         if (hasAppendix) {
             args[args.length - 1] = appendix;
         }
         EspressoThreadLocalState tls = getLanguage().getThreadLocalState();
         tls.blockContinuationSuspension();
-        Object result;
+        Object result = null;
         try {
             result = callNode.call(args);
         } finally {
             tls.unblockContinuationSuspension();
+            if (originalLinkName.equals(getNames().getOrCreate("makeConcatWithConstants"))) {
+                SPouT.resumeAnalyze();
+                SPouT.makeConcatWithConstantsSymbolically(result, args2, getMeta());
+            }
         }
         if (!returnsPrimitiveType) {
             getBytecodeNode().checkNoForeignObjectAssumption((StaticObject) result);

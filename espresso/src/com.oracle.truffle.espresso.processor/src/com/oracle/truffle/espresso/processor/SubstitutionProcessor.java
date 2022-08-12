@@ -100,6 +100,7 @@ public final class SubstitutionProcessor extends EspressoProcessor {
         final List<String> guestTypeNames;
         final String returnType;
         final boolean hasReceiver;
+        final boolean passAnnotations;
         final TypeMirror nameProvider;
         final TypeMirror languageFilter;
         final boolean inlineInBytecode;
@@ -108,7 +109,7 @@ public final class SubstitutionProcessor extends EspressoProcessor {
         final TypeMirror group;
 
         SubstitutorHelper(EspressoProcessor processor, Element target, String targetClassName, String guestMethodName, List<String> guestTypeNames, String returnType,
-                        boolean hasReceiver, TypeMirror nameProvider, TypeMirror languageFilter, boolean inlineInBytecode, TypeMirror guardValue, TypeElement substitutionClass,
+                        boolean hasReceiver, boolean passAnnotations, TypeMirror nameProvider, TypeMirror languageFilter, boolean inlineInBytecode, TypeMirror guardValue, TypeElement substitutionClass,
                         byte flags, TypeMirror group) {
             super(processor, target, processor.getTypeElement(SUBSTITUTION), substitutionClass);
             this.targetClassName = targetClassName;
@@ -116,6 +117,7 @@ public final class SubstitutionProcessor extends EspressoProcessor {
             this.guestTypeNames = guestTypeNames;
             this.returnType = returnType;
             this.hasReceiver = hasReceiver;
+            this.passAnnotations = passAnnotations;
             this.nameProvider = nameProvider;
             this.languageFilter = languageFilter;
             this.inlineInBytecode = inlineInBytecode;
@@ -206,15 +208,24 @@ public final class SubstitutionProcessor extends EspressoProcessor {
         }
     }
 
-    private void checkParameterOrReturnType(String headerMessage, TypeMirror typeMirror, Element element) {
+    private void checkParameterOrReturnType(String headerMessage, TypeMirror typeMirror, Element element, boolean passAnnotations) {
         if (typeMirror.getKind().isPrimitive()) {
             if (getAnnotation(typeMirror, javaType) != null) {
-                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR,
-                                headerMessage + " (primitive type) cannot be annotated with @JavaType", element);
+                if (!passAnnotations) {
+                    processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR,
+                            headerMessage + " (primitive type) cannot be annotated with @JavaType", element);
+                }
+            }
+            else {
+                if (passAnnotations) {
+                    processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR,
+                            headerMessage + " (primitive type) not annotated with @JavaType but can receive annotations", element);
+                }
+
             }
         } else if (typeMirror.getKind() != TypeKind.VOID) {
             // Reference type.
-            if (!processingEnv.getTypeUtils().isSameType(typeMirror, staticObject.asType())) {
+            if (!processingEnv.getTypeUtils().isSameType(typeMirror, staticObject.asType()) && !passAnnotations) {
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING,
                                 headerMessage + " is not of type StaticObject", element);
             }
@@ -230,18 +241,18 @@ public final class SubstitutionProcessor extends EspressoProcessor {
         }
     }
 
-    private void checkTargetMethod(ExecutableElement targetElement) {
+    private void checkTargetMethod(ExecutableElement targetElement, boolean passAnnotations) {
         for (VariableElement param : targetElement.getParameters()) {
             if (isActualParameter(param)) {
-                checkParameterOrReturnType("Substitution parameter", param.asType(), param);
+                checkParameterOrReturnType("Substitution parameter", param.asType(), param, passAnnotations);
             } else {
                 checkInjectedParameter("Substitution parameter", param.asType(), param);
             }
         }
-        checkParameterOrReturnType("Substitution return type", targetElement.getReturnType(), targetElement);
+        checkParameterOrReturnType("Substitution return type", targetElement.getReturnType(), targetElement, passAnnotations);
     }
 
-    private void checkSubstitutionElement(Element element) {
+    private void checkSubstitutionElement(Element element, boolean passAnnotations) {
         if (element.getKind() == ElementKind.METHOD) {
             ExecutableElement methodElement = (ExecutableElement) element;
             Set<Modifier> modifiers = methodElement.getModifiers();
@@ -251,7 +262,7 @@ public final class SubstitutionProcessor extends EspressoProcessor {
             if (!modifiers.contains(Modifier.STATIC)) {
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Substitution method must be static", element);
             }
-            checkTargetMethod(methodElement);
+            checkTargetMethod(methodElement, passAnnotations);
         }
         if (element.getKind() == ElementKind.CLASS) {
             TypeElement typeElement = (TypeElement) element;
@@ -261,7 +272,7 @@ public final class SubstitutionProcessor extends EspressoProcessor {
             }
             ExecutableElement targetMethod = findNodeExecute(typeElement);
             if (targetMethod != null) {
-                checkTargetMethod(targetMethod);
+                checkTargetMethod(targetMethod, passAnnotations);
             }
         }
     }
@@ -314,8 +325,10 @@ public final class SubstitutionProcessor extends EspressoProcessor {
         AnnotationMirror subst = getAnnotation(element, substitutionAnnotation);
         if (subst != null) {
 
+            boolean passAnnotations = getAnnotationValue(subst, "passAnnotations", Boolean.class);
+
             // Sanity check.
-            checkSubstitutionElement(element);
+            checkSubstitutionElement(element, passAnnotations);
 
             // Obtain the name of the element to be substituted in.
             String targetMethodName = getSubstutitutedMethodName(element);
@@ -365,7 +378,7 @@ public final class SubstitutionProcessor extends EspressoProcessor {
                 flags |= SubstitutionFlag.InlineInBytecode;
             }
 
-            SubstitutorHelper helper = new SubstitutorHelper(this, element, targetClassName, targetMethodName, guestTypes, returnType, hasReceiver, nameProvider, languageFilter,
+            SubstitutorHelper helper = new SubstitutorHelper(this, element, targetClassName, targetMethodName, guestTypes, returnType, hasReceiver, passAnnotations, nameProvider, languageFilter,
                             inlineInBytecode, decodedInlineGuard, substitutionClass, flags, group);
 
             // Create the contents of the source file
@@ -660,6 +673,7 @@ public final class SubstitutionProcessor extends EspressoProcessor {
         declaration.addContent(ProcessorUtils.stringify(h.returnType), ",").addLine();
         declaration.addContent(generateParameterTypes(h.guestTypeNames, 4), ',').addLine();
         declaration.addContent(h.hasReceiver, ',').addLine();
+        declaration.addContent(h.passAnnotations, ',').addLine();
         declaration.addContent(h.languageFilter, '.', INSTANCE, ',').addLine();
         declaration.addContent("(byte) ", h.flags, ',').addLine();
         declaration.addContent(h.guardValue != null ? (h.guardValue + "." + INSTANCE) : "null", ',').addLine();

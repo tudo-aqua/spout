@@ -34,6 +34,7 @@ import java.util.logging.Level;
 import java.util.regex.Pattern;
 
 import org.graalvm.home.HomeFinder;
+import com.oracle.truffle.espresso.nodes.commands.*;
 import org.graalvm.home.Version;
 import org.graalvm.options.OptionDescriptors;
 import org.graalvm.options.OptionKey;
@@ -433,6 +434,19 @@ public final class EspressoLanguage extends TruffleLanguage<EspressoContext> imp
         }
         if (ReferenceProcessRootNode.EVAL_NAME.equals(contents)) {
             RootNode node = new ReferenceProcessRootNode(this);
+            return node.getCallTarget();
+        }
+        if (EndPathNode.EVAL_NAME.equals(contents)) {
+            RootNode node = new EndPathNode(this);
+            return node.getCallTarget();
+        }
+        if (contents.startsWith(NewPathNode.EVAL_NAME)) {
+            RootNode node = new NewPathNode(this, contents.substring(NewPathNode.EVAL_NAME.length()));
+            return node.getCallTarget();
+        }
+        if (contents.startsWith(UncaughtExceptionNode.EVAL_NAME)) {
+            RootNode node = new UncaughtExceptionNode(this,
+                    contents.substring(UncaughtExceptionNode.EVAL_NAME.length()));
             return node.getCallTarget();
         }
         throw new EspressoParseError(

@@ -80,6 +80,14 @@ public @interface Substitution {
     Class<? extends SubstitutionNamesProvider> nameProvider() default SubstitutionNamesProvider.NoProvider.class;
 
     /**
+     * ok to pass annotated values into this method?
+     *
+     * @return
+     */
+    boolean passAnnotations() default false;
+
+
+    /**
      * Some substitution should happen only for a given guest java version, or even iff an option is
      * specified. this method allows to conditionally substitute based on the language.
      */

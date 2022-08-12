@@ -23,9 +23,14 @@
 package com.oracle.truffle.espresso.substitutions.standard;
 
 import com.oracle.truffle.espresso.substitutions.EspressoSubstitutions;
+import com.oracle.truffle.espresso.substitutions.Inject;
+import com.oracle.truffle.espresso.substitutions.JavaType;
 import com.oracle.truffle.espresso.substitutions.Substitution;
-
 import static com.oracle.truffle.espresso.substitutions.SubstitutionFlag.IsTrivial;
+import com.oracle.truffle.espresso.meta.Meta;
+import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
+import tools.aqua.spout.SPouT;
+import tools.aqua.spout.SPouTNumeric;
 
 /**
  * These substitutions are just for performance. Directly uses the optimized host intrinsics
@@ -33,13 +38,47 @@ import static com.oracle.truffle.espresso.substitutions.SubstitutionFlag.IsTrivi
  */
 @EspressoSubstitutions
 public final class Target_java_lang_Double {
-    @Substitution(flags = {IsTrivial})
-    public static double longBitsToDouble(long bits) {
-        return Double.longBitsToDouble(bits);
+
+    //@Substitution(flags = {IsTrivial})
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "D") Object longBitsToDouble(@JavaType(internalName = "J") Object bits,@Inject Meta meta) {
+        return SPouTNumeric.doubleLongBitsToDouble(bits, meta);
     }
 
-    @Substitution(flags = {IsTrivial})
-    public static long doubleToRawLongBits(double value) {
-        return Double.doubleToRawLongBits(value);
+    //@Substitution(flags = {IsTrivial})
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "D") Object doubleToRawLongBits(@JavaType(internalName = "D") Object value, @Inject Meta meta) {
+        return SPouTNumeric.doubleToRawLongBits(value, meta);
+    }
+
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "J") Object doubleToLongBits(@JavaType(internalName = "D") Object value, @Inject Meta meta) {
+        return SPouTNumeric.doubleToRawLongBits(value, meta);
+    }
+
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "D") Object parseDouble(@JavaType(String.class) StaticObject s, @Inject Meta meta) {
+        return SPouT.parseDouble(s, meta);
+    }
+
+    @Substitution(passAnnotations = true)
+    public static @JavaType(String.class) StaticObject toString(@JavaType(internalName = "D") Object value,
+                                                                @Inject Meta meta) {
+        return SPouTNumeric.doubleToString(value, meta);
+    }
+
+    @Substitution(passAnnotations = true)
+    public static @JavaType(String.class) StaticObject toHexString(@JavaType(internalName = "D") Object value, @Inject Meta meta) {
+        return SPouTNumeric.doubleToHexString(value, meta);
+    }
+
+    @Substitution(methodName = "valueOf", passAnnotations = true)
+    public static @JavaType(Double.class) StaticObject valueOfDouble(@JavaType(internalName = "D") Object value, @Inject Meta meta){
+        return SPouTNumeric.doubleValueOfDouble(value, meta);
+    }
+
+    @Substitution(hasReceiver = true, passAnnotations = true)
+    public static @JavaType(internalName = "S") Object shortValue(@JavaType(Double.class) StaticObject d,  @Inject Meta meta){
+        return SPouTNumeric.doubleToShort(d, meta);
     }
 }

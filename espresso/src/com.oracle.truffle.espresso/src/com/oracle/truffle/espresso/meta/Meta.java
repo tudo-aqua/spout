@@ -82,6 +82,7 @@ import com.oracle.truffle.espresso.shared.meta.KnownTypes;
 import com.oracle.truffle.espresso.substitutions.JImageExtensions;
 import com.oracle.truffle.espresso.substitutions.JavaType;
 import com.oracle.truffle.espresso.vm.InterpreterToVM;
+import tools.aqua.spout.SPouT;
 
 /**
  * Introspection API to access the guest world from the host. Provides seamless conversions from
@@ -419,6 +420,7 @@ public final class Meta extends ContextAccessImpl
         java_io_InputStream_skip = java_io_InputStream.requireDeclaredMethod(Names.skip, Signatures._long_long);
         java_io_PrintStream = knownKlass(Types.java_io_PrintStream);
         java_io_PrintStream_println = java_io_PrintStream.requireDeclaredMethod(Names.println, Signatures._void_String);
+        java_io_PrintStream_println_obj = java_io_PrintStream.requireDeclaredMethod(Names.println, Signatures._void_Object);
         java_nio_file_Path = knownKlass(Types.java_nio_file_Path);
         java_nio_file_Paths = knownKlass(Types.java_nio_file_Paths);
         java_nio_file_Paths_get = java_nio_file_Paths.requireDeclaredMethod(Names.get, Signatures.Path_String_String_array);
@@ -645,6 +647,10 @@ public final class Meta extends ContextAccessImpl
         java_lang_System_in = java_lang_System.requireDeclaredField(Names.in, Types.java_io_InputStream);
         java_lang_System_out = java_lang_System.requireDeclaredField(Names.out, Types.java_io_PrintStream);
         java_lang_System_err = java_lang_System.requireDeclaredField(Names.err, Types.java_io_PrintStream);
+
+        java_lang_Runtime = knownKlass(Types.java_lang_Runtime);
+        java_lang_Runtime_exit = java_lang_Runtime.requireDeclaredMethod(Names.exit, Signatures._void_int);
+        java_lang_Runtime_getRuntime = java_lang_Runtime.requireDeclaredMethod(Names.getRuntime, Signatures.Runtime);
 
         jdk_internal_util_SystemProps_Raw = diff().klass(VERSION_9_OR_HIGHER, Types.jdk_internal_util_SystemProps_Raw).notRequiredKlass();
 
@@ -1199,6 +1205,12 @@ public final class Meta extends ContextAccessImpl
         interopDispatch = new InteropKlassesDispatch(this);
 
         tRegexSupport = context.getLanguage().useTRegex() ? new TRegexSupport() : null;
+
+        java_lang_StringLatin1 = knownKlass(Types.java_lang_StringLatin1);
+        java_lang_StringLatin1_newString = java_lang_StringLatin1.lookupMethod(getNames().getOrCreate("newString"), Signatures.String_byte_array_int_int);
+
+        java_lang_StringUTF16 = knownKlass(Types.java_lang_StringUTF16);
+        java_lang_StringUTF16_newString = java_lang_StringUTF16.lookupMethod(getNames().getOrCreate("newString"), Signatures.String_byte_array_int_int);
     }
 
     private static void initializeEspressoClassInHierarchy(ObjectKlass klass) {
@@ -1633,6 +1645,7 @@ public final class Meta extends ContextAccessImpl
 
     public final ObjectKlass java_io_PrintStream;
     public final Method java_io_PrintStream_println;
+    public final Method java_io_PrintStream_println_obj;
 
     public final ObjectKlass java_nio_file_Path;
     public final ObjectKlass java_nio_file_Paths;
@@ -1751,6 +1764,7 @@ public final class Meta extends ContextAccessImpl
     public final Field sun_misc_SignalHandler_SIG_DFL;
     public final Field sun_misc_SignalHandler_SIG_IGN;
 
+    public final ObjectKlass java_lang_Runtime;
     public final ObjectKlass java_lang_System;
     public final Method java_lang_System_initializeSystemClass;
     public final Method java_lang_System_initPhase1;
@@ -1758,6 +1772,10 @@ public final class Meta extends ContextAccessImpl
     public final Method java_lang_System_initPhase3;
     public final Method java_lang_System_getProperty;
     public final Method java_lang_System_exit;
+
+    public final Method java_lang_Runtime_exit;
+    public final Method java_lang_Runtime_getRuntime;
+
     public final Field java_lang_System_securityManager;
     public final Field java_lang_System_in;
     public final Field java_lang_System_out;
@@ -2080,6 +2098,16 @@ public final class Meta extends ContextAccessImpl
 
     @CompilationFinal //
     public ContinuumSupport continuum;
+
+    // Concolic String Execution
+
+    public final ObjectKlass java_lang_StringLatin1;
+
+    public final Method java_lang_StringLatin1_newString;
+
+    public final ObjectKlass java_lang_StringUTF16;
+
+    public final Method java_lang_StringUTF16_newString;
 
     public final class PolyglotSupport {
         public final ObjectKlass UnknownIdentifierException;
@@ -2568,7 +2596,7 @@ public final class Meta extends ContextAccessImpl
      * such constructor declared.
      *
      * @param exceptionKlass guest exception class, subclass of guest {@link #java_lang_Throwable
-     *            Throwable}.
+     *                       Throwable}.
      */
     public @JavaType(Throwable.class) static StaticObject initExceptionWithMessage(@JavaType(Throwable.class) ObjectKlass exceptionKlass, @JavaType(String.class) StaticObject message) {
         assert exceptionKlass.getMeta().java_lang_Throwable.isAssignableFrom(exceptionKlass);
@@ -2585,7 +2613,7 @@ public final class Meta extends ContextAccessImpl
      * such constructor declared.
      *
      * @param exceptionKlass guest exception class, subclass of guest {@link #java_lang_Throwable
-     *            Throwable}.
+     *                       Throwable}.
      */
     public @JavaType(Throwable.class) static StaticObject initExceptionWithMessage(@JavaType(Throwable.class) ObjectKlass exceptionKlass, String message) {
         return initExceptionWithMessage(exceptionKlass, exceptionKlass.getMeta().toGuestString(message));
@@ -2599,7 +2627,7 @@ public final class Meta extends ContextAccessImpl
      * default constructor}. The given guest class must have such constructor declared.
      *
      * @param exceptionKlass guest exception class, subclass of guest {@link #java_lang_Throwable
-     *            Throwable}.
+     *                       Throwable}.
      */
     public @JavaType(Throwable.class) static StaticObject initException(@JavaType(Throwable.class) ObjectKlass exceptionKlass) {
         assert exceptionKlass.getMeta().java_lang_Throwable.isAssignableFrom(exceptionKlass);
@@ -2615,7 +2643,7 @@ public final class Meta extends ContextAccessImpl
      * have such constructor declared.
      *
      * @param exceptionKlass guest exception class, subclass of guest {@link #java_lang_Throwable
-     *            Throwable}.
+     *                       Throwable}.
      */
     public @JavaType(Throwable.class) static StaticObject initExceptionWithCause(@JavaType(Throwable.class) ObjectKlass exceptionKlass, @JavaType(Throwable.class) StaticObject cause) {
         assert exceptionKlass.getMeta().java_lang_Throwable.isAssignableFrom(exceptionKlass);
@@ -2631,7 +2659,7 @@ public final class Meta extends ContextAccessImpl
      * default constructor}. The given guest class must have such constructor declared.
      *
      * @param exceptionKlass guest exception class, subclass of guest {@link #java_lang_Throwable
-     *            Throwable}.
+     *                       Throwable}.
      */
     @HostCompilerDirectives.InliningCutoff
     public EspressoException throwException(@JavaType(Throwable.class) ObjectKlass exceptionKlass) {
@@ -2648,6 +2676,7 @@ public final class Meta extends ContextAccessImpl
     @HostCompilerDirectives.InliningCutoff
     public EspressoException throwException(@JavaType(Throwable.class) StaticObject throwable) {
         assert InterpreterToVM.instanceOf(throwable, throwable.getKlass().getMeta().java_lang_Throwable);
+        //SPouT.iflowRegisterException();
         throw EspressoException.wrap(throwable, this);
     }
 
@@ -2660,8 +2689,8 @@ public final class Meta extends ContextAccessImpl
      * such constructor declared.
      *
      * @param exceptionKlass guest exception class, subclass of guest {@link #java_lang_Throwable
-     *            Throwable}.
-     * @param message the message to be used when initializing the exception
+     *                       Throwable}.
+     * @param message        the message to be used when initializing the exception
      */
     @HostCompilerDirectives.InliningCutoff
     public EspressoException throwExceptionWithMessage(@JavaType(Throwable.class) ObjectKlass exceptionKlass, @JavaType(String.class) StaticObject message) {
@@ -2677,8 +2706,8 @@ public final class Meta extends ContextAccessImpl
      * such constructor declared.
      *
      * @param exceptionKlass guest exception class, subclass of guest {@link #java_lang_Throwable
-     *            Throwable}.
-     * @param message the message to be used when initializing the exception
+     *                       Throwable}.
+     * @param message        the message to be used when initializing the exception
      */
     @HostCompilerDirectives.InliningCutoff
     public EspressoException throwExceptionWithMessage(@JavaType(Throwable.class) ObjectKlass exceptionKlass, String message) {
@@ -2694,9 +2723,9 @@ public final class Meta extends ContextAccessImpl
      * such constructor declared.
      *
      * @param exceptionKlass guest exception class, subclass of guest {@link #java_lang_Throwable
-     *            Throwable}.
-     * @param msgFormat the {@linkplain java.util.Formatter format string} to be used to construct
-     *            the message used when initializing the exception
+     *                       Throwable}.
+     * @param msgFormat      the {@linkplain java.util.Formatter format string} to be used to construct
+     *                       the message used when initializing the exception
      */
     @HostCompilerDirectives.InliningCutoff
     public EspressoException throwExceptionWithMessage(@JavaType(Throwable.class) ObjectKlass exceptionKlass, String msgFormat, Object... args) {
@@ -2709,7 +2738,7 @@ public final class Meta extends ContextAccessImpl
      * The given guest class must have such constructor declared.
      *
      * @param exceptionKlass guest exception class, subclass of guest {@link #java_lang_Throwable
-     *            Throwable}.
+     *                       Throwable}.
      */
     @HostCompilerDirectives.InliningCutoff
     public EspressoException throwExceptionWithCause(@JavaType(Throwable.class) ObjectKlass exceptionKlass, @JavaType(Throwable.class) StaticObject cause) {
@@ -3222,7 +3251,7 @@ public final class Meta extends ContextAccessImpl
      * conversion is not possible, throws {@link EspressoError}.
      *
      * @param defaultIfNull if true and value is {@link StaticObject#isNull(StaticObject) guest
-     *            null}, the conversion will return the default value of the primitive type.
+     *                      null}, the conversion will return the default value of the primitive type.
      */
     public boolean asBoolean(Object value, boolean defaultIfNull) {
         if (value instanceof Boolean) {
@@ -3239,7 +3268,7 @@ public final class Meta extends ContextAccessImpl
      * conversion is not possible, throws {@link EspressoError}.
      *
      * @param defaultIfNull if true and value is {@link StaticObject#isNull(StaticObject) guest
-     *            null}, the conversion will return the default value of the primitive type.
+     *                      null}, the conversion will return the default value of the primitive type.
      */
     public byte asByte(Object value, boolean defaultIfNull) {
         if (value instanceof Byte) {
@@ -3256,7 +3285,7 @@ public final class Meta extends ContextAccessImpl
      * conversion is not possible, throws {@link EspressoError}.
      *
      * @param defaultIfNull if true and value is {@link StaticObject#isNull(StaticObject) guest
-     *            null}, the conversion will return the default value of the primitive type.
+     *                      null}, the conversion will return the default value of the primitive type.
      */
     public short asShort(Object value, boolean defaultIfNull) {
         if (value instanceof Short) {
@@ -3273,7 +3302,7 @@ public final class Meta extends ContextAccessImpl
      * conversion is not possible, throws {@link EspressoError}.
      *
      * @param defaultIfNull if true and value is {@link StaticObject#isNull(StaticObject) guest
-     *            null}, the conversion will return the default value of the primitive type.
+     *                      null}, the conversion will return the default value of the primitive type.
      */
     public char asChar(Object value, boolean defaultIfNull) {
         if (value instanceof Character) {
@@ -3290,7 +3319,7 @@ public final class Meta extends ContextAccessImpl
      * conversion is not possible, throws {@link EspressoError}.
      *
      * @param defaultIfNull if true and value is {@link StaticObject#isNull(StaticObject) guest
-     *            null}, the conversion will return the default value of the primitive type.
+     *                      null}, the conversion will return the default value of the primitive type.
      */
     public int asInt(Object value, boolean defaultIfNull) {
         if (value instanceof Integer) {
@@ -3307,7 +3336,7 @@ public final class Meta extends ContextAccessImpl
      * conversion is not possible, throws {@link EspressoError}.
      *
      * @param defaultIfNull if true and value is {@link StaticObject#isNull(StaticObject) guest
-     *            null}, the conversion will return the default value of the primitive type.
+     *                      null}, the conversion will return the default value of the primitive type.
      */
     public float asFloat(Object value, boolean defaultIfNull) {
         if (value instanceof Float) {
@@ -3324,7 +3353,7 @@ public final class Meta extends ContextAccessImpl
      * conversion is not possible, throws {@link EspressoError}.
      *
      * @param defaultIfNull if true and value is {@link StaticObject#isNull(StaticObject) guest
-     *            null}, the conversion will return the default value of the primitive type.
+     *                      null}, the conversion will return the default value of the primitive type.
      */
     public double asDouble(Object value, boolean defaultIfNull) {
         if (value instanceof Double) {
@@ -3341,7 +3370,7 @@ public final class Meta extends ContextAccessImpl
      * conversion is not possible, throws {@link EspressoError}.
      *
      * @param defaultIfNull if true and value is {@link StaticObject#isNull(StaticObject) guest
-     *            null}, the conversion will return the default value of the primitive type.
+     *                      null}, the conversion will return the default value of the primitive type.
      */
     public long asLong(Object value, boolean defaultIfNull) {
         if (value instanceof Long) {
@@ -3372,7 +3401,7 @@ public final class Meta extends ContextAccessImpl
      * {@link EspressoError}.
      *
      * @param defaultIfNull if true and value is {@link StaticObject#isNull(StaticObject) guest
-     *            null}, the conversion will return the default value of the primitive type.
+     *                      null}, the conversion will return the default value of the primitive type.
      */
     @CompilerDirectives.TruffleBoundary(allowInlining = true)
     private long tryBitwiseConversionToLong(Object value, boolean defaultIfNull) {

@@ -53,6 +53,7 @@ import com.oracle.truffle.espresso.substitutions.Substitution;
 import com.oracle.truffle.espresso.substitutions.SubstitutionNode;
 import com.oracle.truffle.espresso.substitutions.SubstitutionProfiler;
 import com.oracle.truffle.espresso.vm.VM;
+import tools.aqua.spout.SPouT;
 
 @EspressoSubstitutions
 public final class Target_java_lang_System {
@@ -83,6 +84,17 @@ public final class Target_java_lang_System {
         SYSTEM_IDENTITY_HASH_CODE_COUNT.inc();
         return VM.JVM_IHashCode(self, meta, lang);
     }
+
+    // TODO: problem with blacklisted method
+
+    /*
+    @Substitution()
+    public static void exit(int status, @Inject Meta meta) {
+        SPouT.endPath();
+        Object runtime = meta.java_lang_Runtime_getRuntime.invokeMethodStatic();
+        meta.java_lang_Runtime_exit.invokeMethodVirtual(runtime, status);
+    }
+    */
 
     @ReportPolymorphism
     @Substitution

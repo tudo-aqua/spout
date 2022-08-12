@@ -69,6 +69,7 @@ public abstract class JavaSubstitution extends SubstitutionProfiler {
         private final String returnType;
         private final String[] parameterTypes;
         private final boolean hasReceiver;
+        private final boolean passAnnotations;
 
         private final LanguageFilter filter;
         private final byte flags;
@@ -81,6 +82,7 @@ public abstract class JavaSubstitution extends SubstitutionProfiler {
                         String returnType,
                         String[] parameterTypes,
                         boolean hasReceiver,
+                       boolean passAnnotations,
                         LanguageFilter filter,
                         byte flags,
                         InlinedMethodPredicate guard,
@@ -94,6 +96,7 @@ public abstract class JavaSubstitution extends SubstitutionProfiler {
             this.flags = flags;
             this.guard = guard;
             this.factory = factory;
+            this.passAnnotations = passAnnotations;
         }
 
         public String[] getMethodNames() {
@@ -152,6 +155,10 @@ public abstract class JavaSubstitution extends SubstitutionProfiler {
             }
             CompilerDirectives.transferToInterpreterAndInvalidate();
             throw EspressoError.shouldNotReachHere("Unrecognized encoded names for substitution. " + encodedNames);
+        }
+
+        public boolean passAnnotations() {
+            return passAnnotations;
         }
     }
 

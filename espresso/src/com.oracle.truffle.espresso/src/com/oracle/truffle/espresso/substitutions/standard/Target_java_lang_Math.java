@@ -23,8 +23,15 @@
 package com.oracle.truffle.espresso.substitutions.standard;
 
 import com.oracle.truffle.espresso.substitutions.EspressoSubstitutions;
+import com.oracle.truffle.espresso.substitutions.Inject;
 import com.oracle.truffle.espresso.substitutions.InlineInBytecode;
+import com.oracle.truffle.espresso.substitutions.JavaType;
 import com.oracle.truffle.espresso.substitutions.Substitution;
+
+
+import com.oracle.truffle.espresso.meta.Meta;
+import tools.aqua.spout.SPouT;
+import tools.aqua.spout.SPouTNumeric;
 
 /**
  * These substitutions are just for performance. Directly uses the optimized host intrinsics
@@ -34,54 +41,54 @@ import com.oracle.truffle.espresso.substitutions.Substitution;
 @InlineInBytecode
 public final class Target_java_lang_Math {
 
-    @Substitution
-    public static double sin(double a) {
-        return Math.sin(a);
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "D") Object sin(@JavaType(internalName = "D") Object a, @Inject Meta meta) {
+        return SPouT.mathSin(a, meta);
     }
 
-    @Substitution
-    public static double cos(double a) {
-        return Math.cos(a);
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "D") Object cos(@JavaType(internalName = "D") Object a, @Inject Meta meta) {
+        return SPouT.mathCos(a, meta);
     }
 
-    @Substitution
-    public static double tan(double a) {
-        return Math.tan(a);
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "D") Object tan(@JavaType(internalName = "D") Object a, @Inject Meta meta) {
+        return SPouT.mathTan(a, meta);
     }
 
-    @Substitution
-    public static double asin(double a) {
-        return Math.asin(a);
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "D") Object asin(@JavaType(internalName = "D") Object a, @Inject Meta meta) {
+        return SPouT.mathArcSin(a, meta);
     }
 
-    @Substitution
-    public static double acos(double a) {
-        return Math.acos(a);
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "D") Object acos(@JavaType(internalName = "D") Object a, @Inject Meta meta) {
+        return SPouT.mathArcCos(a, meta);
     }
 
-    @Substitution
-    public static double atan(double a) {
-        return Math.atan(a);
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "D") Object atan(@JavaType(internalName = "D") Object a, @Inject Meta meta) {
+        return SPouT.mathATan(a, meta);
     }
 
-    @Substitution
-    public static double exp(double a) {
-        return Math.exp(a);
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "D") Object exp(@JavaType(internalName = "D") Object a, @Inject Meta meta) {
+        return SPouT.mathExp(a, meta);
     }
 
-    @Substitution
-    public static double log(double a) {
-        return Math.log(a);
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "D") Object log(@JavaType(internalName = "D") Object a, @Inject Meta meta) {
+        return SPouT.mathLog(a, meta);
     }
 
-    @Substitution
-    public static double log10(double a) {
-        return Math.log10(a);
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "D") Object log10(@JavaType(internalName = "D") Object a, @Inject Meta meta) {
+        return SPouT.mathLog10(a, meta);
     }
 
-    @Substitution
-    public static double sqrt(double a) {
-        return Math.sqrt(a);
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "D") Object sqrt(@JavaType(internalName = "D") Object a, @Inject Meta meta) {
+        return SPouT.mathSqrt(a, meta);
     }
 
     @Substitution
@@ -111,44 +118,49 @@ public final class Target_java_lang_Math {
         return Math.rint(a);
     }
 
-    @Substitution
-    public static double atan2(double y, double x) {
-        return Math.atan2(y, x);
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "D") Object atan2(@JavaType(internalName = "D") Object y, @JavaType(internalName = "D") Object x, @Inject Meta meta) {
+        return SPouT.mathATan2(y, x, meta);
     }
 
-    @Substitution
-    public static double pow(double a, double b) {
-        return Math.pow(a, b);
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "D") Object pow(@JavaType(internalName = "D") Object a, @JavaType(internalName = "D") Object b, @Inject Meta meta) {
+        return SPouT.mathPow(a, b, meta);
     }
 
-    @Substitution
-    public static int round(float a) {
-        return Math.round(a);
+    // TODO: causes shutdown problem
+    /*
+    @Substitution(passAnnotations = true, methodName = "round")
+    public static @JavaType(internalName = "I") Object roundf(@JavaType(internalName = "F") Object a, @Inject Meta meta) {
+        return SPouT.mathRoundF(a, meta);
+    }
+    */
+    @Substitution(passAnnotations = true, methodName = "round")
+    public static @JavaType(internalName = "J") Object roundd(@JavaType(internalName = "D") Object a, @Inject Meta meta) {
+        return SPouT.mathRoundD(a, meta);
     }
 
-    @Substitution
-    public static long round(double a) {
-        return Math.round(a);
+    @Substitution(passAnnotations = true, methodName = "abs")
+    public static @JavaType(internalName = "I") Object absInt(@JavaType(internalName = "I") Object a) {
+        return SPouT.mathAbsInt(a);
     }
 
-    @Substitution
-    public static int abs(int a) {
-        return Math.abs(a);
+    // TODO: causes shutdown problem
+    /*
+    @Substitution(passAnnotations = true, methodName = "abs")
+    public static @JavaType(internalName = "J") Object absLong(@JavaType(internalName = "J") Object a) {
+        return SPouT.mathAbsLong(a);
+    }
+    */
+
+    @Substitution(passAnnotations = true, methodName = "abs")
+    public static @JavaType(internalName = "F") Object absFloat(@JavaType(internalName = "F") Object a) {
+        return SPouT.mathAbsFloat(a);
     }
 
-    @Substitution
-    public static long abs(long a) {
-        return Math.abs(a);
-    }
-
-    @Substitution
-    public static float abs(float a) {
-        return Math.abs(a);
-    }
-
-    @Substitution
-    public static double abs(double a) {
-        return Math.abs(a);
+    @Substitution(passAnnotations = true, methodName = "abs")
+    public static @JavaType(internalName = "D") Object absDouble(@JavaType(internalName = "D") Object a) {
+        return SPouT.mathAbsDouble(a);
     }
 
     @Substitution
@@ -231,14 +243,14 @@ public final class Target_java_lang_Math {
         return Math.copySign(magnitude, sign);
     }
 
-    @Substitution
-    public static int getExponent(float f) {
-        return Math.getExponent(f);
+    @Substitution(passAnnotations = true, methodName = "getExponent")
+    public static @JavaType(internalName = "I") Object getExponentFloat(@JavaType(internalName = "F") Object f, @Inject Meta meta) {
+        return SPouTNumeric.mathGetExponentFloat(f, meta);
     }
 
-    @Substitution
-    public static int getExponent(double d) {
-        return Math.getExponent(d);
+    @Substitution(passAnnotations = true, methodName = "getExponent")
+    public static @JavaType(internalName = "I") Object getExponentDouble(@JavaType(internalName = "D") Object d, @Inject Meta meta) {
+        return SPouTNumeric.mathGetExponentDouble(d, meta);
     }
 
     @Substitution

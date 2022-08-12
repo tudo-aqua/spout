@@ -23,12 +23,14 @@
 package com.oracle.truffle.espresso.nodes.quick.interop;
 
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.espresso.EspressoLanguage;
 import com.oracle.truffle.espresso.classfile.bytecode.Bytecodes;
 import com.oracle.truffle.espresso.nodes.EspressoFrame;
 import com.oracle.truffle.espresso.nodes.bytecodes.ByteArrayLoad;
 import com.oracle.truffle.espresso.nodes.bytecodes.ByteArrayLoadNodeGen;
 import com.oracle.truffle.espresso.nodes.quick.QuickNode;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
+import tools.aqua.spout.SPouT;
 
 /**
  * @see ByteArrayLoad
@@ -48,6 +50,7 @@ public final class ByteArrayLoadQuickNode extends QuickNode {
     public int execute(VirtualFrame frame, boolean isContinuationResume) {
         int index = EspressoFrame.popInt(frame, top - 1);
         StaticObject array = nullCheck(EspressoFrame.popObject(frame, top - 2));
+        SPouT.getArrayAnnotations(frame, getBytecodeNode(), getBci(frame), array, index, top-1, top-2, EspressoLanguage.get(this));
         EspressoFrame.putInt(frame, top - 2, byteArrayLoad.execute(array, index));
         return stackEffectOf_BALOAD;
     }

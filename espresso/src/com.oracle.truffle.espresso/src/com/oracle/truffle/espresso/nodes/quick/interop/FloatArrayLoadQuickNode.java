@@ -29,6 +29,8 @@ import com.oracle.truffle.espresso.nodes.bytecodes.FloatArrayLoad;
 import com.oracle.truffle.espresso.nodes.bytecodes.FloatArrayLoadNodeGen;
 import com.oracle.truffle.espresso.nodes.quick.QuickNode;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
+import com.oracle.truffle.espresso.EspressoLanguage;
+import tools.aqua.spout.SPouT;
 
 /**
  * @see FloatArrayLoad
@@ -48,6 +50,7 @@ public final class FloatArrayLoadQuickNode extends QuickNode {
     public int execute(VirtualFrame frame, boolean isContinuationResume) {
         int index = EspressoFrame.popInt(frame, top - 1);
         StaticObject array = nullCheck(EspressoFrame.popObject(frame, top - 2));
+        SPouT.getArrayAnnotations(frame, getBytecodeNode(), getBci(frame), array, index, top-1, top-2, EspressoLanguage.get(this));
         EspressoFrame.putFloat(frame, top - 2, floatArrayLoad.execute(array, index));
         return stackEffectOf_FALOAD;
     }

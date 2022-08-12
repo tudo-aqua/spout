@@ -376,6 +376,10 @@ import com.oracle.truffle.espresso.vm.InterpreterToVM;
 import com.oracle.truffle.espresso.vm.continuation.HostFrameRecord;
 import com.oracle.truffle.espresso.vm.continuation.UnwindContinuationException;
 
+import tools.aqua.spout.*;
+import tools.aqua.taint.PostDominatorAnalysis;
+import tools.aqua.taint.TaintAnalysis;
+
 /**
  * Bytecode interpreter loop.
  * <p>
@@ -443,6 +447,10 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
 
     private final LivenessAnalysis livenessAnalysis;
 
+    private PostDominatorAnalysis postDominatorAnalysis;
+
+    private int[] tries;
+
     private byte trivialBytecodesCache = -1;
 
     @CompilationFinal private Object osrMetadata;
@@ -471,6 +479,8 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
         this.noForeignObjects = Truffle.getRuntime().createAssumption("noForeignObjects");
         this.implicitExceptionProfile = false;
         this.livenessAnalysis = methodVersion.getLivenessAnalysis();
+        this.postDominatorAnalysis = SPouT.iflowGetPDA(method);
+        this.tries = this.postDominatorAnalysis != null ? this.postDominatorAnalysis.getTries() : null;
         /*
          * The "triviality" is partially computed here since isTrivial is called from a compiler
          * thread where the context is not accessible.
@@ -497,7 +507,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
     @ExplodeLoop
     private void initArguments(VirtualFrame frame) {
         Object[] arguments = frame.getArguments();
-
+        AnnotatedVM.initAnnotations(frame);
         boolean hasReceiver = !getMethod().isStatic();
         int receiverSlot = hasReceiver ? 1 : 0;
         int curSlot = 0;
@@ -514,6 +524,11 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
         CompilerAsserts.partialEvaluationConstant(argCount);
         for (int i = 0; i < argCount; ++i) {
             Symbol<Type> argType = SignatureSymbols.parameterType(methodSignature, i);
+            if (arguments[i + receiverSlot] instanceof AnnotatedValue) {
+                AnnotatedValue a = (AnnotatedValue) arguments[i + receiverSlot];
+                AnnotatedVM.setLocalAnnotations(frame, curSlot, a);
+                arguments[i + receiverSlot] = a.getValue();
+            }
             // @formatter:off
             switch (argType.byteAt(0)) {
                 case 'Z' : setLocalInt(frame, curSlot, ((boolean) arguments[i + receiverSlot]) ? 1 : 0); break;
@@ -718,6 +733,17 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
         }
     }
 
+    public boolean isTry(int bci) {
+        if (tries == null) return false;
+        for (int i=0; i<tries.length; i++) {
+            int c = tries[i];
+            if (bci > c) continue;
+            if (bci < c) return false;
+            return true;
+        }
+        return false;
+    }
+
     @SuppressWarnings("DataFlowIssue")   // Too complex for IntelliJ to analyze.
     @ExplodeLoop(kind = ExplodeLoop.LoopExplosionKind.MERGE_EXPLODE)
     @BytecodeInterpreterSwitch
@@ -729,6 +755,8 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
         int statementIndex = startStatementIndex;
         boolean skipLivenessActions = instrument != null;
         boolean shouldResumeContinuation = resumeContinuation;
+
+        int ipdBCI = -1;
 
         final Counter loopCount = new Counter();
 
@@ -758,11 +786,18 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
         loop: while (true) {
             final int curOpcode = bs.opcode(curBCI);
             EXECUTED_BYTECODES_COUNT.inc();
+            ipdBCI = SPouT.iflowGetIpdBCI();
+            if (curBCI == ipdBCI) {
+                SPouT.nextBytecode(frame, this, curBCI);
+            }
+            if (isTry(curBCI)) {
+                SPouT.informationFlowEnterBlockWithHandler(frame, this, curBCI);
+            }
             try {
                 CompilerAsserts.partialEvaluationConstant(top);
                 CompilerAsserts.partialEvaluationConstant(curBCI);
+                CompilerAsserts.partialEvaluationConstant(ipdBCI);
                 CompilerAsserts.partialEvaluationConstant(curOpcode);
-
                 CompilerAsserts.partialEvaluationConstant(statementIndex);
                 assert statementIndex == InstrumentationSupport.NO_STATEMENT || curBCI == returnValueBci || curBCI == throwValueBci ||
                                 statementIndex == instrumentation.hookBCIToNodeIndex.lookupBucket(curBCI);
@@ -778,7 +813,13 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                 // @formatter:off
                 switch (curOpcode) {
                     case NOP: break;
-                    case ACONST_NULL: putObject(frame, top, StaticObject.NULL); break;
+                    case ACONST_NULL:
+                        // Since NULL is a singleton, we do not annotate it.
+                        // Assumption is that control-flow taint will affect branches
+                        // based on null checks directly.
+                        // TODO: validate assumption
+                        putObject(frame, top, StaticObject.NULL);
+                        break;
 
                     case ICONST_M1: // fall through
                     case ICONST_0: // fall through
@@ -786,20 +827,38 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     case ICONST_2: // fall through
                     case ICONST_3: // fall through
                     case ICONST_4: // fall through
-                    case ICONST_5: putInt(frame, top, curOpcode - ICONST_0); break;
+                    case ICONST_5:
+                        putInt(frame, top, curOpcode - ICONST_0);
+                        SPouT.markWithIFTaint(frame, top);
+                        break;
 
                     case LCONST_0: // fall through
-                    case LCONST_1: putLong(frame, top, curOpcode - LCONST_0); break;
+                    case LCONST_1:
+                        putLong(frame, top, curOpcode - LCONST_0);
+                        SPouT.markWithIFTaint(frame, top + 1);
+                        break;
 
                     case FCONST_0: // fall through
                     case FCONST_1: // fall through
-                    case FCONST_2: putFloat(frame, top, curOpcode - FCONST_0); break;
+                    case FCONST_2:
+                        putFloat(frame, top, curOpcode - FCONST_0);
+                        SPouT.markWithIFTaint(frame, top);
+                        break;
 
                     case DCONST_0: // fall through
-                    case DCONST_1: putDouble(frame, top, curOpcode - DCONST_0); break;
+                    case DCONST_1:
+                        putDouble(frame, top, curOpcode - DCONST_0);
+                        SPouT.markWithIFTaint(frame, top + 1);
+                        break;
 
-                    case BIPUSH: putInt(frame, top, bs.readByte(curBCI)); break;
-                    case SIPUSH: putInt(frame, top, bs.readShort(curBCI)); break;
+                    case BIPUSH:
+                        putInt(frame, top, bs.readByte(curBCI));
+                        SPouT.markWithIFTaint(frame, top);
+                        break;
+                    case SIPUSH:
+                        putInt(frame, top, bs.readShort(curBCI));
+                        SPouT.markWithIFTaint(frame, top);
+                        break;
 
                     case LDC   : putPoolConstant(frame, top, bs.readCPI1(curBCI), curOpcode); break;
                     case LDC_W : // fall through
@@ -808,22 +867,31 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     case ILOAD:
                         putInt(frame, top, getLocalInt(frame, bs.readLocalIndex1(curBCI)));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.putAnnotations(frame, top, AnnotatedVM.getLocalAnnotations(frame, bs.readLocalIndex(curBCI)));
+                        SPouT.markWithIFTaint(frame, top);
                         break;
                     case LLOAD:
                         putLong(frame, top, getLocalLong(frame, bs.readLocalIndex1(curBCI)));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.putAnnotations(frame, top, AnnotatedVM.getLocalAnnotations(frame, bs.readLocalIndex(curBCI)));
+                        SPouT.markWithIFTaint(frame, top);
                         break;
                     case FLOAD:
                         putFloat(frame, top, getLocalFloat(frame, bs.readLocalIndex1(curBCI)));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.putAnnotations(frame, top, AnnotatedVM.getLocalAnnotations(frame, bs.readLocalIndex(curBCI)));
+                        SPouT.markWithIFTaint(frame, top);
                         break;
                     case DLOAD:
                         putDouble(frame, top, getLocalDouble(frame, bs.readLocalIndex1(curBCI)));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.putAnnotations(frame, top+ 1, AnnotatedVM.getLocalAnnotations(frame, bs.readLocalIndex(curBCI)));
+                        SPouT.markWithIFTaint(frame, top);
                         break;
                     case ALOAD:
                         putObject(frame, top, getLocalObject(frame, bs.readLocalIndex1(curBCI)));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        // no concolic analysis of objects
                         break;
 
                     case ILOAD_0: // fall through
@@ -832,6 +900,8 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     case ILOAD_3:
                         putInt(frame, top, getLocalInt(frame, curOpcode - ILOAD_0));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.putAnnotations(frame, top, AnnotatedVM.getLocalAnnotations(frame, curOpcode - ILOAD_0));
+                        SPouT.markWithIFTaint(frame, top);
                         break;
                     case LLOAD_0: // fall through
                     case LLOAD_1: // fall through
@@ -839,6 +909,8 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     case LLOAD_3:
                         putLong(frame, top, getLocalLong(frame, curOpcode - LLOAD_0));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.putAnnotations(frame, top + 1, AnnotatedVM.getLocalAnnotations(frame, curOpcode - LLOAD_0));
+                        SPouT.markWithIFTaint(frame, top);
                         break;
                     case FLOAD_0: // fall through
                     case FLOAD_1: // fall through
@@ -846,6 +918,8 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     case FLOAD_3:
                         putFloat(frame, top, getLocalFloat(frame, curOpcode - FLOAD_0));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.putAnnotations(frame, top, AnnotatedVM.getLocalAnnotations(frame, curOpcode - FLOAD_0));
+                        SPouT.markWithIFTaint(frame, top);
                         break;
                     case DLOAD_0: // fall through
                     case DLOAD_1: // fall through
@@ -853,6 +927,8 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     case DLOAD_3:
                         putDouble(frame, top, getLocalDouble(frame, curOpcode - DLOAD_0));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.putAnnotations(frame, top + 1, AnnotatedVM.getLocalAnnotations(frame, curOpcode - DLOAD_0));
+                        SPouT.markWithIFTaint(frame, top);
                         break;
                     case ALOAD_0:
                         putObject(frame, top, getLocalObject(frame, 0));
@@ -863,6 +939,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     case ALOAD_3:
                         putObject(frame, top, getLocalObject(frame, curOpcode - ALOAD_0));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        // no concolic analysis of objects
                         break;
 
                     case IALOAD: // fall through
@@ -880,22 +957,27 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     case ISTORE:
                         setLocalInt(frame, bs.readLocalIndex1(curBCI), popInt(frame, top - 1));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.setLocalAnnotations(frame, bs.readLocalIndex(curBCI), AnnotatedVM.popAnnotations(frame, top -1));
                         break;
                     case LSTORE:
                         setLocalLong(frame, bs.readLocalIndex1(curBCI), popLong(frame, top - 1));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.setLocalAnnotations(frame, bs.readLocalIndex(curBCI), AnnotatedVM.popAnnotations(frame, top -1));
                         break;
                     case FSTORE:
                         setLocalFloat(frame, bs.readLocalIndex1(curBCI), popFloat(frame, top - 1));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.setLocalAnnotations(frame, bs.readLocalIndex(curBCI), AnnotatedVM.popAnnotations(frame, top -1));
                         break;
                     case DSTORE:
                         setLocalDouble(frame, bs.readLocalIndex1(curBCI), popDouble(frame, top - 1));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.setLocalAnnotations(frame, bs.readLocalIndex(curBCI), AnnotatedVM.popAnnotations(frame, top -1));
                         break;
                     case ASTORE:
                         setLocalObjectOrReturnAddress(frame, bs.readLocalIndex1(curBCI), popReturnAddressOrObject(frame, top - 1));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        // no concolic analysis of objects
                         break;
 
                     case ISTORE_0: // fall through
@@ -904,6 +986,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     case ISTORE_3:
                         setLocalInt(frame, curOpcode - ISTORE_0, popInt(frame, top - 1));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.setLocalAnnotations(frame, curOpcode - ISTORE_0, AnnotatedVM.popAnnotations(frame, top - 1));
                         break;
                     case LSTORE_0: // fall through
                     case LSTORE_1: // fall through
@@ -911,6 +994,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     case LSTORE_3:
                         setLocalLong(frame, curOpcode - LSTORE_0, popLong(frame, top - 1));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.setLocalAnnotations(frame, curOpcode - LSTORE_0, AnnotatedVM.popAnnotations(frame, top - 1));
                         break;
                     case FSTORE_0: // fall through
                     case FSTORE_1: // fall through
@@ -918,6 +1002,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     case FSTORE_3:
                         setLocalFloat(frame, curOpcode - FSTORE_0, popFloat(frame, top - 1));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.setLocalAnnotations(frame, curOpcode - FSTORE_0, AnnotatedVM.popAnnotations(frame, top - 1));
                         break;
                     case DSTORE_0: // fall through
                     case DSTORE_1: // fall through
@@ -925,6 +1010,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     case DSTORE_3:
                         setLocalDouble(frame, curOpcode - DSTORE_0, popDouble(frame, top - 1));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.setLocalAnnotations(frame, curOpcode - DSTORE_0, AnnotatedVM.popAnnotations(frame, top - 1));
                         break;
                     case ASTORE_0: // fall through
                     case ASTORE_1: // fall through
@@ -932,6 +1018,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     case ASTORE_3:
                         setLocalObjectOrReturnAddress(frame, curOpcode - ASTORE_0, popReturnAddressOrObject(frame, top - 1));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        // no concolic analysis of objects
                         break;
 
                     case IASTORE: // fall through
@@ -946,9 +1033,12 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     case POP2:
                         clear(frame, top - 1);
                         clear(frame, top - 2);
+                        AnnotatedVM.popAnnotations(frame, top -1);
+                        AnnotatedVM.popAnnotations(frame, top -2);
                         break;
                     case POP:
                         clear(frame, top - 1);
+                        AnnotatedVM.popAnnotations(frame, top -1);
                         break;
 
                     // TODO(peterssen): Stack shuffling is expensive.
@@ -960,82 +1050,82 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     case DUP2_X2 : dup2x2(frame, top);     break;
                     case SWAP    : swapSingle(frame, top); break;
 
-                    case IADD: putInt(frame, top - 2, popInt(frame, top - 1) + popInt(frame, top - 2)); break;
-                    case LADD: putLong(frame, top - 4, popLong(frame, top - 1) + popLong(frame, top - 3)); break;
-                    case FADD: putFloat(frame, top - 2, popFloat(frame, top - 1) + popFloat(frame, top - 2)); break;
-                    case DADD: putDouble(frame, top - 4, popDouble(frame, top - 1) + popDouble(frame, top - 3)); break;
+                    case IADD: SPouT.iadd(frame, top); break;
+                    case LADD: SPouT.ladd(frame, top); break;
+                    case FADD: SPouT.fadd(frame, top); break;
+                    case DADD: SPouT.dadd(frame, top); break;
 
-                    case ISUB: putInt(frame, top - 2, popInt(frame, top - 2) - popInt(frame, top - 1)); break;
-                    case LSUB: putLong(frame, top - 4, popLong(frame, top - 3) - popLong(frame, top - 1)); break;
-                    case FSUB: putFloat(frame, top - 2, popFloat(frame, top - 2) - popFloat(frame, top - 1)); break;
-                    case DSUB: putDouble(frame, top - 4, popDouble(frame, top - 3) - popDouble(frame, top - 1)); break;
+                    case ISUB: SPouT.isub(frame, top); break;
+                    case LSUB: SPouT.lsub(frame, top); break;
+                    case FSUB: SPouT.fsub(frame, top); break;
+                    case DSUB: SPouT.dsub(frame, top); break;
 
-                    case IMUL: putInt(frame, top - 2, popInt(frame, top - 1) * popInt(frame, top - 2)); break;
-                    case LMUL: putLong(frame, top - 4, popLong(frame, top - 1) * popLong(frame, top - 3)); break;
-                    case FMUL: putFloat(frame, top - 2, popFloat(frame, top - 1) * popFloat(frame, top - 2)); break;
-                    case DMUL: putDouble(frame, top - 4, popDouble(frame, top - 1) * popDouble(frame, top - 3)); break;
+                    case IMUL: SPouT.imul(frame, top); break;
+                    case LMUL: SPouT.lmul(frame, top); break;
+                    case FMUL: SPouT.fmul(frame, top); break;
+                    case DMUL: SPouT.dmul(frame, top); break;
 
-                    case IDIV: putInt(frame, top - 2, divInt(checkNonZero(popInt(frame, top - 1)), popInt(frame, top - 2))); break;
-                    case LDIV: putLong(frame, top - 4, divLong(checkNonZero(popLong(frame, top - 1)), popLong(frame, top - 3))); break;
-                    case FDIV: putFloat(frame, top - 2, divFloat(popFloat(frame, top - 1), popFloat(frame, top - 2))); break;
-                    case DDIV: putDouble(frame, top - 4, divDouble(popDouble(frame, top - 1), popDouble(frame, top - 3))); break;
+                    case IDIV: SPouT.idiv(frame, top, this, curBCI); break;
+                    case LDIV: SPouT.ldiv(frame, top, this, curBCI); break;
+                    case FDIV: SPouT.fdiv(frame, top); break;
+                    case DDIV: SPouT.ddiv(frame, top); break;
 
-                    case IREM: putInt(frame, top - 2, remInt(checkNonZero(popInt(frame, top - 1)), popInt(frame, top - 2))); break;
-                    case LREM: putLong(frame, top - 4, remLong(checkNonZero(popLong(frame, top - 1)), popLong(frame, top - 3))); break;
-                    case FREM: putFloat(frame, top - 2, remFloat(popFloat(frame, top - 1), popFloat(frame, top - 2))); break;
-                    case DREM: putDouble(frame, top - 4, remDouble(popDouble(frame, top - 1), popDouble(frame, top - 3))); break;
+                    case IREM: SPouT.irem(frame, top, this, curBCI); break;
+                    case LREM: SPouT.lrem(frame, top, this, curBCI); break;
+                    case FREM: SPouT.frem(frame, top); break;
+                    case DREM: SPouT.drem(frame, top); break;
 
-                    case INEG: putInt(frame, top - 1, -popInt(frame, top - 1)); break;
-                    case LNEG: putLong(frame, top - 2, -popLong(frame, top - 1)); break;
-                    case FNEG: putFloat(frame, top - 1, -popFloat(frame, top - 1)); break;
-                    case DNEG: putDouble(frame, top - 2, -popDouble(frame, top - 1)); break;
+                    case INEG: SPouT.ineg(frame,top); break;
+                    case LNEG: SPouT.lneg(frame, top); break;
+                    case FNEG: SPouT.fneg(frame, top); break;
+                    case DNEG: SPouT.dneg(frame, top); break;
 
-                    case ISHL: putInt(frame, top - 2, shiftLeftInt(popInt(frame, top - 1), popInt(frame, top - 2))); break;
-                    case LSHL: putLong(frame, top - 3, shiftLeftLong(popInt(frame, top - 1), popLong(frame, top - 2))); break;
-                    case ISHR: putInt(frame, top - 2, shiftRightSignedInt(popInt(frame, top - 1), popInt(frame, top - 2))); break;
-                    case LSHR: putLong(frame, top - 3, shiftRightSignedLong(popInt(frame, top - 1), popLong(frame, top - 2))); break;
-                    case IUSHR: putInt(frame, top - 2, shiftRightUnsignedInt(popInt(frame, top - 1), popInt(frame, top - 2))); break;
-                    case LUSHR: putLong(frame, top - 3, shiftRightUnsignedLong(popInt(frame, top - 1), popLong(frame, top - 2))); break;
+                    case ISHL: SPouT.ishl(frame, top); break;
+                    case LSHL:SPouT.lshl(frame, top); break;
+                    case ISHR: SPouT.ishr(frame, top); break;
+                    case LSHR: SPouT.lshr(frame, top); break;
+                    case IUSHR: SPouT.iushr(frame, top); break;
+                    case LUSHR: SPouT.lushr(frame, top); break;
 
-                    case IAND: putInt(frame, top - 2, popInt(frame, top - 1) & popInt(frame, top - 2)); break;
-                    case LAND: putLong(frame, top - 4, popLong(frame, top - 1) & popLong(frame, top - 3)); break;
+                    case IAND: SPouT.iand(frame, top); break;
+                    case LAND: SPouT.land(frame, top); break;
 
-                    case IOR: putInt(frame, top - 2, popInt(frame, top - 1) | popInt(frame, top - 2)); break;
-                    case LOR: putLong(frame, top - 4, popLong(frame, top - 1) | popLong(frame, top - 3)); break;
+                    case IOR: SPouT.ior(frame, top); break;
+                    case LOR: SPouT.lor(frame, top); break;
 
-                    case IXOR: putInt(frame, top - 2, popInt(frame, top - 1) ^ popInt(frame, top - 2)); break;
-                    case LXOR: putLong(frame, top - 4, popLong(frame, top - 1) ^ popLong(frame, top - 3)); break;
+                    case IXOR: SPouT.ixor(frame, top); break;
+                    case LXOR: SPouT.lxor(frame, top); break;
 
                     case IINC:
-                        setLocalInt(frame, bs.readLocalIndex1(curBCI), getLocalInt(frame, bs.readLocalIndex1(curBCI)) + bs.readIncrement1(curBCI));
+                        SPouT.iinc(frame, bs.readLocalIndex1(curBCI), bs.readIncrement1(curBCI));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
                         break;
 
-                    case I2L: putLong(frame, top - 1, popInt(frame, top - 1)); break;
-                    case I2F: putFloat(frame, top - 1, popInt(frame, top - 1)); break;
-                    case I2D: putDouble(frame, top - 1, popInt(frame, top - 1)); break;
+                    case I2L: SPouT.i2l(frame, top); break;
+                    case I2F: SPouT.i2f(frame, top); break;
+                    case I2D: SPouT.i2d(frame, top); break;
+                    
+                    case L2I: SPouT.l2i(frame, top); break;
+                    case L2F: SPouT.l2f(frame, top); break;
+                    case L2D: SPouT.l2d(frame, top); break;
 
-                    case L2I: putInt(frame, top - 2, (int) popLong(frame, top - 1)); break;
-                    case L2F: putFloat(frame, top - 2, popLong(frame, top - 1)); break;
-                    case L2D: putDouble(frame, top - 2, popLong(frame, top - 1)); break;
+                    case F2I: SPouT.f2i(frame, top); break;
+                    case F2L: SPouT.f2l(frame, top); break;
+                    case F2D: SPouT.f2d(frame, top); break;
 
-                    case F2I: putInt(frame, top - 1, (int) popFloat(frame, top - 1)); break;
-                    case F2L: putLong(frame, top - 1, (long) popFloat(frame, top - 1)); break;
-                    case F2D: putDouble(frame, top - 1, popFloat(frame, top - 1)); break;
+                    case D2I: SPouT.d2i(frame, top); break;
+                    case D2L: SPouT.d2l(frame, top); break;
+                    case D2F: SPouT.d2f(frame, top); break;
 
-                    case D2I: putInt(frame, top - 2, (int) popDouble(frame, top - 1)); break;
-                    case D2L: putLong(frame, top - 2, (long) popDouble(frame, top - 1)); break;
-                    case D2F: putFloat(frame, top - 2, (float) popDouble(frame, top - 1)); break;
+                    case I2B: SPouT.i2b(frame, top); break;
+                    case I2C: SPouT.i2c(frame, top); break;
+                    case I2S: SPouT.i2s(frame, top); break;
 
-                    case I2B: putInt(frame, top - 1, (byte) popInt(frame, top - 1)); break;
-                    case I2C: putInt(frame, top - 1, (char) popInt(frame, top - 1)); break;
-                    case I2S: putInt(frame, top - 1, (short) popInt(frame, top - 1)); break;
-
-                    case LCMP : putInt(frame, top - 4, compareLong(popLong(frame, top - 1), popLong(frame, top - 3))); break;
-                    case FCMPL: putInt(frame, top - 2, compareFloatLess(popFloat(frame, top - 1), popFloat(frame, top - 2))); break;
-                    case FCMPG: putInt(frame, top - 2, compareFloatGreater(popFloat(frame, top - 1), popFloat(frame, top - 2))); break;
-                    case DCMPL: putInt(frame, top - 4, compareDoubleLess(popDouble(frame, top - 1), popDouble(frame, top - 3))); break;
-                    case DCMPG: putInt(frame, top - 4, compareDoubleGreater(popDouble(frame, top - 1), popDouble(frame, top - 3))); break;
+                    case LCMP : SPouT.lcmp(frame, top); break;
+                    case FCMPL: SPouT.fcmpl(frame, top); break;
+                    case FCMPG: SPouT.fcmpg(frame, top); break;
+                    case DCMPL: SPouT.dcmpl(frame, top); break;
+                    case DCMPG: SPouT.dcmpg(frame, top); break;
 
                     // @formatter:on
                     case IFEQ: // fall through
@@ -1044,7 +1134,8 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     case IFGE: // fall through
                     case IFGT: // fall through
                     case IFLE: // fall through
-                        if (takeBranchPrimitive1(popInt(frame, top - 1), curOpcode)) {
+                        //if (takeBranchPrimitive1(popInt(frame, top - 1), curOpcode)) {
+                        if (SPouT.takeBranchPrimitive1(frame, top, curOpcode, this, curBCI)) {
                             int targetBCI = bs.readBranchDest2(curBCI);
                             top += Bytecodes.stackEffectOf(IFLE);
                             statementIndex = beforeJumpChecks(frame, curBCI, targetBCI, top, statementIndex, instrument, loopCount, skipLivenessActions);
@@ -1059,7 +1150,8 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     case IF_ICMPGE: // fall through
                     case IF_ICMPGT: // fall through
                     case IF_ICMPLE:
-                        if (takeBranchPrimitive2(popInt(frame, top - 1), popInt(frame, top - 2), curOpcode)) {
+                        //if (takeBranchPrimitive2(popInt(frame, top - 1), popInt(frame, top - 2), curOpcode)) {
+                        if (SPouT.takeBranchPrimitive2(frame, top, curOpcode, this, curBCI)) {
                             top += Bytecodes.stackEffectOf(IF_ICMPLE);
                             statementIndex = beforeJumpChecks(frame, curBCI, bs.readBranchDest2(curBCI), top, statementIndex, instrument, loopCount, skipLivenessActions);
                             curBCI = bs.readBranchDest2(curBCI);
@@ -1069,7 +1161,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
 
                     case IF_ACMPEQ: // fall through
                     case IF_ACMPNE:
-                        if (takeBranchRef2(popObject(frame, top - 1), popObject(frame, top - 2), curOpcode)) {
+                        if (SPouT.takeBranchRef2(frame, this, curBCI, popObject(frame, top - 1), popObject(frame, top - 2), curOpcode)) {
                             int targetBCI = bs.readBranchDest2(curBCI);
                             top += Bytecodes.stackEffectOf(IF_ACMPNE);
                             statementIndex = beforeJumpChecks(frame, curBCI, targetBCI, top, statementIndex, instrument, loopCount, skipLivenessActions);
@@ -1204,6 +1296,8 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                         int high = switchHelper.highKey(bs, curBCI);
                         assert low <= high;
 
+                        SPouT.tableSwitch(index, AnnotatedVM.popAnnotations(frame, top -1), low, high, frame, this, curBCI);
+
                         // Interpreter uses direct lookup.
                         if (CompilerDirectives.inInterpreter()) {
                             int targetBCI;
@@ -1243,6 +1337,16 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                         BytecodeLookupSwitch switchHelper = BytecodeLookupSwitch.INSTANCE;
                         int low = 0;
                         int high = switchHelper.numberOfCases(bs, curBCI) - 1;
+
+                        Annotations aKey = AnnotatedVM.popAnnotations(frame, top -1);
+                        if (aKey != null) {
+                            int[] vals = new int[high - low + 1];
+                            for (int i = 0; i < vals.length; i++) {
+                                vals[i] = switchHelper.keyAt(bs, curBCI, low + i);
+                            }
+                            SPouT.lookupSwitch(key, aKey, frame, this, curBCI, vals);
+                        }
+
                         while (low <= high) {
                             int mid = (low + high) >>> 1;
                             int midVal = switchHelper.keyAt(bs, curBCI, mid);
@@ -1281,7 +1385,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                         if (instrument != null) {
                             instrument.exitAt(frame, statementIndex, returnValue);
                         }
-
+                        SPouT.informationFlowMethodReturn(frame);
                         // This branch must not be a loop exit.
                         // Let the next loop iteration return this
                         top = startingStackOffset(getMethodVersion().getMaxLocals());
@@ -1320,22 +1424,29 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
 
                     case NEW         :
                         Klass klass = resolveType(NEW, bs.readCPI2(curBCI));
-                        putObject(frame, top, newReferenceObject(klass)); break;
+                        StaticObject obj = newReferenceObject(klass);
+                        SPouT.markObjectWithIFTaint(obj);
+                        putObject(frame, top, obj); break;
                     case NEWARRAY    :
                         byte jvmPrimitiveType = bs.readByte(curBCI);
-                        int length = popInt(frame, top - 1);
-                        putObject(frame, top - 1, newPrimitiveArray(jvmPrimitiveType, length)); break;
-                    case ANEWARRAY   : putObject(frame, top - 1, newReferenceArray(resolveType(ANEWARRAY, bs.readCPI2(curBCI)), popInt(frame, top - 1))); break;
+                        //int length = popInt(frame, top - 1);
+                        //putObject(frame, top - 1, newPrimitiveArray(jvmPrimitiveType, length)); break;
+                        SPouT.newArray(frame, jvmPrimitiveType, top, this); break;
+                    case ANEWARRAY   :
+                        Klass k = resolveType(ANEWARRAY, bs.readCPI2(curBCI));
+                        SPouT.anewArray(frame, k, top, this); break;
+                        //putObject(frame, top - 1, newReferenceArray(resolveType(ANEWARRAY, bs.readCPI2(curBCI)), popInt(frame, top - 1))); break;
 
                     case ARRAYLENGTH : arrayLength(frame, top, curBCI); break;
 
                     case ATHROW      :
+                        SPouT.iflowRegisterException();
                         throw getMethod().getMeta().throwException(nullCheck(popObject(frame, top - 1)));
-
                     case CHECKCAST   : {
                         StaticObject receiver = peekObject(frame, top - 1);
                         if (StaticObject.isNull(receiver) || receiver.getKlass() == resolveType(CHECKCAST, readOriginalCPI(curBCI))) {
                             // Most common case, avoid spawning a node.
+                            SPouT.checkcast(frame, receiver, this, curBCI, false);
                         } else {
                             CompilerDirectives.transferToInterpreterAndInvalidate();
                             quickenCheckCast(frame, top, curBCI, CHECKCAST);
@@ -1347,9 +1458,11 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                         if (StaticObject.isNull(receiver)) {
                             // Skip resolution.
                             putInt(frame, top - 1, /* false */ 0);
+                            SPouT.instanceOf(frame, receiver, false, top -1);
                         } else if (receiver.getKlass() == resolveType(INSTANCEOF, readOriginalCPI(curBCI))) {
                             // Quick-check, avoid spawning a node.
                             putInt(frame, top - 1, /* true */ 1);
+                            SPouT.instanceOf(frame, receiver, true, top -1);
                         } else {
                             CompilerDirectives.transferToInterpreterAndInvalidate();
                             putObject(frame, top - 1, receiver);
@@ -1469,7 +1582,8 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     }
 
                     case MULTIANEWARRAY:
-                        top += allocateMultiArray(frame, top, resolveType(MULTIANEWARRAY, bs.readCPI2(curBCI)), bs.readUByte(curBCI + 3));
+                        //top += allocateMultiArray(frame, top, resolveType(MULTIANEWARRAY, bs.readCPI2(curBCI)), bs.readUByte(curBCI + 3));
+                        top += SPouT.newMultiArray(frame, top, resolveType(MULTIANEWARRAY, bs.readCPI2(curBCI)), bs.readUByte(curBCI + 3), this);
                         break;
 
                     case BREAKPOINT:
@@ -1640,6 +1754,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                         int targetBCI = handler.getHandlerBCI();
                         statementIndex = beforeJumpChecks(frame, curBCI, targetBCI, top, statementIndex, instrument, loopCount, skipLivenessActions);
                         curBCI = targetBCI;
+                        SPouT.iflowUnregisterException(frame, this, curBCI);
                         continue loop; // skip bs.next()
                     } else {
                         if (instrument != null) {
@@ -1731,13 +1846,13 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
         return getAllocator().createNew((ObjectKlass) klass);
     }
 
-    private StaticObject newPrimitiveArray(byte jvmPrimitiveType, int length) {
+    public StaticObject newPrimitiveArray(byte jvmPrimitiveType, int length) {
         Meta meta = getMethod().getMeta();
         GuestAllocator.AllocationChecks.checkCanAllocateArray(meta, length, this);
         return getAllocator().createNewPrimitiveArray(meta, jvmPrimitiveType, length);
     }
 
-    private StaticObject newReferenceArray(Klass componentType, int length) {
+    public StaticObject newReferenceArray(Klass componentType, int length) {
         GuestAllocator.AllocationChecks.checkCanAllocateArray(getMethod().getMeta(), length, this);
         return getAllocator().createNewReferenceArray(componentType, length);
     }
@@ -1772,14 +1887,77 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
         Symbol<Type> returnType = SignatureSymbols.returnType(getMethod().getParsedSignature());
         // @formatter:off
         switch (returnType.byteAt(0)) {
-            case 'Z' : return stackIntToBoolean(popInt(frame, top - 1));
-            case 'B' : return (byte) popInt(frame, top - 1);
-            case 'S' : return (short) popInt(frame, top - 1);
-            case 'C' : return (char) popInt(frame, top - 1);
-            case 'I' : return popInt(frame, top - 1);
-            case 'J' : return popLong(frame, top - 1);
-            case 'F' : return popFloat(frame, top - 1);
-            case 'D' : return popDouble(frame, top - 1);
+            case 'Z' :Object rBool =  AnnotatedVM.popAnnotations(frame, top - 1);
+                if (rBool instanceof AnnotatedValue){
+                    popInt(frame, top -1);
+                    return rBool;
+                }else if (rBool instanceof Annotations){
+                    return new AnnotatedValue(stackIntToBoolean(popInt(frame, top -1)), (Annotations) rBool);
+                }
+                return stackIntToBoolean(popInt(frame, top -1));
+            case 'B' :
+                Object rByte =  AnnotatedVM.popAnnotations(frame, top - 1);
+                if (rByte instanceof AnnotatedValue){
+                    popInt(frame, top -1);
+                    return rByte;
+                }else if(rByte instanceof Annotations){
+                    return new AnnotatedValue((byte) popInt(frame, top - 1), (Annotations) rByte);
+                }
+                return (byte) popInt(frame, top - 1);
+            case 'S' :
+                Object rShort =  AnnotatedVM.popAnnotations(frame, top - 1);
+                if (rShort instanceof AnnotatedValue){
+                    popInt(frame, top -1);
+                    return rShort;
+                }else if(rShort instanceof Annotations){
+                    return new AnnotatedValue((short) popInt(frame, top - 1), (Annotations) rShort);
+                }
+                return (short) popInt(frame, top - 1);
+            case 'C' :
+                Object rChar =  AnnotatedVM.popAnnotations(frame, top - 1);
+                if (rChar instanceof AnnotatedValue){
+                    popInt(frame, top -1);
+                    return rChar;
+                } else if(rChar instanceof Annotations){
+                    return new AnnotatedValue((short) popInt(frame, top - 1), (Annotations) rChar);
+                }
+                return (char) popInt(frame, top - 1);
+            case 'I' :
+                Object rInt =  AnnotatedVM.popAnnotations(frame, top - 1);
+                if (rInt instanceof AnnotatedValue){
+                    popInt(frame, top -1);
+                    return rInt;
+                }else if(rInt instanceof Annotations){
+                    return new AnnotatedValue(popInt(frame, top - 1), (Annotations) rInt);
+                }
+                return popInt(frame, top - 1);
+            case 'J' :
+                Object rLong =  AnnotatedVM.popAnnotations(frame, top - 1);
+                if (rLong instanceof AnnotatedValue){
+                    popLong(frame, top -1);
+                    return rLong;
+                }else if(rLong instanceof Annotations){
+                    return new AnnotatedValue(popLong(frame, top - 1), (Annotations) rLong);
+                }
+                return popLong(frame, top - 1);
+            case 'F' :
+                Object rFloat =  AnnotatedVM.popAnnotations(frame, top - 1);
+                if (rFloat instanceof AnnotatedValue){
+                    popFloat(frame, top -1);
+                    return rFloat;
+                }else if(rFloat instanceof Annotations){
+                    return new AnnotatedValue(popFloat(frame, top - 1), (Annotations) rFloat);
+                }
+                return popFloat(frame, top - 1);
+            case 'D' :
+                Object rDouble =  AnnotatedVM.popAnnotations(frame, top - 1);
+                if (rDouble instanceof AnnotatedValue){
+                    popDouble(frame, top -1);
+                    return rDouble;
+                }else if(rDouble instanceof Annotations){
+                    return new AnnotatedValue(popDouble(frame, top - 1), (Annotations) rDouble);
+                }
+                return popDouble(frame, top - 1);
             case 'V' : return StaticObject.NULL; // void
             case '[' : // fall through
             case 'L' : return popObject(frame, top - 1);
@@ -1923,6 +2101,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
         StaticObject array = nullCheck(popObject(frame, top - 1));
         if (noForeignObjects.isValid() || array.isEspressoObject()) {
             putInt(frame, top - 1, InterpreterToVM.arrayLength(array, getLanguage()));
+            SPouT.arrayLength(frame, top, array);
         } else {
             CompilerDirectives.transferToInterpreterAndInvalidate();
             // The array was released, it must be restored for the quickening.
@@ -1941,13 +2120,35 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
             EspressoLanguage language = getLanguage();
             // @formatter:off
             switch (loadOpcode) {
-                case BALOAD: putInt(frame, top - 2, getInterpreterToVM().getArrayByte(language, index, array, this));      break;
-                case SALOAD: putInt(frame, top - 2, getInterpreterToVM().getArrayShort(language, index, array, this));     break;
-                case CALOAD: putInt(frame, top - 2, getInterpreterToVM().getArrayChar(language, index, array, this));      break;
-                case IALOAD: putInt(frame, top - 2, getInterpreterToVM().getArrayInt(language, index, array, this));       break;
-                case FALOAD: putFloat(frame, top - 2, getInterpreterToVM().getArrayFloat(language, index, array, this));   break;
-                case LALOAD: putLong(frame, top - 2, getInterpreterToVM().getArrayLong(language, index, array, this));     break;
-                case DALOAD: putDouble(frame, top - 2, getInterpreterToVM().getArrayDouble(language, index, array, this)); break;
+                case BALOAD:
+                    SPouT.getArrayAnnotations(frame, this, curBCI, array, index, top-1, top-2, language);
+                    putInt(frame, top - 2, getInterpreterToVM().getArrayByte(language, index, array, this));
+                    break;
+                case SALOAD:
+                    SPouT.getArrayAnnotations(frame, this, curBCI, array, index, top-1, top-2, language);
+                    putInt(frame, top - 2, getInterpreterToVM().getArrayShort(language, index, array, this));
+                    break;
+                case CALOAD:
+                    SPouT.getArrayAnnotations(frame, this, curBCI, array, index, top-1, top-2, language);
+                    putInt(frame, top - 2, getInterpreterToVM().getArrayChar(language, index, array, this));
+                    break;
+                case IALOAD:
+                    // putInt(frame, top - 2, getInterpreterToVM().getArrayInt(language, index, array, this));       break;
+                    SPouT.getArrayAnnotations(frame, this, curBCI, array, index, top-1, top-2, language);
+                    putInt(frame, top - 2, getInterpreterToVM().getArrayInt(language, index, array, this));
+                    break;
+                case FALOAD:
+                    SPouT.getArrayAnnotations(frame, this, curBCI, array, index, top-1, top-2, language);
+                    putFloat(frame, top - 2, getInterpreterToVM().getArrayFloat(language, index, array, this));
+                    break;
+                case LALOAD:
+                    SPouT.getArrayAnnotations(frame, this, curBCI, array, index, top-1, top-2, language);
+                    putLong(frame, top - 2, getInterpreterToVM().getArrayLong(language, index, array, this));
+                    break;
+                case DALOAD:
+                    SPouT.getArrayAnnotations(frame, this, curBCI, array, index, top-1, top-2, language);
+                    putDouble(frame, top - 2, getInterpreterToVM().getArrayDouble(language, index, array, this));
+                    break;
                 case AALOAD: putObject(frame, top - 2, getInterpreterToVM().getArrayObject(language, index, array, this));       break;
                 default:
                     CompilerDirectives.transferToInterpreterAndInvalidate();
@@ -1974,13 +2175,35 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
             EspressoLanguage language = getLanguage();
             // @formatter:off
             switch (storeOpcode) {
-                case BASTORE: getInterpreterToVM().setArrayByte(language, (byte) popInt(frame, top - 1), index, array, this);   break;
-                case SASTORE: getInterpreterToVM().setArrayShort(language, (short) popInt(frame, top - 1), index, array, this); break;
-                case CASTORE: getInterpreterToVM().setArrayChar(language, (char) popInt(frame, top - 1), index, array, this);   break;
-                case IASTORE: getInterpreterToVM().setArrayInt(language, popInt(frame, top - 1), index, array, this);           break;
-                case FASTORE: getInterpreterToVM().setArrayFloat(language, popFloat(frame, top - 1), index, array, this);       break;
-                case LASTORE: getInterpreterToVM().setArrayLong(language, popLong(frame, top - 1), index, array, this);         break;
-                case DASTORE: getInterpreterToVM().setArrayDouble(language, popDouble(frame, top - 1), index, array, this);     break;
+                case BASTORE:
+                    SPouT.setArrayAnnotations(frame, this, curBCI, array, index, top -1, top - 1 - offset, language);
+                    getInterpreterToVM().setArrayByte(language, (byte) popInt(frame, top - 1), index, array, this);
+                    break;
+                case SASTORE:
+                    SPouT.setArrayAnnotations(frame, this, curBCI, array, index, top -1, top - 1 - offset, language);
+                    getInterpreterToVM().setArrayShort(language, (short) popInt(frame, top - 1), index, array, this);
+                    break;
+                case CASTORE:
+                    SPouT.setArrayAnnotations(frame, this, curBCI, array, index, top -1, top - 1 - offset, language);
+                    getInterpreterToVM().setArrayChar(language, (char) popInt(frame, top - 1), index, array, this);
+                    break;
+                case IASTORE:
+                    //getInterpreterToVM().setArrayInt(language, popInt(frame, top - 1), index, array, this);           break;
+                    SPouT.setArrayAnnotations(frame, this, curBCI, array, index, top -1, top - 1 - offset, language);
+                    getInterpreterToVM().setArrayInt(language, popInt(frame, top - 1), index, array, this);
+                    break;
+                case FASTORE:
+                    SPouT.setArrayAnnotations(frame, this, curBCI, array, index, top -1, top - 1 - offset, language);
+                    getInterpreterToVM().setArrayFloat(language, popFloat(frame, top - 1), index, array, this);
+                    break;
+                case LASTORE:
+                    SPouT.setArrayAnnotations(frame, this, curBCI, array, index, top -1, top - 1 - offset, language);
+                    getInterpreterToVM().setArrayLong(language, popLong(frame, top - 1), index, array, this);
+                    break;
+                case DASTORE:
+                    SPouT.setArrayAnnotations(frame, this, curBCI, array, index, top -1, top - 1 - offset, language);
+                    getInterpreterToVM().setArrayDouble(language, popDouble(frame, top - 1), index, array, this);
+                    break;
                 case AASTORE: referenceArrayStore(frame, top, index, array);     break;
                 default:
                     CompilerDirectives.transferToInterpreterAndInvalidate();
@@ -2070,18 +2293,22 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
             case INTEGER -> {
                 assert opcode == LDC || opcode == LDC_W;
                 putInt(frame, top, pool.intAt(cpi));
+                SPouT.markWithIFTaint(frame, top);
             }
             case FLOAT -> {
                 assert opcode == LDC || opcode == LDC_W;
                 putFloat(frame, top, pool.floatAt(cpi));
+                SPouT.markWithIFTaint(frame, top);
             }
             case LONG -> {
                 assert opcode == LDC2_W;
                 putLong(frame, top, pool.longAt(cpi));
+                SPouT.markWithIFTaint(frame, top + 1);
             }
             case DOUBLE -> {
                 assert opcode == LDC2_W;
                 putDouble(frame, top, pool.doubleAt(cpi));
+                SPouT.markWithIFTaint(frame, top + 1);
             }
             case CLASS -> {
                 assert opcode == LDC || opcode == LDC_W;
@@ -2091,6 +2318,9 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
             case STRING -> {
                 assert opcode == LDC || opcode == LDC_W;
                 StaticObject internedString = pool.resolvedStringAt(cpi);
+                Meta meta = getMeta();
+                StaticObject obj = meta.toGuestString(meta.toHostString(internedString));
+                SPouT.markObjectWithIFTaint(obj);
                 putObject(frame, top, internedString);
             }
             case METHODHANDLE -> {
@@ -2472,9 +2702,12 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
     private int quickenInvokeDynamic(final VirtualFrame frame, int top, int curBCI, int opcode) {
         CompilerDirectives.transferToInterpreterAndInvalidate();
         assert opcode == Bytecodes.INVOKEDYNAMIC;
+
+        // TODO: not sure if getMethod().getName() is the original link name
+
         BaseQuickNode quick = tryPatchQuick(curBCI,
                         cpi -> getConstantPool().linkInvokeDynamic(getMethod().getDeclaringKlass(), cpi, getMethod(), curBCI),
-                        link -> new InvokeDynamicCallSiteNode(link.getMemberName(), link.getUnboxedAppendix(), link.getParsedSignature(), getMethod().getMeta(), top, curBCI));
+                        link -> new InvokeDynamicCallSiteNode(link.getMemberName(), link.getUnboxedAppendix(), link.getParsedSignature(), getMethod().getMeta(), top, curBCI, getMethod().getName()));
         return quick.execute(frame, false) - Bytecodes.stackEffectOf(opcode);
     }
 
@@ -2549,6 +2782,13 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
         return -allocatedDimensions; // Does not include the created (pushed) array.
     }
 
+    public StaticObject allocateMultiArray(VirtualFrame frame, Klass klass, int[] dimensions) {
+        assert klass.isArray();
+        Klass component = ((ArrayKlass) klass).getComponentType();
+        GuestAllocator.AllocationChecks.checkCanAllocateMultiArray(getMeta(), component, dimensions, this);
+        StaticObject value = getAllocator().createNewMultiArray(component, dimensions);
+        return value;
+    }
     // endregion Instance/array allocation
 
     // region Method return
@@ -2625,19 +2865,19 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
         return Long.compare(x, y);
     }
 
-    private static int compareFloatGreater(float y, float x) {
+    public static int compareFloatGreater(float y, float x) {
         return (x < y ? -1 : ((x == y) ? 0 : 1));
     }
 
-    private static int compareFloatLess(float y, float x) {
+    public static int compareFloatLess(float y, float x) {
         return (x > y ? 1 : ((x == y) ? 0 : -1));
     }
 
-    private static int compareDoubleGreater(double y, double x) {
+    public static int compareDoubleGreater(double y, double x) {
         return (x < y ? -1 : ((x == y) ? 0 : 1));
     }
 
-    private static int compareDoubleLess(double y, double x) {
+    public static int compareDoubleLess(double y, double x) {
         return (x > y ? 1 : ((x == y) ? 0 : -1));
     }
     // endregion Comparisons
@@ -2735,6 +2975,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     instrumentation.notifyFieldModification(frame, statementIndex, field, receiver, booleanValue);
                 }
                 InterpreterToVM.setFieldBoolean(booleanValue, receiver, field);
+                AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
                 break;
             case 'B':
                 byte byteValue = (byte) popInt(frame, top - 1);
@@ -2742,6 +2983,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     instrumentation.notifyFieldModification(frame, statementIndex, field, receiver, byteValue);
                 }
                 InterpreterToVM.setFieldByte(byteValue, receiver, field);
+                AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
                 break;
             case 'C':
                 char charValue = (char) popInt(frame, top - 1);
@@ -2749,6 +2991,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     instrumentation.notifyFieldModification(frame, statementIndex, field, receiver, charValue);
                 }
                 InterpreterToVM.setFieldChar(charValue, receiver, field);
+                AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
                 break;
             case 'S':
                 short shortValue = (short) popInt(frame, top - 1);
@@ -2756,6 +2999,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     instrumentation.notifyFieldModification(frame, statementIndex, field, receiver, shortValue);
                 }
                 InterpreterToVM.setFieldShort(shortValue, receiver, field);
+                AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
                 break;
             case 'I':
                 int intValue = popInt(frame, top - 1);
@@ -2763,6 +3007,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     instrumentation.notifyFieldModification(frame, statementIndex, field, receiver, intValue);
                 }
                 InterpreterToVM.setFieldInt(intValue, receiver, field);
+                AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
                 break;
             case 'D':
                 double doubleValue = popDouble(frame, top - 1);
@@ -2770,6 +3015,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     instrumentation.notifyFieldModification(frame, statementIndex, field, receiver, doubleValue);
                 }
                 InterpreterToVM.setFieldDouble(doubleValue, receiver, field);
+                AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
                 break;
             case 'F':
                 float floatValue = popFloat(frame, top - 1);
@@ -2777,6 +3023,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     instrumentation.notifyFieldModification(frame, statementIndex, field, receiver, floatValue);
                 }
                 InterpreterToVM.setFieldFloat(floatValue, receiver, field);
+                AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
                 break;
             case 'J':
                 long longValue = popLong(frame, top - 1);
@@ -2784,6 +3031,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     instrumentation.notifyFieldModification(frame, statementIndex, field, receiver, longValue);
                 }
                 InterpreterToVM.setFieldLong(longValue, receiver, field);
+                AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
                 break;
             case '[': // fall through
             case 'L':
@@ -2847,17 +3095,30 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
         // @formatter:off
         byte typeHeader = field.getType().byteAt(0);
         switch (typeHeader) {
-            case 'Z' : putInt(frame, resultAt, InterpreterToVM.getFieldBoolean(receiver, field) ? 1 : 0); break;
-            case 'B' : putInt(frame, resultAt, InterpreterToVM.getFieldByte(receiver, field));      break;
-            case 'C' : putInt(frame, resultAt, InterpreterToVM.getFieldChar(receiver, field));      break;
-            case 'S' : putInt(frame, resultAt, InterpreterToVM.getFieldShort(receiver, field));     break;
-            case 'I' : putInt(frame, resultAt, InterpreterToVM.getFieldInt(receiver, field));       break;
-            case 'D' : putDouble(frame, resultAt, InterpreterToVM.getFieldDouble(receiver, field)); break;
-            case 'F' : putFloat(frame, resultAt, InterpreterToVM.getFieldFloat(receiver, field));   break;
-            case 'J' : putLong(frame, resultAt, InterpreterToVM.getFieldLong(receiver, field));     break;
+            case 'Z' : putInt(frame, resultAt, InterpreterToVM.getFieldBoolean(receiver, field) ? 1 : 0);
+                AnnotatedVM.putAnnotations(frame, resultAt, AnnotatedVM.getFieldAnnotation(receiver, field));break;
+            case 'B' : putInt(frame, resultAt, InterpreterToVM.getFieldByte(receiver, field));
+                AnnotatedVM.putAnnotations(frame, resultAt, AnnotatedVM.getFieldAnnotation(receiver, field));
+                break;
+            case 'C' : putInt(frame, resultAt, InterpreterToVM.getFieldChar(receiver, field));
+                AnnotatedVM.putAnnotations(frame, resultAt, AnnotatedVM.getFieldAnnotation(receiver, field));break;
+            case 'S' : putInt(frame, resultAt, InterpreterToVM.getFieldShort(receiver, field));
+                AnnotatedVM.putAnnotations(frame, resultAt, AnnotatedVM.getFieldAnnotation(receiver, field));break;
+            case 'I' :
+                putInt(frame, resultAt, InterpreterToVM.getFieldInt(receiver, field));
+                AnnotatedVM.putAnnotations(frame, resultAt, AnnotatedVM.getFieldAnnotation(receiver, field));
+                break;
+            case 'D' : putDouble(frame, resultAt, InterpreterToVM.getFieldDouble(receiver, field));
+                AnnotatedVM.putAnnotations(frame, resultAt + 1, AnnotatedVM.getFieldAnnotation(receiver, field));
+                break;
+            case 'F' : putFloat(frame, resultAt, InterpreterToVM.getFieldFloat(receiver, field));
+                AnnotatedVM.putAnnotations(frame, resultAt, AnnotatedVM.getFieldAnnotation(receiver, field));break;
+            case 'J' : putLong(frame, resultAt, InterpreterToVM.getFieldLong(receiver, field));
+                AnnotatedVM.putAnnotations(frame, resultAt +1, AnnotatedVM.getFieldAnnotation(receiver, field));break;
             case '[' : // fall through
             case 'L' : {
                 StaticObject value = InterpreterToVM.getFieldObject(receiver, field);
+                SPouT.markObjectWithIFTaint(value);
                 putObject(frame, resultAt, value);
                 checkNoForeignObjectAssumption(value);
                 break;
@@ -3209,5 +3470,12 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
             trivialBytecodesCache = trivialBytecodes() ? TRIVIAL_YES : TRIVIAL_NO;
         }
         return trivialBytecodesCache == TRIVIAL_YES;
+    }
+
+    public PostDominatorAnalysis getPostDominatorAnalysis() {
+        if (postDominatorAnalysis == null) {
+            postDominatorAnalysis = SPouT.iflowGetPDA(getMethod());
+        }
+        return postDominatorAnalysis;
     }
 }

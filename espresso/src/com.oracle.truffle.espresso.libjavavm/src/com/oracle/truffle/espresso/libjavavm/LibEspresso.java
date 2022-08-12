@@ -133,6 +133,10 @@ public final class LibEspresso {
             return result;
         }
         javaVMPointer.write(espressoJavaVM);
+
+        String concolicOptions = Arguments.getConcolicOptions();
+        context.eval("java", "<NewPath> " + concolicOptions);
+
         return JNIErrors.JNI_OK();
     }
 
@@ -203,6 +207,7 @@ public final class LibEspresso {
     static int closeContext(@SuppressWarnings("unused") IsolateThread thread, JNIJavaVM javaVM) {
         ObjectHandle contextHandle = javaVM.getFunctions().getContext();
         Context context = ObjectHandles.getGlobal().get(contextHandle);
+        context.eval("java","<EndPath>");
         ObjectHandles.getGlobal().destroy(contextHandle);
         try {
             context.leave();

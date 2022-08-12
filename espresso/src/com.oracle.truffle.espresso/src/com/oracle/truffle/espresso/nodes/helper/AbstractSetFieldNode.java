@@ -42,6 +42,7 @@ import com.oracle.truffle.espresso.nodes.EspressoFrame;
 import com.oracle.truffle.espresso.nodes.EspressoNode;
 import com.oracle.truffle.espresso.runtime.EspressoContext;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
+import tools.aqua.spout.AnnotatedVM;
 
 public abstract class AbstractSetFieldNode extends EspressoNode {
     final Field field;
@@ -103,6 +104,7 @@ abstract class IntSetFieldNode extends AbstractSetFieldNode {
         int value = EspressoFrame.popInt(frame, top - 1);
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
     }
 
     abstract void executeSetField(StaticObject receiver, int value);
@@ -132,6 +134,7 @@ abstract class BooleanSetFieldNode extends AbstractSetFieldNode {
         boolean value = EspressoFrame.popInt(frame, top - 1) != 0;
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
     }
 
     abstract void executeSetField(StaticObject receiver, boolean value);
@@ -161,6 +164,7 @@ abstract class CharSetFieldNode extends AbstractSetFieldNode {
         char value = (char) EspressoFrame.popInt(frame, top - 1);
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
     }
 
     abstract void executeSetField(StaticObject receiver, char value);
@@ -190,6 +194,7 @@ abstract class ShortSetFieldNode extends AbstractSetFieldNode {
         short value = (short) EspressoFrame.popInt(frame, top - 1);
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
     }
 
     abstract void executeSetField(StaticObject receiver, short value);
@@ -219,6 +224,7 @@ abstract class ByteSetFieldNode extends AbstractSetFieldNode {
         byte value = (byte) EspressoFrame.popInt(frame, top - 1);
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
     }
 
     abstract void executeSetField(StaticObject receiver, byte value);
@@ -248,6 +254,7 @@ abstract class LongSetFieldNode extends AbstractSetFieldNode {
         long value = EspressoFrame.popLong(frame, top - 1);
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
     }
 
     abstract void executeSetField(StaticObject receiver, long value);
@@ -277,6 +284,7 @@ abstract class FloatSetFieldNode extends AbstractSetFieldNode {
         float value = EspressoFrame.popFloat(frame, top - 1);
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
     }
 
     abstract void executeSetField(StaticObject receiver, float value);
@@ -306,6 +314,7 @@ abstract class DoubleSetFieldNode extends AbstractSetFieldNode {
         double value = EspressoFrame.popDouble(frame, top - 1);
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
     }
 
     abstract void executeSetField(StaticObject receiver, double value);
