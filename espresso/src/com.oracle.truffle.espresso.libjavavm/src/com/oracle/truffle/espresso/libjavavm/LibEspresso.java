@@ -64,8 +64,7 @@ public class LibEspresso {
         }
         VMRuntime.initialize();
         // Use the nuclear option for System.exit
-        builder.useSystemExit(true);
-        builder.option("java.ExitHost", "true");
+        builder.option("java.ExitHost", "false");
         builder.option("java.EnableSignals", "true");
         builder.option("java.ExposeNativeJavaVM", "true");
         Context context = builder.build();
@@ -87,6 +86,10 @@ public class LibEspresso {
             return result;
         }
         javaVMPointer.write(espressoJavaVM);
+
+        String concolicOptions = Arguments.getConcolicOptions();
+        context.eval("java", "<NewPath> " + concolicOptions);
+
         return JNIErrors.JNI_OK();
     }
 
@@ -135,6 +138,7 @@ public class LibEspresso {
     static void exit(@SuppressWarnings("unused") IsolateThread thread, JNIJavaVM javaVM) {
         ObjectHandle contextHandle = javaVM.getFunctions().getContext();
         Context context = ObjectHandles.getGlobal().get(contextHandle);
+        context.eval("java","<EndPath>");
         Value exitValue = context.eval("java", "<ExitCode>");
         int exitCode;
         if (!exitValue.fitsInInt()) {

@@ -28,6 +28,7 @@ import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 
+import com.oracle.truffle.espresso.nodes.commands.*;
 import org.graalvm.home.Version;
 import org.graalvm.options.OptionDescriptors;
 
@@ -56,9 +57,6 @@ import com.oracle.truffle.espresso.descriptors.Types;
 import com.oracle.truffle.espresso.descriptors.Utf8ConstantTable;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.JavaKind;
-import com.oracle.truffle.espresso.nodes.commands.ExitCodeNode;
-import com.oracle.truffle.espresso.nodes.commands.GetBindingsNode;
-import com.oracle.truffle.espresso.nodes.commands.ReferenceProcessNode;
 import com.oracle.truffle.espresso.runtime.EspressoContext;
 import com.oracle.truffle.espresso.runtime.EspressoThreadLocalState;
 import com.oracle.truffle.espresso.runtime.JavaVersion;
@@ -245,6 +243,14 @@ public final class EspressoLanguage extends TruffleLanguage<EspressoContext> {
         }
         if (ReferenceProcessNode.EVAL_NAME.equals(contents)) {
             RootNode node = new ReferenceProcessNode(this);
+            return node.getCallTarget();
+        }
+        if (EndPathNode.EVAL_NAME.equals(contents)) {
+            RootNode node = new EndPathNode(this);
+            return node.getCallTarget();
+        }
+        if (contents.startsWith(NewPathNode.EVAL_NAME)) {
+            RootNode node = new NewPathNode(this, contents.substring(NewPathNode.EVAL_NAME.length()));
             return node.getCallTarget();
         }
         throw new EspressoParseError(

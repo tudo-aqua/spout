@@ -45,6 +45,8 @@ public final class EspressoLauncher extends AbstractLanguageLauncher {
     private static final String AGENT_PATH = "java.AgentPath.";
     private static final String JAVA_AGENT = "java.JavaAgent";
 
+    private static final Map<String, String> concolicOptions = new HashMap<>();
+
     public static void main(String[] args) {
         new EspressoLauncher().launch(args);
     }
@@ -302,6 +304,39 @@ public final class EspressoLauncher extends AbstractLanguageLauncher {
                             case "sun.boot.library.path":
                                 espressoOptions.put("java.BootLibraryPath", value);
                                 break;
+                            case "concolic.bools":
+                                concolicOptions.put("concolic.bools", value);
+                                break;
+                            case "concolic.bytes":
+                                concolicOptions.put("concolic.bytes", value);
+                                break;
+                            case "concolic.chars":
+                                concolicOptions.put("concolic.chars", value);
+                                break;
+                            case "concolic.shorts":
+                                concolicOptions.put("concolic.shorts", value);
+                                break;
+                            case "concolic.ints":
+                                concolicOptions.put("concolic.ints", value);
+                                break;
+                            case "concolic.longs":
+                                concolicOptions.put("concolic.longs", value);
+                                break;
+                            case "concolic.floats":
+                                concolicOptions.put("concolic.floats", value);
+                                break;
+                            case "concolic.doubles":
+                                concolicOptions.put("concolic.doubles", value);
+                                break;
+                            case "concolic.strings":
+                                concolicOptions.put("concolic.strings", value);
+                                break;
+                            case "concolic.execution":
+                                concolicOptions.put("concolic.execution", value);
+                                break;
+                            case "taint.flow":
+                                concolicOptions.put("taint.flow", value);
+                                break;
                         }
 
                         espressoOptions.put("java.Properties." + key, value);
@@ -493,11 +528,44 @@ public final class EspressoLauncher extends AbstractLanguageLauncher {
         }
 
         contextBuilder.allowCreateThread(true);
-        // We use the host system exit for compatibility with the reference implementation.
-        contextBuilder.useSystemExit(true);
-        contextBuilder.option("java.ExitHost", "true");
 
         try (Context context = contextBuilder.build()) {
+
+            String params = "";
+            if (concolicOptions.containsKey("concolic.bools")) {
+                params += " concolic.bools:" + concolicOptions.get("concolic.bools");
+            }
+            if (concolicOptions.containsKey("concolic.bytes")) {
+                params += " concolic.bytes:" + concolicOptions.get("concolic.bytes");
+            }
+            if (concolicOptions.containsKey("concolic.chars")) {
+                params += " concolic.chars:" + concolicOptions.get("concolic.chars");
+            }
+            if (concolicOptions.containsKey("concolic.shorts")) {
+                params += " concolic.shorts:" + concolicOptions.get("concolic.shorts");
+            }
+            if (concolicOptions.containsKey("concolic.ints")) {
+                params += " concolic.ints:" + concolicOptions.get("concolic.ints");
+            }
+            if (concolicOptions.containsKey("concolic.longs")) {
+                params += " concolic.longs:" + concolicOptions.get("concolic.longs");
+            }
+            if (concolicOptions.containsKey("concolic.floats")) {
+                params += " concolic.floats:" + concolicOptions.get("concolic.floats");
+            }
+            if (concolicOptions.containsKey("concolic.doubles")) {
+                params += " concolic.doubles:" + concolicOptions.get("concolic.doubles");
+            }
+            if (concolicOptions.containsKey("concolic.strings")) {
+                params += " concolic.strings:" + concolicOptions.get("concolic.strings");
+            }
+            if (concolicOptions.containsKey("concolic.execution")) {
+                params += " concolic.execution:" + concolicOptions.get("concolic.execution");
+            }
+            if (concolicOptions.containsKey("taint.flow")) {
+                params += " taint.flow:" + concolicOptions.get("taint.flow");
+            }
+            context.eval("java", "<NewPath> " + params);
 
             // TODO: Ensure consistency between option "java.Version" and the given "java.JavaHome".
 
@@ -542,6 +610,7 @@ public final class EspressoLauncher extends AbstractLanguageLauncher {
                     handleMainUncaught(context, e);
                 }
             }
+            context.eval("java","<EndPath>");
         }
     }
 

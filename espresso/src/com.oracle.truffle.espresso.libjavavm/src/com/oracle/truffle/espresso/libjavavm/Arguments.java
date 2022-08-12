@@ -51,6 +51,8 @@ public final class Arguments {
     private static final String AGENT_PATH = "java.AgentPath.";
     private static final String JAVA_AGENT = "java.JavaAgent";
 
+    private static String concolicOptions = "";
+
     /*
      * HotSpot comment:
      * 
@@ -141,6 +143,39 @@ public final class Arguments {
                                 break;
                             case "sun.boot.library.path":
                                 builder.option("java.BootLibraryPath", value);
+                                break;
+                            case "concolic.bools":
+                                concolicOptions += "concolic.bools:" + value + " ";
+                                break;
+                            case "concolic.bytes":
+                                concolicOptions += "concolic.bytes:" + value + " ";
+                                break;
+                            case "concolic.chars":
+                                concolicOptions += "concolic.chars:" + value + " ";
+                                break;
+                            case "concolic.shorts":
+                                concolicOptions += "concolic.shorts:" + value + " ";
+                                break;
+                            case "concolic.ints":
+                                concolicOptions += "concolic.ints:" + value + " ";
+                                break;
+                            case "concolic.longs":
+                                concolicOptions += "concolic.longs:" + value + " ";
+                                break;
+                            case "concolic.floats":
+                                concolicOptions += "concolic.floats:" + value + " ";
+                                break;
+                            case "concolic.doubles":
+                                concolicOptions += "concolic.doubles:" + value + " ";
+                                break;
+                            case "concolic.strings":
+                                concolicOptions += "concolic.strings:" + value + " ";
+                                break;
+                            case "concolic.execution":
+                                concolicOptions += "concolic.execution:" + value + " ";
+                                break;
+                            case "taint.flow":
+                                concolicOptions += "taint.flow:" + value + " ";
                                 break;
                         }
                         builder.option(JAVA_PROPS + key, value);
@@ -297,6 +332,10 @@ public final class Arguments {
 
     public static ArgumentException abortExperimental(String message) {
         throw new Arguments.ArgumentException(message, true);
+    }
+
+    public static String getConcolicOptions() {
+        return concolicOptions;
     }
 
     public static void warn(String message) {
