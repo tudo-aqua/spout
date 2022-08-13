@@ -338,6 +338,11 @@ import com.oracle.truffle.espresso.runtime.ReturnAddress;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import com.oracle.truffle.espresso.vm.InterpreterToVM;
 
+import tools.aqua.spout.AnnotatedVM;
+import tools.aqua.spout.AnnotatedValue;
+import tools.aqua.spout.Annotations;
+import tools.aqua.spout.SPouT;
+
 /**
  * Bytecode interpreter loop.
  *
@@ -448,7 +453,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
     @ExplodeLoop
     private void initArguments(VirtualFrame frame) {
         Object[] arguments = frame.getArguments();
-
+        AnnotatedVM.initAnnotations(frame);
         boolean hasReceiver = !getMethod().isStatic();
         int receiverSlot = hasReceiver ? 1 : 0;
         int curSlot = 0;
@@ -1005,7 +1010,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case DUP2_X2 : EspressoFrame.dup2x2(frame, top);     break;
                     case SWAP    : EspressoFrame.swapSingle(frame, top); break;
 
-                    case IADD: putInt(frame, top - 2, popInt(frame, top - 1) + popInt(frame, top - 2)); break;
+                    case IADD: SPouT.iadd(frame, top); break;
                     case LADD: putLong(frame, top - 4, popLong(frame, top - 1) + popLong(frame, top - 3)); break;
                     case FADD: putFloat(frame, top - 2, popFloat(frame, top - 1) + popFloat(frame, top - 2)); break;
                     case DADD: putDouble(frame, top - 4, popDouble(frame, top - 1) + popDouble(frame, top - 3)); break;
@@ -2824,6 +2829,10 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
      * @param kind kind to push
      */
     public static int putKind(VirtualFrame frame, int top, Object value, JavaKind kind) {
+        if (value instanceof AnnotatedValue) {
+            AnnotatedVM.putAnnotations(frame, top, (Annotations) value);
+            value = ((AnnotatedValue) value).getValue();
+        }
         // @formatter:off
         switch (kind) {
             case Boolean : putInt(frame, top, ((boolean) value) ? 1 : 0); break;

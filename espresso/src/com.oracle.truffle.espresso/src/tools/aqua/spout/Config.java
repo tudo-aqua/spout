@@ -205,8 +205,8 @@ public class Config {
         Variable symbolic = new Variable(Types.INT, countIntSeeds);
         AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
         countIntSeeds++;
-        Analysis.getInstance().getTrace().addElement(new SymbolDeclaration(symbolic));
-        GWIT.trackLocationForWitness("" + concrete);
+        //Analysis.getInstance().getTrace().addElement(new SymbolDeclaration(symbolic));
+        //GWIT.trackLocationForWitness("" + concrete);
         return a;
     }
 */

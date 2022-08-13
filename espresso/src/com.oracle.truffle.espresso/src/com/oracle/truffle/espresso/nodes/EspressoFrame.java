@@ -41,13 +41,16 @@ final class EspressoFrame {
      */
 
     static final int BCI_SLOT = 0;
-    static final int VALUES_START = 1;
+    static int ANNOTATION_SLOT = 1;
+    static final int VALUES_START = 2;
 
     public static FrameDescriptor createFrameDescriptor(int locals, int stack) {
         int slotCount = locals + stack;
         FrameDescriptor.Builder builder = FrameDescriptor.newBuilder(slotCount + VALUES_START);
         int bciSlot = builder.addSlot(FrameSlotKind.Int, null, null); // BCI
         assert bciSlot == BCI_SLOT;
+        int aSlot = builder.addSlot(FrameSlotKind.Object, null, null);
+        assert aSlot == ANNOTATION_SLOT;
         int valuesStart = builder.addSlots(slotCount, FrameSlotKind.Illegal); // locals + stack
         assert valuesStart == VALUES_START;
         return builder.build();

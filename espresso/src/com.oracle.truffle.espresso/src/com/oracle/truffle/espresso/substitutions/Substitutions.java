@@ -133,7 +133,7 @@ public final class Substitutions extends ContextAccessImpl {
         EspressoRootNode createNodeIfValid(Method method, boolean forceValid);
 
         default EspressoRootNode createNodeIfValid(Method method) {
-            return createNodeIfValid(method, false);
+            return createNodeIfValid(method, true);
         }
     }
 
