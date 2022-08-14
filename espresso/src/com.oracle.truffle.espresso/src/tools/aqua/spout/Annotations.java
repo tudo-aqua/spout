@@ -12,6 +12,11 @@ public class Annotations {
         this(new Object[annotationLength]);
     }
 
+    Annotations(Annotations other) {
+        this.annotations = new Object[other.annotations.length];
+        System.arraycopy(other.annotations, 0, this.annotations, 0, this.annotations.length);
+    }
+
     Annotations(Object[] annotations) {
         assert annotations.length == annotationLength;
         this.annotations = annotations;

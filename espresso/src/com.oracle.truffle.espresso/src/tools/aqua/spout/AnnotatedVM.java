@@ -23,10 +23,20 @@ public class AnnotatedVM {
         annotations[slot - VALUES_START] = value;
     }
 
+    public static Annotations getLocalAnnotations(VirtualFrame frame, int slot) {
+        Annotations[] annotations = getAnnotations(frame);
+        Annotations result = annotations[slot];
+        return result;
+    }
+
+    public static void setLocalAnnotations(VirtualFrame frame, int slot, Annotations value) {
+        Annotations[] annotations = getAnnotations(frame);
+        annotations[slot] = value;
+    }
+
     public static void initAnnotations(VirtualFrame frame) {
         Annotations[] annotations = new Annotations[ frame.getFrameDescriptor().getNumberOfSlots() - VALUES_START ];
         frame.setObject(ANNOTATION_SLOT, annotations);
     }
-
 
 }

@@ -882,6 +882,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case ILOAD_3:
                         putInt(frame, top, getLocalInt(frame, curOpcode - ILOAD_0));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.putAnnotations(frame, top, AnnotatedVM.getLocalAnnotations(frame, curOpcode - ILOAD_0));
                         break;
                     case LLOAD_0: // fall through
                     case LLOAD_1: // fall through
@@ -954,6 +955,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case ISTORE_3:
                         setLocalInt(frame, curOpcode - ISTORE_0, popInt(frame, top - 1));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.setLocalAnnotations(frame, curOpcode - ISTORE_0, AnnotatedVM.popAnnotations(frame, top - 1));
                         break;
                     case LSTORE_0: // fall through
                     case LSTORE_1: // fall through
@@ -2762,13 +2764,14 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
         int argAt = top - 1;
         for (int i = argCount - 1; i >= 0; --i) {
             Symbol<Type> argType = Signatures.parameterType(signature, i);
+            Annotations a = AnnotatedVM.popAnnotations(frame, argAt);
             // @formatter:off
             switch (argType.byteAt(0)) {
                 case 'Z' : args[i + extraParam] = (popInt(frame, argAt) != 0);  break;
                 case 'B' : args[i + extraParam] = (byte) popInt(frame, argAt);  break;
                 case 'S' : args[i + extraParam] = (short) popInt(frame, argAt); break;
                 case 'C' : args[i + extraParam] = (char) popInt(frame, argAt);  break;
-                case 'I' : args[i + extraParam] = popInt(frame, argAt);         break;
+                case 'I' : args[i + extraParam] = (a == null) ? popInt(frame, argAt) : new AnnotatedValue(popInt(frame, argAt) , a); break;
                 case 'F' : args[i + extraParam] = popFloat(frame, argAt);       break;
                 case 'J' : args[i + extraParam] = popLong(frame, argAt);   --argAt; break;
                 case 'D' : args[i + extraParam] = popDouble(frame, argAt); --argAt; break;

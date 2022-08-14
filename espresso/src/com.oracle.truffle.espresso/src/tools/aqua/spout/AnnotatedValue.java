@@ -35,6 +35,11 @@ public final class AnnotatedValue extends Annotations {
         this.value = value;
     }
 
+    public AnnotatedValue(Object value, Annotations annotations) {
+        super(annotations);
+        this.value = value;
+    }
+
     AnnotatedValue(Object value, Object[] annotations) {
         super(annotations);
         this.value = value;
