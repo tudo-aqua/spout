@@ -25,7 +25,10 @@ package tools.aqua.spout;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.espresso.meta.JavaKind;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
+import tools.aqua.concolic.SymbolDeclaration;
+import tools.aqua.taint.Taint;
 
 public class SPouT {
 
@@ -37,6 +40,8 @@ public class SPouT {
 
     private static Config config = null;
 
+    private static Trace trace = null;
+
     // --------------------------------------------------------------------------
     //
     // start and stop
@@ -46,6 +51,7 @@ public class SPouT {
         System.out.println("======================== START PATH [BEGIN].");
         config = new Config(options);
         analysis = new MetaAnalysis(config);
+        trace = new Trace();
         // TODO: should be deferred to latest possible point in time
         analyze = true;
         System.out.println("======================== START PATH [END].");
@@ -54,6 +60,7 @@ public class SPouT {
     @CompilerDirectives.TruffleBoundary
     public static void endPath() {
         System.out.println("======================== END PATH [BEGIN].");
+        trace.printTrace();
         System.out.println("======================== END PATH [END].");
         System.out.println("[ENDOFTRACE]");
         System.out.flush();
@@ -64,12 +71,27 @@ public class SPouT {
     // analysis entry points
 
     @CompilerDirectives.TruffleBoundary
-    public static AnnotatedValue nextSymbolicInt() {
-        if (!analyze) return null;
+    public static Object nextSymbolicInt() {
+        if (!analyze || !config.isConcolicAnalysis()) return 0;
         AnnotatedValue av = config.nextSymbolicInt();
-        //Analysis.getInstance().getTrace().addElement(new SymbolDeclaration(symbolic));
+        addToTrace(new SymbolDeclaration(Annotations.annotation(av, config.getConcolicIdx())));
         //GWIT.trackLocationForWitness("" + concrete);
         return av;
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static Object taint(Object o, int color) {
+        if (!analyze || config.getTaintAnalysis().equals(Config.TaintType.OFF)) return o;
+        AnnotatedValue av = new AnnotatedValue(o);
+        av.set(config.getTaintIdx(), new Taint(color));
+        return av;
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static void checkTaint(Object o, int color) {
+        if (!analyze || config.getTaintAnalysis().equals(Config.TaintType.OFF)) return;
+
+        log("Taint check on " + o + " for color " + color);
     }
 
     // case IADD: putInt(frame, top - 2, popInt(frame, top - 1) + popInt(frame, top - 2)); break;
@@ -97,5 +119,9 @@ public class SPouT {
     @CompilerDirectives.TruffleBoundary
     public static void log(String message) {
         System.out.println(message);
+    }
+
+    public static void addToTrace(TraceElement element) {
+        if (analyze) trace.addElement(element);
     }
 }

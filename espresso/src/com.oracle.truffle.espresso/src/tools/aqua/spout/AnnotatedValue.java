@@ -24,6 +24,8 @@
 
 package tools.aqua.spout;
 
+import java.util.Arrays;
+
 public final class AnnotatedValue extends Annotations {
 
     private final Object value;
@@ -46,5 +48,13 @@ public final class AnnotatedValue extends Annotations {
     @SuppressWarnings("unchecked")
     public <T> T getValue() {
         return (T) value;
+    }
+
+    @Override
+    public String toString() {
+        return "AnnotatedValue{" +
+                "value=" + value +
+                ", annotations=" + Arrays.toString(getAnnotations()) +
+                '}';
     }
 }

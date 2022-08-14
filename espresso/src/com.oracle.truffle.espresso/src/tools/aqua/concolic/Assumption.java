@@ -22,14 +22,24 @@
  * questions.
  */
 
-package tools.aqua.taint;
+package tools.aqua.concolic;
 
-import tools.aqua.spout.Analysis;
+import tools.aqua.smt.Expression;
+import tools.aqua.spout.TraceElement;
 
-public class TaintAnalysis implements Analysis<Taint> {
+public class Assumption extends TraceElement {
 
-    public Taint iadd(int c1, int c2, Taint a1, Taint a2) {
-        return ColorUtil.joinColors(a1, a2);
+    private final Expression condition;
+
+    private final boolean satisfied;
+
+    public Assumption(Expression condition, boolean sat) {
+        this.condition = condition;
+        this.satisfied = sat;
     }
 
+    @Override
+    public String toString() {
+        return "[ASSUMPTION] (assert " + condition + ") // sat=" + satisfied;
+    }
 }

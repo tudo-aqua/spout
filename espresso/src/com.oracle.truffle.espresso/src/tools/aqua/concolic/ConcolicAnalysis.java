@@ -29,8 +29,9 @@ import tools.aqua.spout.Analysis;
 
 public class ConcolicAnalysis implements Analysis<Expression> {
 
+    @Override
     public Expression iadd(int c1, int c2, Expression a1, Expression a2) {
-        return null;
+        return a1;
     }
 
 }

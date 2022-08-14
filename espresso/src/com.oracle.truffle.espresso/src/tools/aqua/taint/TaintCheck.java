@@ -24,12 +24,34 @@
 
 package tools.aqua.taint;
 
-import tools.aqua.spout.Analysis;
+import com.oracle.truffle.api.CompilerDirectives;
+import tools.aqua.spout.TraceElement;
+import tools.aqua.taint.ColorUtil;
 
-public class TaintAnalysis implements Analysis<Taint> {
+import java.util.Map;
 
-    public Taint iadd(int c1, int c2, Taint a1, Taint a2) {
-        return ColorUtil.joinColors(a1, a2);
+public class TaintCheck extends TraceElement {
+
+    private final int checkFor;
+
+    private final long[] taint;
+
+    private final Map<Integer, String> colorNames;
+
+    public TaintCheck(int checkFor, long[] taint, Map<Integer, String> colorNames) {
+        this.checkFor = checkFor;
+        this.taint = taint;
+        this.colorNames = colorNames;
+    }
+
+    @Override
+    @CompilerDirectives.TruffleBoundary
+    public String toString() {
+        String ret =  "[TAINTCHECK] checkFor=" + checkFor + " on value tainted by ";
+        for (int c : ColorUtil.colorsIn(taint)) {
+            ret += (colorNames.containsKey(c) ? colorNames.get(c) : c) + ", ";
+        }
+        return ret;
     }
 
 }

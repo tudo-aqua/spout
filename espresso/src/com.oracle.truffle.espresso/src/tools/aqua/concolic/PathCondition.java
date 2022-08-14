@@ -21,15 +21,33 @@
  * or visit https://aqua.engineering if you need additional information or have any
  * questions.
  */
+package tools.aqua.concolic;
 
-package tools.aqua.taint;
+import tools.aqua.smt.Expression;
+import tools.aqua.spout.TraceElement;
 
-import tools.aqua.spout.Analysis;
+public class PathCondition extends TraceElement {
 
-public class TaintAnalysis implements Analysis<Taint> {
+    private final Expression condition;
 
-    public Taint iadd(int c1, int c2, Taint a1, Taint a2) {
-        return ColorUtil.joinColors(a1, a2);
+    private final int branchCount;
+
+    private final int branchId;
+
+    public PathCondition(Expression condition, int branchId, int branchCount) {
+        this.condition = condition;
+        this.branchId = branchId;
+        this.branchCount = branchCount;
     }
 
+    public Expression getCondition() {
+        return condition;
+    }
+
+    @Override
+    public String toString() {
+        return "[DECISION] (assert " + condition + ")" +
+                " // branchCount=" + branchCount +
+                ", branchId=" + branchId;
+    }
 }

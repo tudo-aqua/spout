@@ -25,14 +25,6 @@ public class Config {
 
     private int annotationLength = 2;
 
-    public TaintType getTaintAnalysis() {
-        return taintAnalysis;
-    }
-
-    public boolean isConcolicAnalysis() {
-        return concolicAnalysis;
-    }
-
     public Config() {
     }
 
@@ -368,4 +360,21 @@ public class Config {
         return concrete;
     }
     */
+
+    public int getConcolicIdx() {
+        return concolicIdx;
+    }
+
+    public int getTaintIdx() {
+        return taintIdx;
+    }
+
+    public TaintType getTaintAnalysis() {
+        return taintAnalysis;
+    }
+
+    public boolean isConcolicAnalysis() {
+        return concolicAnalysis;
+    }
+
 }

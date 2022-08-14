@@ -25,27 +25,30 @@
 package com.oracle.truffle.espresso.substitutions;
 
 
-//@EspressoSubstitutions
-public class Target_tools_aqua_concolic_Tainting {
-/*
+import com.oracle.truffle.espresso.meta.JavaKind;
+import tools.aqua.spout.SPouT;
+
+@EspressoSubstitutions
+public final class Target_tools_aqua_concolic_Tainting {
+
     // taint o with color
     @Substitution(hasReceiver = false, methodName = "taint")
-    public static @Host(typeName = "I") Object taint_int(@Host(typeName = "I") Object o, @Host(typeName = "I") Object color) {
-        return TaintAnalysis.taint(o, color, JavaKind.Int);
+    public static @JavaType(internalName = "I") Object taint_int(@JavaType(internalName = "I") Object o, int color) {
+        return SPouT.taint(o, color);
     }
-
+/*
     // clean o from taint of color
     @Substitution(hasReceiver = false, methodName = "clean")
     public static @Host(typeName = "I") Object clean_int(@Host(typeName = "I") Object o, @Host(typeName = "I") Object color) {
         return TaintAnalysis.clean(o, color, JavaKind.Int);
     }
-
+*/
     // check if o is tainted with color
     @Substitution(hasReceiver = false, methodName = "check")
-    public static void check_int(@Host(typeName = "I") Object o, @Host(typeName = "I") Object color) {
-        TaintAnalysis.checkTaint(o, color, JavaKind.Int);
+    public static void check_int(@JavaType(internalName = "I") Object o, int color) {
+        SPouT.checkTaint(o, color);
     }
-
+/*
     @Substitution(hasReceiver = false)
     public static void stopAnalysis() {
         TaintAnalysis.stopTaintAnalysis();

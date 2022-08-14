@@ -21,15 +21,18 @@
  * or visit https://aqua.engineering if you need additional information or have any
  * questions.
  */
+package tools.aqua.spout;
 
-package tools.aqua.taint;
+public class ExceptionalEvent extends TraceElement {
 
-import tools.aqua.spout.Analysis;
+    private final String message;
 
-public class TaintAnalysis implements Analysis<Taint> {
-
-    public Taint iadd(int c1, int c2, Taint a1, Taint a2) {
-        return ColorUtil.joinColors(a1, a2);
+    ExceptionalEvent(String message) {
+        this.message = message;
     }
 
+    @Override
+    public String toString() {
+        return "[ABORT] " + message;
+    }
 }

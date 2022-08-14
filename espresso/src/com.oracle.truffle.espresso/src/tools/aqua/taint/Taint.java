@@ -24,7 +24,28 @@
 
 package tools.aqua.taint;
 
+import java.util.Arrays;
+
 public class Taint {
 
+    private long[] colors;
 
+    public Taint(long[] colors) {
+        this.colors = colors;
+    }
+
+    public Taint(int color) {
+        this.colors = ColorUtil.setColor(null, color);
+    }
+
+    public long[] getColors() {
+        return colors;
+    }
+
+    @Override
+    public String toString() {
+        return "Taint{" +
+                "colors=" + Arrays.toString(colors) +
+                '}';
+    }
 }

@@ -1,5 +1,7 @@
 package tools.aqua.spout;
 
+import java.util.Arrays;
+
 public class Annotations {
 
     private static int annotationLength = 0;
@@ -30,5 +32,12 @@ public class Annotations {
 
     static void configure(int length) {
         annotationLength = length;
+    }
+
+    @Override
+    public String toString() {
+        return "Annotations{" +
+                "annotations=" + Arrays.toString(annotations) +
+                '}';
     }
 }

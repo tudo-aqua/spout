@@ -22,14 +22,17 @@
  * questions.
  */
 
-package tools.aqua.taint;
+package tools.aqua.spout;
 
-import tools.aqua.spout.Analysis;
+public abstract class TraceElement {
 
-public class TaintAnalysis implements Analysis<Taint> {
+    private TraceElement next;
 
-    public Taint iadd(int c1, int c2, Taint a1, Taint a2) {
-        return ColorUtil.joinColors(a1, a2);
+    public void setNext(TraceElement next) {
+        this.next = next;
     }
 
+    public TraceElement getNext() {
+        return next;
+    }
 }
