@@ -3,6 +3,8 @@ package tools.aqua.spout;
 import com.oracle.truffle.espresso.impl.ObjectKlass;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.smt.Types;
+import tools.aqua.smt.Variable;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -16,6 +18,12 @@ public class Config {
     private boolean concolicAnalysis = false;
 
     private TaintType taintAnalysis = TaintType.OFF;
+
+    private int concolicIdx = 0;
+
+    private int taintIdx = 1;
+
+    private int annotationLength = 2;
 
     public TaintType getTaintAnalysis() {
         return taintAnalysis;
@@ -195,21 +203,20 @@ public class Config {
 
     private int[] seedsIntValues = new int[] {};
     private int countIntSeeds = 0;
-/*
-    @CompilerDirectives.TruffleBoundary
+
     public AnnotatedValue nextSymbolicInt() {
         int concrete = 0;
         if (countIntSeeds < seedsIntValues.length) {
             concrete = seedsIntValues[countIntSeeds];
         }
         Variable symbolic = new Variable(Types.INT, countIntSeeds);
-        AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
+        Object[] annotations = new Object[annotationLength];
+        annotations[concolicIdx] = symbolic;
+        AnnotatedValue a = new AnnotatedValue(concrete, annotations);
         countIntSeeds++;
-        //Analysis.getInstance().getTrace().addElement(new SymbolDeclaration(symbolic));
-        //GWIT.trackLocationForWitness("" + concrete);
         return a;
     }
-*/
+
     private boolean[] seedsBooleanValues = new boolean[] {};
     private int countBooleanSeeds = 0;
 /*

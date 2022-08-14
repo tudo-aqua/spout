@@ -27,4 +27,6 @@ public class AnnotatedVM {
         Annotations[] annotations = new Annotations[ frame.getFrameDescriptor().getNumberOfSlots() - VALUES_START ];
         frame.setObject(ANNOTATION_SLOT, annotations);
     }
+
+
 }

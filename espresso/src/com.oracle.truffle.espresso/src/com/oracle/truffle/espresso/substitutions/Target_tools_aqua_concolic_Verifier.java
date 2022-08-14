@@ -63,8 +63,7 @@ public final class Target_tools_aqua_concolic_Verifier {
     //    public static int nondetInt()
     @Substitution(hasReceiver = false)
     public static @JavaType(internalName = "I") Object nondetInt() {
-        SPouT.log("new concolic int");
-        return new AnnotatedValue(0);
+        return SPouT.nextSymbolicInt();
     }
 /*
     //    public static long nondetLong()

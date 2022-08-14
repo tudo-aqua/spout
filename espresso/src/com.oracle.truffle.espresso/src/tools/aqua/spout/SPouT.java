@@ -35,6 +35,8 @@ public class SPouT {
 
     private static MetaAnalysis analysis = null;
 
+    private static Config config = null;
+
     // --------------------------------------------------------------------------
     //
     // start and stop
@@ -42,7 +44,7 @@ public class SPouT {
     @CompilerDirectives.TruffleBoundary
     public static void newPath(String options) {
         System.out.println("======================== START PATH [BEGIN].");
-        Config config = new Config(options);
+        config = new Config(options);
         analysis = new MetaAnalysis(config);
         // TODO: should be deferred to latest possible point in time
         analyze = true;
@@ -60,6 +62,15 @@ public class SPouT {
     // --------------------------------------------------------------------------
     //
     // analysis entry points
+
+    @CompilerDirectives.TruffleBoundary
+    public static AnnotatedValue nextSymbolicInt() {
+        if (!analyze) return null;
+        AnnotatedValue av = config.nextSymbolicInt();
+        //Analysis.getInstance().getTrace().addElement(new SymbolDeclaration(symbolic));
+        //GWIT.trackLocationForWitness("" + concrete);
+        return av;
+    }
 
     // case IADD: putInt(frame, top - 2, popInt(frame, top - 1) + popInt(frame, top - 2)); break;
     public static void iadd(VirtualFrame frame, int top) {

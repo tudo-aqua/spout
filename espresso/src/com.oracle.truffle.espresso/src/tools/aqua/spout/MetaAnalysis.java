@@ -25,12 +25,14 @@
 package tools.aqua.spout;
 
 import com.oracle.truffle.api.frame.VirtualFrame;
+import tools.aqua.concolic.ConcolicAnalysis;
+import tools.aqua.taint.TaintAnalysis;
 
 public class MetaAnalysis implements Analysis<Annotations> {
 
     private Config config;
 
-    private Analysis<?>[] analyes = new Analysis<?>[] {};
+    private Analysis<?>[] analyses = new Analysis<?>[] {};
 
     MetaAnalysis(Config config) {
         this.config = config;
@@ -38,17 +40,34 @@ public class MetaAnalysis implements Analysis<Annotations> {
     }
 
     private void initialize() {
-
+        Annotations.configure(2);
+        this.analyses = new Analysis[] {
+          new ConcolicAnalysis(),
+          new TaintAnalysis()
+        };
     }
 
     @Override
     public Annotations iadd(int c1, int c2, Annotations a1, Annotations a2) {
-        //SPouT.debug("running analysis.");
-
-        for (Analysis<?> analysis : analyes) {
-            analysis.iadd(c1, c2, AnnotatedValue.annotation(null, 0), AnnotatedValue.annotation(null, 0));
-        }
-        return null;
+        return execute(c1, c2, a1, a2, (analysis, c11, c21, s1, s2) -> analysis.iadd(c11, c21, s1, s2));
     }
 
+    private Annotations execute(int c1, int c2, Annotations a1, Annotations a2, Executor executor) {
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[analyses.length];
+        for (Analysis<?> analysis : analyses) {
+            Object result = executor.execute(analysis, c1, c2, AnnotatedValue.annotation(a1, i), AnnotatedValue.annotation(a2, i));
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? new Annotations(annotations) : null;
+    }
+
+    interface Executor {
+        Object execute(Analysis analysis, int c1, int c2, Object s1, Object s2);
+    }
 }
