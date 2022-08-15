@@ -26,6 +26,9 @@ package tools.aqua.spout;
 
 public interface Analysis<T> {
 
+    //public void terminate();
+
     public T iadd(int c1, int c2, T a1, T a2);
+
 
 }

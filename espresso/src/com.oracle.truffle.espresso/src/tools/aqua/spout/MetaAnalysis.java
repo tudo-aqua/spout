@@ -25,26 +25,17 @@
 package tools.aqua.spout;
 
 import com.oracle.truffle.api.frame.VirtualFrame;
-import tools.aqua.concolic.ConcolicAnalysis;
-import tools.aqua.taint.TaintAnalysis;
+
 
 public class MetaAnalysis implements Analysis<Annotations> {
 
-    private Config config;
+    private final Config config;
 
-    private Analysis<?>[] analyses = new Analysis<?>[] {};
+    private final Analysis<?>[] analyses;
 
     MetaAnalysis(Config config) {
         this.config = config;
-        initialize();
-    }
-
-    private void initialize() {
-        Annotations.configure(2);
-        this.analyses = new Analysis[] {
-          new ConcolicAnalysis(),
-          new TaintAnalysis()
-        };
+        this.analyses = config.getAnalyses();
     }
 
     @Override

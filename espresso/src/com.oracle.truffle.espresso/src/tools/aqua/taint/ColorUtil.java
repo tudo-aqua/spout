@@ -113,7 +113,8 @@ public class ColorUtil {
         return colors;
     }
 
-    public static boolean hasColor(long[] colors, int color) {
+    public static boolean hasColor(Taint t , int color) {
+        long[] colors = t.getColors();
         int segment = color / 64;
         int offset = color % 64;
 
@@ -128,12 +129,12 @@ public class ColorUtil {
         return setColor(null, color);
     }
 
-    public static Collection<Integer> colorsIn(long[] taint) {
+    public static Collection<Integer> colorsIn(Taint taint) {
         ArrayList<Integer> colors = new ArrayList<>();
         if (taint == null) {
             return colors;
         }
-        for (int i=0; i< taint.length*64; i++) {
+        for (int i=0; i< taint.getColors().length*64; i++) {
             if (hasColor(taint, i)) {
                 colors.add(i);
             }

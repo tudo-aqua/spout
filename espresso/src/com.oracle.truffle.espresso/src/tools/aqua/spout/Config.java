@@ -1,10 +1,9 @@
 package tools.aqua.spout;
 
-import com.oracle.truffle.espresso.impl.ObjectKlass;
-import com.oracle.truffle.espresso.meta.Meta;
-import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.concolic.ConcolicAnalysis;
 import tools.aqua.smt.Types;
 import tools.aqua.smt.Variable;
+import tools.aqua.taint.TaintAnalysis;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -15,9 +14,15 @@ public class Config {
 
     public enum TaintType {OFF, DATA, CONTROL, INFORMATION};
 
-    private boolean concolicAnalysis = false;
+    private boolean hasConcolicAnalysis = false;
 
-    private TaintType taintAnalysis = TaintType.OFF;
+    private TaintType taintType = TaintType.OFF;
+
+    private final Trace trace;
+
+    private ConcolicAnalysis concolicAnalysis = null;
+
+    private TaintAnalysis taintAnalysis = null;
 
     private int concolicIdx = 0;
 
@@ -25,22 +30,44 @@ public class Config {
 
     private int annotationLength = 2;
 
-    public Config() {
+    public Config(String config) {
+        this.trace = new Trace();
+        parseConfig(config);
     }
 
-    public Config(String config) {
-        parseConfig(config);
-        System.out.println("Concolic Analysis: " + concolicAnalysis);
-        System.out.println("Taint Analysis: " + taintAnalysis);
-        System.out.println("Seeded Bool Values: " + Arrays.toString(seedsBooleanValues));
-        System.out.println("Seeded Byte Values: " + Arrays.toString(seedsByteValues));
-        System.out.println("Seeded Char Values: " + Arrays.toString(seedsCharValues));
-        System.out.println("Seeded Short Values: " + Arrays.toString(seedsShortValues));
-        System.out.println("Seeded Int Values: " + Arrays.toString(seedsIntValues));
-        System.out.println("Seeded Long Values: " + Arrays.toString(seedsLongValues));
-        System.out.println("Seeded Float Values: " + Arrays.toString(seedsFloatValues));
-        System.out.println("Seeded Double Values: " + Arrays.toString(seedsDoubleValues));
-        System.out.println("Seeded String Values: " + Arrays.toString(seedStringValues));
+    void configureAnalysis() {
+        if (hasConcolicAnalysis) {
+            this.concolicAnalysis = new ConcolicAnalysis(this);
+        }
+        else {
+            this.concolicAnalysis = null;
+            this.concolicIdx = -1;
+            this.taintIdx = 0;
+            this.annotationLength--;
+        }
+
+        if (!taintType.equals(TaintType.OFF)) {
+            this.taintAnalysis = new TaintAnalysis(this);
+        }
+        else {
+            this.taintAnalysis = null;
+            this.taintIdx = -1;
+            this.annotationLength--;
+        }
+
+        Annotations.configure(this.annotationLength);
+
+        SPouT.log("Concolic Analysis: " + hasConcolicAnalysis);
+        SPouT.log("Taint Analysis: " + taintType);
+        SPouT.log("Seeded Bool Values: " + Arrays.toString(seedsBooleanValues));
+        SPouT.log("Seeded Byte Values: " + Arrays.toString(seedsByteValues));
+        SPouT.log("Seeded Char Values: " + Arrays.toString(seedsCharValues));
+        SPouT.log("Seeded Short Values: " + Arrays.toString(seedsShortValues));
+        SPouT.log("Seeded Int Values: " + Arrays.toString(seedsIntValues));
+        SPouT.log("Seeded Long Values: " + Arrays.toString(seedsLongValues));
+        SPouT.log("Seeded Float Values: " + Arrays.toString(seedsFloatValues));
+        SPouT.log("Seeded Double Values: " + Arrays.toString(seedsDoubleValues));
+        SPouT.log("Seeded String Values: " + Arrays.toString(seedStringValues));
     }
 
     private void parseConfig(String config) {
@@ -182,11 +209,11 @@ public class Config {
     }
 
     private void parseConcolic(String[] valsAsStr) {
-        concolicAnalysis = Boolean.valueOf(valsAsStr[0].trim());
+        hasConcolicAnalysis = Boolean.valueOf(valsAsStr[0].trim());
     }
 
     private void parseTaint(String[] valsAsStr) {
-        taintAnalysis = TaintType.valueOf(valsAsStr[0].trim());
+        taintType = TaintType.valueOf(valsAsStr[0].trim());
     }
 
     // --------------------------------------------------------------------------
@@ -369,12 +396,34 @@ public class Config {
         return taintIdx;
     }
 
-    public TaintType getTaintAnalysis() {
-        return taintAnalysis;
+    public TaintType getTaintType() {
+        return taintType;
     }
 
-    public boolean isConcolicAnalysis() {
+    public boolean hasConcolicAnalysis() {
+        return hasConcolicAnalysis;
+    }
+
+    public boolean hasTaintAnalysis() {
+        return !taintType.equals(TaintType.OFF);
+    }
+
+    public Trace getTrace() {
+        return trace;
+    }
+
+    public ConcolicAnalysis getConcolicAnalysis() {
         return concolicAnalysis;
     }
 
+    public TaintAnalysis getTaintAnalysis() {
+        return taintAnalysis;
+    }
+
+    public Analysis<?>[] getAnalyses() {
+        Analysis<?>[] analyses = new Analysis[this.annotationLength];
+        if (hasConcolicAnalysis()) analyses[this.concolicIdx] = this.concolicAnalysis;
+        if (hasTaintAnalysis()) analyses[this.taintIdx] = this.taintAnalysis;
+        return analyses;
+    }
 }

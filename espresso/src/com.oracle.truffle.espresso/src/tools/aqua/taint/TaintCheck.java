@@ -26,7 +26,6 @@ package tools.aqua.taint;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import tools.aqua.spout.TraceElement;
-import tools.aqua.taint.ColorUtil;
 
 import java.util.Map;
 
@@ -34,11 +33,11 @@ public class TaintCheck extends TraceElement {
 
     private final int checkFor;
 
-    private final long[] taint;
+    private final Taint taint;
 
     private final Map<Integer, String> colorNames;
 
-    public TaintCheck(int checkFor, long[] taint, Map<Integer, String> colorNames) {
+    public TaintCheck(int checkFor, Taint taint, Map<Integer, String> colorNames) {
         this.checkFor = checkFor;
         this.taint = taint;
         this.colorNames = colorNames;

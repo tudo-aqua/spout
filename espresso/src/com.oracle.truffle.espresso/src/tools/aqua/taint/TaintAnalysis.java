@@ -24,10 +24,44 @@
 
 package tools.aqua.taint;
 
-import tools.aqua.spout.Analysis;
+import tools.aqua.concolic.SymbolDeclaration;
+import tools.aqua.spout.*;
+
+import java.util.TreeMap;
 
 public class TaintAnalysis implements Analysis<Taint> {
 
+    private final TreeMap<Integer, String> ifColorNames = new TreeMap<>();
+
+    private final Config config;
+
+    private final Trace trace;
+
+    private final Config.TaintType type;
+
+    public TaintAnalysis(Config config) {
+        this.config = config;
+        this.trace = config.getTrace();
+        this.type = config.getTaintType();
+    }
+
+    public Object taint(Object o, int color) {
+        AnnotatedValue av = new AnnotatedValue(o);
+        av.set(config.getTaintIdx(), new Taint(color));
+        return av;
+    }
+
+    public void checkTaint(AnnotatedValue o, int color) {
+        Taint taint = Annotations.annotation( o, config.getTaintIdx());
+        if (type.equals(Config.TaintType.INFORMATION)) {
+            trace.addElement(new TaintCheck(color, taint, ifColorNames));
+        }
+        else if (ColorUtil.hasColor(taint, color)) {
+            trace.addElement(new TaintViolation(color));
+        }
+    }
+
+    @Override
     public Taint iadd(int c1, int c2, Taint a1, Taint a2) {
         return ColorUtil.joinColors(a1, a2);
     }

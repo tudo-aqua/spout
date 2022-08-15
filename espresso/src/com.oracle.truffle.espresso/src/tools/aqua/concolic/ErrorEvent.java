@@ -21,34 +21,23 @@
  * or visit https://aqua.engineering if you need additional information or have any
  * questions.
  */
-
 package tools.aqua.concolic;
 
-import tools.aqua.smt.Expression;
-import tools.aqua.spout.*;
+import tools.aqua.spout.TraceElement;
 
-public class ConcolicAnalysis implements Analysis<Expression> {
+/**
+ * final path state: error
+ */
+public class ErrorEvent extends TraceElement {
 
-    private final Config config;
+    private final String className;
 
-    private final Trace trace;
-
-    public ConcolicAnalysis(Config config) {
-        this.config = config;
-        this.trace = config.getTrace();
-    }
-
-    public Object nextSymbolicInt() {
-        AnnotatedValue av = config.nextSymbolicInt();
-        trace.addElement(new SymbolDeclaration(Annotations.annotation(av, config.getConcolicIdx())));
-        return av;
+    ErrorEvent(String className) {
+        this.className = className;
     }
 
     @Override
-    public Expression iadd(int c1, int c2, Expression a1, Expression a2) {
-        if (a1 != null) return a1;
-        if (a2 != null) return a2;
-        return null;
+    public String toString() {
+        return "[ERROR] " + className;
     }
-
 }

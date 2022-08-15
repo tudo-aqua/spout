@@ -25,10 +25,11 @@ package tools.aqua.spout;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
-import com.oracle.truffle.espresso.meta.JavaKind;
+import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
-import tools.aqua.concolic.SymbolDeclaration;
 import tools.aqua.taint.Taint;
+import tools.aqua.taint.TaintAnalysis;
+import tools.aqua.taint.TaintCheck;
 
 public class SPouT {
 
@@ -50,8 +51,9 @@ public class SPouT {
     public static void newPath(String options) {
         System.out.println("======================== START PATH [BEGIN].");
         config = new Config(options);
+        config.configureAnalysis();
         analysis = new MetaAnalysis(config);
-        trace = new Trace();
+        trace = config.getTrace();
         // TODO: should be deferred to latest possible point in time
         analyze = true;
         System.out.println("======================== START PATH [END].");
@@ -60,38 +62,68 @@ public class SPouT {
     @CompilerDirectives.TruffleBoundary
     public static void endPath() {
         System.out.println("======================== END PATH [BEGIN].");
-        trace.printTrace();
+        stopAnalysis();
+        if (trace != null) {
+            trace.printTrace();
+        }
         System.out.println("======================== END PATH [END].");
         System.out.println("[ENDOFTRACE]");
         System.out.flush();
+    }
+
+    private static void stopAnalysis() {
+        if (analyze) {
+            analyze = false;
+            //FIXME: analysis.terminate();
+        }
     }
 
     // --------------------------------------------------------------------------
     //
     // analysis entry points
 
+    // FIXME: move part of these methods into the different analyses?
+
+    @CompilerDirectives.TruffleBoundary
+    public static void stopRecording(String message, Meta meta) {
+        log(message);
+        trace.addElement(new ExceptionalEvent(message));
+        stopAnalysis();
+        meta.throwException(meta.java_lang_RuntimeException);
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public void assume(Object condition, Meta meta) {
+        if (!analyze || !config.hasConcolicAnalysis())  {
+            // FIXME: dont care about assumptions outside of concolic analysis?
+            return;
+        }
+        /*
+        boolean cont = concolicAnalysis.assume(condition, meta);
+        if (!cont) {
+            stopRecording("assumption violation", meta);
+        }
+        */
+    }
+
     @CompilerDirectives.TruffleBoundary
     public static Object nextSymbolicInt() {
-        if (!analyze || !config.isConcolicAnalysis()) return 0;
-        AnnotatedValue av = config.nextSymbolicInt();
-        addToTrace(new SymbolDeclaration(Annotations.annotation(av, config.getConcolicIdx())));
+        if (!analyze || !config.hasConcolicAnalysis()) return 0;
+        Object av = config.getConcolicAnalysis().nextSymbolicInt();
         //GWIT.trackLocationForWitness("" + concrete);
         return av;
     }
 
     @CompilerDirectives.TruffleBoundary
     public static Object taint(Object o, int color) {
-        if (!analyze || config.getTaintAnalysis().equals(Config.TaintType.OFF)) return o;
-        AnnotatedValue av = new AnnotatedValue(o);
-        av.set(config.getTaintIdx(), new Taint(color));
-        return av;
+        if (!analyze || !config.hasTaintAnalysis()) return o;
+        return config.getTaintAnalysis().taint(o, color);
     }
 
     @CompilerDirectives.TruffleBoundary
     public static void checkTaint(Object o, int color) {
-        if (!analyze || config.getTaintAnalysis().equals(Config.TaintType.OFF)) return;
-
-        log("Taint check on " + o + " for color " + color);
+        if (!analyze || !config.hasTaintAnalysis()) return;
+        config.getTaintAnalysis().checkTaint( o instanceof AnnotatedValue ? (AnnotatedValue) o : null, color);
     }
 
     // case IADD: putInt(frame, top - 2, popInt(frame, top - 1) + popInt(frame, top - 2)); break;
