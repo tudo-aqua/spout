@@ -1,6 +1,7 @@
 package tools.aqua.spout;
 
 import tools.aqua.concolic.ConcolicAnalysis;
+import tools.aqua.smt.OperatorComparator;
 import tools.aqua.smt.Types;
 import tools.aqua.smt.Variable;
 import tools.aqua.taint.TaintAnalysis;
@@ -56,6 +57,8 @@ public class Config {
         }
 
         Annotations.configure(this.annotationLength);
+        // native image precautions ...
+        OperatorComparator.initialize();
 
         SPouT.log("Concolic Analysis: " + hasConcolicAnalysis);
         SPouT.log("Taint Analysis: " + taintType);
@@ -406,6 +409,10 @@ public class Config {
 
     public boolean hasTaintAnalysis() {
         return !taintType.equals(TaintType.OFF);
+    }
+
+    public boolean analyzeControlFlowTaint() {
+        return taintType.equals(TaintType.CONTROL) || taintType.equals(TaintType.INFORMATION);
     }
 
     public Trace getTrace() {

@@ -35,6 +35,10 @@ public class ColorUtil {
         return newArr;
     }
 
+    public static Taint addColor(Taint t, int color) {
+        return new Taint(setColor( t != null ? t.getColors() : null, color));
+    }
+
     public static long[] setColor(long[] colors, int color) {
         int segment = color / 64;
         int offset = color % 64;
@@ -91,6 +95,7 @@ public class ColorUtil {
         }
         return new Taint(colors);
     }
+
 
     public static long[] joinColors(long[] ... colorings) {
         int size = -1;

@@ -22,18 +22,36 @@
  * questions.
  */
 
-package tools.aqua.spout;
+package tools.aqua.taint;
 
-import com.oracle.truffle.api.frame.VirtualFrame;
-import com.oracle.truffle.espresso.impl.Method;
+import com.oracle.truffle.api.CompilerDirectives;
+import tools.aqua.spout.TraceElement;
 
-public interface Analysis<T> {
+import java.util.Map;
 
-    //public void terminate();
+public class InformationFlow extends TraceElement {
 
-    public T iadd(int c1, int c2, T a1, T a2);
+    private final String name;
 
-    void takeBranchPrimitive1(VirtualFrame frame, Method method, int bci, int opcode, boolean takeBranch, T a);
+    private final Taint taint;
 
-    void takeBranchPrimitive2(VirtualFrame frame, Method method, int bci, int opcode, boolean takeBranch, int c1, int c2, T a1, T a2);
+    private final Map<Integer, String> colorNames;
+
+    public InformationFlow(String name, Taint taint, Map<Integer, String> colorNames) {
+        this.name = name;
+        this.taint = taint;
+        this.colorNames = colorNames;
+    }
+
+    @Override
+    @CompilerDirectives.TruffleBoundary
+    public String toString() {
+        String ret =  "[FLOW] name=" + name + " tainted by ";
+        for (int c : ColorUtil.colorsIn(taint)) {
+            ret += (colorNames.containsKey(c) ? colorNames.get(c) : c) + ", ";
+        }
+        return ret;
+    }
+
+
 }

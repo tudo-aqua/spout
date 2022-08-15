@@ -37,9 +37,7 @@ public class ComplexExpression implements Expression {
         this.operator = operator;
         this.subExpressions = subExpressions;
         for (Expression e : subExpressions) {
-            if (SPouT.DEBUG && e == null) {
-                throw new RuntimeException();
-            }
+            assert e != null;
         }
     }
 

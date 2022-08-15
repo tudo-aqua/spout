@@ -25,6 +25,7 @@
 package tools.aqua.spout;
 
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.espresso.impl.Method;
 
 
 public class MetaAnalysis implements Analysis<Annotations> {
@@ -38,9 +39,8 @@ public class MetaAnalysis implements Analysis<Annotations> {
         this.analyses = config.getAnalyses();
     }
 
-    @Override
-    public Annotations iadd(int c1, int c2, Annotations a1, Annotations a2) {
-        return execute(c1, c2, a1, a2, (analysis, c11, c21, s1, s2) -> analysis.iadd(c11, c21, s1, s2));
+    interface Executor {
+        Object execute(Analysis analysis, int c1, int c2, Object s1, Object s2);
     }
 
     private Annotations execute(int c1, int c2, Annotations a1, Annotations a2, Executor executor) {
@@ -48,7 +48,7 @@ public class MetaAnalysis implements Analysis<Annotations> {
         boolean hasResult = false;
         Object[] annotations = new Object[analyses.length];
         for (Analysis<?> analysis : analyses) {
-            Object result = executor.execute(analysis, c1, c2, AnnotatedValue.annotation(a1, i), AnnotatedValue.annotation(a2, i));
+            Object result = executor.execute(analysis, c1, c2, Annotations.annotation(a1, i), Annotations.annotation(a2, i));
             if (result != null) {
                 annotations[i] = result;
                 hasResult = true;
@@ -58,7 +58,27 @@ public class MetaAnalysis implements Analysis<Annotations> {
         return hasResult ? new Annotations(annotations) : null;
     }
 
-    interface Executor {
-        Object execute(Analysis analysis, int c1, int c2, Object s1, Object s2);
+
+    @Override
+    public Annotations iadd(int c1, int c2, Annotations a1, Annotations a2) {
+        return execute(c1, c2, a1, a2, (analysis, c11, c21, s1, s2) -> analysis.iadd(c11, c21, s1, s2));
     }
+
+    @Override
+    public void takeBranchPrimitive1(VirtualFrame frame, Method method, int bci, int opcode, boolean takeBranch, Annotations a) {
+        int i = 0;
+        for (Analysis<?> analysis : analyses) {
+            analysis.takeBranchPrimitive1(frame, method, bci, opcode, takeBranch, Annotations.annotation(a, i++));
+        }
+    }
+
+    @Override
+    public void takeBranchPrimitive2(VirtualFrame frame, Method method, int bci, int opcode, boolean takeBranch, int c1, int c2, Annotations a1, Annotations a2) {
+        int i = 0;
+        for (Analysis<?> analysis : analyses) {
+            analysis.takeBranchPrimitive2(frame, method, bci, opcode, takeBranch, c1, c2, Annotations.annotation(a1, i), Annotations.annotation(a2, i));
+            i++;
+        }
+    }
+
 }

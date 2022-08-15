@@ -1,8 +1,15 @@
 package tools.aqua.spout;
 
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.espresso.impl.Field;
+import com.oracle.truffle.espresso.impl.ObjectKlass;
+import com.oracle.truffle.espresso.runtime.StaticObject;
 
 public class AnnotatedVM {
+
+    // --------------------------------------------------------------------------
+    //
+    // stack
 
     private static final int ANNOTATION_SLOT = 1;
     private static final int VALUES_START = 2;
@@ -39,4 +46,40 @@ public class AnnotatedVM {
         frame.setObject(ANNOTATION_SLOT, annotations);
     }
 
+    // --------------------------------------------------------------------------
+    //
+    // fields and arrays
+
+    public static void setFieldAnnotation(StaticObject obj, Field f, Annotations a) {
+        if (f.isStatic()) {
+            obj = f.getDeclaringKlass().getStatics();
+        }
+
+        if (!obj.hasAnnotations() && a == null) {
+            return;
+        }
+
+        Annotations[] annotations = obj.getAnnotations();
+        if (annotations == null) {
+           annotations = new Annotations[f.isStatic()
+                            ? f.getDeclaringKlass().getStaticFieldTable().length
+                            : ((ObjectKlass) obj.getKlass()).getFieldTable().length];
+           obj.setAnnotations(annotations);
+        }
+
+        annotations[f.getSlot()] = a;
+    }
+
+    public static Annotations getFieldAnnotation(StaticObject obj, Field f) {
+        if (f.isStatic()) {
+            obj = f.getDeclaringKlass().getStatics();
+        }
+
+        if (!obj.hasAnnotations()) {
+            return null;
+        }
+        Annotations[] annotations = obj.getAnnotations();
+        Annotations a = annotations[f.getSlot()];
+        return a;
+    }
 }

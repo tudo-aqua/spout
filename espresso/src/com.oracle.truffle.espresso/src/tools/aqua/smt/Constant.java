@@ -189,14 +189,12 @@ public abstract class Constant extends Atom {
         }
     }
 
-    private Object value;
+    private final Object value;
 
     Constant(Types type, Object value) {
         super(type);
+        assert value != null;
         this.value = value;
-        if (value == null) {
-            throw new RuntimeException();
-        }
     }
 
     Object getValue() {

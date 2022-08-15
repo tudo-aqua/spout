@@ -342,6 +342,7 @@ import tools.aqua.spout.AnnotatedVM;
 import tools.aqua.spout.AnnotatedValue;
 import tools.aqua.spout.Annotations;
 import tools.aqua.spout.SPouT;
+import tools.aqua.taint.TaintAnalysis;
 
 /**
  * Bytecode interpreter loop.
@@ -801,6 +802,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
         loop: while (true) {
             final int curOpcode = bs.opcode(curBCI);
             EXECUTED_BYTECODES_COUNT.inc();
+            SPouT.nextBytecode(frame, this.getMethod(), curBCI, curOpcode);
             try {
                 CompilerAsserts.partialEvaluationConstant(top);
                 CompilerAsserts.partialEvaluationConstant(curBCI);
@@ -1096,7 +1098,8 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case IFGE: // fall through
                     case IFGT: // fall through
                     case IFLE: // fall through
-                        if (takeBranchPrimitive1(popInt(frame, top - 1), curOpcode)) {
+                        //if (takeBranchPrimitive1(popInt(frame, top - 1), curOpcode)) {
+                        if (SPouT.takeBranchPrimitive1(frame, top, curOpcode, getMethod(), curBCI)) {
                             int targetBCI = bs.readBranchDest2(curBCI);
                             top += Bytecodes.stackEffectOf(IFLE);
                             nextStatementIndex = beforeJumpChecks(frame, curBCI, targetBCI, top, statementIndex, instrument, loopCount, skipLivenessActions);
@@ -1111,7 +1114,8 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case IF_ICMPGE: // fall through
                     case IF_ICMPGT: // fall through
                     case IF_ICMPLE:
-                        if (takeBranchPrimitive2(popInt(frame, top - 1), popInt(frame, top - 2), curOpcode)) {
+                        //if (takeBranchPrimitive2(popInt(frame, top - 1), popInt(frame, top - 2), curOpcode)) {
+                        if (SPouT.takeBranchPrimitive2(frame, top, curOpcode, getMethod(), curBCI)) {
                             top += Bytecodes.stackEffectOf(IF_ICMPLE);
                             nextStatementIndex = beforeJumpChecks(frame, curBCI, bs.readBranchDest2(curBCI), top, statementIndex, instrument, loopCount, skipLivenessActions);
                             curBCI = bs.readBranchDest2(curBCI);
@@ -1314,6 +1318,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case ARRAYLENGTH : arrayLength(frame, top, curBCI); break;
 
                     case ATHROW      :
+                        SPouT.iflowRegisterException();
                         throw getMeta().throwException(nullCheck(popObject(frame, top - 1)));
 
                     case CHECKCAST   : {
@@ -1530,6 +1535,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                         int targetBCI = handler.getHandlerBCI();
                         nextStatementIndex = beforeJumpChecks(frame, curBCI, targetBCI, top, statementIndex, instrument, loopCount, skipLivenessActions);
                         curBCI = targetBCI;
+                        SPouT.iflowUnregisterException(frame, this.getMethod(), curBCI);
                         continue loop; // skip bs.next()
                     } else {
                         if (instrument != null) {
@@ -2625,6 +2631,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     instrumentation.notifyFieldModification(frame, statementIndex, field, receiver, intValue);
                 }
                 InterpreterToVM.setFieldInt(intValue, receiver, field);
+                AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
                 break;
             case 'D':
                 double doubleValue = popDouble(frame, top - 1);
@@ -2722,7 +2729,10 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
             case 'B' : putInt(frame, resultAt, InterpreterToVM.getFieldByte(receiver, field));      break;
             case 'C' : putInt(frame, resultAt, InterpreterToVM.getFieldChar(receiver, field));      break;
             case 'S' : putInt(frame, resultAt, InterpreterToVM.getFieldShort(receiver, field));     break;
-            case 'I' : putInt(frame, resultAt, InterpreterToVM.getFieldInt(receiver, field));       break;
+            case 'I' :
+                putInt(frame, resultAt, InterpreterToVM.getFieldInt(receiver, field));
+                AnnotatedVM.putAnnotations(frame, resultAt, AnnotatedVM.getFieldAnnotation(receiver, field));
+                break;
             case 'D' : putDouble(frame, resultAt, InterpreterToVM.getFieldDouble(receiver, field)); break;
             case 'F' : putFloat(frame, resultAt, InterpreterToVM.getFieldFloat(receiver, field));   break;
             case 'J' : putLong(frame, resultAt, InterpreterToVM.getFieldLong(receiver, field));     break;

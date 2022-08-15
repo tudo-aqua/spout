@@ -347,9 +347,13 @@ public enum OperatorComparator {
 
     // RTZ RoundingMode
 
-    static EnumSet<OperatorComparator> boolOps = EnumSet.of(BVEQ, STRINGEQ, BVNE, STRINGNE, BVLT, BVLE, BVGT, BVGE, BNEG, BAND, BOR, BXOR, BEQUIV, BIMPLIES, SCONTAINS);
+    static EnumSet<OperatorComparator> boolOps = null;
+    static EnumSet<OperatorComparator> cmpOps = null;
 
-    static EnumSet<OperatorComparator> cmpOps = EnumSet.of(LCMP, FCMPL, FCMPG, DCMPL, DCMPG);
+    public static void initialize() {
+        boolOps = EnumSet.of(BVEQ, STRINGEQ, BVNE, STRINGNE, BVLT, BVLE, BVGT, BVGE, BNEG, BAND, BOR, BXOR, BEQUIV, BIMPLIES, SCONTAINS);
+        cmpOps = EnumSet.of(LCMP, FCMPL, FCMPG, DCMPL, DCMPG);
+    }
 
     public boolean isBoolean() {
         return boolOps.contains(this);

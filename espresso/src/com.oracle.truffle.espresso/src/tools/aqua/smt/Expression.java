@@ -23,6 +23,7 @@
  */
 package tools.aqua.smt;
 
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.espresso.meta.EspressoError;
 
 public interface Expression {
@@ -34,6 +35,7 @@ public interface Expression {
             case FLOAT: return Constant.fromConcreteValue( (float) value);
             case DOUBLE: return Constant.fromConcreteValue( (double) value);
             default:
+                CompilerDirectives.transferToInterpreter();
                 throw EspressoError.shouldNotReachHere("unsupported constant type");
         }
     }

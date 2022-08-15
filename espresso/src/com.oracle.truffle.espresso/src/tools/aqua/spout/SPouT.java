@@ -25,11 +25,15 @@ package tools.aqua.spout;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.espresso.impl.Method;
+import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
-import tools.aqua.taint.Taint;
 import tools.aqua.taint.TaintAnalysis;
-import tools.aqua.taint.TaintCheck;
+
+import static com.oracle.truffle.espresso.bytecode.Bytecodes.*;
+import static tools.aqua.spout.Config.TaintType.CONTROL;
+import static tools.aqua.spout.Config.TaintType.INFORMATION;
 
 public class SPouT {
 
@@ -54,9 +58,9 @@ public class SPouT {
         config.configureAnalysis();
         analysis = new MetaAnalysis(config);
         trace = config.getTrace();
+        System.out.println("======================== START PATH [END].");
         // TODO: should be deferred to latest possible point in time
         analyze = true;
-        System.out.println("======================== START PATH [END].");
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -126,6 +130,25 @@ public class SPouT {
         config.getTaintAnalysis().checkTaint( o instanceof AnnotatedValue ? (AnnotatedValue) o : null, color);
     }
 
+    public static void nextBytecode(VirtualFrame frame, Method method, int bci, int opcode) {
+        if (!analyze || !config.analyzeControlFlowTaint()) return;
+        config.getTaintAnalysis().informationFlowNextBytecode(frame, method, bci, opcode);
+    }
+
+    public static void iflowRegisterException() {
+        if (!analyze || !config.analyzeControlFlowTaint()) return;
+        config.getTaintAnalysis().iflowRegisterException();
+    }
+
+    public static void iflowUnregisterException(VirtualFrame frame, Method method, int bci) {
+        if (!analyze || !config.analyzeControlFlowTaint()) return;
+        config.getTaintAnalysis().iflowUnregisterException(frame, method, bci);
+    }
+
+    // --------------------------------------------------------------------------
+    //
+    // byte codes
+
     // case IADD: putInt(frame, top - 2, popInt(frame, top - 1) + popInt(frame, top - 2)); break;
     public static void iadd(VirtualFrame frame, int top) {
         // concrete
@@ -137,6 +160,58 @@ public class SPouT {
         AnnotatedVM.putAnnotations(frame, top - 2, analysis.iadd(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 2)));
+    }
+
+    public static boolean takeBranchPrimitive1(VirtualFrame frame, int top, int opcode, Method method, int bci) {
+
+        assert IFEQ <= opcode && opcode <= IFLE;
+        int c = BytecodeNode.popInt(frame, top - 1);
+
+        boolean takeBranch = true;
+
+        // @formatter:off
+        switch (opcode) {
+            case IFEQ: takeBranch = (c == 0); break;
+            case IFNE: takeBranch = (c != 0); break;
+            case IFLT: takeBranch = (c < 0);  break;
+            case IFGE: takeBranch = (c >= 0); break;
+            case IFGT: takeBranch = (c > 0);  break;
+            case IFLE: takeBranch = (c <= 0); break;
+            default:
+                CompilerDirectives.transferToInterpreter();
+                throw EspressoError.shouldNotReachHere("expecting IFEQ,IFNE,IFLT,IFGE,IFGT,IFLE");
+        }
+
+        if (analyze) analysis.takeBranchPrimitive1(frame, method, bci, opcode, takeBranch, AnnotatedVM.popAnnotations(frame, top - 1));
+        return takeBranch;
+    }
+
+    public static boolean takeBranchPrimitive2(VirtualFrame frame, int top, int opcode, Method method, int bci) {
+
+        assert IF_ICMPEQ <= opcode && opcode <= IF_ICMPLE;
+        int c1 = BytecodeNode.popInt(frame, top - 1);
+        int c2 = BytecodeNode.popInt(frame, top - 2);
+
+        // concrete
+        boolean takeBranch = true;
+
+        switch (opcode) {
+            case IF_ICMPEQ: takeBranch = (c1 == c2); break;
+            case IF_ICMPNE: takeBranch = (c1 != c2); break;
+            case IF_ICMPLT: takeBranch = (c1 > c2);  break;
+            case IF_ICMPGE: takeBranch = (c1 <= c2); break;
+            case IF_ICMPGT: takeBranch = (c1 < c2);  break;
+            case IF_ICMPLE: takeBranch = (c1 >= c2); break;
+            default:
+                CompilerDirectives.transferToInterpreter();
+                throw EspressoError.shouldNotReachHere("non-branching bytecode");
+        }
+
+        if (analyze) analysis.takeBranchPrimitive2(frame, method, bci, opcode, takeBranch, c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top -2 ));
+
+        return takeBranch;
     }
 
     // --------------------------------------------------------------------------
