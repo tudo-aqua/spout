@@ -26,7 +26,9 @@ package tools.aqua.taint;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.espresso.bytecode.Bytecodes;
 import com.oracle.truffle.espresso.impl.Method;
+import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.runtime.EspressoContext;
 import tools.aqua.concolic.SymbolDeclaration;
 import tools.aqua.spout.*;
@@ -44,7 +46,7 @@ public class TaintAnalysis implements Analysis<Taint> {
 
     private static Taint ifTaint = null;
 
-    private InformationFlowScope iflowScopes = new InformationFlowScope(null, null, 0, null, new int[]{});
+    private InformationFlowScope iflowScopes = new InformationFlowScope(null, null, 0, null, -1);
 
     private int nextFreeColor = 63;
 
@@ -89,52 +91,49 @@ public class TaintAnalysis implements Analysis<Taint> {
     //
     // information flow
 
-    private void informationFlowAddScope(VirtualFrame frame, Method method, int bci, int branch, Taint a1, Taint a2) {
+    private void informationFlowAddScope(VirtualFrame frame, BytecodeNode bcn, int bci, int branch, Taint a1, Taint a2) {
         CompilerDirectives.transferToInterpreter();
         if (!tainted || ifExceptionThrown) return;
 
-        if (outofscope(method)) return;
+        if (outofscope(bcn.getMethod())) return;
 
-        int[] endOfScope = GraphUtil.getEndOfScopeAfterBlock(method, bci);
+        int ipdBCI = bcn.getPostDominatorAnalysis().immediatePostDominatorStartForBCI(bci);
+        //SPouT.log("new scope at bci=" + bci + ", ipdStart=" + ipdBCI);
+
         // new taint
         Taint decisionTaint = ColorUtil.joinColors(ifTaint, a1, a2);
         String decisionName = iflowScopes.nextDecisionName();
         Taint scopeTaint = ColorUtil.addColor(decisionTaint, ++nextFreeColor);
 
-        iflowScopes = new InformationFlowScope(iflowScopes, frame, branch, scopeTaint, endOfScope);
+        iflowScopes = new InformationFlowScope(iflowScopes, frame, branch, scopeTaint, ipdBCI);
         ifTaint = scopeTaint;
-        informationFlowAddColor(decisionName, method);
+        informationFlowAddColor(decisionName);
         if (type == INFORMATION) {
             trace.addElement(new InformationFlow(decisionName, decisionTaint, ifColorNames));
         }
     }
 
     @CompilerDirectives.TruffleBoundary
-    private void informationFlowAddColor(String decisionName, Method m) {
+    private void informationFlowAddColor(String decisionName) {
         ifColorNames.put(nextFreeColor, decisionName);
     }
 
-    public void informationFlowNextBytecode(VirtualFrame frame, Method method, int bci, int opcode) {
-        CompilerDirectives.transferToInterpreter();
+    public void informationFlowNextBytecode(VirtualFrame frame, int bci) {
         if (!tainted || ifExceptionThrown) return;
+        while (iflowScopes.isEnd(frame, bci)) {
+            //SPouT.debug("pop iflow scope at ipd=" + bci);
+            iflowScopes = iflowScopes.parent;
+            ifTaint = iflowScopes.taint;
+        }
+    }
 
-        if (outofscope(method)) return;
 
-        if (opcode != ATHROW) {
-            while (iflowScopes.isEnd(frame, bci)) {
-                iflowScopes = iflowScopes.parent;
-                ifTaint = iflowScopes.taint;
-            }
-
-            // TODO: sometimes in CFGs return statements are not in the leafs only ...
-            if (opcode == RETURN || opcode == IRETURN || opcode == LRETURN ||
-                    opcode == ARETURN || opcode == FRETURN || opcode == DRETURN) {
-
-                while (iflowScopes.frame == frame) {
-                    iflowScopes = iflowScopes.parent;
-                    ifTaint = iflowScopes.taint;
-                }
-            }
+    public void informationFlowMethodReturn(VirtualFrame frame) {
+        if (!tainted || ifExceptionThrown) return;
+        while (iflowScopes.frame == frame) {
+            //SPouT.debug("pop iflow scope at return");
+            iflowScopes = iflowScopes.parent;
+            ifTaint = iflowScopes.taint;
         }
     }
 
@@ -155,13 +154,16 @@ public class TaintAnalysis implements Analysis<Taint> {
 
         ifExceptionThrown = false;
 
-        int[] endOfScope = GraphUtil.getEndOfScopeAfterPreviousBlock(method, bci);
         Taint scopeTaint = iflowScopes.taint;
         while (iflowScopes.frame != frame && iflowScopes.parent != null) {
             iflowScopes = iflowScopes.parent;
         }
-        iflowScopes = new InformationFlowScope(iflowScopes, frame, 0, scopeTaint, endOfScope);
+        iflowScopes.setTaint(scopeTaint);
         ifTaint = scopeTaint;
+    }
+
+    public int iflowGetIpdBCI() {
+        return iflowScopes.endOfScope;
     }
 
     // --------------------------------------------------------------------------
@@ -174,16 +176,17 @@ public class TaintAnalysis implements Analysis<Taint> {
     }
 
     @Override
-    public void takeBranchPrimitive1(VirtualFrame frame, Method method, int bci, int opcode, boolean takeBranch, Taint a) {
+    public void takeBranchPrimitive1(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, Taint a) {
         if (type == INFORMATION || (type == CONTROL && a != null)) {
-            informationFlowAddScope(frame, method, bci, takeBranch ? 0 : 1, a, null);
+            informationFlowAddScope(frame, bcn, bci, takeBranch ? 0 : 1, a, null);
         }
     }
 
     @Override
-    public void takeBranchPrimitive2(VirtualFrame frame, Method method, int bci, int opcode, boolean takeBranch, int c1, int c2, Taint a1, Taint a2) {
+    public void takeBranchPrimitive2(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, int c1, int c2, Taint a1, Taint a2) {
         if (type == INFORMATION || (type == CONTROL && (a1 != null || a2 != null))) {
-            informationFlowAddScope(frame, method, bci, takeBranch ? 0 : 1, a1, a2);
+            informationFlowAddScope(frame, bcn, bci, takeBranch ? 0 : 1, a1, a2);
         }
     }
+
 }

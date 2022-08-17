@@ -30,14 +30,14 @@ public class InformationFlowScope {
     /*
      * bci's that leave this scope
      */
-    int[] endOfScope;
+    int endOfScope;
 
     /*
      * distinguish multiple subsequent independent branches
      */
     int nameCount = 0;
 
-    public InformationFlowScope(InformationFlowScope parent, VirtualFrame frame, int branchId, Taint taint, int[] end) {
+    public InformationFlowScope(InformationFlowScope parent, VirtualFrame frame, int branchId, Taint taint, int end) {
         this.frame = frame;
         this.endOfScope = end;
         this.parent = parent;
@@ -46,15 +46,7 @@ public class InformationFlowScope {
     }
 
     public boolean isEnd(VirtualFrame frame, int bci) {
-        if (frame != this.frame) {
-            return false;
-        }
-        for (int i : endOfScope) {
-            if (i == bci) {
-                return true;
-            }
-        }
-        return false;
+        return (endOfScope > 0) && (endOfScope == bci) && (frame == this.frame);
     }
 
     public String nextDecisionName() {
@@ -66,8 +58,7 @@ public class InformationFlowScope {
         return (parent == null ? "if" : parent.currentDecisionName()) + "_" + branchId + "n" + nameCount;
     }
 
-    @CompilerDirectives.TruffleBoundary
-    public String endBcis() {
-        return Arrays.toString(endOfScope);
+    public void setTaint(Taint taint) {
+        this.taint = taint;
     }
 }

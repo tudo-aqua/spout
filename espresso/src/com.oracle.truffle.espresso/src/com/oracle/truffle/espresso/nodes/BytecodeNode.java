@@ -342,6 +342,7 @@ import tools.aqua.spout.AnnotatedVM;
 import tools.aqua.spout.AnnotatedValue;
 import tools.aqua.spout.Annotations;
 import tools.aqua.spout.SPouT;
+import tools.aqua.taint.PostDominatorAnalysis;
 import tools.aqua.taint.TaintAnalysis;
 
 /**
@@ -407,6 +408,8 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
 
     private final LivenessAnalysis livenessAnalysis;
 
+    private final PostDominatorAnalysis postDominatorAnalysis;
+
     private byte trivialBytecodesCache = -1;
 
     @CompilationFinal private Object osrMetadata;
@@ -423,6 +426,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
         this.noForeignObjects = Truffle.getRuntime().createAssumption("noForeignObjects");
         this.implicitExceptionProfile = false;
         this.livenessAnalysis = LivenessAnalysis.analyze(methodVersion);
+        this.postDominatorAnalysis = SPouT.iflowGetPDA(method);
         /*
          * The "triviality" is partially computed here since isTrivial is called from a compiler
          * thread where the context is not accessible.
@@ -471,6 +475,11 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
         CompilerAsserts.partialEvaluationConstant(argCount);
         for (int i = 0; i < argCount; ++i) {
             Symbol<Type> argType = Signatures.parameterType(methodSignature, i);
+            if (arguments[i + receiverSlot] instanceof AnnotatedValue) {
+                AnnotatedValue a = (AnnotatedValue) arguments[i + receiverSlot];
+                AnnotatedVM.setLocalAnnotations(frame, curSlot, a);
+                arguments[i + receiverSlot] = a.getValue();
+            }
             // @formatter:off
             switch (argType.byteAt(0)) {
                 case 'Z' : setLocalInt(frame, curSlot, ((boolean) arguments[i + receiverSlot]) ? 1 : 0); break;
@@ -780,6 +789,8 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
         boolean skipEntryInstrumentation = isOSR;
         boolean skipLivenessActions = false;
 
+        int ipdBCI = -1;
+
         // pop frame cause initializeBody to be skipped on re-entry
         // so force the initialization here
         if (!frame.isInt(EspressoFrame.BCI_SLOT)) {
@@ -802,10 +813,14 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
         loop: while (true) {
             final int curOpcode = bs.opcode(curBCI);
             EXECUTED_BYTECODES_COUNT.inc();
-            SPouT.nextBytecode(frame, this.getMethod(), curBCI, curOpcode);
+            if (curBCI == ipdBCI) {
+                SPouT.nextBytecode(frame, curBCI);
+            }
+            ipdBCI = SPouT.iflowGetIpdBCI();
             try {
                 CompilerAsserts.partialEvaluationConstant(top);
                 CompilerAsserts.partialEvaluationConstant(curBCI);
+                CompilerAsserts.partialEvaluationConstant(ipdBCI);
                 CompilerAsserts.partialEvaluationConstant(skipEntryInstrumentation);
                 CompilerAsserts.partialEvaluationConstant(curOpcode);
 
@@ -1099,7 +1114,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case IFGT: // fall through
                     case IFLE: // fall through
                         //if (takeBranchPrimitive1(popInt(frame, top - 1), curOpcode)) {
-                        if (SPouT.takeBranchPrimitive1(frame, top, curOpcode, getMethod(), curBCI)) {
+                        if (SPouT.takeBranchPrimitive1(frame, top, curOpcode, this, curBCI)) {
                             int targetBCI = bs.readBranchDest2(curBCI);
                             top += Bytecodes.stackEffectOf(IFLE);
                             nextStatementIndex = beforeJumpChecks(frame, curBCI, targetBCI, top, statementIndex, instrument, loopCount, skipLivenessActions);
@@ -1115,7 +1130,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case IF_ICMPGT: // fall through
                     case IF_ICMPLE:
                         //if (takeBranchPrimitive2(popInt(frame, top - 1), popInt(frame, top - 2), curOpcode)) {
-                        if (SPouT.takeBranchPrimitive2(frame, top, curOpcode, getMethod(), curBCI)) {
+                        if (SPouT.takeBranchPrimitive2(frame, top, curOpcode, this, curBCI)) {
                             top += Bytecodes.stackEffectOf(IF_ICMPLE);
                             nextStatementIndex = beforeJumpChecks(frame, curBCI, bs.readBranchDest2(curBCI), top, statementIndex, instrument, loopCount, skipLivenessActions);
                             curBCI = bs.readBranchDest2(curBCI);
@@ -1287,6 +1302,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                         if (instrument != null) {
                             instrument.notifyReturn(frame, statementIndex, returnValue);
                         }
+                        SPouT.informationFlowMethodReturn(frame);
                         return returnValue;
                     }
                     // @formatter:off
@@ -3138,5 +3154,9 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
             trivialBytecodesCache = trivialBytecodes() ? TRIVIAL_YES : TRIVIAL_NO;
         }
         return trivialBytecodesCache == TRIVIAL_YES;
+    }
+
+    public PostDominatorAnalysis getPostDominatorAnalysis() {
+        return postDominatorAnalysis;
     }
 }

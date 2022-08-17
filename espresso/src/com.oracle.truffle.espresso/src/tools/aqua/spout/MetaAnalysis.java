@@ -26,6 +26,7 @@ package tools.aqua.spout;
 
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.impl.Method;
+import com.oracle.truffle.espresso.nodes.BytecodeNode;
 
 
 public class MetaAnalysis implements Analysis<Annotations> {
@@ -65,18 +66,18 @@ public class MetaAnalysis implements Analysis<Annotations> {
     }
 
     @Override
-    public void takeBranchPrimitive1(VirtualFrame frame, Method method, int bci, int opcode, boolean takeBranch, Annotations a) {
+    public void takeBranchPrimitive1(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, Annotations a) {
         int i = 0;
         for (Analysis<?> analysis : analyses) {
-            analysis.takeBranchPrimitive1(frame, method, bci, opcode, takeBranch, Annotations.annotation(a, i++));
+            analysis.takeBranchPrimitive1(frame, bcn, bci, opcode, takeBranch, Annotations.annotation(a, i++));
         }
     }
 
     @Override
-    public void takeBranchPrimitive2(VirtualFrame frame, Method method, int bci, int opcode, boolean takeBranch, int c1, int c2, Annotations a1, Annotations a2) {
+    public void takeBranchPrimitive2(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, int c1, int c2, Annotations a1, Annotations a2) {
         int i = 0;
         for (Analysis<?> analysis : analyses) {
-            analysis.takeBranchPrimitive2(frame, method, bci, opcode, takeBranch, c1, c2, Annotations.annotation(a1, i), Annotations.annotation(a2, i));
+            analysis.takeBranchPrimitive2(frame, bcn, bci, opcode, takeBranch, c1, c2, Annotations.annotation(a1, i), Annotations.annotation(a2, i));
             i++;
         }
     }

@@ -26,6 +26,7 @@ package tools.aqua.spout;
 
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.impl.Method;
+import com.oracle.truffle.espresso.nodes.BytecodeNode;
 
 public interface Analysis<T> {
 
@@ -33,7 +34,7 @@ public interface Analysis<T> {
 
     public T iadd(int c1, int c2, T a1, T a2);
 
-    void takeBranchPrimitive1(VirtualFrame frame, Method method, int bci, int opcode, boolean takeBranch, T a);
+    void takeBranchPrimitive1(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, T a);
 
-    void takeBranchPrimitive2(VirtualFrame frame, Method method, int bci, int opcode, boolean takeBranch, int c1, int c2, T a1, T a2);
+    void takeBranchPrimitive2(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, int c1, int c2, T a1, T a2);
 }

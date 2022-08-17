@@ -29,6 +29,7 @@ import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
+import tools.aqua.taint.PostDominatorAnalysis;
 import tools.aqua.taint.TaintAnalysis;
 
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.*;
@@ -130,9 +131,14 @@ public class SPouT {
         config.getTaintAnalysis().checkTaint( o instanceof AnnotatedValue ? (AnnotatedValue) o : null, color);
     }
 
-    public static void nextBytecode(VirtualFrame frame, Method method, int bci, int opcode) {
+    public static void nextBytecode(VirtualFrame frame, int bci) {
         if (!analyze || !config.analyzeControlFlowTaint()) return;
-        config.getTaintAnalysis().informationFlowNextBytecode(frame, method, bci, opcode);
+        config.getTaintAnalysis().informationFlowNextBytecode(frame, bci);
+    }
+
+    public static void informationFlowMethodReturn(VirtualFrame frame) {
+        if (!analyze || !config.analyzeControlFlowTaint()) return;
+        config.getTaintAnalysis().informationFlowMethodReturn(frame);
     }
 
     public static void iflowRegisterException() {
@@ -143,6 +149,16 @@ public class SPouT {
     public static void iflowUnregisterException(VirtualFrame frame, Method method, int bci) {
         if (!analyze || !config.analyzeControlFlowTaint()) return;
         config.getTaintAnalysis().iflowUnregisterException(frame, method, bci);
+    }
+
+    public static int iflowGetIpdBCI() {
+        if (!analyze || !config.analyzeControlFlowTaint()) return -1;
+        return config.getTaintAnalysis().iflowGetIpdBCI();
+    }
+
+    public static PostDominatorAnalysis iflowGetPDA(Method method) {
+        if (!analyze || !config.analyzeControlFlowTaint()) return null;
+        return new PostDominatorAnalysis(method);
     }
 
     // --------------------------------------------------------------------------
@@ -162,7 +178,7 @@ public class SPouT {
                 AnnotatedVM.popAnnotations(frame, top - 2)));
     }
 
-    public static boolean takeBranchPrimitive1(VirtualFrame frame, int top, int opcode, Method method, int bci) {
+    public static boolean takeBranchPrimitive1(VirtualFrame frame, int top, int opcode, BytecodeNode bcn, int bci) {
 
         assert IFEQ <= opcode && opcode <= IFLE;
         int c = BytecodeNode.popInt(frame, top - 1);
@@ -182,11 +198,11 @@ public class SPouT {
                 throw EspressoError.shouldNotReachHere("expecting IFEQ,IFNE,IFLT,IFGE,IFGT,IFLE");
         }
 
-        if (analyze) analysis.takeBranchPrimitive1(frame, method, bci, opcode, takeBranch, AnnotatedVM.popAnnotations(frame, top - 1));
+        if (analyze) analysis.takeBranchPrimitive1(frame, bcn, bci, opcode, takeBranch, AnnotatedVM.popAnnotations(frame, top - 1));
         return takeBranch;
     }
 
-    public static boolean takeBranchPrimitive2(VirtualFrame frame, int top, int opcode, Method method, int bci) {
+    public static boolean takeBranchPrimitive2(VirtualFrame frame, int top, int opcode, BytecodeNode bcn, int bci) {
 
         assert IF_ICMPEQ <= opcode && opcode <= IF_ICMPLE;
         int c1 = BytecodeNode.popInt(frame, top - 1);
@@ -207,7 +223,7 @@ public class SPouT {
                 throw EspressoError.shouldNotReachHere("non-branching bytecode");
         }
 
-        if (analyze) analysis.takeBranchPrimitive2(frame, method, bci, opcode, takeBranch, c1, c2,
+        if (analyze) analysis.takeBranchPrimitive2(frame, bcn, bci, opcode, takeBranch, c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top -2 ));
 

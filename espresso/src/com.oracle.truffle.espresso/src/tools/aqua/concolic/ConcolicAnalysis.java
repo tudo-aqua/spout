@@ -28,6 +28,7 @@ import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.meta.EspressoError;
+import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import tools.aqua.smt.*;
 import tools.aqua.spout.*;
 
@@ -86,7 +87,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     // branching helpers ...
 
     @Override
-    public void takeBranchPrimitive1(VirtualFrame frame, Method method, int bci, int opcode, boolean takeBranch, Expression a) {
+    public void takeBranchPrimitive1(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, Expression a) {
         if (a == null || a instanceof Constant) {
             return;
         }
@@ -154,7 +155,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     @Override
-    public void takeBranchPrimitive2(VirtualFrame frame, Method method, int bci, int opcode, boolean takeBranch, int c1, int c2, Expression a1, Expression a2) {
+    public void takeBranchPrimitive2(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, int c1, int c2, Expression a1, Expression a2) {
         if ((a1 == null || a1 instanceof Constant) && (a2 == null || a2 instanceof Constant)) {
             return;
         }
