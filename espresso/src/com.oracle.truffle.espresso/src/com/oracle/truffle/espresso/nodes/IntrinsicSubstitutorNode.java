@@ -32,9 +32,14 @@ import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.perf.DebugCounter;
 import com.oracle.truffle.espresso.substitutions.JavaSubstitution;
+import tools.aqua.spout.AnnotatedVM;
+import tools.aqua.spout.AnnotatedValue;
+import tools.aqua.spout.SPouT;
 
 public final class IntrinsicSubstitutorNode extends EspressoMethodNode {
     @Child private JavaSubstitution substitution;
+
+    private final boolean passAnnotations;
 
     // Truffle does not want to report split on first call. Delay until the second.
     private final DebugCounter nbSplits;
@@ -42,6 +47,7 @@ public final class IntrinsicSubstitutorNode extends EspressoMethodNode {
     public IntrinsicSubstitutorNode(JavaSubstitution.Factory factory, Method method) {
         super(method.getMethodVersion());
         this.substitution = factory.create();
+        this.passAnnotations = factory.passAnnotations();
 
         EspressoError.guarantee(!substitution.isTrivial() || !method.isSynchronized(),
                         "Substitution for synchronized method cannot be marked as trivial", method);
@@ -58,15 +64,18 @@ public final class IntrinsicSubstitutorNode extends EspressoMethodNode {
         assert toSplit.substitution.canSplit();
         this.substitution = toSplit.substitution.split();
         this.nbSplits = toSplit.nbSplits;
+        this.passAnnotations = toSplit.passAnnotations;
     }
 
     @Override
     void initializeBody(VirtualFrame frame) {
-        // nop
     }
 
     @Override
     public Object executeBody(VirtualFrame frame) {
+        if (!passAnnotations) {
+            return substitution.invoke(AnnotatedVM.deAnnotateArguments(frame.getArguments(), getMethod()));
+        }
         return substitution.invoke(frame.getArguments());
     }
 

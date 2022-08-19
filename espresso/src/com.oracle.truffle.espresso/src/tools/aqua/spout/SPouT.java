@@ -230,13 +230,27 @@ public class SPouT {
         return takeBranch;
     }
 
+    public static void tableSwitch(int concIndex, Annotations annotatedIndex, int low, int high,
+                            VirtualFrame frame, BytecodeNode bcn, int bci) {
+        if (analyze) {
+            analysis.tableSwitch(frame, bcn, bci, low, high, concIndex, annotatedIndex);
+        }
+    }
+
+    public static void lookupSwitch(int key, Annotations annotatedKey,
+                             VirtualFrame frame, BytecodeNode bcn, int bci, int... vals) {
+        if (analyze) {
+            analysis.lookupSwitch(frame, bcn, bci, vals, key, annotatedKey);
+        }
+    }
+
     // --------------------------------------------------------------------------
     //
     // helpers
 
     @CompilerDirectives.TruffleBoundary
     public static void debug(String message) {
-        if (DEBUG) System.out.println(message);
+        if (DEBUG) System.out.println("[debug] " + message);
     }
 
     @CompilerDirectives.TruffleBoundary

@@ -73,6 +73,7 @@ public class TaintAnalysis implements Analysis<Taint> {
     public Object taint(Object o, int color) {
         AnnotatedValue av = new AnnotatedValue(o);
         av.set(config.getTaintIdx(), new Taint(color));
+        SPouT.debug("Tainting with color " + color);
         tainted = true;
         return av;
     }
@@ -84,6 +85,9 @@ public class TaintAnalysis implements Analysis<Taint> {
         }
         else if (ColorUtil.hasColor(taint, color)) {
             trace.addElement(new TaintViolation(color));
+        }
+        else {
+            SPouT.debug("Checking for taint with color " + color);
         }
     }
 
@@ -172,7 +176,7 @@ public class TaintAnalysis implements Analysis<Taint> {
 
     @Override
     public Taint iadd(int c1, int c2, Taint a1, Taint a2) {
-        return ColorUtil.joinColors(a1, a2);
+        return ColorUtil.joinColors(a1, a2, ifTaint);
     }
 
     @Override

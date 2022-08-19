@@ -35,13 +35,15 @@ public abstract class JavaSubstitution extends SubstitutionProfiler {
         private final String returnType;
         private final String[] parameterTypes;
         private final boolean hasReceiver;
+        private final boolean passAnnotations;
 
-        public Factory(String methodName, String substitutionClassName, String returnType, String[] parameterTypes, boolean hasReceiver) {
+        public Factory(String methodName, String substitutionClassName, String returnType, String[] parameterTypes, boolean hasReceiver, boolean passAnnotations) {
             this.methodName = new String[]{methodName};
             this.substitutionClassName = new String[]{substitutionClassName};
             this.returnType = returnType;
             this.parameterTypes = parameterTypes;
             this.hasReceiver = hasReceiver;
+            this.passAnnotations = passAnnotations;
         }
 
         public String[] getMethodNames() {
@@ -66,6 +68,10 @@ public abstract class JavaSubstitution extends SubstitutionProfiler {
 
         public boolean isValidFor(@SuppressWarnings("unused") JavaVersion version) {
             return true;
+        }
+
+        public boolean passAnnotations() {
+            return passAnnotations;
         }
     }
 

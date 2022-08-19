@@ -94,17 +94,19 @@ public final class SubstitutionProcessor extends EspressoProcessor {
         final List<String> guestTypeNames;
         final String returnType;
         final boolean hasReceiver;
+        final boolean passAnnotations;
         final TypeMirror nameProvider;
         final TypeMirror versionFilter;
 
         SubstitutorHelper(EspressoProcessor processor, Element target, String targetClassName, String guestMethodName, List<String> guestTypeNames, String returnType,
-                        boolean hasReceiver, TypeMirror nameProvider, TypeMirror versionFilter) {
+                        boolean hasReceiver, boolean passAnnotations,TypeMirror nameProvider, TypeMirror versionFilter) {
             super(processor, target, processor.getTypeElement(SUBSTITUTION));
             this.targetClassName = targetClassName;
             this.guestMethodName = guestMethodName;
             this.guestTypeNames = guestTypeNames;
             this.returnType = returnType;
             this.hasReceiver = hasReceiver;
+            this.passAnnotations = passAnnotations;
             this.nameProvider = nameProvider;
             this.versionFilter = versionFilter;
         }
@@ -301,6 +303,8 @@ public final class SubstitutionProcessor extends EspressoProcessor {
             // Obtain the hasReceiver() value from the @Substitution annotation.
             boolean hasReceiver = getAnnotationValue(subst, "hasReceiver", Boolean.class);
 
+            boolean passAnnotations = getAnnotationValue(subst, "passAnnotations", Boolean.class);
+
             // Obtain the fully qualified guest return type of the element.
             String returnType = getReturnTypeFromHost(targetMethod);
 
@@ -308,7 +312,7 @@ public final class SubstitutionProcessor extends EspressoProcessor {
             nameProvider = nameProvider == null ? defaultNameProvider : nameProvider;
 
             TypeMirror versionFilter = getVersionFilter(subst);
-            SubstitutorHelper helper = new SubstitutorHelper(this, element, className, actualMethodName, guestTypes, returnType, hasReceiver, nameProvider, versionFilter);
+            SubstitutorHelper helper = new SubstitutorHelper(this, element, className, actualMethodName, guestTypes, returnType, hasReceiver, passAnnotations, nameProvider, versionFilter);
 
             // Create the contents of the source file
             String classFile = spawnSubstitutor(
@@ -570,7 +574,8 @@ public final class SubstitutionProcessor extends EspressoProcessor {
                         .addIndentedBodyLine(1, ProcessorUtils.stringify(h.targetClassName), ',') //
                         .addIndentedBodyLine(1, ProcessorUtils.stringify(h.returnType), ',') //
                         .addIndentedBodyLine(1, generateParameterTypes(h.guestTypeNames, 4), ',') //
-                        .addIndentedBodyLine(1, h.hasReceiver) //
+                        .addIndentedBodyLine(1, h.hasReceiver, ',') //
+                        .addIndentedBodyLine(1, h.passAnnotations)
                         .addBodyLine(");");
         factoryBuilder.withMethod(factoryConstructor);
 

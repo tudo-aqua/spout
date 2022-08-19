@@ -338,10 +338,7 @@ import com.oracle.truffle.espresso.runtime.ReturnAddress;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import com.oracle.truffle.espresso.vm.InterpreterToVM;
 
-import tools.aqua.spout.AnnotatedVM;
-import tools.aqua.spout.AnnotatedValue;
-import tools.aqua.spout.Annotations;
-import tools.aqua.spout.SPouT;
+import tools.aqua.spout.*;
 import tools.aqua.taint.PostDominatorAnalysis;
 import tools.aqua.taint.TaintAnalysis;
 
@@ -1225,6 +1222,8 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                         int high = switchHelper.highKey(bs, curBCI);
                         assert low <= high;
 
+                        SPouT.tableSwitch(index, AnnotatedVM.popAnnotations(frame, top -1), low, high, frame, this, curBCI);
+
                         // Interpreter uses direct lookup.
                         if (CompilerDirectives.inInterpreter()) {
                             int targetBCI;
@@ -1264,6 +1263,16 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                         BytecodeLookupSwitch switchHelper = BytecodeLookupSwitch.INSTANCE;
                         int low = 0;
                         int high = switchHelper.numberOfCases(bs, curBCI) - 1;
+
+                        Annotations aKey = AnnotatedVM.popAnnotations(frame, top -1);
+                        if (aKey != null) {
+                            int[] vals = new int[high - low + 1];
+                            for (int i = 0; i < vals.length; i++) {
+                                vals[i] = switchHelper.keyAt(bs, curBCI, low + i);
+                            }
+                            SPouT.lookupSwitch(key, aKey, frame, this, curBCI, vals);
+                        }
+
                         while (low <= high) {
                             int mid = (low + high) >>> 1;
                             int midVal = switchHelper.keyAt(bs, curBCI, mid);

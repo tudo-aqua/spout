@@ -21,6 +21,7 @@
  * or visit https://aqua.engineering if you need additional information or have any
  * questions.
  */
+
 package tools.aqua.spout;
 
 public class ExceptionalEvent extends TraceElement {

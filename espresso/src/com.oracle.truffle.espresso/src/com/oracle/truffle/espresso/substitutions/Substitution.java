@@ -71,6 +71,13 @@ import java.lang.annotation.Target;
      */
     boolean hasReceiver() default false;
 
+    /**
+     * ok to pass annotated values into this method?
+     *
+     * @return
+     */
+    boolean passAnnotations() default false;
+
     Class<? extends SubstitutionNamesProvider> nameProvider() default SubstitutionNamesProvider.NoProvider.class;
 
     Class<? extends VersionFilter> versionFilter() default VersionFilter.NoFilter.class;

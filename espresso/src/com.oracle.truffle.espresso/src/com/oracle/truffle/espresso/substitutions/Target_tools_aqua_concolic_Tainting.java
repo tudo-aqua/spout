@@ -32,7 +32,7 @@ import tools.aqua.spout.SPouT;
 public final class Target_tools_aqua_concolic_Tainting {
 
     // taint o with color
-    @Substitution(hasReceiver = false, methodName = "taint")
+    @Substitution(passAnnotations = true, methodName = "taint")
     public static @JavaType(internalName = "I") Object taint_int(@JavaType(internalName = "I") Object o, int color) {
         return SPouT.taint(o, color);
     }
@@ -44,7 +44,7 @@ public final class Target_tools_aqua_concolic_Tainting {
     }
 */
     // check if o is tainted with color
-    @Substitution(hasReceiver = false, methodName = "check")
+    @Substitution(passAnnotations = true, methodName = "check")
     public static void check_int(@JavaType(internalName = "I") Object o, int color) {
         SPouT.checkTaint(o, color);
     }

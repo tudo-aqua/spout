@@ -41,7 +41,7 @@ public class MetaAnalysis implements Analysis<Annotations> {
     }
 
     interface Executor {
-        Object execute(Analysis analysis, int c1, int c2, Object s1, Object s2);
+        <T> T execute(Analysis<T> analysis, int c1, int c2, T s1, T s2);
     }
 
     private Annotations execute(int c1, int c2, Annotations a1, Annotations a2, Executor executor) {
@@ -62,11 +62,12 @@ public class MetaAnalysis implements Analysis<Annotations> {
 
     @Override
     public Annotations iadd(int c1, int c2, Annotations a1, Annotations a2) {
-        return execute(c1, c2, a1, a2, (analysis, c11, c21, s1, s2) -> analysis.iadd(c11, c21, s1, s2));
+        return execute(c1, c2, a1, a2, Analysis::iadd);
     }
 
     @Override
-    public void takeBranchPrimitive1(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, Annotations a) {
+    public void takeBranchPrimitive1(VirtualFrame frame, BytecodeNode bcn, int bci,
+                                     int opcode, boolean takeBranch, Annotations a) {
         int i = 0;
         for (Analysis<?> analysis : analyses) {
             analysis.takeBranchPrimitive1(frame, bcn, bci, opcode, takeBranch, Annotations.annotation(a, i++));
@@ -74,7 +75,8 @@ public class MetaAnalysis implements Analysis<Annotations> {
     }
 
     @Override
-    public void takeBranchPrimitive2(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, int c1, int c2, Annotations a1, Annotations a2) {
+    public void takeBranchPrimitive2(VirtualFrame frame, BytecodeNode bcn, int bci,
+                                     int opcode, boolean takeBranch, int c1, int c2, Annotations a1, Annotations a2) {
         int i = 0;
         for (Analysis<?> analysis : analyses) {
             analysis.takeBranchPrimitive2(frame, bcn, bci, opcode, takeBranch, c1, c2, Annotations.annotation(a1, i), Annotations.annotation(a2, i));
@@ -82,4 +84,21 @@ public class MetaAnalysis implements Analysis<Annotations> {
         }
     }
 
+    @Override
+    public void tableSwitch(VirtualFrame frame, BytecodeNode bcn, int bci,
+                            int low, int high, int concIndex, Annotations a1) {
+        int i = 0;
+        for (Analysis<?> analysis : analyses) {
+            analysis.tableSwitch(frame, bcn, bci, low, high, concIndex, Annotations.annotation(a1, i));
+        }
+    }
+
+    @Override
+    public void lookupSwitch(VirtualFrame frame, BytecodeNode bcn, int bci,
+                             int[] vals, int key, Annotations a1) {
+        int i = 0;
+        for (Analysis<?> analysis : analyses) {
+           analysis.lookupSwitch(frame, bcn, bci, vals, key, Annotations.annotation(a1, i));
+        }
+    }
 }

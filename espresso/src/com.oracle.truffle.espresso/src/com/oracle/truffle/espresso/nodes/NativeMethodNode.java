@@ -44,6 +44,9 @@ import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.perf.DebugCounter;
 import com.oracle.truffle.espresso.runtime.EspressoException;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.spout.AnnotatedVM;
+import tools.aqua.spout.AnnotatedValue;
+import tools.aqua.spout.SPouT;
 
 /**
  * Represents a native Java method.
@@ -70,6 +73,9 @@ public final class NativeMethodNode extends EspressoMethodNode {
 
     @ExplodeLoop
     private Object[] preprocessArgs(JniEnv env, Object[] args) {
+
+        args = AnnotatedVM.deAnnotateArguments(args, getMethod());
+
         Symbol<Type>[] parsedSignature = getMethod().getParsedSignature();
         int paramCount = Signatures.parameterCount(parsedSignature);
         Object[] nativeArgs = new Object[2 /* JNIEnv* + class or receiver */ + paramCount];

@@ -211,4 +211,51 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         trace.addElement(pc);
     }
 
+    @Override
+    public void tableSwitch(VirtualFrame frame, BytecodeNode bcn, int bci, int low, int high, int concIndex, Expression a1) {
+        if (a1 == null) {
+            return;
+        }
+        Expression expr;
+        int bId;
+        if (low <= concIndex && concIndex <= high) {
+            Constant idx = Constant.fromConcreteValue(concIndex);
+            expr = new ComplexExpression(OperatorComparator.BVEQ, a1, idx);
+            bId = concIndex - low;
+        } else {
+            Constant sLow = Constant.fromConcreteValue(low);
+            Constant sHigh = Constant.fromConcreteValue(high);
+            expr = new ComplexExpression(BOR, new ComplexExpression(BVLT, a1, sLow), new ComplexExpression(BVGT, a1, sHigh));
+            bId = high - low + 1;
+        }
+
+        PathCondition pc = new PathCondition(expr, bId, high - low + 2);
+        trace.addElement(pc);
+    }
+
+    @Override
+    public void lookupSwitch(VirtualFrame frame, BytecodeNode bcn, int bci, int[] vals, int key, Expression a1) {
+        if (a1 == null) {
+            return;
+        }
+
+        for (int i = 0; i < vals.length; i++) {
+            if (vals[i] == key) {
+                Constant idxVal = Constant.fromConcreteValue(key);
+                trace.addElement(new PathCondition(
+                        new ComplexExpression(OperatorComparator.BVEQ, a1, idxVal), i, vals.length + 1));
+                return;
+            }
+        }
+
+        ComplexExpression[] subExpr = new ComplexExpression[vals.length];
+        for (int i = 0; i < vals.length; i++) {
+            Constant idxVal = Constant.fromConcreteValue(vals[i]);
+            subExpr[i] = new ComplexExpression(BVNE, a1, idxVal);
+        }
+
+        trace.addElement(new PathCondition(
+                new ComplexExpression(OperatorComparator.BAND, subExpr), vals.length, vals.length + 1));
+    }
+
 }
