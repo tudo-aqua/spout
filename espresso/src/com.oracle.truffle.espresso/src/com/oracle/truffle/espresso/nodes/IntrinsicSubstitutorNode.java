@@ -26,6 +26,7 @@ package com.oracle.truffle.espresso.nodes;
 import java.util.Arrays;
 
 import com.oracle.truffle.api.frame.Frame;
+import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.espresso.impl.Method;
@@ -33,8 +34,7 @@ import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.perf.DebugCounter;
 import com.oracle.truffle.espresso.substitutions.JavaSubstitution;
 import tools.aqua.spout.AnnotatedVM;
-import tools.aqua.spout.AnnotatedValue;
-import tools.aqua.spout.SPouT;
+
 
 public final class IntrinsicSubstitutorNode extends EspressoMethodNode {
     @Child private JavaSubstitution substitution;
@@ -74,7 +74,9 @@ public final class IntrinsicSubstitutorNode extends EspressoMethodNode {
     @Override
     public Object executeBody(VirtualFrame frame) {
         if (!passAnnotations) {
-            return substitution.invoke(AnnotatedVM.deAnnotateArguments(frame.getArguments(), getMethod()));
+            Object[] args = frame.getArguments();
+            CompilerAsserts.partialEvaluationConstant(args);
+            return substitution.invoke(AnnotatedVM.deAnnotateArguments(args, getMethod()));
         }
         return substitution.invoke(frame.getArguments());
     }
