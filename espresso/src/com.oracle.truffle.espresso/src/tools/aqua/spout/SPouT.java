@@ -295,6 +295,34 @@ public class SPouT {
         AnnotatedVM.putAnnotations(frame, top -1, aLength);
     }
 
+    public static void getArrayAnnotations(VirtualFrame frame, StaticObject array,
+                                           int cIndex, int fromIndexSlot, int toSlot, EspressoLanguage lang) {
+        if (!analyze) return;
+
+        Annotations aIndex = AnnotatedVM.popAnnotations(frame, fromIndexSlot);
+        if (analyze && config.hasConcolicAnalysis()) {
+            config.getConcolicAnalysis().checkArrayAccessPathConstraint(
+                    array, cIndex, Annotations.annotation(aIndex, config.getConcolicIdx()), lang);
+        }
+
+        Annotations a = AnnotatedVM.getArrayAnnotations(array, cIndex);
+        AnnotatedVM.putAnnotations(frame, toSlot, a);
+    }
+
+    public static void setArrayAnnotations(VirtualFrame frame, StaticObject array,
+                                           int cIndex, int fromValueSlot, int fromIndexSlot, EspressoLanguage lang) {
+        if (!analyze) return;
+
+        Annotations aIndex = AnnotatedVM.popAnnotations(frame, fromIndexSlot);
+        if (analyze && config.hasConcolicAnalysis()) {
+            config.getConcolicAnalysis().checkArrayAccessPathConstraint(
+                    array, cIndex, Annotations.annotation(aIndex, config.getConcolicIdx()), lang);
+        }
+
+        Annotations aValue = AnnotatedVM.popAnnotations(frame, fromValueSlot);
+        AnnotatedVM.setArrayAnnotations(array, cIndex, aValue, lang);
+    }
+
     // branching
 
     public static boolean takeBranchPrimitive1(VirtualFrame frame, int top, int opcode, BytecodeNode bcn, int bci) {

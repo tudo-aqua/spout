@@ -25,6 +25,7 @@
 package tools.aqua.spout;
 
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.espresso.EspressoLanguage;
 import com.oracle.truffle.espresso.impl.Field;
 import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.impl.ObjectKlass;
@@ -106,6 +107,26 @@ public class AnnotatedVM {
         Annotations[] annotations = obj.getAnnotations();
         Annotations a = annotations[f.getSlot()];
         return a;
+    }
+
+    public static Annotations getArrayAnnotations(StaticObject array, int index) {
+        if (!array.hasAnnotations()) {
+            return null;
+        }
+        Annotations[] annotations = array.getAnnotations();
+        Annotations a = annotations[index];
+        return a;
+    }
+
+    public static void setArrayAnnotations(StaticObject array, int index, Annotations a, EspressoLanguage lang) {
+        if (a == null) return;
+
+        if (!array.hasAnnotations()) {
+            Annotations[] annotations = new Annotations[array.length(lang) + 1];
+            array.setAnnotations(annotations);
+        }
+        Annotations[] annotations = array.getAnnotations();
+        annotations[index] = a;
     }
 
     // --------------------------------------------------------------------------

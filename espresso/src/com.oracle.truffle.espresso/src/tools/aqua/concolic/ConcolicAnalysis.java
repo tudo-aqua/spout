@@ -26,9 +26,11 @@ package tools.aqua.concolic;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.espresso.EspressoLanguage;
 import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
+import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.smt.*;
 import tools.aqua.spout.*;
 
@@ -95,6 +97,34 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                 legal ? lengthConstraint : new ComplexExpression(BNEG, lengthConstraint),
                 legal ? 1 : 0,
                 2));
+    }
+
+    public boolean checkArrayAccessPathConstraint(StaticObject array, int cIndex, Expression sIndex, EspressoLanguage lang) {
+        assert array.isArray();
+        int cLen = array.length(lang);
+        boolean safe = 0 <= cIndex && cIndex < cLen;
+        if ((array.hasAnnotations() && array.getAnnotations()[cLen] != null) || sIndex != null) {
+
+            if (sIndex == null) {
+                sIndex = Constant.fromConcreteValue(cIndex);
+            }
+
+            Expression sLen = null;
+            if (array.hasAnnotations()) {
+                sLen = Annotations.annotation( array.getAnnotations()[cLen], config.getConcolicIdx());
+            }
+            if (sLen == null) {
+                sLen = Constant.fromConcreteValue(cLen);
+            }
+
+            Expression arrayBound = new ComplexExpression(BAND,
+                            new ComplexExpression(BVLE, INT_ZERO, sIndex),
+                            new ComplexExpression(BVLT, sIndex, sLen));
+
+            trace.addElement(new PathCondition(
+                            safe ? arrayBound : new ComplexExpression(BNEG, arrayBound), safe ? 1 : 0, 2));
+        }
+        return safe;
     }
 
     // branching helpers ...
