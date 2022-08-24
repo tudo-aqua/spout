@@ -23,16 +23,28 @@
 
 package tools.aqua.spout;
 
+import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.espresso.EspressoLanguage;
+import com.oracle.truffle.espresso.impl.ArrayKlass;
+import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
+import com.oracle.truffle.espresso.runtime.GuestAllocator;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import com.oracle.truffle.espresso.vm.InterpreterToVM;
 import tools.aqua.taint.PostDominatorAnalysis;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
+
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.*;
+import static com.oracle.truffle.espresso.nodes.BytecodeNode.popInt;
 
 public class SPouT {
 
@@ -186,8 +198,8 @@ public class SPouT {
     // case IADD: putInt(frame, top - 2, popInt(frame, top - 1) + popInt(frame, top - 2)); break;
     public static void iadd(VirtualFrame frame, int top) {
         // concrete
-        int c1 = BytecodeNode.popInt(frame, top - 1);
-        int c2 = BytecodeNode.popInt(frame, top - 2);
+        int c1 = popInt(frame, top - 1);
+        int c2 = popInt(frame, top - 2);
         int concResult = c1 + c2;
         BytecodeNode.putInt(frame, top - 2, concResult);
         if (!analyze) return;
@@ -199,7 +211,7 @@ public class SPouT {
     // arrays
 
     public static void newArray(VirtualFrame frame, byte jvmPrimitiveType, int top, BytecodeNode bcn) {
-        int length = BytecodeNode.popInt(frame, top - 1);
+        int length = popInt(frame, top - 1);
         StaticObject array = null;
         if (analyze) {
             Annotations a = AnnotatedVM.popAnnotations(frame, top - 1);
@@ -220,6 +232,57 @@ public class SPouT {
         BytecodeNode.putObject(frame, top - 1, array);
     }
 
+    public static int newMultiArray(VirtualFrame frame, int top, Klass klass, int allocatedDimensions, BytecodeNode bcn) {
+        assert klass.isArray();
+        CompilerAsserts.partialEvaluationConstant(allocatedDimensions);
+        CompilerAsserts.partialEvaluationConstant(klass);
+        int[] dimensions = new int[allocatedDimensions];
+        Annotations[] symDim = new Annotations[allocatedDimensions];
+        int zeroDimOrError = allocatedDimensions;
+        for (int i = 0; i < allocatedDimensions; ++i) {
+            dimensions[i] = popInt(frame, top - allocatedDimensions + i);
+            symDim[i] = AnnotatedVM.popAnnotations(frame, top - allocatedDimensions + i);
+            if (analyze && config.hasConcolicAnalysis() && i < zeroDimOrError) {
+                config.getConcolicAnalysis().newArrayPathConstraint(
+                        dimensions[i], Annotations.annotation(symDim[i], config.getConcolicIdx()));
+                if (dimensions[i] <= 0) {
+                    zeroDimOrError = i;
+                }
+            }
+        }
+
+        StaticObject value = bcn.allocateMultiArray(frame, klass, dimensions);
+
+        if (analyze) {
+            for (int i = 0; i < zeroDimOrError; ++i) {
+                if (symDim[i] != null) {
+                    List<StaticObject> arrays = getAllArraysAtDepth(value, i, EspressoLanguage.get(bcn));
+                    for (StaticObject arr : arrays) {
+                        int dLength = dimensions[i];
+                        Annotations[] aArray = new Annotations[dLength + 1];
+                        aArray[dLength] = symDim[i];
+                        arr.setAnnotations(aArray);
+                    }
+                }
+            }
+        }
+
+        BytecodeNode.putObject(frame, top - allocatedDimensions, value);
+        return -allocatedDimensions; // Does not include the created (pushed) array.
+    }
+
+    private static List<StaticObject> getAllArraysAtDepth(StaticObject array, int depth, EspressoLanguage lang) {
+        if (depth == 0) {
+            return Collections.singletonList(array);
+        }
+        List<StaticObject> lower = getAllArraysAtDepth(array, depth - 1, lang);
+        List<StaticObject> arrays = new LinkedList<>();
+        for (StaticObject a : lower) {
+            arrays.addAll(Arrays.asList(a.unwrap(lang)));
+        }
+        return arrays;
+    }
+
     public static void arrayLength(VirtualFrame frame, int top, StaticObject arr) {
         if (!analyze || !arr.hasAnnotations()) return;
         Annotations[] annotations = arr.getAnnotations();
@@ -232,7 +295,7 @@ public class SPouT {
     public static boolean takeBranchPrimitive1(VirtualFrame frame, int top, int opcode, BytecodeNode bcn, int bci) {
 
         assert IFEQ <= opcode && opcode <= IFLE;
-        int c = BytecodeNode.popInt(frame, top - 1);
+        int c = popInt(frame, top - 1);
 
         boolean takeBranch = true;
 
@@ -256,8 +319,8 @@ public class SPouT {
     public static boolean takeBranchPrimitive2(VirtualFrame frame, int top, int opcode, BytecodeNode bcn, int bci) {
 
         assert IF_ICMPEQ <= opcode && opcode <= IF_ICMPLE;
-        int c1 = BytecodeNode.popInt(frame, top - 1);
-        int c2 = BytecodeNode.popInt(frame, top - 2);
+        int c1 = popInt(frame, top - 1);
+        int c2 = popInt(frame, top - 2);
 
         // concrete
         boolean takeBranch = true;

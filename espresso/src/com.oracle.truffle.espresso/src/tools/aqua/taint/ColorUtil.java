@@ -119,6 +119,7 @@ public class ColorUtil {
     }
 
     public static boolean hasColor(Taint t , int color) {
+        if (t == null) return false;
         long[] colors = t.getColors();
         int segment = color / 64;
         int offset = color % 64;

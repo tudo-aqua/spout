@@ -1433,7 +1433,8 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     }
 
                     case MULTIANEWARRAY:
-                        top += allocateMultiArray(frame, top, resolveType(MULTIANEWARRAY, bs.readCPI2(curBCI)), bs.readUByte(curBCI + 3));
+                        //top += allocateMultiArray(frame, top, resolveType(MULTIANEWARRAY, bs.readCPI2(curBCI)), bs.readUByte(curBCI + 3));
+                        top += SPouT.newMultiArray(frame, top, resolveType(MULTIANEWARRAY, bs.readCPI2(curBCI)), bs.readUByte(curBCI + 3), this);
                         break;
 
                     case BREAKPOINT:
@@ -2397,6 +2398,13 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
         return -allocatedDimensions; // Does not include the created (pushed) array.
     }
 
+    public StaticObject allocateMultiArray(VirtualFrame frame, Klass klass, int[] dimensions) {
+        assert klass.isArray();
+        Klass component = ((ArrayKlass) klass).getComponentType();
+        GuestAllocator.AllocationChecks.checkCanAllocateMultiArray(getMeta(), component, dimensions, this);
+        StaticObject value = getAllocator().createNewMultiArray(component, dimensions);
+        return value;
+    }
     // endregion Instance/array allocation
 
     // region Method return
