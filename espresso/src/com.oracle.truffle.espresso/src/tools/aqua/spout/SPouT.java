@@ -254,21 +254,26 @@ public class SPouT {
         StaticObject value = bcn.allocateMultiArray(frame, klass, dimensions);
 
         if (analyze) {
-            for (int i = 0; i < zeroDimOrError; ++i) {
-                if (symDim[i] != null) {
-                    List<StaticObject> arrays = getAllArraysAtDepth(value, i, EspressoLanguage.get(bcn));
-                    for (StaticObject arr : arrays) {
-                        int dLength = dimensions[i];
-                        Annotations[] aArray = new Annotations[dLength + 1];
-                        aArray[dLength] = symDim[i];
-                        arr.setAnnotations(aArray);
-                    }
-                }
-            }
+            annotateMultiArray(value, dimensions, symDim, zeroDimOrError, bcn);
         }
 
         BytecodeNode.putObject(frame, top - allocatedDimensions, value);
         return -allocatedDimensions; // Does not include the created (pushed) array.
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    private static void annotateMultiArray(StaticObject rootArray, int[] cDim, Annotations[] sDim, int bound, BytecodeNode bcn) {
+        for (int i = 0; i < bound; ++i) {
+            if (sDim[i] != null) {
+                List<StaticObject> arrays = getAllArraysAtDepth(rootArray, i, EspressoLanguage.get(bcn));
+                for (StaticObject arr : arrays) {
+                    int dLength = cDim[i];
+                    Annotations[] aArray = new Annotations[dLength + 1];
+                    aArray[dLength] = sDim[i];
+                    arr.setAnnotations(aArray);
+                }
+            }
+        }
     }
 
     private static List<StaticObject> getAllArraysAtDepth(StaticObject array, int depth, EspressoLanguage lang) {
