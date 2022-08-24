@@ -607,6 +607,12 @@ public final class EspressoLauncher extends AbstractLanguageLauncher {
                 if (e.isInternalError()) {
                     e.printStackTrace();
                 } else if (!e.isExit()) {
+                    if (e.isGuestException()) {
+                        Value guestException = e.getGuestObject();
+                        Value guestKlass = guestException.invokeMember("getClass");
+                        Value klassName = guestKlass.invokeMember("getName");
+                        context.eval("java", "<UncaughtException> " + klassName.asString());
+                    }
                     handleMainUncaught(context, e);
                 }
             }

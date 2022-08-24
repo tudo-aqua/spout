@@ -84,6 +84,19 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return binarySymbolicOp(OperatorComparator.IADD, Types.INT, c1, c2, a1, a2);
     }
 
+    // arrays
+
+    public void newArrayPathConstraint(int cLength, Expression sLength) {
+        if (sLength == null) return;
+
+        boolean legal = (0 <= cLength);
+        Expression lengthConstraint = new ComplexExpression(BVLE, INT_ZERO, sLength);
+        trace.addElement(new PathCondition(
+                legal ? lengthConstraint : new ComplexExpression(BNEG, lengthConstraint),
+                legal ? 1 : 0,
+                2));
+    }
+
     // branching helpers ...
 
     @Override

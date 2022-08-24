@@ -29,12 +29,10 @@ import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
+import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.taint.PostDominatorAnalysis;
-import tools.aqua.taint.TaintAnalysis;
 
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.*;
-import static tools.aqua.spout.Config.TaintType.CONTROL;
-import static tools.aqua.spout.Config.TaintType.INFORMATION;
 
 public class SPouT {
 
@@ -112,6 +110,25 @@ public class SPouT {
     }
 
     @CompilerDirectives.TruffleBoundary
+    public static void uncaughtException(StaticObject pendingException) {
+        if (analyze) {
+            String errorMessage = pendingException.getKlass().getNameAsString();
+            trace.addElement(new ErrorEvent(errorMessage));
+        }
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static void uncaughtException(String pendingExceptionName) {
+        if (analyze) {
+            String errorMessage = pendingExceptionName.
+                    trim().
+                    replaceAll("\\.", "/");
+
+            trace.addElement(new ErrorEvent(errorMessage));
+        }
+    }
+
+    @CompilerDirectives.TruffleBoundary
     public static Object nextSymbolicInt() {
         if (!analyze || !config.hasConcolicAnalysis()) return 0;
         Object av = config.getConcolicAnalysis().nextSymbolicInt();
@@ -142,6 +159,7 @@ public class SPouT {
     }
 
     public static void iflowRegisterException() {
+        // TODO: should we check for type and log all assertion violations (even when caught?)
         if (!analyze || !config.analyzeControlFlowTaint()) return;
         config.getTaintAnalysis().iflowRegisterException();
     }
@@ -177,6 +195,39 @@ public class SPouT {
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 2)));
     }
+
+    // arrays
+
+    public static void newArray(VirtualFrame frame, byte jvmPrimitiveType, int top, BytecodeNode bcn) {
+        int length = BytecodeNode.popInt(frame, top - 1);
+        StaticObject array = null;
+        if (analyze) {
+            Annotations a = AnnotatedVM.popAnnotations(frame, top - 1);
+            if (a != null) {
+                if (config.hasConcolicAnalysis()) {
+                    config.getConcolicAnalysis().newArrayPathConstraint(
+                            length, Annotations.annotation(a, config.getConcolicIdx()));
+                }
+                array = bcn.newPrimitiveArray(jvmPrimitiveType, length);
+                Annotations[] annotations = new Annotations[length+1];
+                annotations[length] = a;
+                array.setAnnotations(annotations);
+            }
+        }
+        if (array == null) {
+            array = bcn.newPrimitiveArray(jvmPrimitiveType, length);
+        }
+        BytecodeNode.putObject(frame, top - 1, array);
+    }
+
+    public static void arrayLength(VirtualFrame frame, int top, StaticObject arr) {
+        if (!analyze || !arr.hasAnnotations()) return;
+        Annotations[] annotations = arr.getAnnotations();
+        Annotations aLength = annotations[annotations.length-1];
+        AnnotatedVM.putAnnotations(frame, top -1, aLength);
+    }
+
+    // branching
 
     public static boolean takeBranchPrimitive1(VirtualFrame frame, int top, int opcode, BytecodeNode bcn, int bci) {
 

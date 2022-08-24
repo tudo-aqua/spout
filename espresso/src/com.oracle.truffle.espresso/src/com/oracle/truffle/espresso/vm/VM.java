@@ -154,6 +154,7 @@ import com.oracle.truffle.espresso.vm.structs.Structs;
 import com.oracle.truffle.espresso.vm.structs.StructsAccess;
 
 import sun.misc.Unsafe;
+import tools.aqua.spout.SPouT;
 
 /**
  * Espresso implementation of the VM interface (libjvm).
@@ -1554,6 +1555,7 @@ public final class VM extends NativeEnv {
         Meta meta = context.getMeta();
         try {
             if (pendingException != null) {
+                SPouT.uncaughtException(pendingException);
                 meta.java_lang_Thread_dispatchUncaughtException.invokeDirect(currentThread, pendingException);
             }
 

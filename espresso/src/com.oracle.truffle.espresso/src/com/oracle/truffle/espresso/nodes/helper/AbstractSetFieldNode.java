@@ -41,6 +41,7 @@ import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.nodes.EspressoNode;
 import com.oracle.truffle.espresso.runtime.EspressoContext;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.spout.AnnotatedVM;
 
 public abstract class AbstractSetFieldNode extends EspressoNode {
     final Field field;
@@ -102,6 +103,7 @@ abstract class IntSetFieldNode extends AbstractSetFieldNode {
         int value = BytecodeNode.popInt(frame, top - 1);
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
     }
 
     abstract void executeSetField(StaticObject receiver, int value);

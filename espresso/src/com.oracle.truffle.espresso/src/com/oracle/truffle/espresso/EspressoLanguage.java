@@ -253,6 +253,11 @@ public final class EspressoLanguage extends TruffleLanguage<EspressoContext> {
             RootNode node = new NewPathNode(this, contents.substring(NewPathNode.EVAL_NAME.length()));
             return node.getCallTarget();
         }
+        if (contents.startsWith(UncaughtExceptionNode.EVAL_NAME)) {
+            RootNode node = new UncaughtExceptionNode(this,
+                    contents.substring(UncaughtExceptionNode.EVAL_NAME.length()));
+            return node.getCallTarget();
+        }
         throw new EspressoParseError(
                         "Espresso cannot evaluate Java sources directly, only a few special commands are supported: " + GetBindingsNode.EVAL_NAME + " and " + ReferenceProcessNode.EVAL_NAME + "\n" +
                                         "Use the \"" + ID + "\" language bindings to load guest Java classes e.g. context.getBindings(\"" + ID + "\").getMember(\"java.lang.Integer\")");

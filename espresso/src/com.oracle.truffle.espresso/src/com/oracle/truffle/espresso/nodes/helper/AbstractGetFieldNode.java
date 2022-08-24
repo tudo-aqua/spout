@@ -42,6 +42,7 @@ import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.nodes.EspressoNode;
 import com.oracle.truffle.espresso.nodes.interop.ToEspressoNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.spout.AnnotatedVM;
 
 public abstract class AbstractGetFieldNode extends EspressoNode {
     final Field field;
@@ -104,6 +105,7 @@ abstract class IntGetFieldNode extends AbstractGetFieldNode {
     public int getField(VirtualFrame frame, BytecodeNode root, StaticObject receiver, int at, int statementIndex) {
         root.notifyFieldAccess(frame, statementIndex, getField(), receiver);
         BytecodeNode.putInt(frame, at, executeGetField(receiver));
+        AnnotatedVM.putAnnotations(frame, at, AnnotatedVM.getFieldAnnotation(receiver, field));
         return slotCount;
     }
 
