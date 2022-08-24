@@ -180,6 +180,11 @@ public class TaintAnalysis implements Analysis<Taint> {
     }
 
     @Override
+    public Taint iinc(int incr, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
     public void takeBranchPrimitive1(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, Taint a) {
         if (type == INFORMATION || (type == CONTROL && a != null)) {
             informationFlowAddScope(frame, bcn, bci, takeBranch ? 0 : 1, a, null);

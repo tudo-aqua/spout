@@ -81,9 +81,21 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return new ComplexExpression(op, s1);
     }
 
+    // primitive operations
+
     @Override
     public Expression iadd(int c1, int c2, Expression a1, Expression a2) {
         return binarySymbolicOp(OperatorComparator.IADD, Types.INT, c1, c2, a1, a2);
+    }
+
+    @Override
+    public Expression iinc(int incr, Expression s1) {
+        Expression sym = null;
+        if (s1 != null) {
+            Constant symbIncr = Constant.fromConcreteValue(incr);
+            sym = new ComplexExpression(OperatorComparator.IADD, s1, symbIncr);
+        }
+        return sym;
     }
 
     // arrays

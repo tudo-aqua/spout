@@ -27,6 +27,7 @@ import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.EspressoLanguage;
+import com.oracle.truffle.espresso.bytecode.BytecodeStream;
 import com.oracle.truffle.espresso.impl.ArrayKlass;
 import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.impl.Method;
@@ -36,6 +37,7 @@ import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.runtime.GuestAllocator;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import com.oracle.truffle.espresso.vm.InterpreterToVM;
+import tools.aqua.smt.Expression;
 import tools.aqua.taint.PostDominatorAnalysis;
 
 import java.util.Arrays;
@@ -206,6 +208,16 @@ public class SPouT {
         AnnotatedVM.putAnnotations(frame, top - 2, analysis.iadd(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 2)));
+    }
+
+    // setLocalInt(frame, bs.readLocalIndex1(curBCI), getLocalInt(frame, bs.readLocalIndex1(curBCI)) + bs.readIncrement1(curBCI));
+    public static void iinc(VirtualFrame frame, int index, int incr) {
+        // concrete
+        int c1 = BytecodeNode.getLocalInt(frame, index);
+        int concResult = c1 + incr;
+        BytecodeNode.setLocalInt(frame, index, concResult);
+        if (!analyze) return;
+        AnnotatedVM.setLocalAnnotations(frame, index, analysis.iinc(incr, AnnotatedVM.getLocalAnnotations(frame, index)));
     }
 
     // arrays

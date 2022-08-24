@@ -1073,7 +1073,8 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case LXOR: putLong(frame, top - 4, popLong(frame, top - 1) ^ popLong(frame, top - 3)); break;
 
                     case IINC:
-                        setLocalInt(frame, bs.readLocalIndex1(curBCI), getLocalInt(frame, bs.readLocalIndex1(curBCI)) + bs.readIncrement1(curBCI));
+                        //setLocalInt(frame, bs.readLocalIndex1(curBCI), getLocalInt(frame, bs.readLocalIndex1(curBCI)) + bs.readIncrement1(curBCI));
+                        SPouT.iinc(frame, bs.readLocalIndex1(curBCI), bs.readIncrement1(curBCI));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
                         break;
 

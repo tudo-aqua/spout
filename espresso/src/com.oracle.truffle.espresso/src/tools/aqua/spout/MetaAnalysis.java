@@ -25,7 +25,6 @@
 package tools.aqua.spout;
 
 import com.oracle.truffle.api.frame.VirtualFrame;
-import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 
 
@@ -40,11 +39,15 @@ public class MetaAnalysis implements Analysis<Annotations> {
         this.analyses = config.getAnalyses();
     }
 
-    interface Executor {
+    interface BinaryOperation {
         <T> T execute(Analysis<T> analysis, int c1, int c2, T s1, T s2);
     }
 
-    private Annotations execute(int c1, int c2, Annotations a1, Annotations a2, Executor executor) {
+    interface UnaryOperation {
+        <T> T execute(Analysis<T> analysis, int c1, T s1);
+    }
+
+    private Annotations execute(int c1, int c2, Annotations a1, Annotations a2, BinaryOperation executor) {
         int i = 0;
         boolean hasResult = false;
         Object[] annotations = new Object[analyses.length];
@@ -59,10 +62,29 @@ public class MetaAnalysis implements Analysis<Annotations> {
         return hasResult ? new Annotations(annotations) : null;
     }
 
+    private Annotations execute(int c1, Annotations a1, UnaryOperation executor) {
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[analyses.length];
+        for (Analysis<?> analysis : analyses) {
+            Object result = executor.execute(analysis, c1, Annotations.annotation(a1, i));
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? new Annotations(annotations) : null;
+    }
 
     @Override
     public Annotations iadd(int c1, int c2, Annotations a1, Annotations a2) {
         return execute(c1, c2, a1, a2, Analysis::iadd);
+    }
+
+    @Override
+    public Annotations iinc(int c1, Annotations a1) {
+        return execute(c1, a1, Analysis::iinc);
     }
 
     @Override
