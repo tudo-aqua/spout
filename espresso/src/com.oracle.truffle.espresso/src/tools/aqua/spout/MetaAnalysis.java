@@ -83,6 +83,11 @@ public class MetaAnalysis implements Analysis<Annotations> {
     }
 
     @Override
+    public Annotations isub(int c1, int c2, Annotations a1, Annotations a2) {
+        return execute(c1, c2, a1, a2, Analysis::isub);
+    }
+
+    @Override
     public Annotations iinc(int c1, Annotations a1) {
         return execute(c1, a1, Analysis::iinc);
     }

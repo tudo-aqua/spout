@@ -89,6 +89,11 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     @Override
+    public Expression isub(int c1, int c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.ISUB, Types.INT, c2, c1, a2, a1);
+    }
+
+    @Override
     public Expression iinc(int incr, Expression s1) {
         Expression sym = null;
         if (s1 != null) {

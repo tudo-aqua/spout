@@ -47,6 +47,7 @@ import java.util.List;
 
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.*;
 import static com.oracle.truffle.espresso.nodes.BytecodeNode.popInt;
+import static com.oracle.truffle.espresso.nodes.BytecodeNode.putInt;
 
 public class SPouT {
 
@@ -203,9 +204,21 @@ public class SPouT {
         int c1 = popInt(frame, top - 1);
         int c2 = popInt(frame, top - 2);
         int concResult = c1 + c2;
-        BytecodeNode.putInt(frame, top - 2, concResult);
+        putInt(frame, top - 2, concResult);
         if (!analyze) return;
         AnnotatedVM.putAnnotations(frame, top - 2, analysis.iadd(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 2)));
+    }
+
+    //putInt(frame, top - 2, popInt(frame, top - 2) - popInt(frame, top - 1)); break;
+    public static void isub(VirtualFrame frame, int top) {
+        int c1 = popInt(frame, top - 1);
+        int c2 = popInt(frame, top - 2);
+        int concResult = c2 - c1;
+        putInt(frame, top - 2, concResult);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.isub(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 2)));
     }
