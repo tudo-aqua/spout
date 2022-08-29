@@ -47,6 +47,8 @@ import java.util.List;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.*;
 import static com.oracle.truffle.espresso.nodes.BytecodeNode.popInt;
 import static com.oracle.truffle.espresso.nodes.BytecodeNode.putInt;
+import static com.oracle.truffle.espresso.nodes.BytecodeNode.popLong;
+import static com.oracle.truffle.espresso.nodes.BytecodeNode.putLong;
 
 public class SPouT {
 
@@ -248,6 +250,18 @@ public class SPouT {
         AnnotatedVM.putAnnotations(frame, top - 2, analysis.isub(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 2)));
+    }
+
+    //case LSUB: putLong(frame, top - 4, popLong(frame, top - 3) - popLong(frame, top - 1)); break;
+    public static void lsub(VirtualFrame frame, int top) {
+        long c1 = popLong(frame, top - 1);
+        long c2 = popLong(frame, top - 3);
+        long concResult = c2 - c1;
+        putLong(frame, top - 4, concResult);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 4, analysis.lsub(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 3)));
     }
 
     // setLocalInt(frame, bs.readLocalIndex1(curBCI), getLocalInt(frame, bs.readLocalIndex1(curBCI)) + bs.readIncrement1(curBCI));
