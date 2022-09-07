@@ -1037,7 +1037,9 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case LSUB:
                         //putLong(frame, top - 4, popLong(frame, top - 3) - popLong(frame, top - 1)); break;
                         SPouT.lsub(frame, top); break;
-                    case FSUB: putFloat(frame, top - 2, popFloat(frame, top - 2) - popFloat(frame, top - 1)); break;
+                    case FSUB:
+                        //putFloat(frame, top - 2, popFloat(frame, top - 2) - popFloat(frame, top - 1)); break;
+                        SPouT.fsub(frame, top);
                     case DSUB: putDouble(frame, top - 4, popDouble(frame, top - 3) - popDouble(frame, top - 1)); break;
 
                     case IMUL: putInt(frame, top - 2, popInt(frame, top - 1) * popInt(frame, top - 2)); break;

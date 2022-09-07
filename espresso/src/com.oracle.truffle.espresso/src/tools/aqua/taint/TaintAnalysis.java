@@ -190,6 +190,11 @@ public class TaintAnalysis implements Analysis<Taint> {
     }
 
     @Override
+    public Taint fsub(float c1, float c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
     public Taint iinc(int incr, Taint a1) {
         return ColorUtil.joinColors(a1, ifTaint);
     }
