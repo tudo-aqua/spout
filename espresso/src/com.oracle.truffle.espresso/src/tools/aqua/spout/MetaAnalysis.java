@@ -125,6 +125,22 @@ public class MetaAnalysis implements Analysis<Annotations> {
         return execute(c1, c2, a1, a2, Analysis::isub);
     }
 
+    public Annotations imul(int c1, int c2, Annotations a1, Annotations a2) {
+        return execute(c1, c2, a1, a2, Analysis::imul);
+    }
+
+    public Annotations idiv(int c1, int c2, Annotations a1, Annotations a2) {
+        return execute(c1, c2, a1, a2, Analysis::idiv);
+    }
+
+    public Annotations irem(int c1, int c2, Annotations a1, Annotations a2) {
+        return execute(c1, c2, a1, a2, Analysis::irem);
+    }
+
+    public Annotations ishl(int c1, int c2, Annotations a1, Annotations a2) {
+        return execute(c1, c2, a1, a2, Analysis::ishl);
+    }
+
     @Override
     public Annotations lsub(long c1, long c2, Annotations a1, Annotations a2) {
         return lexecute(c1, c2, a1, a2, Analysis::lsub);
@@ -138,6 +154,10 @@ public class MetaAnalysis implements Analysis<Annotations> {
     @Override
     public Annotations iinc(int c1, Annotations a1) {
         return execute(c1, a1, Analysis::iinc);
+    }
+
+    public Annotations lcmp(long c1, long c2, Annotations a1, Annotations a2) {
+        return lexecute(c1, c2, a1, a2, Analysis::lcmp);
     }
 
     @Override

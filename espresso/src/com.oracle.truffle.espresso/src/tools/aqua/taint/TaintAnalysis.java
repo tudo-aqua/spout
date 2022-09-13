@@ -199,6 +199,27 @@ public class TaintAnalysis implements Analysis<Taint> {
         return ColorUtil.joinColors(a1, ifTaint);
     }
 
+    public Taint imul(int c1, int c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    public Taint idiv(int c1, int c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    public Taint irem(int c1, int c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    public Taint ishl(int c1, int c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint lcmp(long c1, long c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
     @Override
     public void takeBranchPrimitive1(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, Taint a) {
         if (type == INFORMATION || (type == CONTROL && a != null)) {

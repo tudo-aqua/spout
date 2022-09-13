@@ -43,6 +43,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.lang.ArithmeticException;
 
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.*;
 import static com.oracle.truffle.espresso.nodes.BytecodeNode.popInt;
@@ -286,6 +287,81 @@ public class SPouT {
         BytecodeNode.setLocalInt(frame, index, concResult);
         if (!analyze) return;
         AnnotatedVM.setLocalAnnotations(frame, index, analysis.iinc(incr, AnnotatedVM.getLocalAnnotations(frame, index)));
+    }
+
+    public static void lcmp(VirtualFrame frame, int top) {
+        long c1 = popLong(frame, top - 1);
+        long c2 = popLong(frame, top - 3);
+        int concResult;
+        if (c1>c2) {
+            concResult = 1;
+        }
+        else if (c1==c2) {
+            concResult = 0;
+        }
+        else concResult = -1;
+        putInt(frame, top - 4, concResult);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 4, analysis.lcmp(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 3)));
+    }
+
+    public static void imul(VirtualFrame frame, int top) {
+        int c1 = popInt(frame, top - 1);
+        int c2 = popInt(frame, top - 2);
+        int concResult = c1*c2;
+        putInt(frame, top - 2, concResult);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.imul(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 2)));
+    }
+
+    public static void idiv(VirtualFrame frame, int top) {
+        int c1 = popInt(frame, top - 1);
+        int c2 = popInt(frame, top - 2);
+        if (c2!=0){
+            int concResult = c1/c2;
+            putInt(frame, top - 2, concResult);
+            if (!analyze) return;
+            AnnotatedVM.putAnnotations(frame, top - 2, analysis.idiv(c1, c2,
+                    AnnotatedVM.popAnnotations(frame, top - 1),
+                    AnnotatedVM.popAnnotations(frame, top - 2)));
+        }
+        else {
+            throw new ArithmeticException();
+        }
+
+    }
+
+    public static void irem(VirtualFrame frame, int top) {
+        int c1 = popInt(frame, top - 1);
+        int c2 = popInt(frame, top - 2);
+        if (c2!=0){
+            int concResult = c1-(c1/c2)*c2;
+            putInt(frame, top - 2, concResult);
+            if (!analyze) return;
+            AnnotatedVM.putAnnotations(frame, top - 2, analysis.irem(c1, c2,
+                    AnnotatedVM.popAnnotations(frame, top - 1),
+                    AnnotatedVM.popAnnotations(frame, top - 2)));
+        }
+        else {
+            throw new ArithmeticException();
+        }
+
+    }
+
+    public static void ishl(VirtualFrame frame, int top) {
+        int c1 = popInt(frame, top - 1);
+        int c2 = popInt(frame, top - 2);
+        int concResult = c2 << c1;
+        putInt(frame, top - 2, concResult);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.ishl(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 2)));
+
     }
 
     // arrays
