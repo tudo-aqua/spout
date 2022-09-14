@@ -27,8 +27,11 @@ package tools.aqua.concolic;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.EspressoLanguage;
+import com.oracle.truffle.espresso.classfile.constantpool.StringConstant;
 import com.oracle.truffle.espresso.impl.Method;
+import com.oracle.truffle.espresso.impl.ObjectKlass;
 import com.oracle.truffle.espresso.meta.EspressoError;
+import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.smt.*;
@@ -54,6 +57,18 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         AnnotatedValue av = config.nextSymbolicInt();
         trace.addElement(new SymbolDeclaration(Annotations.annotation(av, config.getConcolicIdx())));
         return av;
+    }
+
+    public StaticObject nextSymbolicString(Meta meta) {
+        Config.SymbolicStringValue ssv = config.nextSymbolicString();
+        StaticObject guestString = meta.toGuestString(ssv.concrete);
+        int lengthAnnotations = ((ObjectKlass) guestString.getKlass()).getFieldTable().length + 1;
+        Annotations[] annotations = new Annotations[lengthAnnotations];
+        Object[] stringDescription = {ssv.symbolic, null};
+        annotations[annotations.length-1] = Annotations.create(stringDescription);
+        guestString.setAnnotations(annotations);
+        trace.addElement(new SymbolDeclaration(ssv.symbolic));
+        return guestString;
     }
 
     private Expression binarySymbolicOp(OperatorComparator op, Types typeLeft, Types typeRight,
@@ -317,5 +332,20 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         trace.addElement(new PathCondition(
                 new ComplexExpression(OperatorComparator.BAND, subExpr), vals.length, vals.length + 1));
     }
+
+    public AnnotatedValue stringContains(AnnotatedValue concreteRes, StaticObject self, StaticObject s, Meta meta) {
+        Expression symbolicSelf = makeStringToExpr(self, meta);
+        Expression symbolicOther = makeStringToExpr(s, meta);
+        concreteRes.set(config.getConcolicIdx(), new ComplexExpression(SCONTAINS, symbolicSelf, symbolicOther));
+        return concreteRes;
+    }
+    private  Expression makeStringToExpr(StaticObject self, Meta meta){
+        if(self.hasAnnotations()){
+            Annotations[] fields = self.getAnnotations();
+            return (Expression) fields[fields.length -1 ].getAnnotations()[config.getConcolicIdx()];
+        }
+        return Constant.fromConcreteValue(meta.toHostString(self));
+    }
+
 
 }

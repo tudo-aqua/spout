@@ -27,17 +27,16 @@ import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.EspressoLanguage;
-import com.oracle.truffle.espresso.bytecode.BytecodeStream;
-import com.oracle.truffle.espresso.impl.ArrayKlass;
 import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
-import com.oracle.truffle.espresso.runtime.GuestAllocator;
 import com.oracle.truffle.espresso.runtime.StaticObject;
-import com.oracle.truffle.espresso.vm.InterpreterToVM;
+import tools.aqua.smt.ComplexExpression;
 import tools.aqua.smt.Expression;
+import tools.aqua.smt.Types;
+import tools.aqua.smt.Variable;
 import tools.aqua.taint.PostDominatorAnalysis;
 
 import java.util.Arrays;
@@ -48,6 +47,7 @@ import java.util.List;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.*;
 import static com.oracle.truffle.espresso.nodes.BytecodeNode.popInt;
 import static com.oracle.truffle.espresso.nodes.BytecodeNode.putInt;
+import static tools.aqua.smt.OperatorComparator.SCONTAINS;
 
 public class SPouT {
 
@@ -149,6 +149,14 @@ public class SPouT {
         Object av = config.getConcolicAnalysis().nextSymbolicInt();
         //GWIT.trackLocationForWitness("" + concrete);
         return av;
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static StaticObject nextSymbolicString(Meta meta) {
+        if(!analyze || !config.hasConcolicAnalysis()) return meta.toGuestString("");
+        StaticObject annotatedObject = config.getConcolicAnalysis().nextSymbolicString(meta);
+        //GWIT.trackLocationForWitness("" + concrete);
+        return annotatedObject;
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -414,6 +422,21 @@ public class SPouT {
         if (analyze) {
             analysis.lookupSwitch(frame, bcn, bci, vals, key, annotatedKey);
         }
+    }
+
+    // --------------------------------------------------------------------------
+    //
+    // The String Library
+
+    @CompilerDirectives.TruffleBoundary
+    public static Object stringContains(StaticObject self, StaticObject s, Meta meta) {
+        String concreteSelf = meta.toHostString(self);
+        String other = meta.toHostString(s);
+        boolean concreteRes = concreteSelf.contains(other);
+        if (!self.hasAnnotations() && !s.hasAnnotations() || !config.hasConcolicAnalysis()) {
+            return concreteRes;
+        }
+        return config.getConcolicAnalysis().stringContains(new AnnotatedValue(concreteRes, Annotations.emptyArray()), self, s, meta);
     }
 
     // --------------------------------------------------------------------------

@@ -23,6 +23,8 @@
  */
 package com.oracle.truffle.espresso.substitutions;
 
+import com.oracle.truffle.espresso.meta.Meta;
+import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.spout.AnnotatedValue;
 import tools.aqua.spout.SPouT;
 
@@ -83,11 +85,11 @@ public final class Target_tools_aqua_concolic_Verifier {
     public static @Host(typeName = "D") Object nondetDouble(@InjectMeta Meta meta) {
         return Analysis.getInstance().getConfig().nextSymbolicDouble();
     }
-
+*/
     //    public static String nondetString()
     @Substitution(hasReceiver = false)
-    public static @Host(String.class) StaticObject nondetString(@InjectMeta Meta meta) {
-        return Analysis.getInstance().getConfig().nextSymbolicString(meta);
+    public static @JavaType(String.class) StaticObject nondetString(@Inject Meta meta) {
+        return SPouT.nextSymbolicString(meta);
     }
-*/
+
 }

@@ -46,6 +46,10 @@ public class Annotations {
         this.annotations = annotations;
     }
 
+    public static Annotations emptyArray() {
+        return new Annotations();
+    }
+
     public Object[] getAnnotations() {
         return annotations;
     }
@@ -59,6 +63,10 @@ public class Annotations {
         annotations[i] = annotation;
     }
 
+    /*
+     * This is set to initialize the Annotations by the config method. It is supposed to equal at the end config.annotationsLength.
+     * It is somewhat of configuring an annotations factory.
+     */
     static void configure(int length) {
         annotationLength = length;
     }
@@ -68,5 +76,9 @@ public class Annotations {
         return "Annotations{" +
                 "annotations=" + Arrays.toString(annotations) +
                 '}';
+    }
+
+    public static Annotations create(Object[] annotations){
+        return new Annotations(annotations);
     }
 }

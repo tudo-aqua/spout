@@ -24,7 +24,9 @@
 
 package tools.aqua.spout;
 
+import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.concolic.ConcolicAnalysis;
+import tools.aqua.smt.Expression;
 import tools.aqua.smt.OperatorComparator;
 import tools.aqua.smt.Types;
 import tools.aqua.smt.Variable;
@@ -145,6 +147,7 @@ public class Config {
                 case "taint.flow":
                     parseTaint(vals);
                     break;
+
             }
         }
     }
@@ -261,6 +264,15 @@ public class Config {
         AnnotatedValue a = new AnnotatedValue(concrete, annotations);
         countIntSeeds++;
         return a;
+    }
+
+    public SymbolicStringValue nextSymbolicString(){
+        String concrete = "";
+        if(countStringSeeds < seedStringValues.length){
+            concrete = seedStringValues[countStringSeeds];
+        }
+        Variable symbolic = new Variable(Types.STRING, countStringSeeds++);
+        return new SymbolicStringValue(concrete, symbolic);
     }
 
     private boolean[] seedsBooleanValues = new boolean[] {};
@@ -457,4 +469,14 @@ public class Config {
         if (hasTaintAnalysis()) analyses[this.taintIdx] = this.taintAnalysis;
         return analyses;
     }
+
+    // This should be a record, but SPouT cannot compile records yet.
+    public class SymbolicStringValue{
+        public String concrete;
+        public Variable symbolic;
+        public SymbolicStringValue(String c, Variable s){
+            concrete = c;
+            symbolic = s;
+        }
+    };
 }
