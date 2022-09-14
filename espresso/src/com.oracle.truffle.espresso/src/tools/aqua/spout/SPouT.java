@@ -433,10 +433,14 @@ public class SPouT {
         String concreteSelf = meta.toHostString(self);
         String other = meta.toHostString(s);
         boolean concreteRes = concreteSelf.contains(other);
-        if (!self.hasAnnotations() && !s.hasAnnotations() || !config.hasConcolicAnalysis()) {
+        if (!self.hasAnnotations() && !s.hasAnnotations() || !analyze) {
             return concreteRes;
         }
-        return config.getConcolicAnalysis().stringContains(new AnnotatedValue(concreteRes, Annotations.emptyArray()), self, s, meta);
+        AnnotatedValue result = new AnnotatedValue(concreteRes, Annotations.emptyArray());
+        if(config.hasConcolicAnalysis()){
+            result = config.getConcolicAnalysis().stringContains(result, self, s, meta);
+        }
+        return result;
     }
 
     // --------------------------------------------------------------------------
