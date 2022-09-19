@@ -65,7 +65,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         int lengthAnnotations = ((ObjectKlass) guestString.getKlass()).getFieldTable().length + 1;
         Annotations[] annotations = new Annotations[lengthAnnotations];
         Object[] stringDescription = {ssv.symbolic, null};
-        annotations[annotations.length-1] = Annotations.create(stringDescription);
+        annotations[annotations.length - 1] = Annotations.create(stringDescription);
         guestString.setAnnotations(annotations);
         trace.addElement(new SymbolDeclaration(ssv.symbolic));
         return guestString;
@@ -84,7 +84,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     private Expression binarySymbolicOp(OperatorComparator op, Types type,
-                                               Object cLeft, Object cRight, Expression sLeft, Expression sRight) {
+                                        Object cLeft, Object cRight, Expression sLeft, Expression sRight) {
 
         return binarySymbolicOp(op, type, type, cLeft, cRight, sLeft, sRight);
     }
@@ -143,18 +143,18 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
             Expression sLen = null;
             if (array.hasAnnotations()) {
-                sLen = Annotations.annotation( array.getAnnotations()[cLen], config.getConcolicIdx());
+                sLen = Annotations.annotation(array.getAnnotations()[cLen], config.getConcolicIdx());
             }
             if (sLen == null) {
                 sLen = Constant.fromConcreteValue(cLen);
             }
 
             Expression arrayBound = new ComplexExpression(BAND,
-                            new ComplexExpression(BVLE, INT_ZERO, sIndex),
-                            new ComplexExpression(BVLT, sIndex, sLen));
+                    new ComplexExpression(BVLE, INT_ZERO, sIndex),
+                    new ComplexExpression(BVLT, sIndex, sLen));
 
             trace.addElement(new PathCondition(
-                            safe ? arrayBound : new ComplexExpression(BNEG, arrayBound), safe ? 1 : 0, 2));
+                    safe ? arrayBound : new ComplexExpression(BNEG, arrayBound), safe ? 1 : 0, 2));
         }
         return safe;
     }
@@ -170,26 +170,41 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         Expression expr = null;
         if (Expression.isBoolean(a)) {
             switch (opcode) {
-                case IFEQ: expr = !takeBranch ? a : new ComplexExpression(BNEG, a); break;
-                case IFNE: expr =  takeBranch ? a : new ComplexExpression(BNEG, a); break;
+                case IFEQ:
+                    expr = !takeBranch ? a : new ComplexExpression(BNEG, a);
+                    break;
+                case IFNE:
+                    expr = takeBranch ? a : new ComplexExpression(BNEG, a);
+                    break;
                 default:
                     CompilerDirectives.transferToInterpreter();
                     throw EspressoError.shouldNotReachHere("only defined for IFEQ and IFNE so far");
             }
-        }
-        else if (Expression.isCmpExpression(a)) {
+        } else if (Expression.isCmpExpression(a)) {
             ComplexExpression ce = (ComplexExpression) a;
             OperatorComparator op = null;
             switch (ce.getOperator()) {
                 case LCMP:
                     // 0 if x == y; less than 0 if x < y; greater than 0 if x > y
                     switch (opcode) {
-                        case IFEQ: op = takeBranch ? OperatorComparator.BVEQ : BVNE; break;
-                        case IFNE: op = takeBranch ? BVNE : OperatorComparator.BVEQ; break;
-                        case IFLT: op = takeBranch ? BVLT : BVGE; break;
-                        case IFGE: op = takeBranch ? BVGE : BVLT; break;
-                        case IFGT: op = takeBranch ? BVGT : BVLE; break;
-                        case IFLE: op = takeBranch ? BVLE : BVGT; break;
+                        case IFEQ:
+                            op = takeBranch ? OperatorComparator.BVEQ : BVNE;
+                            break;
+                        case IFNE:
+                            op = takeBranch ? BVNE : OperatorComparator.BVEQ;
+                            break;
+                        case IFLT:
+                            op = takeBranch ? BVLT : BVGE;
+                            break;
+                        case IFGE:
+                            op = takeBranch ? BVGE : BVLT;
+                            break;
+                        case IFGT:
+                            op = takeBranch ? BVGT : BVLE;
+                            break;
+                        case IFLE:
+                            op = takeBranch ? BVLE : BVGT;
+                            break;
                     }
                     break;
                 case FCMPL:
@@ -199,11 +214,21 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                     // 0 if x == y; less than 0 if x < y; greater than 0 if x > y
                     switch (opcode) {
                         case IFEQ:
-                        case IFNE: op = OperatorComparator.FPEQ; break;
-                        case IFLT: op = takeBranch ? OperatorComparator.FPLT : OperatorComparator.FPGE; break;
-                        case IFGE: op = takeBranch ? OperatorComparator.FPGE : OperatorComparator.FPLT; break;
-                        case IFGT: op = takeBranch ? OperatorComparator.FPGT : OperatorComparator.FPLE; break;
-                        case IFLE: op = takeBranch ? OperatorComparator.FPLE : OperatorComparator.FPGT; break;
+                        case IFNE:
+                            op = OperatorComparator.FPEQ;
+                            break;
+                        case IFLT:
+                            op = takeBranch ? OperatorComparator.FPLT : OperatorComparator.FPGE;
+                            break;
+                        case IFGE:
+                            op = takeBranch ? OperatorComparator.FPGE : OperatorComparator.FPLT;
+                            break;
+                        case IFGT:
+                            op = takeBranch ? OperatorComparator.FPGT : OperatorComparator.FPLE;
+                            break;
+                        case IFLE:
+                            op = takeBranch ? OperatorComparator.FPLE : OperatorComparator.FPGT;
+                            break;
                     }
                     break;
             }
@@ -214,12 +239,24 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             }
         } else {
             switch (opcode) {
-                case IFEQ: expr = new ComplexExpression(BVEQ, a, INT_ZERO); break;
-                case IFNE: expr = new ComplexExpression(BVNE, a, INT_ZERO); break;
-                case IFLT: expr = new ComplexExpression(BVLT, a, INT_ZERO); break;
-                case IFGE: expr = new ComplexExpression(BVGE, a, INT_ZERO); break;
-                case IFGT: expr = new ComplexExpression(BVGT, a, INT_ZERO); break;
-                case IFLE: expr = new ComplexExpression(BVLE, a, INT_ZERO); break;
+                case IFEQ:
+                    expr = new ComplexExpression(BVEQ, a, INT_ZERO);
+                    break;
+                case IFNE:
+                    expr = new ComplexExpression(BVNE, a, INT_ZERO);
+                    break;
+                case IFLT:
+                    expr = new ComplexExpression(BVLT, a, INT_ZERO);
+                    break;
+                case IFGE:
+                    expr = new ComplexExpression(BVGE, a, INT_ZERO);
+                    break;
+                case IFGT:
+                    expr = new ComplexExpression(BVGT, a, INT_ZERO);
+                    break;
+                case IFLE:
+                    expr = new ComplexExpression(BVLE, a, INT_ZERO);
+                    break;
                 default:
                     CompilerDirectives.transferToInterpreter();
                     throw EspressoError.shouldNotReachHere("expecting IFEQ,IFNE,IFLT,IFGE,IFGT,IFLE");
@@ -249,8 +286,12 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             int c = (a1 != null) ? c2 : c1;
 
             switch (opcode) {
-                case IF_ICMPEQ: expr = (c != 0) ? new ComplexExpression(BNEG, expr) : expr; break;
-                case IF_ICMPNE: expr = (c == 0) ? new ComplexExpression(BNEG, expr) : expr; break;
+                case IF_ICMPEQ:
+                    expr = (c != 0) ? new ComplexExpression(BNEG, expr) : expr;
+                    break;
+                case IF_ICMPNE:
+                    expr = (c == 0) ? new ComplexExpression(BNEG, expr) : expr;
+                    break;
                 default:
                     CompilerDirectives.transferToInterpreter();
                     // FIXME: replace EspressoError.shouldNotReachHere calls with stoprecording(...) to make analysis shut down properly
@@ -269,12 +310,24 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             if (a2 == null) a2 = Expression.fromConstant(Types.INT, c2);
 
             switch (opcode) {
-                case IF_ICMPEQ: expr = new ComplexExpression(takeBranch ? BVEQ : BVNE, a1, a2); break;
-                case IF_ICMPNE: expr = new ComplexExpression(takeBranch ? BVNE : BVEQ, a1, a2); break;
-                case IF_ICMPLT: expr = new ComplexExpression(takeBranch ? BVGT : BVLE, a1, a2); break;
-                case IF_ICMPGE: expr = new ComplexExpression(takeBranch ? BVLE : BVGT, a1, a2); break;
-                case IF_ICMPGT: expr = new ComplexExpression(takeBranch ? BVLT : BVGE, a1, a2); break;
-                case IF_ICMPLE: expr = new ComplexExpression(takeBranch ? BVGE : BVLT, a1, a2); break;
+                case IF_ICMPEQ:
+                    expr = new ComplexExpression(takeBranch ? BVEQ : BVNE, a1, a2);
+                    break;
+                case IF_ICMPNE:
+                    expr = new ComplexExpression(takeBranch ? BVNE : BVEQ, a1, a2);
+                    break;
+                case IF_ICMPLT:
+                    expr = new ComplexExpression(takeBranch ? BVGT : BVLE, a1, a2);
+                    break;
+                case IF_ICMPGE:
+                    expr = new ComplexExpression(takeBranch ? BVLE : BVGT, a1, a2);
+                    break;
+                case IF_ICMPGT:
+                    expr = new ComplexExpression(takeBranch ? BVLT : BVGE, a1, a2);
+                    break;
+                case IF_ICMPLE:
+                    expr = new ComplexExpression(takeBranch ? BVGE : BVLT, a1, a2);
+                    break;
                 default:
                     CompilerDirectives.transferToInterpreter();
                     // FIXME: replace EspressoError.shouldNotReachHere calls with stoprecording(...) to make analysis shut down properly
@@ -333,19 +386,288 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                 new ComplexExpression(OperatorComparator.BAND, subExpr), vals.length, vals.length + 1));
     }
 
+    //__________________________________________________________________
+    // Concolic String library
+    //__________________________________________________________________
     public AnnotatedValue stringContains(AnnotatedValue concreteRes, StaticObject self, StaticObject s, Meta meta) {
         Expression symbolicSelf = makeStringToExpr(self, meta);
         Expression symbolicOther = makeStringToExpr(s, meta);
         concreteRes.set(config.getConcolicIdx(), new ComplexExpression(SCONTAINS, symbolicSelf, symbolicOther));
         return concreteRes;
     }
-    private  Expression makeStringToExpr(StaticObject self, Meta meta){
-        if(self.hasAnnotations()){
+
+    public AnnotatedValue stringCompareTo(AnnotatedValue av, StaticObject self, StaticObject other, Meta meta) {
+        Expression symbolicSelf = makeStringToExpr(self, meta);
+        Expression symbolicOther = makeStringToExpr(other, meta);
+        PathCondition pc;
+        if (av.<Integer>getValue() > 0) {
+            pc = new PathCondition(new ComplexExpression(OperatorComparator.SLT, symbolicOther, symbolicSelf), 0, 3);
+        } else if (av.<Integer>getValue() < 0) {
+            pc = new PathCondition(new ComplexExpression(OperatorComparator.SLT, symbolicSelf, symbolicOther), 1, 3);
+        } else {
+            pc = new PathCondition(new ComplexExpression(
+                    STRINGEQ, symbolicSelf, symbolicOther), 2, 3);
+        }
+        trace.addElement(pc);
+        return av;
+
+    }
+
+    public AnnotatedValue stringEqual(AnnotatedValue av, StaticObject self, StaticObject other, Meta meta) {
+        Expression sself = makeStringToExpr(self, meta);
+        Expression sother = makeStringToExpr(other, meta);
+        Expression symbolicResult = new ComplexExpression(STRINGEQ, sself, sother);
+        av.set(config.getConcolicIdx(), symbolicResult);
+        return av;
+    }
+
+    //FIXME
+    public void charAtPCCheck(StaticObject self, Object index, Meta meta) {
+        String concreteString = meta.toHostString(self);
+        int concreteIndex = 0;
+        Expression indexExpr;
+        boolean concolicIndex = false;
+        if (index instanceof AnnotatedValue) {
+            AnnotatedValue a = (AnnotatedValue) index;
+            concreteIndex = a.<Integer>getValue();
+            indexExpr = (Expression) a.getAnnotations()[config.getConcolicIdx()];
+            concolicIndex = true;
+        } else {
+            concreteIndex = (int) index;
+            indexExpr = Constant.fromConcreteValue(concreteIndex);
+        }
+        Expression symbolicString = makeStringToExpr(self, meta);
+        Expression intIndexExpr = new ComplexExpression(BV2NAT, indexExpr);
+        Expression symbolicStrLen = new ComplexExpression(SLENGTH, symbolicString);
+        Expression bvSymbolicStrLen = new ComplexExpression(NAT2BV32, symbolicStrLen);
+
+        boolean sat1 = (0 <= concreteIndex);
+        boolean sat2 = (concreteIndex < concreteString.length());
+        if (!sat1 && concolicIndex) {
+            Expression indexGreaterEqualsZero =
+                    new ComplexExpression(GT, INT_ZERO, indexExpr);
+            trace.addElement(new PathCondition(indexGreaterEqualsZero, 1, 2));
+        } else if (sat1 && concolicIndex) {
+            Expression indexGreaterEqualsZero =
+                    new ComplexExpression(LE, INT_ZERO, indexExpr);
+            trace.addElement(new PathCondition(indexGreaterEqualsZero, 0, 2));
+        }
+
+        if (!sat2) {
+            Expression indexLTSymbolicStringLength = new ComplexExpression(GE, indexExpr, bvSymbolicStrLen);
+            trace.addElement(new PathCondition(indexLTSymbolicStringLength, 1, 2));
+        } else {
+            Expression indexLTSymbolicStringLength = new ComplexExpression(LT, indexExpr, bvSymbolicStrLen);
+            trace.addElement(new PathCondition(indexLTSymbolicStringLength, 0, 2));
+        }
+    }
+
+    public AnnotatedValue charAtContent(AnnotatedValue av, StaticObject self, Object index, Meta meta) {
+        String concreteString = meta.toHostString(self);
+        int concreteIndex = 0;
+        Expression indexExpr;
+        boolean concolicIndex = false;
+        if (index instanceof AnnotatedValue) {
+            AnnotatedValue a = (AnnotatedValue) index;
+            concreteIndex = a.<Integer>getValue();
+            indexExpr = (Expression) a.getAnnotations()[config.getConcolicIdx()];
+            concolicIndex = true;
+        } else {
+            concreteIndex = (int) index;
+            indexExpr = Constant.fromConcreteValue(concreteIndex);
+        }
+        Expression symbolicString = makeStringToExpr(self, meta);
+        Expression charAtExpr = new ComplexExpression(SAT, symbolicString, indexExpr);
+        av.set(config.getConcolicIdx(), charAtExpr);
+        return av;
+    }
+
+
+    public Object stringLength(AnnotatedValue annotatedValue, StaticObject self, Meta meta) {
+        Expression expr = makeStringToExpr(self, meta);
+        annotatedValue.set(config.getConcolicIdx(), new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, expr)));
+        return annotatedValue;
+    }
+
+    public StaticObject stringConcat(StaticObject result, StaticObject self, StaticObject other, Meta meta) {
+        Expression sself = makeStringToExpr(self, meta);
+        Expression sother = makeStringToExpr(other, meta);
+        annotateStringWithExpression(result, new ComplexExpression(SCONCAT, sself, sother));
+        return result;
+    }
+
+    public StaticObject stringToUpper(StaticObject result, StaticObject self, Meta meta) {
+        Expression value = makeStringToExpr(self, meta);
+        return annotateStringWithExpression(result, new ComplexExpression(STOUPPER, value));
+    }
+
+    public StaticObject stringToLower(StaticObject result, StaticObject self, Meta meta) {
+        Expression value = makeStringToExpr(self, meta);
+        return annotateStringWithExpression(result, new ComplexExpression(STOLOWER, value));
+    }
+
+    public Object regionMatches(StaticObject self, StaticObject other, boolean ignore, int ctoffset, int cooffset, int clen, Meta meta) {
+        String cSelf = meta.toHostString(self);
+        String cOther = meta.toHostString(self);
+        boolean isSelfSymbolic = self.hasAnnotations()
+                && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
+        boolean isOtherSymbolic = other.hasAnnotations()
+                && other.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
+        boolean boundsCheck =
+                evaluateBoundRegionMatches(
+                        cooffset,
+                        ctoffset,
+                        clen,
+                        cOther.length(),
+                        cSelf.length(),
+                        makeStringLengthExpr(other, meta),
+                        makeStringLengthExpr(self, meta));
+        if (!boundsCheck) {
+            return false;
+        }
+        boolean cRes = cSelf.regionMatches(ignore, ctoffset, cOther, cooffset, clen);
+        if (isSelfSymbolic && !isOtherSymbolic) {
+            return regionMatchesSymbolic(
+                    makeStringToExpr(self, meta),
+                    Constant.fromConcreteValue(cOther),
+                    ctoffset,
+                    cooffset,
+                    clen,
+                    ignore,
+                    cRes);
+        } else if (!isSelfSymbolic && isOtherSymbolic) {
+            return regionMatchesSymbolic(
+                    makeStringToExpr(other, meta),
+                    Constant.fromConcreteValue(cSelf),
+                    cooffset,
+                    ctoffset,
+                    clen,
+                    ignore,
+                    cRes);
+        } else {
+            return regionMatchesSymbolic(
+                    makeStringToExpr(self, meta),
+                    makeStringToExpr(other, meta),
+                    ctoffset,
+                    cooffset,
+                    clen,
+                    ignore,
+                    cRes);
+        }
+    }
+
+    private Object regionMatchesSymbolic(
+            Expression symbolicSelf,
+            Expression symbolicOther,
+            int ctoffset,
+            int cooffset,
+            int clen,
+            boolean ignore,
+            boolean cRes) {
+        Expression symbolicSubSelf =
+                new ComplexExpression(
+                        SSUBSTR,
+                        symbolicSelf,
+                        Constant.createNatConstant(ctoffset),
+                        Constant.createNatConstant(clen));
+        Expression symbolicSubOther =
+                new ComplexExpression(
+                        SSUBSTR,
+                        symbolicOther,
+                        Constant.createNatConstant(cooffset),
+                        Constant.createNatConstant(clen));
+        if (ignore) {
+            symbolicSubSelf = new ComplexExpression(STOLOWER, symbolicSubSelf);
+            symbolicSubOther = new ComplexExpression(STOLOWER, symbolicSubOther);
+        }
+        PathCondition pc;
+        if (cRes) {
+            pc =
+                    new PathCondition(
+                            new ComplexExpression(STRINGEQ, symbolicSubSelf, symbolicSubOther), 0, 2);
+        } else {
+            pc =
+                    new PathCondition(
+                            new ComplexExpression(
+                                    BNEG, new ComplexExpression(STRINGEQ, symbolicSubSelf, symbolicSubOther)),
+                            1,
+                            2);
+        }
+        trace.addElement(pc);
+        return cRes;
+    }
+
+    private boolean evaluateBoundRegionMatches(
+            int ooffset,
+            int toffset,
+            int len,
+            int olen,
+            int tlen,
+            Expression otherSymLen,
+            Expression tSymLen) {
+        boolean upperOBound = (ooffset + len) > olen;
+        Expression upperOBoundE =
+                new ComplexExpression(LT, otherSymLen, Constant.fromConcreteValue(ooffset + len));
+
+        boolean lowerOBound = (ooffset + len) < 0;
+
+        boolean lowerTBound = (toffset + len) < 0;
+
+        boolean upperTBound = (toffset + len) > tlen;
+        Expression upperTBoundE =
+                new ComplexExpression(LT, tSymLen, Constant.fromConcreteValue(toffset + len));
+        Expression check0 = new ComplexExpression(BAND, upperOBoundE, upperTBoundE);
+        Expression check1 =
+                new ComplexExpression(BAND, upperOBoundE, new ComplexExpression(BNEG, upperTBoundE));
+        Expression check2 =
+                new ComplexExpression(BAND, new ComplexExpression(BNEG, upperOBoundE), upperTBoundE);
+        Expression check3 =
+                new ComplexExpression(
+                        BAND,
+                        new ComplexExpression(BNEG, upperOBoundE),
+                        new ComplexExpression(BNEG, upperTBoundE));
+        Expression effective = null;
+        int branchIdx = -1;
+        if (upperOBound) {
+            if (upperTBound) {
+                effective = check0;
+                branchIdx = 0;
+
+            } else {
+                effective = check1;
+                branchIdx = 1;
+            }
+        } else {
+            if (upperTBound) {
+                effective = check2;
+                branchIdx = 2;
+            } else {
+                effective = check3;
+                branchIdx = 3;
+            }
+        }
+        PathCondition pc = new PathCondition(effective, branchIdx, 4);
+        trace.addElement(pc);
+        return !(upperOBound || lowerOBound || lowerTBound || upperTBound);
+    }
+
+    private Expression makeStringToExpr(StaticObject self, Meta meta) {
+        if (self.hasAnnotations()) {
             Annotations[] fields = self.getAnnotations();
-            return (Expression) fields[fields.length -1 ].getAnnotations()[config.getConcolicIdx()];
+            return (Expression) fields[fields.length - 1].getAnnotations()[config.getConcolicIdx()];
         }
         return Constant.fromConcreteValue(meta.toHostString(self));
     }
 
+    private Expression makeStringLengthExpr(StaticObject self, Meta meta){
+        return new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, makeStringToExpr(self, meta)));
+    }
 
+    private StaticObject annotateStringWithExpression(StaticObject self, Expression value) {
+        Annotations[] stringAnnotation = self.getAnnotations();
+        stringAnnotation[stringAnnotation.length - 1].set(config.getConcolicIdx(),
+                value);
+        self.setAnnotations(stringAnnotation);
+        return self;
+    }
 }
