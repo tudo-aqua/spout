@@ -27,7 +27,7 @@ package tools.aqua.concolic;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.EspressoLanguage;
-import com.oracle.truffle.espresso.classfile.constantpool.StringConstant;
+import com.oracle.truffle.espresso.descriptors.Symbol;
 import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.impl.ObjectKlass;
 import com.oracle.truffle.espresso.meta.EspressoError;
@@ -40,6 +40,7 @@ import tools.aqua.spout.*;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.*;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPLE;
 import static tools.aqua.smt.Constant.INT_ZERO;
+import static tools.aqua.smt.Constant.NAT_ZERO;
 import static tools.aqua.smt.OperatorComparator.*;
 
 public class ConcolicAnalysis implements Analysis<Expression> {
@@ -506,6 +507,104 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return annotateStringWithExpression(result, new ComplexExpression(STOLOWER, value));
     }
 
+    public StaticObject stringBuilderAppend(StaticObject self, StaticObject string, Meta meta) {
+        if (!self.hasAnnotations() && !string.hasAnnotations()) {
+            return self;
+        }
+        Expression sself = makeStringToExpr(self, meta);
+        Expression sother = makeStringToExpr(string, meta);
+        Expression resExpr = new ComplexExpression(SCONCAT, sself, sother);
+        if (!hasConcolicStringAnnotations(self)) {
+            SPouT.initStringAnnotations(self);
+            resExpr = sother;
+        }
+        self = annotateStringWithExpression(self, resExpr);
+        return self;
+    }
+
+    public AnnotatedValue stringBufferLength(AnnotatedValue result, StaticObject self, Meta meta) {
+        Expression sLength = makeStringLengthExpr(self, meta);
+        result.set(config.getConcolicIdx(), sLength);
+        return result;
+    }
+
+    public StaticObject stringBuilderToString(StaticObject result, StaticObject self, Meta meta) {
+        if (hasConcolicStringAnnotations(self)) {
+            result = SPouT.initStringAnnotations(result);
+            annotateStringWithExpression(result, makeStringToExpr(self, meta));
+        }
+        return result;
+    }
+
+    public void stringBuilderInsert(
+            StaticObject self,
+            int offset,
+            StaticObject toInsert,
+            Meta meta) {
+        Expression symbolicOffset = Constant.createNatConstant(offset);
+        if (hasConcolicStringAnnotations(self) || hasConcolicStringAnnotations(toInsert)) {
+            Method m = self.getKlass().lookupMethod(meta.getNames().getOrCreate("toString"), Symbol.Signature.java_lang_String);
+            StaticObject stringValue = (StaticObject) m.invokeDirect(self);
+            String concreteSelf = meta.toHostString(stringValue);
+
+            Expression symbolicSelf = makeStringToExpr(self, meta);
+            Expression symbolicToInsert = makeStringToExpr(toInsert, meta);
+
+            Expression symbolicSelfLength = new ComplexExpression(SLENGTH, makeStringToExpr(self, meta));
+            Expression symbolicToInsertLength = new ComplexExpression(SLENGTH, makeStringToExpr(toInsert, meta));
+
+            boolean validOffset = 0 <= offset && offset <= concreteSelf.length();
+            if (!validOffset) {
+                Expression lengthCheck =
+                        new ComplexExpression(
+                                BNEG,
+                                new ComplexExpression(
+                                        BAND,
+                                        new ComplexExpression(GE, NAT_ZERO, symbolicOffset),
+                                        new ComplexExpression(LE, symbolicOffset, symbolicSelfLength)));
+                PathCondition pc = new PathCondition(lengthCheck, 1, 2);
+                trace.addElement(pc);
+                return;
+            } else {
+                Expression lengthCheck =
+                        new ComplexExpression(
+                                BAND,
+                                new ComplexExpression(GE, NAT_ZERO, symbolicOffset),
+                                new ComplexExpression(LE, symbolicOffset, symbolicSelfLength));
+                PathCondition pc = new PathCondition(lengthCheck, 0, 2);
+                trace.addElement(pc);
+            }
+            Expression resultingSymbolicValue;
+            if (concreteSelf.isEmpty()) {
+                resultingSymbolicValue = symbolicToInsert;
+            } else {
+                if (offset != 0) {
+                    Expression symbolicLeft =
+                            new ComplexExpression(SSUBSTR, symbolicSelf, NAT_ZERO, symbolicOffset);
+                    Expression symbolicRight =
+                            new ComplexExpression(
+                                    SSUBSTR,
+                                    symbolicSelf,
+                                    new ComplexExpression(NATADD, symbolicOffset, symbolicToInsertLength),
+                                    symbolicSelfLength);
+                    resultingSymbolicValue =
+                            new ComplexExpression(
+                                    SCONCAT,
+                                    symbolicLeft,
+                                    new ComplexExpression(SCONCAT, symbolicToInsert, symbolicRight));
+                } else {
+                    resultingSymbolicValue =
+                            new ComplexExpression(
+                                    SCONCAT,
+                                    symbolicToInsert,
+                                    symbolicSelf);
+                }
+            }
+            annotateStringWithExpression(self, resultingSymbolicValue);
+        }
+    }
+
+
     public Object regionMatches(StaticObject self, StaticObject other, boolean ignore, int ctoffset, int cooffset, int clen, Meta meta) {
         String cSelf = meta.toHostString(self);
         String cOther = meta.toHostString(self);
@@ -659,7 +758,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return Constant.fromConcreteValue(meta.toHostString(self));
     }
 
-    private Expression makeStringLengthExpr(StaticObject self, Meta meta){
+    private Expression makeStringLengthExpr(StaticObject self, Meta meta) {
         return new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, makeStringToExpr(self, meta)));
     }
 
@@ -669,5 +768,10 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                 value);
         self.setAnnotations(stringAnnotation);
         return self;
+    }
+
+    public boolean hasConcolicStringAnnotations(StaticObject self) {
+        Annotations[] stringAnnotation = self.getAnnotations();
+        return stringAnnotation != null && stringAnnotation[stringAnnotation.length - 1].getAnnotations()[config.getConcolicIdx()] != null;
     }
 }

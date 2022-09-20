@@ -271,7 +271,8 @@ public class Config {
         if(countStringSeeds < seedStringValues.length){
             concrete = seedStringValues[countStringSeeds];
         }
-        Variable symbolic = new Variable(Types.STRING, countStringSeeds++);
+        Variable symbolic = new Variable(Types.STRING, countStringSeeds);
+        countStringSeeds++;
         return new SymbolicStringValue(concrete, symbolic);
     }
 

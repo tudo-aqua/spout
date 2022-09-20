@@ -574,6 +574,14 @@ public final class Symbol<T> extends ByteSequence {
         public static final Symbol<Type> java_lang_String = StaticSymbols.putType("Ljava/lang/String;");
         public static final Symbol<Type> java_lang_String_array = StaticSymbols.putType("[Ljava/lang/String;");
 
+        public static final Symbol<Type> java_lang_AbstractStringBuilder = StaticSymbols.putType("Ljava/lang/AbstractStringBuilder;");
+
+        public static final Symbol<Type> java_lang_StringBuilder = StaticSymbols.putType("Ljava/lang/StringBuilder;");
+
+        public static final Symbol<Type> java_lang_StringLatin1 = StaticSymbols.putType("Ljava/lang/StringLatin1;");
+
+        public static final  Symbol<Type> java_lang_StringUTF16 = StaticSymbols.putType("Ljava/lang/StringUTF16;");
+
         public static final Symbol<Type> java_lang_Object = StaticSymbols.putType("Ljava/lang/Object;");
         public static final Symbol<Type> java_lang_Object_array = StaticSymbols.putType("[Ljava/lang/Object;");
 
@@ -886,6 +894,7 @@ public final class Symbol<T> extends ByteSequence {
 
         public static final Symbol<Signature> _boolean = StaticSymbols.putSignature(Type._boolean);
         public static final Symbol<Signature> _byte = StaticSymbols.putSignature(Type._byte);
+        public static final Symbol<Signature> _byte_array = StaticSymbols.putSignature(Type._byte_array);
         public static final Symbol<Signature> _short = StaticSymbols.putSignature(Type._short);
         public static final Symbol<Signature> _char = StaticSymbols.putSignature(Type._char);
         public static final Symbol<Signature> _int = StaticSymbols.putSignature(Type._int);
@@ -1085,6 +1094,15 @@ public final class Symbol<T> extends ByteSequence {
         public static final Symbol<Signature> ModuleFinder_Path_array = StaticSymbols.putSignature(Type.java_lang_module_ModuleFinder, Type.java_nio_file_Path_array);
         public static final Symbol<Signature> ModuleFinder_ModuleFinder_array = StaticSymbols.putSignature(Type.java_lang_module_ModuleFinder, Type.java_lang_module_ModuleFinder_array);
 
-        public static final Symbol<Signature> java_lang_String_void = StaticSymbols.putSignature(Type.java_lang_String, Type._void);
+        public static final Symbol<Signature> java_lang_String = StaticSymbols.putSignature(Type.java_lang_String);
+
+        public static final Symbol<Signature> java_lang_AbstractStringBuilder_java_lang_String = StaticSymbols.putSignature(Type.java_lang_AbstractStringBuilder, Type.java_lang_String);
+        public static final Symbol<Signature> AbstractStringBuilder_int_String = StaticSymbols.putSignature(Type.java_lang_AbstractStringBuilder, Type._int, Type.java_lang_String);
+
+        public static final Symbol<Signature> java_lang_StringBuilder_java_lang_String = StaticSymbols.putSignature(Type.java_lang_StringBuilder, Type.java_lang_String);
+
+        public static final Symbol<Signature> String_byte_array_int_int = StaticSymbols.putSignature(Type.java_lang_String, Type._byte_array, Type._int, Type._int);
+
+        public static final Symbol<Signature> _void_int_int_char_array_int = StaticSymbols.putSignature(Type._void, Type._int, Type._int, Type._char_array, Type._int);
     }
 }

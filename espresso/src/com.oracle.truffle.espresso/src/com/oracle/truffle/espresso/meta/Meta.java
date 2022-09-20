@@ -826,6 +826,12 @@ public final class Meta extends ContextAccessImpl {
                         .notRequiredMethod(jdk_internal_module_ModuleLoaderMap_Modules);
 
         interopDispatch = new InteropKlassesDispatch(this);
+
+        java_lang_StringLatin1 = knownKlass(Type.java_lang_StringLatin1);
+        java_lang_StringLatin1_newString = java_lang_StringLatin1.lookupMethod(getNames().getOrCreate("newString"), Signature.String_byte_array_int_int);
+
+        java_lang_StringUTF16 = knownKlass(Type.java_lang_StringUTF16);
+        java_lang_StringUTF16_newString = java_lang_StringUTF16.lookupMethod(getNames().getOrCreate("newString"), Signature.String_byte_array_int_int);
     }
 
     /**
@@ -1422,6 +1428,16 @@ public final class Meta extends ContextAccessImpl {
     @CompilationFinal public Method java_beans_ThreadGroupContext_removeBeanInfo;
     @CompilationFinal public ObjectKlass java_beans_Introspector;
     @CompilationFinal public Method java_beans_Introspector_flushFromCaches;
+
+    // Concolic String Execution
+
+    public final ObjectKlass java_lang_StringLatin1;
+
+    public final Method java_lang_StringLatin1_newString;
+
+    public final ObjectKlass java_lang_StringUTF16;
+
+    public final Method java_lang_StringUTF16_newString;
 
     public final class PolyglotSupport {
         public final ObjectKlass UnknownIdentifierException;

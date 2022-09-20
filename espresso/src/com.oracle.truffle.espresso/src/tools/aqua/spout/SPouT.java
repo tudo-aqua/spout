@@ -28,6 +28,7 @@ import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.EspressoLanguage;
 import com.oracle.truffle.espresso.descriptors.Symbol;
+import com.oracle.truffle.espresso.descriptors.Symbol.Signature;
 import com.oracle.truffle.espresso.impl.Field;
 import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.impl.Method;
@@ -37,7 +38,6 @@ import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.concolic.ConcolicAnalysis;
-import tools.aqua.smt.*;
 import tools.aqua.taint.PostDominatorAnalysis;
 
 import java.util.Arrays;
@@ -48,7 +48,6 @@ import java.util.List;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.*;
 import static com.oracle.truffle.espresso.nodes.BytecodeNode.popInt;
 import static com.oracle.truffle.espresso.nodes.BytecodeNode.putInt;
-import static tools.aqua.smt.OperatorComparator.SCONTAINS;
 
 public class SPouT {
 
@@ -113,67 +112,22 @@ public class SPouT {
 
     public static Object split(StaticObject self, StaticObject regex, Meta meta) {
         boolean isSelfSymbolic = self.hasAnnotations()
-                && self.getAnnotations()[self.getAnnotations().length-1].getAnnotations()[config.getConcolicIdx()] != null;
+                && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
         boolean isRegexSymbolic = regex.hasAnnotations()
-                && regex.getAnnotations()[self.getAnnotations().length-1].getAnnotations()[config.getConcolicIdx()] != null;
+                && regex.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
 
-        if(isSelfSymbolic|| isRegexSymbolic){
+        if (isSelfSymbolic || isRegexSymbolic) {
             stopRecording("Cannot split symbolic strings yet", meta);
         }
         String s = meta.toHostString(self);
         String r = meta.toHostString(regex);
         String[] res = s.split(r);
         StaticObject[] resSO = new StaticObject[res.length];
-        for(int i = 0; i < res.length; i++){
+        for (int i = 0; i < res.length; i++) {
             resSO[i] = meta.toGuestString(res[i]);
         }
         return StaticObject.createArray(self.getKlass().getArrayClass(), resSO, meta.getContext());
     }
-
-    public static Object stringRegionMatches_ignoreCase(StaticObject self, Object ignoreCase, Object toffset, StaticObject other, Object ooffset, Object len, Meta meta) {
-        boolean ignore = false;
-        if(ignoreCase instanceof AnnotatedValue){
-            stopRecording("Cannot deal with symbolic ignore case for regionMatches yet", meta);
-        }else{
-            ignore =(boolean) ignoreCase;
-        }
-        int ctoffset= -1, cooffset=-1, clen=-1;
-        if(toffset instanceof AnnotatedValue){
-            stopRecording("Cannot deal with symbolic toffset for regionMatches yet", meta);
-        }
-        else{
-            ctoffset = (int) toffset;
-        }
-        if(ooffset instanceof AnnotatedValue){
-            stopRecording("Cannot deal with symbolic ooffset for regionMatches yet", meta);
-        }
-        else{
-            cooffset = (int) ooffset;
-        }
-        if(len instanceof AnnotatedValue){
-            stopRecording("Cannot deal with symbolic len for regionMatches yet", meta);
-        }
-        else{
-            clen = (int) len;
-        }
-        boolean isSelfSymbolic = self.hasAnnotations()
-                && self.getAnnotations()[self.getAnnotations().length-1].getAnnotations()[config.getConcolicIdx()] != null;
-        boolean isOtherSymbolic = other.hasAnnotations()
-                && other.getAnnotations()[self.getAnnotations().length-1].getAnnotations()[config.getConcolicIdx()] != null;
-        if((isSelfSymbolic || isOtherSymbolic)&& analyze && config.hasConcolicAnalysis()){
-            return  config.getConcolicAnalysis().regionMatches(self, other, ignore, ctoffset, cooffset, clen, meta);
-        }else{
-            return meta.toHostString(self).regionMatches(ignore, ctoffset, meta.toHostString(other), cooffset, clen);
-        }
-    }
-
-    public static Object stringBuilderCharAt(StaticObject self, Object index, Meta meta) {
-        System.out.println("The invocation worked");
-        Method m = findMethod(self.getKlass(), meta.getNames().getOrCreate("toString"), Symbol.Signature.java_lang_String_void);
-        System.out.println(m);
-        return stringCharAt((StaticObject) m.invokeDirect(self), index, meta);
-    }
-
 
     @CompilerDirectives.TruffleBoundary
     public void assume(Object condition, Meta meta) {
@@ -612,7 +566,7 @@ public class SPouT {
             concreteIndex = (int) index;
         }
 
-        if (!self.hasAnnotations() && index instanceof AnnotatedValue) { // && !index.isConcolic()) {
+        if (!self.hasAnnotations() && !(index instanceof AnnotatedValue)) {
             return concreteString.charAt(concreteIndex);
         }
         boolean sat1 = (0 <= concreteIndex);
@@ -642,7 +596,7 @@ public class SPouT {
     public static StaticObject stringToUpperCase(StaticObject self, Meta meta) {
         String host = meta.toHostString(self);
         StaticObject result = meta.toGuestString(host.toUpperCase());
-        if(analyze && config.hasConcolicAnalysis() && self.hasAnnotations()){
+        if (analyze && config.hasConcolicAnalysis() && self.hasAnnotations()) {
             initStringAnnotations(result);
             result = config.getConcolicAnalysis().stringToUpper(result, self, meta);
         }
@@ -652,15 +606,128 @@ public class SPouT {
     public static StaticObject stringToLowerCase(StaticObject self, Meta meta) {
         String host = meta.toHostString(self);
         StaticObject result = meta.toGuestString(host.toUpperCase());
-        if(analyze && config.hasConcolicAnalysis() && self.hasAnnotations()){
+        if (analyze && config.hasConcolicAnalysis() && self.hasAnnotations()) {
             initStringAnnotations(result);
             result = config.getConcolicAnalysis().stringToLower(result, self, meta);
         }
         return result;
     }
 
+    public static Object stringRegionMatches_ignoreCase(StaticObject self, Object ignoreCase, Object toffset, StaticObject other, Object ooffset, Object len, Meta meta) {
+        boolean ignore = false;
+        if (ignoreCase instanceof AnnotatedValue) {
+            stopRecording("Cannot deal with symbolic ignore case for regionMatches yet", meta);
+        } else {
+            ignore = (boolean) ignoreCase;
+        }
+        int ctoffset = -1, cooffset = -1, clen = -1;
+        if (toffset instanceof AnnotatedValue) {
+            stopRecording("Cannot deal with symbolic toffset for regionMatches yet", meta);
+        } else {
+            ctoffset = (int) toffset;
+        }
+        if (ooffset instanceof AnnotatedValue) {
+            stopRecording("Cannot deal with symbolic ooffset for regionMatches yet", meta);
+        } else {
+            cooffset = (int) ooffset;
+        }
+        if (len instanceof AnnotatedValue) {
+            stopRecording("Cannot deal with symbolic len for regionMatches yet", meta);
+        } else {
+            clen = (int) len;
+        }
+        boolean isSelfSymbolic = self.hasAnnotations()
+                && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
+        boolean isOtherSymbolic = other.hasAnnotations()
+                && other.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
+        if ((isSelfSymbolic || isOtherSymbolic) && analyze && config.hasConcolicAnalysis()) {
+            return config.getConcolicAnalysis().regionMatches(self, other, ignore, ctoffset, cooffset, clen, meta);
+        } else {
+            return meta.toHostString(self).regionMatches(ignore, ctoffset, meta.toHostString(other), cooffset, clen);
+        }
+    }
 
+    public static Object stringBuilderCharAt(StaticObject self, Object index, Meta meta) {
+        Method m = self.getKlass().lookupMethod(meta.getNames().getOrCreate("toString"), Symbol.Signature.java_lang_String);
+        StaticObject stringValue = (StaticObject) m.invokeDirect(self);
+        if (self.hasAnnotations()) {
+            stringValue.setAnnotations(self.getAnnotations());
+        }
+        return stringCharAt(stringValue, index, meta);
+    }
 
+    public static void stringBuilder_init_string(StaticObject self, StaticObject other, Meta meta) {
+        String hOther = meta.toHostString(other);
+        Method init = self.getKlass().getSuperKlass().lookupMethod(Symbol.Name._init_, Signature._void_int);
+        Method append = self.getKlass().lookupMethod(meta.getNames().getOrCreate("append"), Signature.java_lang_StringBuilder_java_lang_String);
+        init.invokeDirect(self, hOther.length() + 16);
+        append.invokeDirect(self, other);
+    }
+
+    public static StaticObject stringBuilderAppendString(StaticObject self, StaticObject string, Meta meta) {
+        boolean isAnalyze = analyze;
+        if (analyze && config.hasConcolicAnalysis()) {
+            self = config.getConcolicAnalysis().stringBuilderAppend(self, string, meta);
+        }
+        analyze = false;
+        Method m = self.getKlass().getSuperKlass().lookupMethod(meta.getNames().getOrCreate("append"), Signature.java_lang_AbstractStringBuilder_java_lang_String);
+        m.invokeDirect(self, string);
+        analyze = isAnalyze;
+        return self;
+    }
+
+    public static Object stringBuilderLength(StaticObject self, Meta meta) {
+        Method m = self.getKlass().getSuperKlass().lookupMethod(meta.getNames().getOrCreate("length"), Symbol.Signature._int);
+        int cresult = (int) m.invokeDirect(self);
+        if (analyze && self.hasAnnotations() && config.hasConcolicAnalysis()) {
+            AnnotatedValue av = new AnnotatedValue(cresult, Annotations.emptyArray());
+            return config.getConcolicAnalysis().stringBufferLength(av, self, meta);
+        }
+        return cresult;
+    }
+
+    public static Object stringBuilderToString(StaticObject self, Meta meta) {
+        Klass abstractSB = self.getKlass().getSuperKlass();
+        Method getValue = abstractSB.lookupMethod(meta.getNames().getOrCreate("getValue"), Signature._byte_array);
+        Method length = abstractSB.lookupMethod(meta.getNames().getOrCreate("length"), Signature._int);
+        Method isLatin = abstractSB.lookupMethod(meta.getNames().getOrCreate("isLatin1"), Signature._boolean);
+        StaticObject bytes = (StaticObject) getValue.invokeDirect(self);
+        int ilength = (int) length.invokeDirect(self);
+        StaticObject result =
+                (boolean) isLatin.invokeDirect(self)
+                        ?
+                        (StaticObject) meta.java_lang_StringLatin1_newString.invokeDirect(self, bytes, 0, ilength)
+                        :
+                        (StaticObject) meta.java_lang_StringUTF16_newString.invokeDirect(self, bytes, 0, ilength);
+        if(analyze && config.hasConcolicAnalysis()){
+            result = config.getConcolicAnalysis().stringBuilderToString(result, self, meta);
+        }
+        return result;
+    }
+
+    public static StaticObject stringBuilderInsert(StaticObject self, Object offset, StaticObject toInsert, Meta meta) {
+        if (offset instanceof AnnotatedValue) {
+            SPouT.stopRecording("Cannot handle symbolic offset values for insert into StringBu* yet.", meta);
+        }
+        int concreteOffset = (int) offset;
+        if(analyze && config.hasConcolicAnalysis()){
+            config.getConcolicAnalysis().stringBuilderInsert(self, concreteOffset, toInsert, meta);
+        }
+        Method m = self.getKlass().getSuperKlass().lookupMethod(meta.getNames().getOrCreate("insert"), Signature.AbstractStringBuilder_int_String);
+        return (StaticObject) m.invokeDirect(self, concreteOffset, toInsert);
+    }
+
+    public static void stringBuilderGetChars(StaticObject self, Object srcBegin, Object srcEnd, StaticObject dst, Object dstBegin, Meta meta) {
+        if (srcBegin instanceof AnnotatedValue
+                || srcEnd instanceof AnnotatedValue
+                || config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(dst)
+                || dstBegin instanceof AnnotatedValue
+                || config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(self)) {
+            SPouT.stopRecording("symbolic getChars is not supported", meta);
+        }
+        Method m = self.getKlass().getSuperKlass().lookupMethod(meta.getNames().getOrCreate("getChars"), Signature._void_int_int_char_array_int);
+        m.invokeDirect(self, srcBegin, srcEnd, dst, dstBegin);
+    }
 
     // --------------------------------------------------------------------------
     //
@@ -680,7 +747,7 @@ public class SPouT {
         if (analyze) trace.addElement(element);
     }
 
-    public static StaticObject initStringAnnotations(StaticObject target){
+    public static StaticObject initStringAnnotations(StaticObject target) {
         int lengthAnnotations = ((ObjectKlass) target.getKlass()).getFieldTable().length + 1;
         Annotations[] annotations = new Annotations[lengthAnnotations];
         for (int i = 0; i < annotations.length; i++) {
@@ -688,30 +755,5 @@ public class SPouT {
         }
         target.setAnnotations(annotations);
         return target;
-    }
-
-    private static Method findMethod(Klass k, Symbol<Symbol.Name> name, Symbol<Symbol.Signature> signature) {
-        Method m = k.lookupMethod(name, signature);
-        if(m != null){
-            return m;
-        }
-        ObjectKlass ok = k.getSuperKlass();
-        System.out.println(ok);
-        do{
-            m = ok.lookupMethod(name, signature);
-            if(m != null){
-                return m;
-            }
-            ok = ok.getSuperKlass();
-            System.out.println(ok);
-        } while(ok != null);
-        for(ObjectKlass o: k.getSuperInterfaces()){
-            m = o.lookupMethod(name, signature);
-            if (m != null){
-                return m;
-            }
-        }
-        throw new UnsatisfiedLinkError("Cannot find: %s with signature %s on %s".formatted(name, signature, k.getName()));
-
     }
 }
