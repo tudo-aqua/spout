@@ -1038,8 +1038,8 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                         //putLong(frame, top - 4, popLong(frame, top - 3) - popLong(frame, top - 1)); break;
                         SPouT.lsub(frame, top); break;
                     case FSUB:
-                        //putFloat(frame, top - 2, popFloat(frame, top - 2) - popFloat(frame, top - 1)); break;
-                        SPouT.fsub(frame, top);
+                        putFloat(frame, top - 2, popFloat(frame, top - 2) - popFloat(frame, top - 1)); break;
+                        //SPouT.fsub(frame, top);
                     case DSUB: putDouble(frame, top - 4, popDouble(frame, top - 3) - popDouble(frame, top - 1)); break;
 
                     case IMUL:
@@ -1072,7 +1072,9 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                         //putInt(frame, top - 2, shiftLeftInt(popInt(frame, top - 1), popInt(frame, top - 2))); break;
                         SPouT.ishl(frame, top);
                     case LSHL: putLong(frame, top - 3, shiftLeftLong(popInt(frame, top - 1), popLong(frame, top - 2))); break;
-                    case ISHR: putInt(frame, top - 2, shiftRightSignedInt(popInt(frame, top - 1), popInt(frame, top - 2))); break;
+                    case ISHR:
+                        //putInt(frame, top - 2, shiftRightSignedInt(popInt(frame, top - 1), popInt(frame, top - 2))); break;
+                        SPouT.ishr(frame, top);
                     case LSHR: putLong(frame, top - 3, shiftRightSignedLong(popInt(frame, top - 1), popLong(frame, top - 2))); break;
                     case IUSHR: putInt(frame, top - 2, shiftRightUnsignedInt(popInt(frame, top - 1), popInt(frame, top - 2))); break;
                     case LUSHR: putLong(frame, top - 3, shiftRightUnsignedLong(popInt(frame, top - 1), popLong(frame, top - 2))); break;
@@ -1092,7 +1094,9 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
                         break;
 
-                    case I2L: putLong(frame, top - 1, popInt(frame, top - 1)); break;
+                    case I2L:
+                        //putLong(frame, top - 1, popInt(frame, top - 1)); break;
+                        SPouT.i2l(frame, top);
                     case I2F: putFloat(frame, top - 1, popInt(frame, top - 1)); break;
                     case I2D: putDouble(frame, top - 1, popInt(frame, top - 1)); break;
 

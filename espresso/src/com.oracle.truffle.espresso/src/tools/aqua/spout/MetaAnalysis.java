@@ -141,6 +141,14 @@ public class MetaAnalysis implements Analysis<Annotations> {
         return execute(c1, c2, a1, a2, Analysis::ishl);
     }
 
+    public Annotations ishr(int c1, int c2, Annotations a1, Annotations a2) {
+        return execute(c1, c2, a1, a2, Analysis::ishr);
+    }
+
+    public Annotations i2l(int c1, Annotations a1) {
+        return execute(c1, a1, Analysis::i2l);
+    }
+
     @Override
     public Annotations lsub(long c1, long c2, Annotations a1, Annotations a2) {
         return lexecute(c1, c2, a1, a2, Analysis::lsub);

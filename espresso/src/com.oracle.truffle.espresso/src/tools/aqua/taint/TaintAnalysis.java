@@ -215,6 +215,14 @@ public class TaintAnalysis implements Analysis<Taint> {
         return ColorUtil.joinColors(a1, a2, ifTaint);
     }
 
+    public Taint ishr(int c1, int c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    public Taint i2l(int c1, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
     @Override
     public Taint lcmp(long c1, long c2, Taint a1, Taint a2) {
         return ColorUtil.joinColors(a1, a2, ifTaint);

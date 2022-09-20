@@ -119,6 +119,27 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return sym;
     }
 
+    public Expression lcmp(long c1, long c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.LCMP, Types.LONG, c1, c2, a1, a2);
+    }
+
+    public Expression irem(int c1, int c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.IREM, Types.INT, c1, c2, a1, a2);
+    }
+
+    public Expression ishl(int c1, int c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.ISHL, Types.INT, c1, c2, a1, a2);
+    }
+
+    public Expression idiv(int c1, int c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.IDIV, Types.INT, c1, c2, a1, a2);
+    }
+
+    public Expression imul(int c1, int c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.IMUL, Types.INT, c1, c2, a1, a2);
+    }
+
+
     // arrays
 
     public void newArrayPathConstraint(int cLength, Expression sLength) {
