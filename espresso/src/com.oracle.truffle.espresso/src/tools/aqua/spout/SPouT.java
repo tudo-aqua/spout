@@ -37,7 +37,6 @@ import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
-import tools.aqua.concolic.ConcolicAnalysis;
 import tools.aqua.taint.PostDominatorAnalysis;
 
 import java.util.Arrays;
@@ -647,7 +646,7 @@ public class SPouT {
         }
     }
 
-    public static Object stringBuilderCharAt(StaticObject self, Object index, Meta meta) {
+    public static Object stringBuxxCharAt(StaticObject self, Object index, Meta meta) {
         Method m = self.getKlass().lookupMethod(meta.getNames().getOrCreate("toString"), Symbol.Signature.java_lang_String);
         StaticObject stringValue = (StaticObject) m.invokeDirect(self);
         if (self.hasAnnotations()) {
@@ -656,15 +655,15 @@ public class SPouT {
         return stringCharAt(stringValue, index, meta);
     }
 
-    public static void stringBuilder_init_string(StaticObject self, StaticObject other, Meta meta) {
-        String hOther = meta.toHostString(other);
-        Method init = self.getKlass().getSuperKlass().lookupMethod(Symbol.Name._init_, Signature._void_int);
-        Method append = self.getKlass().lookupMethod(meta.getNames().getOrCreate("append"), Signature.java_lang_StringBuilder_java_lang_String);
-        init.invokeDirect(self, hOther.length() + 16);
-        append.invokeDirect(self, other);
-    }
+//    public static void stringBuilder_init_string(StaticObject self, StaticObject other, Meta meta) {
+//        String hOther = meta.toHostString(other);
+//        Method init = self.getKlass().getSuperKlass().lookupMethod(Symbol.Name._init_, Signature._void_int);
+//        Method append = self.getKlass().lookupMethod(meta.getNames().getOrCreate("append"), Signature.java_lang_StringBuilder_java_lang_String);
+//        init.invokeDirect(self, hOther.length() + 16);
+//        append.invokeDirect(self, other);
+//    }
 
-    public static StaticObject stringBuilderAppendString(StaticObject self, StaticObject string, Meta meta) {
+    public static StaticObject stringBuXXAppendString(StaticObject self, StaticObject string, Meta meta) {
         boolean isAnalyze = analyze;
         if (analyze && config.hasConcolicAnalysis()) {
             self = config.getConcolicAnalysis().stringBuilderAppend(self, string, meta);
@@ -676,7 +675,7 @@ public class SPouT {
         return self;
     }
 
-    public static Object stringBuilderLength(StaticObject self, Meta meta) {
+    public static Object stringBuxxLength(StaticObject self, Meta meta) {
         Method m = self.getKlass().getSuperKlass().lookupMethod(meta.getNames().getOrCreate("length"), Symbol.Signature._int);
         int cresult = (int) m.invokeDirect(self);
         if (analyze && self.hasAnnotations() && config.hasConcolicAnalysis()) {
@@ -686,7 +685,7 @@ public class SPouT {
         return cresult;
     }
 
-    public static Object stringBuilderToString(StaticObject self, Meta meta) {
+    public static StaticObject stringBuxxToString(StaticObject self, Meta meta) {
         Klass abstractSB = self.getKlass().getSuperKlass();
         Method getValue = abstractSB.lookupMethod(meta.getNames().getOrCreate("getValue"), Signature._byte_array);
         Method length = abstractSB.lookupMethod(meta.getNames().getOrCreate("length"), Signature._int);
@@ -705,7 +704,15 @@ public class SPouT {
         return result;
     }
 
-    public static StaticObject stringBuilderInsert(StaticObject self, Object offset, StaticObject toInsert, Meta meta) {
+    @CompilerDirectives.TruffleBoundary
+    public static StaticObject stringBuxxInsert(StaticObject self, Object offset, Object toInsert, Meta meta) {
+        if (toInsert instanceof AnnotatedValue){
+            stopRecording("Cannot insert symbolic chars to StringBuffer", meta);
+        }
+        StaticObject toInsertCasted = meta.toGuestString(String.valueOf((char) toInsert));
+        return stringBuxxInsert(self, offset, toInsertCasted, meta);
+    }
+    public static StaticObject stringBuxxInsert(StaticObject self, Object offset, StaticObject toInsert, Meta meta) {
         if (offset instanceof AnnotatedValue) {
             SPouT.stopRecording("Cannot handle symbolic offset values for insert into StringBu* yet.", meta);
         }
@@ -717,7 +724,7 @@ public class SPouT {
         return (StaticObject) m.invokeDirect(self, concreteOffset, toInsert);
     }
 
-    public static void stringBuilderGetChars(StaticObject self, Object srcBegin, Object srcEnd, StaticObject dst, Object dstBegin, Meta meta) {
+    public static void stringBuxxGetChars(StaticObject self, Object srcBegin, Object srcEnd, StaticObject dst, Object dstBegin, Meta meta) {
         if (srcBegin instanceof AnnotatedValue
                 || srcEnd instanceof AnnotatedValue
                 || config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(dst)
