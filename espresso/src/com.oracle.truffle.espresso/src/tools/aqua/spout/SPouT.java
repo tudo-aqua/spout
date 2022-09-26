@@ -293,13 +293,11 @@ public class SPouT {
         long c1 = popLong(frame, top - 1);
         long c2 = popLong(frame, top - 3);
         int concResult;
-        if (c1>c2) {
+        if (c1 > c2) {
             concResult = 1;
-        }
-        else if (c1==c2) {
+        } else if (c1 == c2) {
             concResult = 0;
-        }
-        else concResult = -1;
+        } else concResult = -1;
         putInt(frame, top - 4, concResult);
         if (!analyze) return;
         AnnotatedVM.putAnnotations(frame, top - 4, analysis.lcmp(c1, c2,
@@ -310,7 +308,7 @@ public class SPouT {
     public static void imul(VirtualFrame frame, int top) {
         int c1 = popInt(frame, top - 1);
         int c2 = popInt(frame, top - 2);
-        int concResult = c1*c2;
+        int concResult = c1 * c2;
         putInt(frame, top - 2, concResult);
         if (!analyze) return;
         AnnotatedVM.putAnnotations(frame, top - 2, analysis.imul(c1, c2,
@@ -321,15 +319,14 @@ public class SPouT {
     public static void idiv(VirtualFrame frame, int top) {
         int c1 = popInt(frame, top - 1);
         int c2 = popInt(frame, top - 2);
-        if (c2!=0){
-            int concResult = c1/c2;
+        if (c2 != 0) {
+            int concResult = c1 / c2;
             putInt(frame, top - 2, concResult);
             if (!analyze) return;
             AnnotatedVM.putAnnotations(frame, top - 2, analysis.idiv(c1, c2,
                     AnnotatedVM.popAnnotations(frame, top - 1),
                     AnnotatedVM.popAnnotations(frame, top - 2)));
-        }
-        else {
+        } else {
             throw new ArithmeticException();
         }
 
@@ -338,15 +335,14 @@ public class SPouT {
     public static void irem(VirtualFrame frame, int top) {
         int c1 = popInt(frame, top - 1);
         int c2 = popInt(frame, top - 2);
-        if (c2!=0){
-            int concResult = c1-(c1/c2)*c2;
+        if (c2 != 0) {
+            int concResult = c1 - (c1 / c2) * c2;
             putInt(frame, top - 2, concResult);
             if (!analyze) return;
             AnnotatedVM.putAnnotations(frame, top - 2, analysis.irem(c1, c2,
                     AnnotatedVM.popAnnotations(frame, top - 1),
                     AnnotatedVM.popAnnotations(frame, top - 2)));
-        }
-        else {
+        } else {
             throw new ArithmeticException();
         }
 
@@ -376,15 +372,75 @@ public class SPouT {
 
     }
 
-    public static void i2l(VirtualFrame frame, int top) {
+    public static void ineg(VirtualFrame frame, int top) {
         int c1 = popInt(frame, top - 1);
-        long concResult = (long) c1;
-        putLong(frame, top - 1, concResult);
+        int concResult = 0 - c1;
+        putInt(frame, top - 1, concResult);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 1, analysis.ineg(c1,
+                AnnotatedVM.popAnnotations(frame, top - 1)));
+    }
+
+    public static void i2l(VirtualFrame frame, int top) {
+        long c1 = popInt(frame, top - 1);
+        putLong(frame, top - 1, c1);
         if (!analyze) return;
         AnnotatedVM.putAnnotations(frame, top - 1, analysis.i2l(c1,
                 AnnotatedVM.popAnnotations(frame, top - 1)));
-
     }
+
+    public static void i2f (VirtualFrame frame, int top) {
+        float c1 = popInt(frame, top - 1);
+        putFloat(frame, top-1, c1);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 1, analysis.i2f(c1,
+                AnnotatedVM.popAnnotations(frame, top - 1)));
+    }
+
+    public static void iushr(VirtualFrame frame, int top) {
+        int c1 = popInt(frame, top - 1);
+        int c2 = popInt(frame, top - 2);
+        int concResult = c2 >>> c1;
+        putInt(frame, top - 2, concResult);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.iushr(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 2)));
+    }
+
+    public static void iand(VirtualFrame frame, int top) {
+        int c1 = popInt(frame, top - 1);
+        int c2 = popInt(frame, top - 2);
+        int concResult = c1 & c2;
+        putInt(frame, top - 2, concResult);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.iand(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 2)));
+    }
+
+    public static void ior(VirtualFrame frame, int top) {
+        int c1 = popInt(frame, top - 1);
+        int c2 = popInt(frame, top - 2);
+        int concResult = c1 | c2;
+        putInt(frame, top - 2, concResult);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.ior(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 2)));
+    }
+
+    public static void ixor(VirtualFrame frame, int top) {
+        int c1 = popInt(frame, top - 1);
+        int c2 = popInt(frame, top - 2);
+        int concResult = c1 ^ c2;
+        putInt(frame, top - 2, concResult);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.ixor(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 2)));
+    }
+
 
     // arrays
 

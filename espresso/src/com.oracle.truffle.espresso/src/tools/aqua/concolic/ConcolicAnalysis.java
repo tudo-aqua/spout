@@ -131,12 +131,59 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return binarySymbolicOp(OperatorComparator.ISHL, Types.INT, c1, c2, a1, a2);
     }
 
+    public Expression ishr(int c1, int c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.ISHR, Types.INT, c1, c2, a1, a2);
+    }
+
+    public Expression iushr(int c1, int c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.IUSHR, Types.INT, c1, c2, a1, a2);
+    }
+
     public Expression idiv(int c1, int c2, Expression a1, Expression a2) {
         return binarySymbolicOp(OperatorComparator.IDIV, Types.INT, c1, c2, a1, a2);
     }
 
     public Expression imul(int c1, int c2, Expression a1, Expression a2) {
         return binarySymbolicOp(OperatorComparator.IMUL, Types.INT, c1, c2, a1, a2);
+    }
+
+    public Expression ineg(int c1, Expression a1) {
+        Expression sym = null;
+        if (a1 != null) {
+            Constant negation = Constant.fromConcreteValue(c1);
+            sym = new ComplexExpression(OperatorComparator.INEG, a1, negation);
+        }
+        return sym;
+    }
+
+    public Expression i2l(long c1, Expression a1) {
+        Expression sym = null;
+        if (c1 != null) {
+            Constant symbIncr = Constant.fromConcreteValue(c1);
+            sym = new ComplexExpression(OperatorComparator.I2L, c1, symbIncr);
+        }
+        return sym;
+    }
+
+    public Expression i2f(float c1, Expression a1) {
+        Expression sym = null;
+        if (a1 != null) {
+            Constant toFloat = Constant.fromConcreteValue(c1);
+            sym = new ComplexExpression(OperatorComparator.I2F, a1, toFloat);
+        }
+        return sym;
+    }
+
+    public Expression iand(int c1, int c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.IAND, Types.INT, c1, c2, a1, a2);
+    }
+
+    public Expression ior(int c1, int c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.IOR, Types.INT, c1, c2, a1, a2);
+    }
+
+    public Expression ixor(int c1, int c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.IXOR, Types.INT, c1, c2, a1, a2);
     }
 
 

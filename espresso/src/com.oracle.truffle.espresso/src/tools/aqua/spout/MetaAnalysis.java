@@ -125,28 +125,44 @@ public class MetaAnalysis implements Analysis<Annotations> {
         return execute(c1, c2, a1, a2, Analysis::isub);
     }
 
+    @Override
     public Annotations imul(int c1, int c2, Annotations a1, Annotations a2) {
         return execute(c1, c2, a1, a2, Analysis::imul);
     }
 
+    @Override
     public Annotations idiv(int c1, int c2, Annotations a1, Annotations a2) {
         return execute(c1, c2, a1, a2, Analysis::idiv);
     }
 
+    @Override
     public Annotations irem(int c1, int c2, Annotations a1, Annotations a2) {
         return execute(c1, c2, a1, a2, Analysis::irem);
     }
 
+    @Override
     public Annotations ishl(int c1, int c2, Annotations a1, Annotations a2) {
         return execute(c1, c2, a1, a2, Analysis::ishl);
     }
 
+    @Override
     public Annotations ishr(int c1, int c2, Annotations a1, Annotations a2) {
         return execute(c1, c2, a1, a2, Analysis::ishr);
     }
 
+    @Override
+    public Annotations iushr(int c1, int c2, Annotations a1, Annotations a2) {
+        return execute(c1, c2, a1, a2, Analysis::iushr);
+    }
+
+    @Override
     public Annotations i2l(int c1, Annotations a1) {
         return execute(c1, a1, Analysis::i2l);
+    }
+
+    @Override
+    public Annotations i2f(int c1, Annotations a1) {
+        return execute(c1, a1, Analysis::i2f);
     }
 
     @Override
@@ -167,6 +183,27 @@ public class MetaAnalysis implements Analysis<Annotations> {
     public Annotations lcmp(long c1, long c2, Annotations a1, Annotations a2) {
         return lexecute(c1, c2, a1, a2, Analysis::lcmp);
     }
+
+    @Override
+    public Annotations ineg(int c1, Annotations a1) {
+        return execute(c1, a1, Analysis::ineg);
+    }
+
+    @Override
+    public Annotations iand(int c1, int c2, Annotations a1, Annotations a2) {
+        return execute(c1, c2, a1, a2, Analysis::iand);
+    }
+
+    @Override
+    public Annotations ior(int c1, int c2, Annotations a1, Annotations a2) {
+        return execute(c1, c2, a1, a2, Analysis::ior);
+    }
+
+    @Override
+    public Annotations ixor(int c1, int c2, Annotations a1, Annotations a2) {
+        return execute(c1, c2, a1, a2, Analysis::ixor);
+    }
+
 
     @Override
     public void takeBranchPrimitive1(VirtualFrame frame, BytecodeNode bcn, int bci,

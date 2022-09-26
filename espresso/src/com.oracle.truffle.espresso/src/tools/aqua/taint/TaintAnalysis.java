@@ -199,28 +199,64 @@ public class TaintAnalysis implements Analysis<Taint> {
         return ColorUtil.joinColors(a1, ifTaint);
     }
 
+    @Override
     public Taint imul(int c1, int c2, Taint a1, Taint a2) {
         return ColorUtil.joinColors(a1, a2, ifTaint);
     }
 
+    @Override
     public Taint idiv(int c1, int c2, Taint a1, Taint a2) {
         return ColorUtil.joinColors(a1, a2, ifTaint);
     }
 
+    @Override
     public Taint irem(int c1, int c2, Taint a1, Taint a2) {
         return ColorUtil.joinColors(a1, a2, ifTaint);
     }
 
+    @Override
     public Taint ishl(int c1, int c2, Taint a1, Taint a2) {
         return ColorUtil.joinColors(a1, a2, ifTaint);
     }
 
+    @Override
     public Taint ishr(int c1, int c2, Taint a1, Taint a2) {
         return ColorUtil.joinColors(a1, a2, ifTaint);
     }
 
+    @Override
+    public Taint iushr(int c1, int c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint ineg(int c1, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
     public Taint i2l(int c1, Taint a1) {
         return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint i2f(int c1, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint iand(int c1, int c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint ior(int c1, int c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint ixor(int c1, int c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
     }
 
     @Override
