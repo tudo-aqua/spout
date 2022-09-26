@@ -6,10 +6,9 @@ import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.spout.SPouT;
 
 @EspressoSubstitutions
-public class Target_java_lang_StringBuffer {
+public final class Target_java_lang_StringBuffer {
 
     @Substitution(methodName = "append", hasReceiver = true)
-    @CompilerDirectives.TruffleBoundary
     public static @JavaType(StringBuffer.class) StaticObject append_string(
             @JavaType(StringBuffer.class) StaticObject self,
             @JavaType(String.class) StaticObject string,

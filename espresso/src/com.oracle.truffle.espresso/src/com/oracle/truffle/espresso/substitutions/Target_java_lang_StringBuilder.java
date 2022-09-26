@@ -13,7 +13,6 @@ public final class Target_java_lang_StringBuilder {
      * is substituted.
      */
     @Substitution(methodName = "append", hasReceiver = true)
-    @TruffleBoundary
     public static @JavaType(StringBuilder.class) StaticObject append_string(
             @JavaType(StringBuilder.class) StaticObject self,
             @JavaType(String.class) StaticObject string,
@@ -47,7 +46,6 @@ public final class Target_java_lang_StringBuilder {
     }
 
     @Substitution(hasReceiver = true)
-    @TruffleBoundary
     public static @JavaType(internalName = "C") Object charAt(
             @JavaType(StringBuilder.class) StaticObject self,
             @JavaType(internalName = "I") Object index,

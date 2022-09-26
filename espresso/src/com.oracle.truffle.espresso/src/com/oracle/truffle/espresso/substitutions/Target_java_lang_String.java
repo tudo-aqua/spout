@@ -9,7 +9,6 @@ import tools.aqua.spout.SPouT;
 @EspressoSubstitutions
 public final class Target_java_lang_String {
     @Substitution(hasReceiver = true)
-    @CompilerDirectives.TruffleBoundary
     public static @JavaType(internalName = "Z") Object contains(@JavaType(String.class) StaticObject self,
                                                                 @JavaType(CharSequence.class) StaticObject s,
                                                                 @Inject Meta meta) {
@@ -32,7 +31,6 @@ public final class Target_java_lang_String {
     }
 
     @Substitution(hasReceiver = true)
-    @CompilerDirectives.TruffleBoundary
     public static @JavaType(internalName = "Z") Object equals(
             @JavaType(String.class) StaticObject self,
             @JavaType(Object.class) StaticObject other,

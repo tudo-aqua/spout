@@ -109,6 +109,7 @@ public class SPouT {
         meta.throwException(meta.java_lang_RuntimeException);
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static Object split(StaticObject self, StaticObject regex, Meta meta) {
         boolean isSelfSymbolic = self.hasAnnotations()
                 && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
@@ -486,6 +487,7 @@ public class SPouT {
         return result;
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static void stringConstructor(StaticObject self, StaticObject other, Meta meta) {
         Field[] fields = other.getKlass().getDeclaredFields();
         Field value = null, coder = null, hash = null;
@@ -512,6 +514,7 @@ public class SPouT {
         }
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static Object stringCompareTo(StaticObject self, StaticObject other, Meta meta) {
         int conreteResult = meta.toHostString(self).compareTo(meta.toHostString(other));
         if (!analyze) {
@@ -524,6 +527,7 @@ public class SPouT {
         return av;
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static Object stringLength(StaticObject self, Meta meta) {
         int length = meta.toHostString(self).length();
         if (!analyze || !config.hasConcolicAnalysis() || !self.hasAnnotations()) {
@@ -532,6 +536,7 @@ public class SPouT {
         return config.getConcolicAnalysis().stringLength(new AnnotatedValue(length, Annotations.emptyArray()), self, meta);
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static StaticObject stringConcat(StaticObject self, StaticObject other, Meta meta) {
         String concreteSelf = meta.toHostString(self);
         String concreteOther = meta.toHostString(other);
@@ -543,6 +548,7 @@ public class SPouT {
         return config.getConcolicAnalysis().stringConcat(result, self, other, meta);
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static Object stringEquals(StaticObject self, StaticObject other, Meta meta) {
         boolean areEqual = meta.toHostString(self).equals(meta.toHostString(other));
         if (!analyze) {
@@ -555,6 +561,7 @@ public class SPouT {
         return av;
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static Object stringCharAt(StaticObject self, Object index, Meta meta) {
         String concreteString = meta.toHostString(self);
         int concreteIndex = 0;
@@ -592,6 +599,7 @@ public class SPouT {
         return av;
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static StaticObject stringToUpperCase(StaticObject self, Meta meta) {
         String host = meta.toHostString(self);
         StaticObject result = meta.toGuestString(host.toUpperCase());
@@ -602,6 +610,7 @@ public class SPouT {
         return result;
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static StaticObject stringToLowerCase(StaticObject self, Meta meta) {
         String host = meta.toHostString(self);
         StaticObject result = meta.toGuestString(host.toUpperCase());
@@ -612,6 +621,7 @@ public class SPouT {
         return result;
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static Object stringRegionMatches_ignoreCase(StaticObject self, Object ignoreCase, Object toffset, StaticObject other, Object ooffset, Object len, Meta meta) {
         boolean ignore = false;
         if (ignoreCase instanceof AnnotatedValue) {
@@ -646,6 +656,7 @@ public class SPouT {
         }
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static Object stringBuxxCharAt(StaticObject self, Object index, Meta meta) {
         Method m = self.getKlass().lookupMethod(meta.getNames().getOrCreate("toString"), Symbol.Signature.java_lang_String);
         StaticObject stringValue = (StaticObject) m.invokeDirect(self);
@@ -655,14 +666,7 @@ public class SPouT {
         return stringCharAt(stringValue, index, meta);
     }
 
-//    public static void stringBuilder_init_string(StaticObject self, StaticObject other, Meta meta) {
-//        String hOther = meta.toHostString(other);
-//        Method init = self.getKlass().getSuperKlass().lookupMethod(Symbol.Name._init_, Signature._void_int);
-//        Method append = self.getKlass().lookupMethod(meta.getNames().getOrCreate("append"), Signature.java_lang_StringBuilder_java_lang_String);
-//        init.invokeDirect(self, hOther.length() + 16);
-//        append.invokeDirect(self, other);
-//    }
-
+    @CompilerDirectives.TruffleBoundary
     public static StaticObject stringBuXXAppendString(StaticObject self, StaticObject string, Meta meta) {
         boolean isAnalyze = analyze;
         if (analyze && config.hasConcolicAnalysis()) {
@@ -675,6 +679,7 @@ public class SPouT {
         return self;
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static Object stringBuxxLength(StaticObject self, Meta meta) {
         Method m = self.getKlass().getSuperKlass().lookupMethod(meta.getNames().getOrCreate("length"), Symbol.Signature._int);
         int cresult = (int) m.invokeDirect(self);
@@ -685,6 +690,7 @@ public class SPouT {
         return cresult;
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static StaticObject stringBuxxToString(StaticObject self, Meta meta) {
         Klass abstractSB = self.getKlass().getSuperKlass();
         Method getValue = abstractSB.lookupMethod(meta.getNames().getOrCreate("getValue"), Signature._byte_array);
@@ -712,6 +718,8 @@ public class SPouT {
         StaticObject toInsertCasted = meta.toGuestString(String.valueOf((char) toInsert));
         return stringBuxxInsert(self, offset, toInsertCasted, meta);
     }
+
+    @CompilerDirectives.TruffleBoundary
     public static StaticObject stringBuxxInsert(StaticObject self, Object offset, StaticObject toInsert, Meta meta) {
         if (offset instanceof AnnotatedValue) {
             SPouT.stopRecording("Cannot handle symbolic offset values for insert into StringBu* yet.", meta);
@@ -724,6 +732,7 @@ public class SPouT {
         return (StaticObject) m.invokeDirect(self, concreteOffset, toInsert);
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static void stringBuxxGetChars(StaticObject self, Object srcBegin, Object srcEnd, StaticObject dst, Object dstBegin, Meta meta) {
         if (srcBegin instanceof AnnotatedValue
                 || srcEnd instanceof AnnotatedValue
