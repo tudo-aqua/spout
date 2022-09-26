@@ -14,8 +14,8 @@ development-image:
     - docker:19.03.12-dind
   script:
     - docker login -u $CI_DEPLOY_USER -p $CI_DEPLOY_PASSWORD $CI_REGISTRY
-    - docker build -t $CI_REGISTRY/psyco/gdart/development:21.2.0 - < scripts/graal-image.Dockerfile
-    - docker push $CI_REGISTRY/psyco/gdart/development:21.2.0
+    - docker build -t $CI_REGISTRY/psyco/gdart/development:22.2.0 - < scripts/graal-image.Dockerfile
+    - docker push $CI_REGISTRY/psyco/gdart/development:22.2.0
   rules:
     - changes:
       - scripts/graal-image.Dockerfile
@@ -24,7 +24,7 @@ development-image:
 
 build:
   stage: build
-  image: $CI_REGISTRY/psyco/gdart/development:21.2.0
+  image: $CI_REGISTRY/psyco/gdart/development:22.2.0
   script:
     - cd espresso
     - mx build --all
