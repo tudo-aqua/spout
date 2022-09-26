@@ -6,7 +6,6 @@ RUN wget https://github.com/graalvm/labs-openjdk-17/releases/download/jvmci-22.3
     tar -xzf labsjdk-ce-17.0.5+5-jvmci-22.3-b06-linux-amd64.tar.gz
 ENV JAVA_HOME=/data/labsjdk-ce-17.0.5-jvmci-22.3-b06/
 
-
 RUN git clone https://github.com/graalvm/mx.git
 ENV PATH=/data/mx:$JAVA_HOME/bin:$PATH
 RUN echo $PATH
