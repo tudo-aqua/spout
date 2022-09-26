@@ -15,4 +15,4 @@ RUN wget https://github.com/graalvm/graalvm-ce-builds/releases/download/vm-22.2.
     tar -xzf graalvm-ce-java17-linux-amd64-22.2.0.tar.gz
 ENV PATH=/data/graalvm-ce-java17-22.2.0/bin:$PATH
 RUN gu install native-image
-RUN DEBIAN_FRONTEND="noninteractive" apt-get -y install build-essential libz-dev zlib1g-dev pip maven
+RUN DEBIAN_FRONTEND="noninteractive" apt-get -y install build-essential libz-dev zlib1g-dev pip maven cmake gcc g++
