@@ -1,5 +1,6 @@
 FROM --platform=linux/amd64 ubuntu:22.04
 WORKDIR /data
+RUN apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 871920D1991BC93C
 RUN apt-get update && apt-get install -y wget git python3 python-is-python3
 
 RUN wget https://github.com/graalvm/labs-openjdk-17/releases/download/jvmci-22.3-b06/labsjdk-ce-17.0.5+5-jvmci-22.3-b06-linux-amd64.tar.gz && \
