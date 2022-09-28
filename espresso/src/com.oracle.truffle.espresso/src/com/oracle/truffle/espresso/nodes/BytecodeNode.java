@@ -1080,7 +1080,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case LSHR: putLong(frame, top - 3, shiftRightSignedLong(popInt(frame, top - 1), popLong(frame, top - 2))); break;
                     case IUSHR:
                         //putInt(frame, top - 2, shiftRightUnsignedInt(popInt(frame, top - 1), popInt(frame, top - 2))); break;
-                        SPouT.iushr(frame, top);
+                        SPouT.iushr(frame, top); break;
                     case LUSHR: putLong(frame, top - 3, shiftRightUnsignedLong(popInt(frame, top - 1), popLong(frame, top - 2))); break;
 
                     case IAND:
@@ -1130,7 +1130,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case I2S: putInt(frame, top - 1, (short) popInt(frame, top - 1)); break;
 
                     case LCMP : //putInt(frame, top - 4, compareLong(popLong(frame, top - 1), popLong(frame, top - 3))); break;
-                    SPouT.lcmp(frame, top);
+                    SPouT.lcmp(frame, top); break;
                     case FCMPL: putInt(frame, top - 2, compareFloatLess(popFloat(frame, top - 1), popFloat(frame, top - 2))); break;
                     case FCMPG: putInt(frame, top - 2, compareFloatGreater(popFloat(frame, top - 1), popFloat(frame, top - 2))); break;
                     case DCMPL: putInt(frame, top - 4, compareDoubleLess(popDouble(frame, top - 1), popDouble(frame, top - 3))); break;

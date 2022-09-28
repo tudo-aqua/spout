@@ -158,18 +158,16 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     public Expression i2l(long c1, Expression a1) {
         Expression sym = null;
-        if (c1 != null) {
-            Constant symbIncr = Constant.fromConcreteValue(c1);
-            sym = new ComplexExpression(OperatorComparator.I2L, c1, symbIncr);
+        if ( a1 != null){
+            sym = new ComplexExpression(OperatorComparator.I2L, a1);
         }
         return sym;
     }
 
     public Expression i2f(float c1, Expression a1) {
         Expression sym = null;
-        if (a1 != null) {
-            Constant toFloat = Constant.fromConcreteValue(c1);
-            sym = new ComplexExpression(OperatorComparator.I2F, a1, toFloat);
+        if(a1 != null){
+            sym = new ComplexExpression(OperatorComparator.I2F, a1);
         }
         return sym;
     }

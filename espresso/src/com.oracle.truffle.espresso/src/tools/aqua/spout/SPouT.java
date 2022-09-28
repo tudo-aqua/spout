@@ -382,7 +382,7 @@ public class SPouT {
     }
 
     public static void i2l(VirtualFrame frame, int top) {
-        long c1 = popInt(frame, top - 1);
+        int c1 = popInt(frame, top - 1);
         putLong(frame, top - 1, c1);
         if (!analyze) return;
         AnnotatedVM.putAnnotations(frame, top - 1, analysis.i2l(c1,

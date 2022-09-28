@@ -235,12 +235,12 @@ public class TaintAnalysis implements Analysis<Taint> {
     }
 
     @Override
-    public Taint i2l(int c1, Taint a1) {
+    public Taint i2l(long c1, Taint a1) {
         return ColorUtil.joinColors(a1, ifTaint);
     }
 
     @Override
-    public Taint i2f(int c1, Taint a1) {
+    public Taint i2f(float c1, Taint a1) {
         return ColorUtil.joinColors(a1, ifTaint);
     }
 

@@ -55,6 +55,14 @@ public class MetaAnalysis implements Analysis<Annotations> {
         <T> T execute(Analysis<T> analysis, int c1, T s1);
     }
 
+    interface UnaryLongOperation {
+        <T> T execute(Analysis<T> analysis, long c1, T s1);
+    }
+
+    interface UnaryFloatOperation {
+        <T> T execute(Analysis<T> analysis, float c1, T s1);
+    }
+
     private Annotations execute(int c1, int c2, Annotations a1, Annotations a2, BinaryOperation executor) {
         int i = 0;
         boolean hasResult = false;
@@ -115,6 +123,35 @@ public class MetaAnalysis implements Analysis<Annotations> {
         return hasResult ? new Annotations(annotations) : null;
     }
 
+    private Annotations lexecute(long c1, Annotations a1, UnaryLongOperation executor) {
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[analyses.length];
+        for (Analysis<?> analysis : analyses) {
+            Object result = executor.execute(analysis, c1, Annotations.annotation(a1, i));
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? new Annotations(annotations) : null;
+    }
+    private Annotations fexecute(float c1, Annotations a1, UnaryFloatOperation executor) {
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[analyses.length];
+        for (Analysis<?> analysis : analyses) {
+            Object result = executor.execute(analysis, c1, Annotations.annotation(a1, i));
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? new Annotations(annotations) : null;
+    }
+
     @Override
     public Annotations iadd(int c1, int c2, Annotations a1, Annotations a2) {
         return execute(c1, c2, a1, a2, Analysis::iadd);
@@ -156,13 +193,13 @@ public class MetaAnalysis implements Analysis<Annotations> {
     }
 
     @Override
-    public Annotations i2l(int c1, Annotations a1) {
-        return execute(c1, a1, Analysis::i2l);
+    public Annotations i2l(long c1, Annotations a1) {
+        return lexecute(c1, a1, Analysis::i2l);
     }
 
     @Override
-    public Annotations i2f(int c1, Annotations a1) {
-        return execute(c1, a1, Analysis::i2f);
+    public Annotations i2f(float c1, Annotations a1) {
+        return fexecute(c1, a1, Analysis::i2f);
     }
 
     @Override
