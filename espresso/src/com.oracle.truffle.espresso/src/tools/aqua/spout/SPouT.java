@@ -316,20 +316,33 @@ public class SPouT {
                 AnnotatedVM.popAnnotations(frame, top - 2)));
     }
 
-    public static void idiv(VirtualFrame frame, int top) {
+    public static void idiv(VirtualFrame frame, int top, BytecodeNode bn) {
         int c1 = popInt(frame, top - 1);
+        checkNotNull(c1, AnnotatedVM.peekAnnotations(frame, top - 1), bn);
         int c2 = popInt(frame, top - 2);
-        if (c2 != 0) {
-            int concResult = c1 / c2;
+            int concResult = c2 / c1;
             putInt(frame, top - 2, concResult);
             if (!analyze) return;
-            AnnotatedVM.putAnnotations(frame, top - 2, analysis.idiv(c1, c2,
-                    AnnotatedVM.popAnnotations(frame, top - 1),
-                    AnnotatedVM.popAnnotations(frame, top - 2)));
-        } else {
-            throw new ArithmeticException();
-        }
+            AnnotatedVM.putAnnotations(frame, top - 2, analysis.idiv(c2, c1,
+                    AnnotatedVM.popAnnotations(frame, top - 2),
+                    AnnotatedVM.popAnnotations(frame, top - 1)));
 
+    }
+
+    private static void checkNotNull(int c1, Annotations a, BytecodeNode bn) {
+        if (c1 == 0) {
+            if(a != null && analyze && config.hasConcolicAnalysis()){
+                config.getConcolicAnalysis().addZeroToTrace(a);
+            }
+            bn.enterImplicitExceptionProfile();
+            Meta meta = bn.getMeta();
+            throw meta.throwExceptionWithMessage(meta.java_lang_ArithmeticException, "/ by zero");
+        }
+        else{
+            if(a != null && analyze && config.hasConcolicAnalysis()){
+                config.getConcolicAnalysis().addNotZeroToTrace(a);
+            }
+        }
     }
 
     public static void irem(VirtualFrame frame, int top) {

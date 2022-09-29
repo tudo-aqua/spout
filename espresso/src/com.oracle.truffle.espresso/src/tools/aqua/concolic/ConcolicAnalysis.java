@@ -840,4 +840,16 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         Annotations[] stringAnnotation = self.getAnnotations();
         return stringAnnotation != null && stringAnnotation[stringAnnotation.length - 1].getAnnotations()[config.getConcolicIdx()] != null;
     }
+
+    public void addNotZeroToTrace(Annotations a){
+        trace.addElement(
+                new PathCondition(
+                        new ComplexExpression(OperatorComparator.BVNE, (Expression) a.getAnnotations()[config.getConcolicIdx()], INT_ZERO), 0, 2));
+    }
+
+    public void addZeroToTrace(Annotations a){
+        trace.addElement(
+                new PathCondition(
+                        new ComplexExpression(OperatorComparator.BVEQ, (Expression) a.getAnnotations()[config.getConcolicIdx()], INT_ZERO), 1, 2));
+    }
 }

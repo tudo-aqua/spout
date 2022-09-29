@@ -44,6 +44,14 @@ public class AnnotatedVM {
         return (Annotations[]) frame.getObject(ANNOTATION_SLOT);
     }
 
+    public static Annotations peekAnnotations(VirtualFrame frame, int slot){
+        Annotations[] annotations = getAnnotations(frame);
+        if (annotations != null) {
+            return annotations[slot - VALUES_START];
+        }
+        return null;
+    }
+
     public static Annotations popAnnotations(VirtualFrame frame, int slot) {
         Annotations[] annotations = getAnnotations(frame);
         Annotations result = annotations[slot - VALUES_START];
