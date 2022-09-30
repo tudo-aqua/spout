@@ -46,12 +46,7 @@ import java.util.List;
 import java.lang.ArithmeticException;
 
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.*;
-import static com.oracle.truffle.espresso.nodes.BytecodeNode.popInt;
-import static com.oracle.truffle.espresso.nodes.BytecodeNode.putInt;
-import static com.oracle.truffle.espresso.nodes.BytecodeNode.popLong;
-import static com.oracle.truffle.espresso.nodes.BytecodeNode.putLong;
-import static com.oracle.truffle.espresso.nodes.BytecodeNode.popFloat;
-import static com.oracle.truffle.espresso.nodes.BytecodeNode.putFloat;
+import static com.oracle.truffle.espresso.nodes.BytecodeNode.*;
 
 public class SPouT {
 
@@ -345,19 +340,15 @@ public class SPouT {
         }
     }
 
-    public static void irem(VirtualFrame frame, int top) {
+    public static void irem(VirtualFrame frame, int top, BytecodeNode bn) {
         int c1 = popInt(frame, top - 1);
+        checkNotNull(c1, AnnotatedVM.peekAnnotations(frame, top - 1), bn);
         int c2 = popInt(frame, top - 2);
-        if (c2 != 0) {
-            int concResult = c1 - (c1 / c2) * c2;
-            putInt(frame, top - 2, concResult);
-            if (!analyze) return;
-            AnnotatedVM.putAnnotations(frame, top - 2, analysis.irem(c1, c2,
-                    AnnotatedVM.popAnnotations(frame, top - 1),
-                    AnnotatedVM.popAnnotations(frame, top - 2)));
-        } else {
-            throw new ArithmeticException();
-        }
+        putInt(frame, top - 2, c2 % c1);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.irem(c2, c1,
+                AnnotatedVM.popAnnotations(frame, top - 2),
+                AnnotatedVM.popAnnotations(frame, top - 1)));
 
     }
 
@@ -407,6 +398,13 @@ public class SPouT {
         putFloat(frame, top-1, c1);
         if (!analyze) return;
         AnnotatedVM.putAnnotations(frame, top - 1, analysis.i2f(c1,
+                AnnotatedVM.popAnnotations(frame, top - 1)));
+    }
+    public static void i2d (VirtualFrame frame, int top) {
+        double c1 = popInt(frame, top - 1);
+        putDouble(frame, top-1, c1);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 1, analysis.i2d(c1,
                 AnnotatedVM.popAnnotations(frame, top - 1)));
     }
 

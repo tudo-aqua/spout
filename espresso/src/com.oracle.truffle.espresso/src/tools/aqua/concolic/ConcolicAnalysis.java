@@ -119,34 +119,42 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return sym;
     }
 
+    @Override
     public Expression lcmp(long c1, long c2, Expression a1, Expression a2) {
         return binarySymbolicOp(OperatorComparator.LCMP, Types.LONG, c1, c2, a1, a2);
     }
 
+    @Override
     public Expression irem(int c1, int c2, Expression a1, Expression a2) {
         return binarySymbolicOp(OperatorComparator.IREM, Types.INT, c1, c2, a1, a2);
     }
 
+    @Override
     public Expression ishl(int c1, int c2, Expression a1, Expression a2) {
         return binarySymbolicOp(OperatorComparator.ISHL, Types.INT, c1, c2, a1, a2);
     }
 
+    @Override
     public Expression ishr(int c1, int c2, Expression a1, Expression a2) {
         return binarySymbolicOp(OperatorComparator.ISHR, Types.INT, c1, c2, a1, a2);
     }
 
+    @Override
     public Expression iushr(int c1, int c2, Expression a1, Expression a2) {
         return binarySymbolicOp(OperatorComparator.IUSHR, Types.INT, c1, c2, a1, a2);
     }
 
+    @Override
     public Expression idiv(int c1, int c2, Expression a1, Expression a2) {
         return binarySymbolicOp(OperatorComparator.IDIV, Types.INT, c1, c2, a1, a2);
     }
 
+    @Override
     public Expression imul(int c1, int c2, Expression a1, Expression a2) {
         return binarySymbolicOp(OperatorComparator.IMUL, Types.INT, c1, c2, a1, a2);
     }
 
+   @Override
     public Expression ineg(int c1, Expression a1) {
         Expression sym = null;
         if (a1 != null) {
@@ -156,6 +164,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return sym;
     }
 
+    @Override
     public Expression i2l(long c1, Expression a1) {
         Expression sym = null;
         if ( a1 != null){
@@ -164,6 +173,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return sym;
     }
 
+    @Override
     public Expression i2f(float c1, Expression a1) {
         Expression sym = null;
         if(a1 != null){
@@ -172,14 +182,26 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return sym;
     }
 
+    @Override
+    public Expression i2d(double c1, Expression a1) {
+        Expression sym = null;
+        if(a1 != null){
+            sym = new ComplexExpression(OperatorComparator.I2F, a1);
+        }
+        return sym;
+    }
+
+    @Override
     public Expression iand(int c1, int c2, Expression a1, Expression a2) {
         return binarySymbolicOp(OperatorComparator.IAND, Types.INT, c1, c2, a1, a2);
     }
 
+    @Override
     public Expression ior(int c1, int c2, Expression a1, Expression a2) {
         return binarySymbolicOp(OperatorComparator.IOR, Types.INT, c1, c2, a1, a2);
     }
 
+    @Override
     public Expression ixor(int c1, int c2, Expression a1, Expression a2) {
         return binarySymbolicOp(OperatorComparator.IXOR, Types.INT, c1, c2, a1, a2);
     }
