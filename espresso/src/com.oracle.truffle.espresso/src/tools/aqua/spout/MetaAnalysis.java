@@ -211,6 +211,10 @@ public class MetaAnalysis implements Analysis<Annotations> {
     public Annotations fsub(float c1, float c2, Annotations a1, Annotations a2) {
         return fexecute(c1, c2, a1, a2, Analysis::fsub);
     }
+    @Override
+    public Annotations dsub(double c1, double c2, Annotations a1, Annotations a2) {
+        return fexecute(c1, c2, a1, a2, Analysis::dsub);
+    }
 
     @Override
     public Annotations iinc(int c1, Annotations a1) {

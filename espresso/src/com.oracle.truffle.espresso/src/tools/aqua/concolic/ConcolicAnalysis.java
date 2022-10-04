@@ -39,9 +39,17 @@ import tools.aqua.spout.*;
 
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.*;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPLE;
-import static tools.aqua.smt.Constant.INT_ZERO;
-import static tools.aqua.smt.Constant.NAT_ZERO;
+import static tools.aqua.smt.Constant.*;
 import static tools.aqua.smt.OperatorComparator.*;
+import static tools.aqua.smt.OperatorComparator.D2F;
+import static tools.aqua.smt.OperatorComparator.D2I;
+import static tools.aqua.smt.OperatorComparator.D2L;
+import static tools.aqua.smt.OperatorComparator.F2D;
+import static tools.aqua.smt.OperatorComparator.F2I;
+import static tools.aqua.smt.OperatorComparator.F2L;
+import static tools.aqua.smt.OperatorComparator.L2D;
+import static tools.aqua.smt.OperatorComparator.L2F;
+import static tools.aqua.smt.Types.LONG;
 
 public class ConcolicAnalysis implements Analysis<Expression> {
 
@@ -105,10 +113,37 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     @Override
+    public Expression ladd(long c1, long c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.LADD, LONG, c1, c2, a1, a2);
+    }
+    @Override
+    public Expression fadd(float c1, float c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.FADD, Types.FLOAT, c1, c2, a1, a2);
+    }
+    @Override
+    public Expression dadd(double c1, double c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.DADD, Types.DOUBLE, c1, c2, a1, a2);
+    }
+
+    @Override
     public Expression isub(int c1, int c2, Expression a1, Expression a2) {
         return binarySymbolicOp(OperatorComparator.ISUB, Types.INT, c2, c1, a2, a1);
     }
 
+    @Override
+    public Expression lsub(long c1, long c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.LSUB, LONG, c2, c1, a2, a1);
+    }
+
+    @Override
+    public Expression fsub(float c1, float c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.FSUB, Types.FLOAT, c2, c1, a2, a1);
+    }
+
+    @Override
+    public Expression dsub(double c1, double c2, Expression a1, Expression a2){
+        return binarySymbolicOp(OperatorComparator.DSUB, Types.DOUBLE, c2, c1, a2, a1);
+    }
     @Override
     public Expression iinc(int incr, Expression s1) {
         Expression sym = null;
@@ -121,7 +156,27 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression lcmp(long c1, long c2, Expression a1, Expression a2) {
-        return binarySymbolicOp(OperatorComparator.LCMP, Types.LONG, c1, c2, a1, a2);
+        return binarySymbolicOp(OperatorComparator.LCMP, LONG, c2, c1, a2, a1);
+    }
+
+    @Override
+    public Expression fcmpl(float c1, float c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.FCMPL, Types.FLOAT, c2, c1, a2, a1);
+    }
+
+    @Override
+    public Expression fcmpg(float c1, float c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.FCMPG, Types.FLOAT, c2, c1, a2, a1);
+    }
+
+    @Override
+    public Expression dcmpl(double c1, double c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.DCMPL, Types.DOUBLE, c2, c1, a2, a1);
+    }
+
+    @Override
+    public Expression dcmpg(double c1, double c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.DCMPG, Types.DOUBLE, c2, c1, a2, a1);
     }
 
     @Override
@@ -130,8 +185,39 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     @Override
+    public Expression lrem(long c1, long c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.LREM, LONG, c2, c1, a2, a1);
+    }
+
+    @Override
+    public Expression frem(float c1, float c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.FREM, Types.FLOAT, c2, c1, a2, a1);
+    }
+
+    @Override
+    public Expression drem(double c1, double c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.DREM, Types.DOUBLE, c2, c1, a2, a1);
+    }
+
+    @Override
     public Expression ishl(int c1, int c2, Expression a1, Expression a2) {
         return binarySymbolicOp(OperatorComparator.ISHL, Types.INT, c1, c2, a1, a2);
+    }
+
+    @Override
+    public Expression lshl(int c1, long c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.LSHL, LONG, Types.INT, c2, c1, a2, a1);
+    }
+
+    @Override
+    public Expression lshr(int c1, long c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.LSHR, LONG, Types.INT, c2, c1, a2, a1);
+    }
+
+
+    @Override
+    public Expression lushr(int c1, long c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.LUSHR, LONG, Types.INT, c2, c1, a2, a1);
     }
 
     @Override
@@ -146,7 +232,22 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression idiv(int c1, int c2, Expression a1, Expression a2) {
-        return binarySymbolicOp(OperatorComparator.IDIV, Types.INT, c1, c2, a1, a2);
+        return binarySymbolicOp(OperatorComparator.IDIV, Types.INT, c2, c1, a2, a1);
+    }
+
+    @Override
+    public Expression ldiv(long c1, long c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.LDIV, LONG, c2, c1, a2, a1);
+    }
+
+    @Override
+    public Expression fdiv(float c1, float c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.FDIV, Types.FLOAT, c2, c1, a2, a1);
+    }
+
+    @Override
+    public Expression ddiv(double c1, double c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.DDIV, Types.DOUBLE, c2, c1, a2, a1);
     }
 
     @Override
@@ -154,14 +255,54 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return binarySymbolicOp(OperatorComparator.IMUL, Types.INT, c1, c2, a1, a2);
     }
 
+    @Override
+    public Expression lmul(long c1, long c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.LMUL, LONG, c1, c2, a1, a2);
+    }
+
+    @Override
+    public  Expression fmul(float c1, float c2, Expression a1, Expression a2){
+        return binarySymbolicOp(OperatorComparator.FMUL, Types.FLOAT, c1, c2, a1, a2);
+    }
+
+    @Override
+    public Expression dmul(double c1, double c2, Expression a1, Expression a2){
+        return binarySymbolicOp(OperatorComparator.DMUL, Types.DOUBLE, c1, c2, a1, a2);
+    }
+
    @Override
     public Expression ineg(int c1, Expression a1) {
-        Expression sym = null;
-        if (a1 != null) {
-            Constant negation = Constant.fromConcreteValue(c1);
-            sym = new ComplexExpression(OperatorComparator.INEG, a1, negation);
-        }
-        return sym;
+        return unarySymbolicOp(OperatorComparator.INEG, a1);
+    }
+
+    @Override
+    public Expression lneg(long c1, Expression a1) {
+        return unarySymbolicOp(OperatorComparator.LNEG, a1);
+    }
+
+    @Override
+    public Expression fneg(float c1, Expression a1) {
+        return unarySymbolicOp(OperatorComparator.FNEG, a1);
+    }
+
+    @Override
+    public Expression dneg(double c1, Expression a1) {
+        return unarySymbolicOp(OperatorComparator.DNEG, a1);
+    }
+
+    @Override
+    public Expression i2b(byte c1, Expression a1) {
+        return unarySymbolicOp(OperatorComparator.I2B, a1);
+    }
+
+    @Override
+    public Expression i2c(char c1, Expression a1) {
+        return unarySymbolicOp(OperatorComparator.I2C, a1);
+    }
+
+    @Override
+    public Expression i2s(short c1, Expression a1) {
+        return unarySymbolicOp(OperatorComparator.I2S, a1);
     }
 
     @Override
@@ -192,6 +333,51 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     @Override
+    public Expression l2i(int c1, Expression a1) {
+        return unarySymbolicOp(OperatorComparator.L2I, a1);
+    }
+
+    @Override
+    public Expression l2f(float c1, Expression a1) {
+        return unarySymbolicOp(L2F, a1);
+    }
+
+    @Override
+    public Expression l2d(double c1, Expression a1) {
+        return unarySymbolicOp(L2D, a1);
+    }
+
+    @Override
+    public Expression f2i(int c1, Expression a1) {
+        return unarySymbolicOp(F2I, a1);
+    }
+
+    @Override
+    public Expression f2l(long c1, Expression a1) {
+        return unarySymbolicOp(F2L, a1);
+    }
+
+    @Override
+    public Expression f2d(double c1, Expression a1) {
+        return unarySymbolicOp(F2D, a1);
+    }
+
+    @Override
+    public Expression d2i(int c1, Expression a1) {
+        return unarySymbolicOp(D2I, a1);
+    }
+
+    @Override
+    public Expression d2l(long c1, Expression a1) {
+        return unarySymbolicOp(D2L, a1);
+    }
+
+    @Override
+    public Expression d2f(float c1, Expression a1) {
+        return unarySymbolicOp(D2F, a1);
+    }
+
+    @Override
     public Expression iand(int c1, int c2, Expression a1, Expression a2) {
         return binarySymbolicOp(OperatorComparator.IAND, Types.INT, c1, c2, a1, a2);
     }
@@ -206,8 +392,21 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return binarySymbolicOp(OperatorComparator.IXOR, Types.INT, c1, c2, a1, a2);
     }
 
+    @Override
+    public Expression land(long c1, long c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.LAND, LONG, c1, c2, a1, a2);
+    }
 
-    // arrays
+    @Override
+    public Expression lor(long c1, long c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.LOR, LONG, c1, c2, a1, a2);
+    }
+
+    @Override
+    public Expression lxor(long c1, long c2, Expression a1, Expression a2) {
+        return binarySymbolicOp(OperatorComparator.LXOR, LONG, c1, c2, a1, a2);
+    }
+// arrays
 
     public void newArrayPathConstraint(int cLength, Expression sLength) {
         if (sLength == null) return;
@@ -863,15 +1062,16 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return stringAnnotation != null && stringAnnotation[stringAnnotation.length - 1].getAnnotations()[config.getConcolicIdx()] != null;
     }
 
-    public void addNotZeroToTrace(Annotations a){
+    public void addNotZeroToTrace(Annotations a, Expression zero){
         trace.addElement(
                 new PathCondition(
-                        new ComplexExpression(OperatorComparator.BVNE, (Expression) a.getAnnotations()[config.getConcolicIdx()], INT_ZERO), 0, 2));
+                        new ComplexExpression(OperatorComparator.BVNE, (Expression) a.getAnnotations()[config.getConcolicIdx()], zero), 0, 2));
     }
 
-    public void addZeroToTrace(Annotations a){
+    public void addZeroToTrace(Annotations a, Expression zero){
         trace.addElement(
                 new PathCondition(
-                        new ComplexExpression(OperatorComparator.BVEQ, (Expression) a.getAnnotations()[config.getConcolicIdx()], INT_ZERO), 1, 2));
+                        new ComplexExpression(OperatorComparator.BVEQ, (Expression) a.getAnnotations()[config.getConcolicIdx()], zero), 1, 2));
     }
+
 }

@@ -1031,72 +1031,55 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case FADD: putFloat(frame, top - 2, popFloat(frame, top - 1) + popFloat(frame, top - 2)); break;
                     case DADD: putDouble(frame, top - 4, popDouble(frame, top - 1) + popDouble(frame, top - 3)); break;
 
-                    case ISUB:
-                        //putInt(frame, top - 2, popInt(frame, top - 2) - popInt(frame, top - 1)); break;
-                        SPouT.isub(frame, top); break;
-                    case LSUB:
-                        //putLong(frame, top - 4, popLong(frame, top - 3) - popLong(frame, top - 1)); break;
-                        SPouT.lsub(frame, top); break;
-                    case FSUB:
-                        putFloat(frame, top - 2, popFloat(frame, top - 2) - popFloat(frame, top - 1)); break;
-                        //SPouT.fsub(frame, top); break;
-                    case DSUB: putDouble(frame, top - 4, popDouble(frame, top - 3) - popDouble(frame, top - 1)); break;
+                    case ISUB: SPouT.isub(frame, top); break;
+                    case LSUB: SPouT.lsub(frame, top); break;
+                    case FSUB: SPouT.fsub(frame, top); break;
+                    case DSUB: SPouT.dsub(frame, top); break;
 
-                    case IMUL:
-                        //putInt(frame, top - 2, popInt(frame, top - 1) * popInt(frame, top - 2)); break;
-                        SPouT.imul(frame, top); break;
-                    case LMUL: putLong(frame, top - 4, popLong(frame, top - 1) * popLong(frame, top - 3)); break;
-                    case FMUL: putFloat(frame, top - 2, popFloat(frame, top - 1) * popFloat(frame, top - 2)); break;
-                    case DMUL: putDouble(frame, top - 4, popDouble(frame, top - 1) * popDouble(frame, top - 3)); break;
+                    case IMUL: SPouT.imul(frame, top); break;
+                    case LMUL: SPouT.lmul(frame, top); break;
+                    case FMUL: SPouT.fmul(frame, top); break;
+                    case DMUL: SPouT.dmul(frame, top); break;
 
-                    case IDIV:
-                        //putInt(frame, top - 2, divInt(checkNonZero(popInt(frame, top - 1)), popInt(frame, top - 2))); break;
-                        SPouT.idiv(frame, top, this); break;
-                    case LDIV: putLong(frame, top - 4, divLong(checkNonZero(popLong(frame, top - 1)), popLong(frame, top - 3))); break;
-                    case FDIV: putFloat(frame, top - 2, divFloat(popFloat(frame, top - 1), popFloat(frame, top - 2))); break;
-                    case DDIV: putDouble(frame, top - 4, divDouble(popDouble(frame, top - 1), popDouble(frame, top - 3))); break;
+                    case IDIV: SPouT.idiv(frame, top, this); break;
+                    case LDIV: SPouT.ldiv(frame, top, this); break;
+                    case FDIV: SPouT.fdiv(frame, top); break;
+                    case DDIV: SPouT.ddiv(frame, top); break;
 
-                    case IREM:
-                        //putInt(frame, top - 2, remInt(checkNonZero(popInt(frame, top - 1)), popInt(frame, top - 2))); break;
-                        SPouT.irem(frame, top, this); break;
-                    case LREM: putLong(frame, top - 4, remLong(checkNonZero(popLong(frame, top - 1)), popLong(frame, top - 3))); break;
-                    case FREM: putFloat(frame, top - 2, remFloat(popFloat(frame, top - 1), popFloat(frame, top - 2))); break;
-                    case DREM: putDouble(frame, top - 4, remDouble(popDouble(frame, top - 1), popDouble(frame, top - 3))); break;
+                    case IREM: SPouT.irem(frame, top, this); break;
+                    case LREM: SPouT.lrem(frame, top, this); break;
+                    case FREM: SPouT.frem(frame, top); break;
+                    case DREM: SPouT.drem(frame, top); break;
 
-                    case INEG:
-                        //putInt(frame, top - 1, -popInt(frame, top - 1)); break;
-                        SPouT.ineg(frame,top); break;
-                    case LNEG: putLong(frame, top - 2, -popLong(frame, top - 1)); break;
-                    case FNEG: putFloat(frame, top - 1, -popFloat(frame, top - 1)); break;
-                    case DNEG: putDouble(frame, top - 2, -popDouble(frame, top - 1)); break;
+                    case INEG: SPouT.ineg(frame,top); break;
+                    case LNEG: SPouT.lneg(frame, top); break;
+                    case FNEG: SPouT.fneg(frame, top); break;
+                    case DNEG: SPouT.dneg(frame, top); break;
 
-                    case ISHL:
-                        //putInt(frame, top - 2, shiftLeftInt(popInt(frame, top - 1), popInt(frame, top - 2))); break;
-                        SPouT.ishl(frame, top); break;
-                    case LSHL: putLong(frame, top - 3, shiftLeftLong(popInt(frame, top - 1), popLong(frame, top - 2))); break;
+                    case ISHL: SPouT.ishl(frame, top); break;
+                    case LSHL:SPouT.lshl(frame, top); break;
                     case ISHR:
                         //putInt(frame, top - 2, shiftRightSignedInt(popInt(frame, top - 1), popInt(frame, top - 2))); break;
                         SPouT.ishr(frame, top); break;
-                    case LSHR: putLong(frame, top - 3, shiftRightSignedLong(popInt(frame, top - 1), popLong(frame, top - 2))); break;
+                    case LSHR: SPouT.lshr(frame, top); break;
                     case IUSHR:
-                        //putInt(frame, top - 2, shiftRightUnsignedInt(popInt(frame, top - 1), popInt(frame, top - 2))); break;
                         SPouT.iushr(frame, top); break;
-                    case LUSHR: putLong(frame, top - 3, shiftRightUnsignedLong(popInt(frame, top - 1), popLong(frame, top - 2))); break;
+                    case LUSHR: SPouT.lushr(frame, top); break;
 
                     case IAND:
-                        putInt(frame, top - 2, popInt(frame, top - 1) & popInt(frame, top - 2)); break;
-                        //SPouT.iand(frame, top); break;
-                    case LAND: putLong(frame, top - 4, popLong(frame, top - 1) & popLong(frame, top - 3)); break;
+                        //putInt(frame, top - 2, popInt(frame, top - 1) & popInt(frame, top - 2)); break;
+                        SPouT.iand(frame, top); break;
+                    case LAND: SPouT.land(frame, top); break;
 
                     case IOR:
                         //putInt(frame, top - 2, popInt(frame, top - 1) | popInt(frame, top - 2)); break;
                         SPouT.ior(frame, top); break;
-                    case LOR: putLong(frame, top - 4, popLong(frame, top - 1) | popLong(frame, top - 3)); break;
+                    case LOR: SPouT.lor(frame, top); break;
 
                     case IXOR:
                         //putInt(frame, top - 2, popInt(frame, top - 1) ^ popInt(frame, top - 2)); break;
                         SPouT.ixor(frame, top); break;
-                    case LXOR: putLong(frame, top - 4, popLong(frame, top - 1) ^ popLong(frame, top - 3)); break;
+                    case LXOR: SPouT.lxor(frame, top); break;
 
                     case IINC:
                         //setLocalInt(frame, bs.readLocalIndex1(curBCI), getLocalInt(frame, bs.readLocalIndex1(curBCI)) + bs.readIncrement1(curBCI));
@@ -1108,28 +1091,27 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case I2F: SPouT.i2f(frame, top); break;
                     case I2D: SPouT.i2d(frame, top); break;
                     
-                    case L2I: putInt(frame, top - 2, (int) popLong(frame, top - 1)); break;
-                    case L2F: putFloat(frame, top - 2, popLong(frame, top - 1)); break;
-                    case L2D: putDouble(frame, top - 2, popLong(frame, top - 1)); break;
+                    case L2I: SPouT.l2i(frame, top); break;
+                    case L2F: SPouT.l2f(frame, top); break;
+                    case L2D: SPouT.l2d(frame, top); break;
 
-                    case F2I: putInt(frame, top - 1, (int) popFloat(frame, top - 1)); break;
-                    case F2L: putLong(frame, top - 1, (long) popFloat(frame, top - 1)); break;
-                    case F2D: putDouble(frame, top - 1, popFloat(frame, top - 1)); break;
+                    case F2I: SPouT.f2i(frame, top); break;
+                    case F2L: SPouT.f2l(frame, top); break;
+                    case F2D: SPouT.f2d(frame, top); break;
 
-                    case D2I: putInt(frame, top - 2, (int) popDouble(frame, top - 1)); break;
-                    case D2L: putLong(frame, top - 2, (long) popDouble(frame, top - 1)); break;
-                    case D2F: putFloat(frame, top - 2, (float) popDouble(frame, top - 1)); break;
+                    case D2I: SPouT.d2i(frame, top); break;
+                    case D2L: SPouT.d2l(frame, top); break;
+                    case D2F: SPouT.d2f(frame, top); break;
 
-                    case I2B: putInt(frame, top - 1, (byte) popInt(frame, top - 1)); break;
-                    case I2C: putInt(frame, top - 1, (char) popInt(frame, top - 1)); break;
-                    case I2S: putInt(frame, top - 1, (short) popInt(frame, top - 1)); break;
+                    case I2B: SPouT.i2b(frame, top); break;
+                    case I2C: SPouT.i2c(frame, top); break;
+                    case I2S: SPouT.i2s(frame, top); break;
 
-                    case LCMP : putInt(frame, top - 4, compareLong(popLong(frame, top - 1), popLong(frame, top - 3))); break;
-                    //SPouT.lcmp(frame, top); break;
-                    case FCMPL: putInt(frame, top - 2, compareFloatLess(popFloat(frame, top - 1), popFloat(frame, top - 2))); break;
-                    case FCMPG: putInt(frame, top - 2, compareFloatGreater(popFloat(frame, top - 1), popFloat(frame, top - 2))); break;
-                    case DCMPL: putInt(frame, top - 4, compareDoubleLess(popDouble(frame, top - 1), popDouble(frame, top - 3))); break;
-                    case DCMPG: putInt(frame, top - 4, compareDoubleGreater(popDouble(frame, top - 1), popDouble(frame, top - 3))); break;
+                    case LCMP : SPouT.lcmp(frame, top); break;
+                    case FCMPL: SPouT.fcmpl(frame, top); break;
+                    case FCMPG: SPouT.fcmpg(frame, top); break;
+                    case DCMPL: SPouT.dcmpl(frame, top); break;
+                    case DCMPG: SPouT.dcmpg(frame, top); break;
 
                     // @formatter:on
                     case IFEQ: // fall through
@@ -2517,19 +2499,19 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
         return Long.compare(x, y);
     }
 
-    private static int compareFloatGreater(float y, float x) {
+    public static int compareFloatGreater(float y, float x) {
         return (x < y ? -1 : ((x == y) ? 0 : 1));
     }
 
-    private static int compareFloatLess(float y, float x) {
+    public static int compareFloatLess(float y, float x) {
         return (x > y ? 1 : ((x == y) ? 0 : -1));
     }
 
-    private static int compareDoubleGreater(double y, double x) {
+    public static int compareDoubleGreater(double y, double x) {
         return (x < y ? -1 : ((x == y) ? 0 : 1));
     }
 
-    private static int compareDoubleLess(double y, double x) {
+    public static int compareDoubleLess(double y, double x) {
         return (x > y ? 1 : ((x == y) ? 0 : -1));
     }
     // endregion Comparisons

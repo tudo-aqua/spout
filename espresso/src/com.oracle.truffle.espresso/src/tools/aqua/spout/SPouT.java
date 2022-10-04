@@ -43,10 +43,11 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
-import java.lang.ArithmeticException;
 
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.*;
 import static com.oracle.truffle.espresso.nodes.BytecodeNode.*;
+import static tools.aqua.smt.Constant.INT_ZERO;
+import static tools.aqua.smt.Constant.LONG_ZERO;
 
 public class SPouT {
 
@@ -238,6 +239,37 @@ public class SPouT {
                 AnnotatedVM.popAnnotations(frame, top - 2)));
     }
 
+    public static void ladd(VirtualFrame frame, int top) {
+        long c1 = popLong(frame, top - 1);
+        long c2 = popLong(frame, top - 3);
+        putLong(frame, top - 4, c1 + c2);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.ladd(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 3)));
+    }
+
+    public static void fadd(VirtualFrame frame, int top) {
+        float c1 = popFloat(frame, top - 1);
+        float c2 = popFloat(frame, top - 2);
+        putFloat(frame, top - 2, c1 + c2);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.fadd(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 2)));
+    }
+
+    public static void dadd(VirtualFrame frame, int top) {
+        double c1 = popDouble(frame, top - 1);
+        double c2 = popDouble(frame, top - 3);
+        putDouble(frame, top - 4, c1 + c2);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.dadd(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 3)));
+    }
+
+
     //putInt(frame, top - 2, popInt(frame, top - 2) - popInt(frame, top - 1)); break;
     public static void isub(VirtualFrame frame, int top) {
         int c1 = popInt(frame, top - 1);
@@ -274,6 +306,16 @@ public class SPouT {
                 AnnotatedVM.popAnnotations(frame, top - 2)));
     }
 
+    public static void dsub(VirtualFrame frame, int top) {
+        double c1 = popDouble(frame, top - 1);
+        double c2 = popDouble(frame, top - 3);
+        putDouble(frame, top - 4, c2 - c1);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 4, analysis.dsub(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 3)));
+    }
+
     // setLocalInt(frame, bs.readLocalIndex1(curBCI), getLocalInt(frame, bs.readLocalIndex1(curBCI)) + bs.readIncrement1(curBCI));
     public static void iinc(VirtualFrame frame, int index, int incr) {
         // concrete
@@ -287,18 +329,54 @@ public class SPouT {
     public static void lcmp(VirtualFrame frame, int top) {
         long c1 = popLong(frame, top - 1);
         long c2 = popLong(frame, top - 3);
-        int concResult;
-        if (c1 > c2) {
-            concResult = 1;
-        } else if (c1 == c2) {
-            concResult = 0;
-        } else concResult = -1;
-        putInt(frame, top - 4, concResult);
+        putInt(frame, top - 4, Long.compare(c2, c1));
         if (!analyze) return;
         AnnotatedVM.putAnnotations(frame, top - 4, analysis.lcmp(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 3)));
     }
+
+
+    public static void fcmpl(VirtualFrame frame, int top) {
+        float c1 = popFloat(frame, top - 1);
+        float c2 = popFloat(frame, top - 2);
+        putInt(frame, top - 2, compareFloatLess(c1, c2));
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.fcmpl(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 2)));
+    }
+
+    public static void fcmpg(VirtualFrame frame, int top) {
+        float c1 = popFloat(frame, top - 1);
+        float c2 = popFloat(frame, top - 2);
+        putInt(frame, top - 2, compareFloatGreater(c1, c2));
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.fcmpg(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 2)));
+    }
+
+    public static void dcmpl(VirtualFrame frame, int top) {
+        double c1 = popDouble(frame, top - 1);
+        double c2 = popDouble(frame, top - 3);
+        putInt(frame, top - 4, compareDoubleLess(c1, c2));
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.dcmpl(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 3)));
+    }
+
+    public static void dcmpg(VirtualFrame frame, int top) {
+        double c1 = popDouble(frame, top - 1);
+        double c2 = popDouble(frame, top - 3);
+        putInt(frame, top - 4, compareDoubleGreater(c1, c2));
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.dcmpg(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 3)));
+    }
+
 
     public static void imul(VirtualFrame frame, int top) {
         int c1 = popInt(frame, top - 1);
@@ -311,46 +389,148 @@ public class SPouT {
                 AnnotatedVM.popAnnotations(frame, top - 2)));
     }
 
-    public static void idiv(VirtualFrame frame, int top, BytecodeNode bn) {
-        int c1 = popInt(frame, top - 1);
-        checkNotNull(c1, AnnotatedVM.peekAnnotations(frame, top - 1), bn);
-        int c2 = popInt(frame, top - 2);
-            int concResult = c2 / c1;
-            putInt(frame, top - 2, concResult);
-            if (!analyze) return;
-            AnnotatedVM.putAnnotations(frame, top - 2, analysis.idiv(c2, c1,
-                    AnnotatedVM.popAnnotations(frame, top - 2),
-                    AnnotatedVM.popAnnotations(frame, top - 1)));
+    public static void lmul(VirtualFrame frame, int top) {
+        long c1 = popLong(frame, top - 1);
+        long c2 = popLong(frame, top - 3);
+        putLong(frame, top - 4, c1 * c2);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 4, analysis.lmul(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 3)));
 
     }
 
-    private static void checkNotNull(int c1, Annotations a, BytecodeNode bn) {
+    public static void fmul(VirtualFrame frame, int top) {
+        float c1 = popFloat(frame, top - 1);
+        float c2 = popFloat(frame, top - 2);
+        putFloat(frame, top - 2, c1 * c2);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.fmul(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 2)));
+    }
+
+    public static void dmul(VirtualFrame frame, int top) {
+        double c1 = popDouble(frame, top - 1);
+        double c2 = popDouble(frame, top - 3);
+        putDouble(frame, top - 4, c1 * c2);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.dmul(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 3)));
+    }
+
+    public static void idiv(VirtualFrame frame, int top, BytecodeNode bn) {
+        int c1 = popInt(frame, top - 1);
+        checkNotZero(c1, AnnotatedVM.peekAnnotations(frame, top - 1), bn);
+        int c2 = popInt(frame, top - 2);
+        putInt(frame, top - 2, c2 / c1);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.idiv(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 2)));
+    }
+
+    public static void ldiv(VirtualFrame frame, int top, BytecodeNode bn) {
+        long c1 = popLong(frame, top - 1);
+        checkNotZero(c1, AnnotatedVM.peekAnnotations(frame, top - 1), bn);
+        long c2 = popLong(frame, top - 3);
+        putLong(frame, top - 4, c2 / c1);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.ldiv(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 2)));
+    }
+
+    public static void fdiv(VirtualFrame frame, int top) {
+        float c1 = popFloat(frame, top - 1);
+        float c2 = popFloat(frame, top - 2);
+        putFloat(frame, top - 2, c2 / c1);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.fdiv(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 2)));
+    }
+
+    public static void ddiv(VirtualFrame frame, int top) {
+        double c1 = popDouble(frame, top - 1);
+        double c2 = popDouble(frame, top - 3);
+        putDouble(frame, top - 4, c2 / c1);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 4, analysis.ddiv(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 3)));
+    }
+
+
+    private static void checkNotZero(int c1, Annotations a, BytecodeNode bn) {
         if (c1 == 0) {
-            if(a != null && analyze && config.hasConcolicAnalysis()){
-                config.getConcolicAnalysis().addZeroToTrace(a);
+            if (a != null && analyze && config.hasConcolicAnalysis()) {
+                config.getConcolicAnalysis().addZeroToTrace(a, INT_ZERO);
             }
             bn.enterImplicitExceptionProfile();
             Meta meta = bn.getMeta();
             throw meta.throwExceptionWithMessage(meta.java_lang_ArithmeticException, "/ by zero");
+        } else {
+            if (a != null && analyze && config.hasConcolicAnalysis()) {
+                config.getConcolicAnalysis().addNotZeroToTrace(a, INT_ZERO);
+            }
         }
-        else{
-            if(a != null && analyze && config.hasConcolicAnalysis()){
-                config.getConcolicAnalysis().addNotZeroToTrace(a);
+    }
+
+    private static void checkNotZero(long c1, Annotations a, BytecodeNode bn) {
+        if (c1 == 0l) {
+            if (a != null && analyze && config.hasConcolicAnalysis()) {
+                config.getConcolicAnalysis().addZeroToTrace(a, LONG_ZERO);
+            }
+            bn.enterImplicitExceptionProfile();
+            Meta meta = bn.getMeta();
+            throw meta.throwExceptionWithMessage(meta.java_lang_ArithmeticException, "/ by zero");
+        } else {
+            if (a != null && analyze && config.hasConcolicAnalysis()) {
+                config.getConcolicAnalysis().addNotZeroToTrace(a, LONG_ZERO);
             }
         }
     }
 
     public static void irem(VirtualFrame frame, int top, BytecodeNode bn) {
         int c1 = popInt(frame, top - 1);
-        checkNotNull(c1, AnnotatedVM.peekAnnotations(frame, top - 1), bn);
+        checkNotZero(c1, AnnotatedVM.peekAnnotations(frame, top - 1), bn);
         int c2 = popInt(frame, top - 2);
         putInt(frame, top - 2, c2 % c1);
         if (!analyze) return;
         AnnotatedVM.putAnnotations(frame, top - 2, analysis.irem(c2, c1,
                 AnnotatedVM.popAnnotations(frame, top - 2),
                 AnnotatedVM.popAnnotations(frame, top - 1)));
-
     }
+    public static void lrem(VirtualFrame frame, int top, BytecodeNode bn) {
+        long c1 = popLong(frame, top - 1);
+        checkNotZero(c1, AnnotatedVM.peekAnnotations(frame, top - 1), bn);
+        long c2 = popLong(frame, top - 3);
+        putLong(frame, top - 4, c2 % c1);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.lrem(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 3)));
+    }
+    public static void frem(VirtualFrame frame, int top) {
+        float c1 = popFloat(frame, top - 1);
+        float c2 = popFloat(frame, top - 2);
+        putFloat(frame, top - 2, c2 % c1);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.frem(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 2)));
+    }public static void drem(VirtualFrame frame, int top) {
+        double c1 = popDouble(frame, top - 1);
+        double c2 = popDouble(frame, top - 3);
+        putDouble(frame, top - 4, c2 % c1);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 4, analysis.drem(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 3)));
+    }
+
 
     public static void ishl(VirtualFrame frame, int top) {
         int c1 = popInt(frame, top - 1);
@@ -361,9 +541,17 @@ public class SPouT {
         AnnotatedVM.putAnnotations(frame, top - 2, analysis.ishl(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 2)));
-
     }
 
+    public static void lshl(VirtualFrame frame, int top) {
+        int c1 = popInt(frame, top - 1);
+        long c2 = popLong(frame, top - 2);
+        putLong(frame, top - 3, c2 << c1);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 3, analysis.lshl(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 2)));
+    }
     public static void ishr(VirtualFrame frame, int top) {
         int c1 = popInt(frame, top - 1);
         int c2 = popInt(frame, top - 2);
@@ -373,7 +561,16 @@ public class SPouT {
         AnnotatedVM.putAnnotations(frame, top - 2, analysis.ishr(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 2)));
+    }
 
+    public static void lshr(VirtualFrame frame, int top) {
+        int c1 = popInt(frame, top - 1);
+        long c2 = popLong(frame, top - 2);
+        putLong(frame, top - 3, c2 >> c1);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 3, analysis.lshr(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 2)));
     }
 
     public static void ineg(VirtualFrame frame, int top) {
@@ -382,6 +579,27 @@ public class SPouT {
         putInt(frame, top - 1, concResult);
         if (!analyze) return;
         AnnotatedVM.putAnnotations(frame, top - 1, analysis.ineg(c1,
+                AnnotatedVM.popAnnotations(frame, top - 1)));
+    }
+    public static void lneg(VirtualFrame frame, int top) {
+        long c1 = popInt(frame, top - 1);
+        putLong(frame, top - 2, -c1);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 1, analysis.lneg(c1,
+                AnnotatedVM.popAnnotations(frame, top - 1)));
+    }
+    public static void fneg(VirtualFrame frame, int top) {
+        float c1 = popInt(frame, top - 1);
+        putFloat(frame, top - 1, -c1);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 1, analysis.fneg(c1,
+                AnnotatedVM.popAnnotations(frame, top - 1)));
+    }
+    public static void dneg(VirtualFrame frame, int top) {
+        double c1 = popInt(frame, top - 1);
+        putDouble(frame, top - 1, -c1);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 1, analysis.dneg(c1,
                 AnnotatedVM.popAnnotations(frame, top - 1)));
     }
 
@@ -393,20 +611,116 @@ public class SPouT {
                 AnnotatedVM.popAnnotations(frame, top - 1)));
     }
 
-    public static void i2f (VirtualFrame frame, int top) {
+    public static void i2f(VirtualFrame frame, int top) {
         float c1 = popInt(frame, top - 1);
-        putFloat(frame, top-1, c1);
+        putFloat(frame, top - 1, c1);
         if (!analyze) return;
         AnnotatedVM.putAnnotations(frame, top - 1, analysis.i2f(c1,
                 AnnotatedVM.popAnnotations(frame, top - 1)));
     }
-    public static void i2d (VirtualFrame frame, int top) {
+
+    public static void i2d(VirtualFrame frame, int top) {
         double c1 = popInt(frame, top - 1);
-        putDouble(frame, top-1, c1);
+        putDouble(frame, top - 1, c1);
         if (!analyze) return;
         AnnotatedVM.putAnnotations(frame, top - 1, analysis.i2d(c1,
                 AnnotatedVM.popAnnotations(frame, top - 1)));
     }
+
+    public static void l2i(VirtualFrame frame, int top){
+        int c1 = (int) popLong(frame, top - 1);
+        putInt(frame, top-2, c1);
+        if(analyze)
+            AnnotatedVM.putAnnotations(frame, top -2, analysis.l2i(c1,
+                    AnnotatedVM.popAnnotations(frame, top -1)));
+    }
+
+    public static void l2f(VirtualFrame frame, int top){
+        float c1 = (float) popLong(frame, top- 1);
+        putFloat(frame, top-2, c1);
+        if(analyze)
+            AnnotatedVM.putAnnotations(frame, top - 2, analysis.l2f(c1,
+                    AnnotatedVM.popAnnotations(frame, top-2)));
+    }
+
+    public static void l2d(VirtualFrame frame, int top){
+        double c1 = (double) popLong(frame, top- 1);
+        putDouble(frame, top-2, c1);
+        if(analyze)
+            AnnotatedVM.putAnnotations(frame, top - 2, analysis.l2d(c1,
+                    AnnotatedVM.popAnnotations(frame, top-2)));
+    }
+    public static void f2i (VirtualFrame frame, int top){
+        int c1 = (int) popFloat(frame, top -1);
+        putInt(frame, top-1, c1);
+        if(analyze)
+            AnnotatedVM.putAnnotations(frame, top -1 , analysis.f2i(c1,
+                    AnnotatedVM.popAnnotations(frame, top -1)));
+
+    }
+
+    public static void f2l (VirtualFrame frame, int top){
+        long c1 = (long) popFloat(frame, top-1);
+        putLong(frame, top -1 , c1);
+        if(analyze)
+            AnnotatedVM.putAnnotations(frame, top -1 , analysis.f2l(c1,
+                    AnnotatedVM.popAnnotations(frame, top -1)));
+    }
+
+    public static void f2d (VirtualFrame frame, int top){
+        double c1 = (double) popFloat(frame, top-1);
+        putDouble(frame, top - 1, c1);
+        if(analyze)
+            AnnotatedVM.putAnnotations(frame, top -1 , analysis.f2d(c1,
+                    AnnotatedVM.popAnnotations(frame, top-1)));
+    }
+
+    public static void d2i (VirtualFrame frame, int top){
+        int c1 = (int) popDouble(frame, top -1);
+        putInt(frame, top -2, c1);
+        if(analyze)
+            AnnotatedVM.putAnnotations(frame, top -1, analysis.d2i(c1,
+                    AnnotatedVM.popAnnotations(frame, top -1)));
+    }
+
+    public static void d2l (VirtualFrame frame, int top){
+        long c1 = (long) popDouble(frame, top -1);
+        putLong(frame, top -2, c1);
+        if(analyze)
+            AnnotatedVM.putAnnotations(frame, top -2, analysis.d2l(c1,
+                    AnnotatedVM.popAnnotations(frame, top-1)));
+
+    }
+    public static void d2f (VirtualFrame frame, int top){
+        float c1 = (float) popDouble(frame, top -1);
+        putFloat(frame, top -2, c1);
+        if(analyze)
+            AnnotatedVM.putAnnotations(frame, top-2, analysis.d2f(c1,
+                    AnnotatedVM.popAnnotations(frame, top-1)));
+    }
+
+    public static void i2b (VirtualFrame frame, int top){
+        byte c1 = (byte) popInt(frame, top -1);
+        putInt(frame, top -1, c1);
+        if(analyze)
+            AnnotatedVM.putAnnotations(frame, top -1 , analysis.i2b(c1,
+                    AnnotatedVM.popAnnotations(frame, top -1)));
+    }
+    public static void i2c (VirtualFrame frame, int top){
+        char c1 = (char) popInt(frame, top -1);
+        putInt(frame, top -1, c1);
+        if(analyze)
+            AnnotatedVM.putAnnotations(frame, top -1 , analysis.i2c(c1,
+                    AnnotatedVM.popAnnotations(frame, top -1)));
+    }
+    public static void i2s (VirtualFrame frame, int top){
+        short c1 = (short) popInt(frame, top -1);
+        putInt(frame, top -1, c1);
+        if(analyze)
+            AnnotatedVM.putAnnotations(frame, top -1 , analysis.i2s(c1,
+                    AnnotatedVM.popAnnotations(frame, top -1)));
+    }
+
 
     public static void iushr(VirtualFrame frame, int top) {
         int c1 = popInt(frame, top - 1);
@@ -415,6 +729,16 @@ public class SPouT {
         putInt(frame, top - 2, concResult);
         if (!analyze) return;
         AnnotatedVM.putAnnotations(frame, top - 2, analysis.iushr(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 2)));
+    }
+
+    public static void lushr(VirtualFrame frame, int top) {
+        int c1 = popInt(frame, top - 1);
+        long c2 = popLong(frame, top - 2);
+        putLong(frame, top - 3, c2 >>> c1);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 3, analysis.lushr(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 2)));
     }
@@ -430,6 +754,16 @@ public class SPouT {
                 AnnotatedVM.popAnnotations(frame, top - 2)));
     }
 
+    public static void land(VirtualFrame frame, int top) {
+        long c1 = popLong(frame, top - 1);
+        long c2 = popLong(frame, top - 3);
+        putLong(frame, top - 4, c1 & c2);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 4, analysis.land(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 3)));
+    }
+
     public static void ior(VirtualFrame frame, int top) {
         int c1 = popInt(frame, top - 1);
         int c2 = popInt(frame, top - 2);
@@ -439,6 +773,16 @@ public class SPouT {
         AnnotatedVM.putAnnotations(frame, top - 2, analysis.ior(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 2)));
+    }
+
+    public static void lor(VirtualFrame frame, int top) {
+        long c1 = popLong(frame, top - 1);
+        long c2 = popLong(frame, top - 3);
+        putLong(frame, top - 4, c1 | c2);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 4, analysis.lor(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 3)));
     }
 
     public static void ixor(VirtualFrame frame, int top) {
@@ -452,6 +796,15 @@ public class SPouT {
                 AnnotatedVM.popAnnotations(frame, top - 2)));
     }
 
+    public static void lxor(VirtualFrame frame, int top) {
+        long c1 = popLong(frame, top - 1);
+        long c2 = popLong(frame, top - 3);
+        putLong(frame, top - 4, c1 ^ c2);
+        if (!analyze) return;
+        AnnotatedVM.putAnnotations(frame, top - 4, analysis.lxor(c1, c2,
+                AnnotatedVM.popAnnotations(frame, top - 1),
+                AnnotatedVM.popAnnotations(frame, top - 3)));
+    }
 
     // arrays
 
@@ -897,7 +1250,7 @@ public class SPouT {
                         (StaticObject) meta.java_lang_StringLatin1_newString.invokeDirect(self, bytes, 0, ilength)
                         :
                         (StaticObject) meta.java_lang_StringUTF16_newString.invokeDirect(self, bytes, 0, ilength);
-        if(analyze && config.hasConcolicAnalysis()){
+        if (analyze && config.hasConcolicAnalysis()) {
             result = config.getConcolicAnalysis().stringBuilderToString(result, self, meta);
         }
         return result;
@@ -905,7 +1258,7 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static StaticObject stringBuxxInsert(StaticObject self, Object offset, Object toInsert, Meta meta) {
-        if (toInsert instanceof AnnotatedValue){
+        if (toInsert instanceof AnnotatedValue) {
             stopRecording("Cannot insert symbolic chars to StringBuffer", meta);
         }
         StaticObject toInsertCasted = meta.toGuestString(String.valueOf((char) toInsert));
@@ -918,7 +1271,7 @@ public class SPouT {
             SPouT.stopRecording("Cannot handle symbolic offset values for insert into StringBu* yet.", meta);
         }
         int concreteOffset = (int) offset;
-        if(analyze && config.hasConcolicAnalysis()){
+        if (analyze && config.hasConcolicAnalysis()) {
             config.getConcolicAnalysis().stringBuilderInsert(self, concreteOffset, toInsert, meta);
         }
         Method m = self.getKlass().getSuperKlass().lookupMethod(meta.getNames().getOrCreate("insert"), Signature.AbstractStringBuilder_int_String);
