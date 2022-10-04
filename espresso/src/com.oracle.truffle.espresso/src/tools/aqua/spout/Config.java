@@ -253,6 +253,47 @@ public class Config {
     private int[] seedsIntValues = new int[] {};
     private int countIntSeeds = 0;
 
+    public AnnotatedValue nextSymbolicBoolean() {
+        boolean concrete = false;
+        if (countBooleanSeeds < seedsBooleanValues.length) {
+            concrete = seedsBooleanValues[countBooleanSeeds];
+        }
+        Variable symbolic = new Variable(Types.BOOL, countBooleanSeeds++);
+        Object[] annotations = new Object[annotationLength];
+        annotations[concolicIdx] = symbolic;
+        return new AnnotatedValue(concrete, annotations);
+    }
+    public AnnotatedValue nextSymbolicByte() {
+        int concrete = 0;
+        if (countByteSeeds < seedsByteValues.length) {
+            concrete = seedsByteValues[countByteSeeds];
+        }
+        Variable symbolic = new Variable(Types.BYTE, countByteSeeds++);
+        Object[] annotations = new Object[annotationLength];
+        annotations[concolicIdx] = symbolic;
+        return new AnnotatedValue(concrete, annotations);
+    }
+    public AnnotatedValue nextSymbolicChar() {
+        int concrete = 0;
+        if (countCharSeeds < seedsCharValues.length) {
+            concrete = seedsCharValues[countCharSeeds];
+        }
+        Variable symbolic = new Variable(Types.CHAR, countCharSeeds++);
+        Object[] annotations = new Object[annotationLength];
+        annotations[concolicIdx] = symbolic;
+        return new AnnotatedValue(concrete, annotations);
+    }
+    public AnnotatedValue nextSymbolicShort() {
+        int concrete = 0;
+        if (countShortSeeds < seedsShortValues.length) {
+            concrete = seedsShortValues[countShortSeeds];
+        }
+        Variable symbolic = new Variable(Types.SHORT, countShortSeeds++);
+        Object[] annotations = new Object[annotationLength];
+        annotations[concolicIdx] = symbolic;
+        return new AnnotatedValue(concrete, annotations);
+    }
+
     public AnnotatedValue nextSymbolicInt() {
         int concrete = 0;
         if (countIntSeeds < seedsIntValues.length) {
@@ -264,6 +305,40 @@ public class Config {
         AnnotatedValue a = new AnnotatedValue(concrete, annotations);
         countIntSeeds++;
         return a;
+    }
+    public AnnotatedValue nextSymbolicLong() {
+        long concrete = 0l;
+        if (countLongSeeds < seedsLongValues.length) {
+            concrete = seedsLongValues[countLongSeeds];
+        }
+        Variable symbolic = new Variable(Types.LONG, countLongSeeds);
+        Object[] annotations = new Object[annotationLength];
+        annotations[concolicIdx] = symbolic;
+        AnnotatedValue a = new AnnotatedValue(concrete, annotations);
+        countIntSeeds++;
+        return a;
+    }
+
+    public AnnotatedValue nextSymbolicFloat() {
+        float concrete = 0.0f;
+        if (countFloatSeeds < seedsFloatValues.length) {
+            concrete = seedsFloatValues[countFloatSeeds];
+        }
+        Variable symbolic = new Variable(Types.FLOAT, countFloatSeeds++);
+        Object[] annotations = new Object[annotationLength];
+        annotations[concolicIdx] = symbolic;
+        return new AnnotatedValue(concrete, annotations);
+    }
+
+    public AnnotatedValue nextSymbolicDouble() {
+        double concrete = 0.0;
+        if (countDoubleSeeds < seedsDoubleValues.length) {
+            concrete = seedsDoubleValues[countDoubleSeeds];
+        }
+        Variable symbolic = new Variable(Types.DOUBLE, countDoubleSeeds++);
+        Object[] annotations = new Object[annotationLength];
+        annotations[concolicIdx] = symbolic;
+        return new AnnotatedValue(concrete, annotations);
     }
 
     public SymbolicStringValue nextSymbolicString(){

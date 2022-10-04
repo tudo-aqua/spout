@@ -110,25 +110,6 @@ public class SPouT {
         meta.throwException(meta.java_lang_RuntimeException);
     }
 
-    @CompilerDirectives.TruffleBoundary
-    public static Object split(StaticObject self, StaticObject regex, Meta meta) {
-        boolean isSelfSymbolic = self.hasAnnotations()
-                && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
-        boolean isRegexSymbolic = regex.hasAnnotations()
-                && regex.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
-
-        if (isSelfSymbolic || isRegexSymbolic) {
-            stopRecording("Cannot split symbolic strings yet", meta);
-        }
-        String s = meta.toHostString(self);
-        String r = meta.toHostString(regex);
-        String[] res = s.split(r);
-        StaticObject[] resSO = new StaticObject[res.length];
-        for (int i = 0; i < res.length; i++) {
-            resSO[i] = meta.toGuestString(res[i]);
-        }
-        return StaticObject.createArray(self.getKlass().getArrayClass(), resSO, meta.getContext());
-    }
 
     @CompilerDirectives.TruffleBoundary
     public void assume(Object condition, Meta meta) {
@@ -163,10 +144,66 @@ public class SPouT {
         }
     }
 
+
     @CompilerDirectives.TruffleBoundary
     public static Object nextSymbolicInt() {
         if (!analyze || !config.hasConcolicAnalysis()) return 0;
         Object av = config.getConcolicAnalysis().nextSymbolicInt();
+        //GWIT.trackLocationForWitness("" + concrete);
+        return av;
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static Object nextSymbolicLong() {
+        if (!analyze || !config.hasConcolicAnalysis()) return 0;
+        Object av = config.getConcolicAnalysis().nextSymbolicLong();
+        //GWIT.trackLocationForWitness("" + concrete);
+        return av;
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static Object nextSymbolicFloat() {
+        if (!analyze || !config.hasConcolicAnalysis()) return 0;
+        Object av = config.getConcolicAnalysis().nextSymbolicFloat();
+        //GWIT.trackLocationForWitness("" + concrete);
+        return av;
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static Object nextSymbolicDouble() {
+        if (!analyze || !config.hasConcolicAnalysis()) return 0;
+        Object av = config.getConcolicAnalysis().nextSymbolicDouble();
+        //GWIT.trackLocationForWitness("" + concrete);
+        return av;
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static Object nextSymbolicBoolean() {
+        if (!analyze || !config.hasConcolicAnalysis()) return 0;
+        Object av = config.getConcolicAnalysis().nextSymbolicBoolean();
+        //GWIT.trackLocationForWitness("" + concrete);
+        return av;
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static Object nextSymbolicByte() {
+        if (!analyze || !config.hasConcolicAnalysis()) return 0;
+        Object av = config.getConcolicAnalysis().nextSymbolicByte();
+        //GWIT.trackLocationForWitness("" + concrete);
+        return av;
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static Object nextSymbolicShort() {
+        if (!analyze || !config.hasConcolicAnalysis()) return 0;
+        Object av = config.getConcolicAnalysis().nextSymbolicShort();
+        //GWIT.trackLocationForWitness("" + concrete);
+        return av;
+    }
+    @CompilerDirectives.TruffleBoundary
+    public static Object nextSymbolicChar() {
+        if (!analyze || !config.hasConcolicAnalysis()) return 0;
+        Object av = config.getConcolicAnalysis().nextSymbolicChar();
         //GWIT.trackLocationForWitness("" + concrete);
         return av;
     }
@@ -1291,6 +1328,108 @@ public class SPouT {
         m.invokeDirect(self, srcBegin, srcEnd, dst, dstBegin);
     }
 
+    @CompilerDirectives.TruffleBoundary
+    public static Object split(StaticObject self, StaticObject regex, Meta meta) {
+        boolean isSelfSymbolic = self.hasAnnotations()
+                && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
+        boolean isRegexSymbolic = regex.hasAnnotations()
+                && regex.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
+
+        if (isSelfSymbolic || isRegexSymbolic) {
+            stopRecording("Cannot split symbolic strings yet", meta);
+        }
+        String s = meta.toHostString(self);
+        String r = meta.toHostString(regex);
+        String[] res = s.split(r);
+        StaticObject[] resSO = new StaticObject[res.length];
+        for (int i = 0; i < res.length; i++) {
+            resSO[i] = meta.toGuestString(res[i]);
+        }
+        return StaticObject.createArray(self.getKlass().getArrayClass(), resSO, meta.getContext());
+    }
+
+    public static StaticObject valueOf_bool(Object v, Meta meta) {
+        if (v instanceof AnnotatedValue) {
+            stopRecording("concolic type conversion to string not supported, yet.", meta);
+        }
+        String ret = "" + (boolean) v;
+        return meta.toGuestString(ret);
+    }
+
+    public static StaticObject valueOf_byte(Object v, Meta meta){
+        if (v instanceof AnnotatedValue) {
+            stopRecording("concolic type conversion to string not supported, yet.", meta);
+        }
+        String ret = "" + (byte) v;
+        return meta.toGuestString(ret);
+    }
+
+    public static StaticObject valueOf_char(Object v, Meta meta) {
+        if (v instanceof AnnotatedValue) {
+            stopRecording("concolic type char conversion to string not supported, yet.", meta);
+        }
+        String ret = "" + (char) v;
+        return meta.toGuestString(ret);
+    }
+
+    public static StaticObject valueOf_char_array(StaticObject v, Meta meta) {
+        if (hasConcolicAnnotations(v)) {
+            stopRecording("concolic type char array conversion to string not supported, yet.", meta);
+        }
+        char[] value = v.unwrap(meta.getLanguage());
+        return meta.toGuestString(new String(value));
+    }
+
+    public static StaticObject valueOf_char_array(StaticObject v, Object offset, Object count, Meta meta) {
+        if (hasConcolicAnnotations(v) || offset instanceof AnnotatedValue || count instanceof AnnotatedValue) {
+            stopRecording("concolic type char array conversion to string not supported, yet.", meta);
+        }
+        int coffset = (int) offset;
+        int ccount = (int) count;
+        char [] value = v.unwrap(meta.getLanguage());
+        return meta.toGuestString(new String(Arrays.copyOfRange(value, coffset, coffset+ccount)));
+    }
+
+    public static StaticObject valueOf_short(Object v, Meta meta) {
+        if (v instanceof AnnotatedValue) {
+            stopRecording("concolic type conversion to string not supported, yet.", meta);
+        }
+        String ret = "" + (short) v;
+        return meta.toGuestString(ret);
+    }
+
+    public static StaticObject valueOf_int(Object v, Meta meta) {
+        if (v instanceof AnnotatedValue) {
+            stopRecording("concolic type conversion to string not supported, yet.", meta);
+        }
+        String ret = "" + (int) v;
+        return meta.toGuestString(ret);
+    }
+
+    public static StaticObject valueOf_long(Object v, Meta meta) {
+        if (v instanceof AnnotatedValue) {
+            stopRecording("concolic type conversion to string not supported, yet.", meta);
+        }
+        String ret = "" + (long) v;
+        return meta.toGuestString(ret);
+    }
+
+    public static StaticObject valueOf_float(Object v, Meta meta) {
+        if (v instanceof AnnotatedValue) {
+            stopRecording("concolic type conversion to string not supported, yet.", meta);
+        }
+        String ret = "" + (float) v;
+        return meta.toGuestString(ret);
+    }
+
+    public static StaticObject valueOf_double(Object v, Meta meta) {
+        if (v instanceof AnnotatedValue) {
+            stopRecording("concolic type conversion to string not supported, yet.", meta);
+        }
+        String ret = "" + (double) v;
+        return meta.toGuestString(ret);
+    }
+
     // --------------------------------------------------------------------------
     //
     // helpers
@@ -1317,5 +1456,8 @@ public class SPouT {
         }
         target.setAnnotations(annotations);
         return target;
+    }
+    private static boolean hasConcolicAnnotations(StaticObject v) {
+        return v.hasAnnotations() && config.hasConcolicAnalysis() && v.getAnnotations()[config.getConcolicIdx()] != null;
     }
 }

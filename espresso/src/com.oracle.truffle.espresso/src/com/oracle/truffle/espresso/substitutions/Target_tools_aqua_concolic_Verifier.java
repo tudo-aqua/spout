@@ -67,25 +67,25 @@ public final class Target_tools_aqua_concolic_Verifier {
     public static @JavaType(internalName = "I") Object nondetInt() {
         return SPouT.nextSymbolicInt();
     }
-/*
+
     //    public static long nondetLong()
-    @Substitution(hasReceiver = false)
-    public static @Host(typeName = "J") Object nondetLong(@InjectMeta Meta meta) {
-        return Analysis.getInstance().getConfig().nextSymbolicLong();
+    @Substitution(hasReceiver = false, passAnnotations = true)
+    public static @JavaType(internalName = "J") Object nondetLong() {
+        return SPouT.nextSymbolicLong();
     }
 
     //    public static float nondetFloat()
-    @Substitution(hasReceiver = false)
-    public static @Host(typeName = "F") Object nondetFloat(@InjectMeta Meta meta) {
-        return Analysis.getInstance().getConfig().nextSymbolicFloat();
+    @Substitution(hasReceiver = false, passAnnotations = true)
+    public static @JavaType(internalName = "F") Object nondetFloat() {
+        return SPouT.nextSymbolicFloat();
     }
 
     //    public static double nondetDouble()
-    @Substitution(hasReceiver = false)
-    public static @Host(typeName = "D") Object nondetDouble(@InjectMeta Meta meta) {
-        return Analysis.getInstance().getConfig().nextSymbolicDouble();
+    @Substitution(hasReceiver = false, passAnnotations = true)
+    public static @JavaType(internalName = "D") Object nondetDouble() {
+        return SPouT.nextSymbolicDouble();
     }
-*/
+
     //    public static String nondetString()
     @Substitution(hasReceiver = false)
     public static @JavaType(String.class) StaticObject nondetString(@Inject Meta meta) {

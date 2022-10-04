@@ -68,6 +68,45 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return av;
     }
 
+    public Object nextSymbolicLong() {
+        AnnotatedValue av = config.nextSymbolicLong();
+        trace.addElement(new SymbolDeclaration(Annotations.annotation(av, config.getConcolicIdx())));
+        return av;
+    }
+
+
+    public Object nextSymbolicFloat() {
+        AnnotatedValue av = config.nextSymbolicFloat();
+        trace.addElement(new SymbolDeclaration(Annotations.annotation(av, config.getConcolicIdx())));
+        return av;
+    }
+
+    public Object nextSymbolicDouble() {
+        AnnotatedValue av = config.nextSymbolicDouble();
+        trace.addElement(new SymbolDeclaration(Annotations.annotation(av, config.getConcolicIdx())));
+        return av;
+    }
+    public Object nextSymbolicBoolean() {
+        AnnotatedValue av = config.nextSymbolicBoolean();
+        trace.addElement(new SymbolDeclaration(Annotations.annotation(av, config.getConcolicIdx())));
+        return av;
+    }
+    public Object nextSymbolicByte() {
+        AnnotatedValue av = config.nextSymbolicByte();
+        trace.addElement(new SymbolDeclaration(Annotations.annotation(av, config.getConcolicIdx())));
+        return av;
+    }
+    public Object nextSymbolicChar() {
+        AnnotatedValue av = config.nextSymbolicChar();
+        trace.addElement(new SymbolDeclaration(Annotations.annotation(av, config.getConcolicIdx())));
+        return av;
+    }
+    public Object nextSymbolicShort() {
+        AnnotatedValue av = config.nextSymbolicShort();
+        trace.addElement(new SymbolDeclaration(Annotations.annotation(av, config.getConcolicIdx())));
+        return av;
+    }
+
     public StaticObject nextSymbolicString(Meta meta) {
         Config.SymbolicStringValue ssv = config.nextSymbolicString();
         StaticObject guestString = meta.toGuestString(ssv.concrete);
