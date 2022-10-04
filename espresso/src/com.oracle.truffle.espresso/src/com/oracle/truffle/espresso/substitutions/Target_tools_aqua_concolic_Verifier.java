@@ -37,32 +37,27 @@ public final class Target_tools_aqua_concolic_Verifier {
     public static void assume(@Host(typeName = "Z") Object condition, @InjectMeta Meta meta) {
         Analysis.getInstance().assume( condition, meta );
     }
-
-    //    public static boolean nondetBoolean()
-    @Substitution(hasReceiver = false)
-    public static @Host(typeName = "Z") Object nondetBoolean(@InjectMeta Meta meta) {
-        return Analysis.getInstance().getConfig().nextSymbolicBoolean();
-    }
-
-    //    public static byte nondetByte()
-    @Substitution(hasReceiver = false)
-    public static @Host(typeName = "B") Object nondetByte(@InjectMeta Meta meta) {
-        return Analysis.getInstance().getConfig().nextSymbolicByte();
-    }
-
-    //    public static char nondetChar()
-    @Substitution(hasReceiver = false)
-    public static @Host(typeName = "C") Object nondetChar(@InjectMeta Meta meta) {
-        return Analysis.getInstance().getConfig().nextSymbolicChar();
-    }
-
-    //    public static short nondetShort()
-    @Substitution(hasReceiver = false)
-    public static @Host(typeName = "S") Object nondetShort(@InjectMeta Meta meta) {
-        return Analysis.getInstance().getConfig().nextSymbolicShort();
-    }
 */
-    //    public static int nondetInt()
+    @Substitution(hasReceiver = false)
+    public static @JavaType(internalName = "Z") Object nondetBoolean() {
+        return SPouT.nextSymbolicBoolean();
+    }
+
+    @Substitution(hasReceiver = false, passAnnotations = true)
+    public static @JavaType(internalName = "B") Object nondetByte() {
+        return SPouT.nextSymbolicByte();
+    }
+
+    @Substitution(hasReceiver = false, passAnnotations = true)
+    public static @JavaType(internalName = "C") Object nondetChar() {
+        return SPouT.nextSymbolicChar();
+    }
+
+    @Substitution(hasReceiver = false, passAnnotations = true)
+    public static @JavaType(internalName = "S") Object nondetShort() {
+        return SPouT.nextSymbolicShort();
+    }
+
     @Substitution(passAnnotations = true)
     public static @JavaType(internalName = "I") Object nondetInt() {
         return SPouT.nextSymbolicInt();
