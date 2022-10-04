@@ -582,24 +582,24 @@ public class SPouT {
                 AnnotatedVM.popAnnotations(frame, top - 1)));
     }
     public static void lneg(VirtualFrame frame, int top) {
-        long c1 = popInt(frame, top - 1);
+        long c1 = popLong(frame, top - 1);
         putLong(frame, top - 2, -c1);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 1, analysis.lneg(c1,
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.lneg(c1,
                 AnnotatedVM.popAnnotations(frame, top - 1)));
     }
     public static void fneg(VirtualFrame frame, int top) {
-        float c1 = popInt(frame, top - 1);
+        float c1 = popFloat(frame, top - 1);
         putFloat(frame, top - 1, -c1);
         if (!analyze) return;
         AnnotatedVM.putAnnotations(frame, top - 1, analysis.fneg(c1,
                 AnnotatedVM.popAnnotations(frame, top - 1)));
     }
     public static void dneg(VirtualFrame frame, int top) {
-        double c1 = popInt(frame, top - 1);
-        putDouble(frame, top - 1, -c1);
+        double c1 = popDouble(frame, top - 1);
+        putDouble(frame, top - 2, -c1);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 1, analysis.dneg(c1,
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.dneg(c1,
                 AnnotatedVM.popAnnotations(frame, top - 1)));
     }
 
