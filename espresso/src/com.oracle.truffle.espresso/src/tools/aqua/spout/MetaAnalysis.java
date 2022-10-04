@@ -27,6 +27,8 @@ package tools.aqua.spout;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 
+import java.util.function.UnaryOperator;
+
 
 public class MetaAnalysis implements Analysis<Annotations> {
 
@@ -47,8 +49,28 @@ public class MetaAnalysis implements Analysis<Annotations> {
         <T> T execute(Analysis<T> analysis, long c1, long c2, T s1, T s2);
     }
 
+    interface BinaryLongShiftOperation {
+        <T> T execute(Analysis<T> analysis, int c1, long c2, T s1, T s2);
+    }
+
     interface BinaryFloatOperation {
         <T> T execute(Analysis<T> analysis, float c1, float c2, T s1, T s2);
+    }
+
+    interface BinaryDoubleOperation {
+        <T> T execute(Analysis<T> analysis, double c1, double c2, T s1, T s2);
+    }
+
+    interface UnaryByteOperation{
+        <T> T execute(Analysis<T> analysis, byte c1, T s1);
+    }
+
+    interface UnaryCharOperation{
+        <T> T execute(Analysis<T> analysis, char c1, T s1);
+    }
+
+    interface UnaryShortOperation{
+        <T> T execute(Analysis<T> analysis, short c1, T s1);
     }
 
     interface UnaryOperation {
@@ -61,6 +83,10 @@ public class MetaAnalysis implements Analysis<Annotations> {
 
     interface UnaryFloatOperation {
         <T> T execute(Analysis<T> analysis, float c1, T s1);
+    }
+
+    interface UnaryDoubleOperation {
+        <T> T execute(Analysis<T> analysis, double c1, T s1);
     }
 
     private Annotations execute(int c1, int c2, Annotations a1, Annotations a2, BinaryOperation executor) {
@@ -92,6 +118,20 @@ public class MetaAnalysis implements Analysis<Annotations> {
         }
         return hasResult ? new Annotations(annotations) : null;
     }
+    private Annotations lShiftExecute(int c1, long c2, Annotations a1, Annotations a2, BinaryLongShiftOperation executor) {
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[analyses.length];
+        for (Analysis<?> analysis : analyses) {
+            Object result = executor.execute(analysis, c1, c2, Annotations.annotation(a1, i), Annotations.annotation(a2, i));
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? new Annotations(annotations) : null;
+    }
 
     private Annotations fexecute(float c1, float c2, Annotations a1, Annotations a2, BinaryFloatOperation executor) {
         int i = 0;
@@ -99,6 +139,66 @@ public class MetaAnalysis implements Analysis<Annotations> {
         Object[] annotations = new Object[analyses.length];
         for (Analysis<?> analysis : analyses) {
             Object result = executor.execute(analysis, c1, c2, Annotations.annotation(a1, i), Annotations.annotation(a2, i));
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? new Annotations(annotations) : null;
+    }
+
+    private Annotations dexecute(double c1, double c2, Annotations a1, Annotations a2, BinaryDoubleOperation executor) {
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[analyses.length];
+        for (Analysis<?> analysis : analyses) {
+            Object result = executor.execute(analysis, c1, c2, Annotations.annotation(a1, i), Annotations.annotation(a2, i));
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? new Annotations(annotations) : null;
+    }
+
+    private Annotations bexecute(byte c1, Annotations a1, UnaryByteOperation executor) {
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[analyses.length];
+        for (Analysis<?> analysis : analyses) {
+            Object result = executor.execute(analysis, c1, Annotations.annotation(a1, i));
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? new Annotations(annotations) : null;
+    }
+
+    private Annotations cexecute(char c1, Annotations a1, UnaryCharOperation executor) {
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[analyses.length];
+        for (Analysis<?> analysis : analyses) {
+            Object result = executor.execute(analysis, c1, Annotations.annotation(a1, i));
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? new Annotations(annotations) : null;
+    }
+
+    private Annotations sexecute(short c1, Annotations a1, UnaryShortOperation executor) {
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[analyses.length];
+        for (Analysis<?> analysis : analyses) {
+            Object result = executor.execute(analysis, c1, Annotations.annotation(a1, i));
             if (result != null) {
                 annotations[i] = result;
                 hasResult = true;
@@ -138,6 +238,21 @@ public class MetaAnalysis implements Analysis<Annotations> {
         return hasResult ? new Annotations(annotations) : null;
     }
     private Annotations fexecute(float c1, Annotations a1, UnaryFloatOperation executor) {
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[analyses.length];
+        for (Analysis<?> analysis : analyses) {
+            Object result = executor.execute(analysis, c1, Annotations.annotation(a1, i));
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? new Annotations(annotations) : null;
+    }
+
+    private Annotations dexecute(double c1, Annotations a1, UnaryDoubleOperation executor) {
         int i = 0;
         boolean hasResult = false;
         Object[] annotations = new Object[analyses.length];
@@ -213,7 +328,7 @@ public class MetaAnalysis implements Analysis<Annotations> {
     }
     @Override
     public Annotations dsub(double c1, double c2, Annotations a1, Annotations a2) {
-        return fexecute(c1, c2, a1, a2, Analysis::dsub);
+        return dexecute(c1, c2, a1, a2, Analysis::dsub);
     }
 
     @Override
@@ -233,6 +348,206 @@ public class MetaAnalysis implements Analysis<Annotations> {
     @Override
     public Annotations iand(int c1, int c2, Annotations a1, Annotations a2) {
         return execute(c1, c2, a1, a2, Analysis::iand);
+    }
+
+    @Override
+    public Annotations ladd(long c1, long c2, Annotations a1, Annotations a2) {
+        return lexecute(c1, c2, a1, a2, Analysis::land);
+    }
+
+    @Override
+    public Annotations fadd(float c1, float c2, Annotations a1, Annotations a2) {
+        return fexecute(c1, c2, a1, a2, Analysis::fadd);
+    }
+
+    @Override
+    public Annotations dadd(double c1, double c2, Annotations a1, Annotations a2) {
+        return dexecute(c1, c2, a1, a2, Analysis::dadd);
+    }
+
+    @Override
+    public Annotations lmul(long c1, long c2, Annotations a1, Annotations a2) {
+        return lexecute(c1, c2, a1, a2, Analysis::lmul);
+    }
+
+    @Override
+    public Annotations fmul(float c1, float c2, Annotations a1, Annotations a2) {
+        return fexecute(c1, c2, a1, a2, Analysis::fmul);
+    }
+
+    @Override
+    public Annotations dmul(double c1, double c2, Annotations a1, Annotations a2) {
+        return dexecute(c1, c2, a1, a2, Analysis::dmul);
+    }
+
+    @Override
+    public void checkNonZero(int value, Annotations taint) {
+        Analysis.super.checkNonZero(value, taint);
+    }
+
+    @Override
+    public void checkNonZero(long value, Annotations taint) {
+        Analysis.super.checkNonZero(value, taint);
+    }
+
+    @Override
+    public Annotations ldiv(long c1, long c2, Annotations a1, Annotations a2) {
+        return lexecute(c1, c2, a1, a2, Analysis::ldiv);
+    }
+
+    @Override
+    public Annotations fdiv(float c1, float c2, Annotations a1, Annotations a2) {
+        return fexecute(c1, c2, a1, a2, Analysis::fdiv);
+    }
+
+    @Override
+    public Annotations ddiv(double c1, double c2, Annotations a1, Annotations a2) {
+        return dexecute(c1, c2, a1, a2, Analysis::ddiv);
+    }
+
+    @Override
+    public Annotations lrem(long c1, long c2, Annotations a1, Annotations a2) {
+        return lexecute(c1, c2, a1, a2, Analysis::lrem);
+    }
+
+    @Override
+    public Annotations frem(float c1, float c2, Annotations a1, Annotations a2) {
+        return fexecute(c1, c2, a1, a2, Analysis::frem);
+    }
+
+    @Override
+    public Annotations drem(double c1, double c2, Annotations a1, Annotations a2) {
+        return dexecute(c1, c2, a1, a2, Analysis::drem);
+    }
+
+    @Override
+    public Annotations lneg(long c1, Annotations a1) {
+        return lexecute(c1, a1, Analysis::lneg);
+    }
+
+    @Override
+    public Annotations fneg(float c1, Annotations a1) {
+        return fexecute(c1, a1, Analysis::fneg);
+    }
+
+    @Override
+    public Annotations dneg(double c1, Annotations a1) {
+        return dexecute(c1, a1, Analysis::dneg);
+    }
+
+    @Override
+    public Annotations lshl(int c1, long c2, Annotations a1, Annotations a2) {
+        return lShiftExecute(c1, c2, a1, a2, Analysis::lshl);
+    }
+
+    @Override
+    public Annotations lshr(int c1, long c2, Annotations a1, Annotations a2) {
+        return lShiftExecute(c1, c2, a1, a2, Analysis::lshr);
+    }
+
+    @Override
+    public Annotations lushr(int c1, long c2, Annotations a1, Annotations a2) {
+        return lShiftExecute(c1, c2, a1, a2, Analysis::lushr);
+    }
+
+    @Override
+    public Annotations land(long c1, long c2, Annotations a1, Annotations a2) {
+        return lexecute(c1, c2, a1, a2, Analysis::land);
+    }
+
+    @Override
+    public Annotations lor(long c1, long c2, Annotations a1, Annotations a2) {
+        return lexecute(c1, c2, a1, a2, Analysis::lor);
+    }
+
+    @Override
+    public Annotations lxor(long c1, long c2, Annotations a1, Annotations a2) {
+        return lexecute(c1, c2, a1, a2, Analysis::lxor);
+    }
+
+    @Override
+    public Annotations i2d(double c1, Annotations a1) {
+        return dexecute(c1, a1, Analysis::i2d);
+    }
+
+    @Override
+    public Annotations l2i(int c1, Annotations a1) {
+        return execute(c1, a1, Analysis::l2i);
+    }
+
+    @Override
+    public Annotations l2f(float c1, Annotations a1) {
+        return fexecute(c1, a1, Analysis::l2f);
+    }
+
+    @Override
+    public Annotations l2d(double c1, Annotations a1) {
+        return dexecute(c1, a1, Analysis::l2d);
+    }
+
+    @Override
+    public Annotations f2i(int c1, Annotations a1) {
+        return execute(c1, a1, Analysis::f2i);
+    }
+
+    @Override
+    public Annotations f2l(long c1, Annotations a1) {
+        return lexecute(c1, a1, Analysis::f2l);
+    }
+
+    @Override
+    public Annotations f2d(double c1, Annotations a1) {
+        return dexecute(c1, a1, Analysis::f2d);
+    }
+
+    @Override
+    public Annotations d2i(int c1, Annotations a1) {
+        return execute(c1, a1, Analysis::d2i);
+    }
+
+    @Override
+    public Annotations d2l(long c1, Annotations a1) {
+        return lexecute(c1, a1, Analysis::d2l);
+    }
+
+    @Override
+    public Annotations d2f(float c1, Annotations a1) {
+        return fexecute(c1, a1, Analysis::d2f);
+    }
+
+    @Override
+    public Annotations i2b(byte c1, Annotations a1) {
+        return bexecute(c1, a1, Analysis::i2b);
+    }
+
+    @Override
+    public Annotations i2c(char c1, Annotations a1) {
+        return cexecute(c1, a1, Analysis::i2c);
+    }
+
+    @Override
+    public Annotations i2s(short c1, Annotations a1) {
+        return sexecute(c1, a1, Analysis::i2s);
+    }
+
+    @Override
+    public Annotations fcmpl(float c1, float c2, Annotations a1, Annotations a2) {
+        return Analysis.super.fcmpl(c1, c2, a1, a2);
+    }
+
+    @Override
+    public Annotations fcmpg(float c1, float c2, Annotations a1, Annotations a2) {
+        return Analysis.super.fcmpg(c1, c2, a1, a2);
+    }
+
+    @Override
+    public Annotations dcmpl(double c1, double c2, Annotations a1, Annotations a2) {
+        return Analysis.super.dcmpl(c1, c2, a1, a2);
+    }
+
+    @Override
+    public Annotations dcmpg(double c1, double c2, Annotations a1, Annotations a2) {
+        return Analysis.super.dcmpg(c1, c2, a1, a2);
     }
 
     @Override

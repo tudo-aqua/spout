@@ -286,4 +286,6 @@ public interface Analysis<T> {
     default void lookupSwitch(VirtualFrame frame, BytecodeNode bcn, int bci,
                               int[] vals, int key, T a1) {
     }
+
+
 }
