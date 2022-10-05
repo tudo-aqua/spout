@@ -46,7 +46,7 @@ public class AnnotatedVM {
 
     public static Annotations peekAnnotations(VirtualFrame frame, int slot){
         Annotations[] annotations = getAnnotations(frame);
-        if (annotations != null) {
+        if (annotations != null && (slot-VALUES_START) >= 0 && (slot-VALUES_START) < annotations.length) {
             return annotations[slot - VALUES_START];
         }
         return null;

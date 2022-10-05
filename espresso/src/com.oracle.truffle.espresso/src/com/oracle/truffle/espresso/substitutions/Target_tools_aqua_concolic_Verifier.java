@@ -25,7 +25,6 @@ package com.oracle.truffle.espresso.substitutions;
 
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.runtime.StaticObject;
-import tools.aqua.spout.AnnotatedValue;
 import tools.aqua.spout.SPouT;
 
 @EspressoSubstitutions
@@ -38,7 +37,7 @@ public final class Target_tools_aqua_concolic_Verifier {
         Analysis.getInstance().assume( condition, meta );
     }
 */
-    @Substitution(hasReceiver = false)
+    @Substitution(hasReceiver = false, passAnnotations = true)
     public static @JavaType(internalName = "Z") Object nondetBoolean() {
         return SPouT.nextSymbolicBoolean();
     }

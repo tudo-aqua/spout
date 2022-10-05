@@ -872,22 +872,27 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case ILOAD:
                         putInt(frame, top, getLocalInt(frame, bs.readLocalIndex(curBCI)));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.putAnnotations(frame, top, AnnotatedVM.getLocalAnnotations(frame, bs.readLocalIndex(curBCI)));
                         break;
                     case LLOAD:
                         putLong(frame, top, getLocalLong(frame, bs.readLocalIndex(curBCI)));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.putAnnotations(frame, top, AnnotatedVM.getLocalAnnotations(frame, bs.readLocalIndex(curBCI)));
                         break;
                     case FLOAD:
                         putFloat(frame, top, getLocalFloat(frame, bs.readLocalIndex(curBCI)));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.putAnnotations(frame, top, AnnotatedVM.getLocalAnnotations(frame, bs.readLocalIndex(curBCI)));
                         break;
                     case DLOAD:
                         putDouble(frame, top, getLocalDouble(frame, bs.readLocalIndex(curBCI)));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.putAnnotations(frame, top, AnnotatedVM.getLocalAnnotations(frame, bs.readLocalIndex(curBCI)));
                         break;
                     case ALOAD:
                         putObject(frame, top, getLocalObject(frame, bs.readLocalIndex(curBCI)));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        // no concolic analysis of objects
                         break;
 
                     case ILOAD_0: // fall through
@@ -904,6 +909,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case LLOAD_3:
                         putLong(frame, top, getLocalLong(frame, curOpcode - LLOAD_0));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.putAnnotations(frame, top + 1, AnnotatedVM.getLocalAnnotations(frame, curOpcode - LLOAD_0));
                         break;
                     case FLOAD_0: // fall through
                     case FLOAD_1: // fall through
@@ -911,6 +917,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case FLOAD_3:
                         putFloat(frame, top, getLocalFloat(frame, curOpcode - FLOAD_0));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.putAnnotations(frame, top, AnnotatedVM.getLocalAnnotations(frame, curOpcode - FLOAD_0));
                         break;
                     case DLOAD_0: // fall through
                     case DLOAD_1: // fall through
@@ -918,6 +925,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case DLOAD_3:
                         putDouble(frame, top, getLocalDouble(frame, curOpcode - DLOAD_0));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.putAnnotations(frame, top + 1, AnnotatedVM.getLocalAnnotations(frame, curOpcode - DLOAD_0));
                         break;
                     case ALOAD_0:
                         putObject(frame, top, getLocalObject(frame, 0));
@@ -928,6 +936,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case ALOAD_3:
                         putObject(frame, top, getLocalObject(frame, curOpcode - ALOAD_0));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        // no concolic analysis of objects
                         break;
 
                     case IALOAD: // fall through
@@ -945,22 +954,27 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case ISTORE:
                         setLocalInt(frame, bs.readLocalIndex(curBCI), popInt(frame, top - 1));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.setLocalAnnotations(frame, bs.readLocalIndex(curBCI), AnnotatedVM.popAnnotations(frame, top -1));
                         break;
                     case LSTORE:
                         setLocalLong(frame, bs.readLocalIndex(curBCI), popLong(frame, top - 1));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.setLocalAnnotations(frame, bs.readLocalIndex(curBCI), AnnotatedVM.popAnnotations(frame, top -1));
                         break;
                     case FSTORE:
                         setLocalFloat(frame, bs.readLocalIndex(curBCI), popFloat(frame, top - 1));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.setLocalAnnotations(frame, bs.readLocalIndex(curBCI), AnnotatedVM.popAnnotations(frame, top -1));
                         break;
                     case DSTORE:
                         setLocalDouble(frame, bs.readLocalIndex(curBCI), popDouble(frame, top - 1));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.setLocalAnnotations(frame, bs.readLocalIndex(curBCI), AnnotatedVM.popAnnotations(frame, top -1));
                         break;
                     case ASTORE:
                         setLocalObjectOrReturnAddress(frame, bs.readLocalIndex(curBCI), popReturnAddressOrObject(frame, top - 1));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        // no concolic analysis of objects
                         break;
 
                     case ISTORE_0: // fall through
@@ -977,6 +991,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case LSTORE_3:
                         setLocalLong(frame, curOpcode - LSTORE_0, popLong(frame, top - 1));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.setLocalAnnotations(frame, curOpcode - LSTORE_0, AnnotatedVM.popAnnotations(frame, top - 1));
                         break;
                     case FSTORE_0: // fall through
                     case FSTORE_1: // fall through
@@ -984,6 +999,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case FSTORE_3:
                         setLocalFloat(frame, curOpcode - FSTORE_0, popFloat(frame, top - 1));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.setLocalAnnotations(frame, curOpcode - FSTORE_0, AnnotatedVM.popAnnotations(frame, top - 1));
                         break;
                     case DSTORE_0: // fall through
                     case DSTORE_1: // fall through
@@ -991,6 +1007,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case DSTORE_3:
                         setLocalDouble(frame, curOpcode - DSTORE_0, popDouble(frame, top - 1));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        AnnotatedVM.setLocalAnnotations(frame, curOpcode - DSTORE_0, AnnotatedVM.popAnnotations(frame, top - 1));
                         break;
                     case ASTORE_0: // fall through
                     case ASTORE_1: // fall through
@@ -998,6 +1015,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case ASTORE_3:
                         setLocalObjectOrReturnAddress(frame, curOpcode - ASTORE_0, popReturnAddressOrObject(frame, top - 1));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
+                        // no concolic analysis of objects
                         break;
 
                     case IASTORE: // fall through
@@ -1012,9 +1030,12 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case POP2:
                         clear(frame, top - 1);
                         clear(frame, top - 2);
+                        AnnotatedVM.popAnnotations(frame, top -1);
+                        AnnotatedVM.popAnnotations(frame, top -2);
                         break;
                     case POP:
                         clear(frame, top - 1);
+                        AnnotatedVM.popAnnotations(frame, top -1);
                         break;
 
                     // TODO(peterssen): Stack shuffling is expensive.
@@ -1027,9 +1048,9 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case SWAP    : EspressoFrame.swapSingle(frame, top); break;
 
                     case IADD: SPouT.iadd(frame, top); break;
-                    case LADD: putLong(frame, top - 4, popLong(frame, top - 1) + popLong(frame, top - 3)); break;
-                    case FADD: putFloat(frame, top - 2, popFloat(frame, top - 1) + popFloat(frame, top - 2)); break;
-                    case DADD: putDouble(frame, top - 4, popDouble(frame, top - 1) + popDouble(frame, top - 3)); break;
+                    case LADD: SPouT.ladd(frame, top); break;
+                    case FADD: SPouT.fadd(frame, top); break;
+                    case DADD: SPouT.dadd(frame, top); break;
 
                     case ISUB: SPouT.isub(frame, top); break;
                     case LSUB: SPouT.lsub(frame, top); break;
@@ -1058,31 +1079,21 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
 
                     case ISHL: SPouT.ishl(frame, top); break;
                     case LSHL:SPouT.lshl(frame, top); break;
-                    case ISHR:
-                        //putInt(frame, top - 2, shiftRightSignedInt(popInt(frame, top - 1), popInt(frame, top - 2))); break;
-                        SPouT.ishr(frame, top); break;
+                    case ISHR: SPouT.ishr(frame, top); break;
                     case LSHR: SPouT.lshr(frame, top); break;
-                    case IUSHR:
-                        SPouT.iushr(frame, top); break;
+                    case IUSHR: SPouT.iushr(frame, top); break;
                     case LUSHR: SPouT.lushr(frame, top); break;
 
-                    case IAND:
-                        //putInt(frame, top - 2, popInt(frame, top - 1) & popInt(frame, top - 2)); break;
-                        SPouT.iand(frame, top); break;
+                    case IAND: SPouT.iand(frame, top); break;
                     case LAND: SPouT.land(frame, top); break;
 
-                    case IOR:
-                        //putInt(frame, top - 2, popInt(frame, top - 1) | popInt(frame, top - 2)); break;
-                        SPouT.ior(frame, top); break;
+                    case IOR: SPouT.ior(frame, top); break;
                     case LOR: SPouT.lor(frame, top); break;
 
-                    case IXOR:
-                        //putInt(frame, top - 2, popInt(frame, top - 1) ^ popInt(frame, top - 2)); break;
-                        SPouT.ixor(frame, top); break;
+                    case IXOR: SPouT.ixor(frame, top); break;
                     case LXOR: SPouT.lxor(frame, top); break;
 
                     case IINC:
-                        //setLocalInt(frame, bs.readLocalIndex1(curBCI), getLocalInt(frame, bs.readLocalIndex1(curBCI)) + bs.readIncrement1(curBCI));
                         SPouT.iinc(frame, bs.readLocalIndex1(curBCI), bs.readIncrement1(curBCI));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
                         break;
@@ -1660,7 +1671,12 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
         Symbol<Type> returnType = Signatures.returnType(getMethod().getParsedSignature());
         // @formatter:off
         switch (returnType.byteAt(0)) {
-            case 'Z' : return stackIntToBoolean(popInt(frame, top - 1));
+            case 'Z' :Object rBool =  AnnotatedVM.popAnnotations(frame, top - 1);
+                if (rBool instanceof AnnotatedValue){
+                    popInt(frame, top -1);
+                    return rBool;
+                }
+                return stackIntToBoolean(popInt(frame, top -1));
             case 'B' : return (byte) popInt(frame, top - 1);
             case 'S' : return (short) popInt(frame, top - 1);
             case 'C' : return (char) popInt(frame, top - 1);
