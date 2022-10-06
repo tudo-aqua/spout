@@ -925,7 +925,8 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case DLOAD_3:
                         putDouble(frame, top, getLocalDouble(frame, curOpcode - DLOAD_0));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
-                        AnnotatedVM.putAnnotations(frame, top + 1, AnnotatedVM.getLocalAnnotations(frame, curOpcode - DLOAD_0));
+                        Annotations a = AnnotatedVM.getLocalAnnotations(frame, curOpcode - DLOAD_0);
+                        AnnotatedVM.putAnnotations(frame, top + 1, a);
                         break;
                     case ALOAD_0:
                         putObject(frame, top, getLocalObject(frame, 0));
@@ -2846,14 +2847,14 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
             Annotations a = AnnotatedVM.popAnnotations(frame, argAt);
             // @formatter:off
             switch (argType.byteAt(0)) {
-                case 'Z' : args[i + extraParam] = (popInt(frame, argAt) != 0);  break;
-                case 'B' : args[i + extraParam] = (byte) popInt(frame, argAt);  break;
-                case 'S' : args[i + extraParam] = (short) popInt(frame, argAt); break;
-                case 'C' : args[i + extraParam] = (char) popInt(frame, argAt);  break;
+                case 'Z' : args[i + extraParam] = (a == null) ? (popInt(frame, argAt) != 0) : new AnnotatedValue((popInt(frame, argAt) != 0) , a); break;
+                case 'B' : args[i + extraParam] = (a == null) ? (byte) popInt(frame, argAt) : new AnnotatedValue((byte) popInt(frame, argAt) , a); break;
+                case 'S' : args[i + extraParam] = (a == null) ? (short) popInt(frame, argAt) : new AnnotatedValue((short) popInt(frame, argAt) , a); break;
+                case 'C' : args[i + extraParam] = (a == null) ? (char) popInt(frame, argAt) : new AnnotatedValue((char) popInt(frame, argAt) , a);  break;
                 case 'I' : args[i + extraParam] = (a == null) ? popInt(frame, argAt) : new AnnotatedValue(popInt(frame, argAt) , a); break;
-                case 'F' : args[i + extraParam] = popFloat(frame, argAt);       break;
-                case 'J' : args[i + extraParam] = popLong(frame, argAt);   --argAt; break;
-                case 'D' : args[i + extraParam] = popDouble(frame, argAt); --argAt; break;
+                case 'F' : args[i + extraParam] = (a == null) ? popFloat(frame, argAt) : new AnnotatedValue(popFloat(frame, argAt) , a); break;
+                case 'J' : args[i + extraParam] = (a == null) ? popLong(frame, argAt) : new AnnotatedValue(popLong(frame, argAt) , a);   --argAt; break;
+                case 'D' : args[i + extraParam] = (a == null) ? popDouble(frame, argAt) : new AnnotatedValue(popDouble(frame, argAt) , a); --argAt; break;
                 case '[' : // fall through
                 case 'L' : args[i + extraParam] = popObject(frame, argAt);      break;
                 default  :
@@ -2912,9 +2913,14 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
      */
     public static int putKind(VirtualFrame frame, int top, Object value, JavaKind kind) {
         if (value instanceof AnnotatedValue) {
-            AnnotatedVM.putAnnotations(frame, top, (Annotations) value);
+            int index = top;
+            if(kind.equals(JavaKind.Long) || kind.equals(JavaKind.Double)){
+                index++;
+            }
+            AnnotatedVM.putAnnotations(frame, index, (Annotations) value);
             value = ((AnnotatedValue) value).getValue();
         }
+        //FIXME, without concolic execution, the unboxing is broken? Check this.
         // @formatter:off
         switch (kind) {
             case Boolean : putInt(frame, top, ((boolean) value) ? 1 : 0); break;

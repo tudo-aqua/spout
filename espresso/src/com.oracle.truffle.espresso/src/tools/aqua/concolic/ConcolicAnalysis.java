@@ -42,11 +42,8 @@ import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPLE;
 import static tools.aqua.smt.Constant.*;
 import static tools.aqua.smt.OperatorComparator.*;
 import static tools.aqua.smt.OperatorComparator.D2F;
-import static tools.aqua.smt.OperatorComparator.D2I;
-import static tools.aqua.smt.OperatorComparator.D2L;
 import static tools.aqua.smt.OperatorComparator.F2D;
-import static tools.aqua.smt.OperatorComparator.F2I;
-import static tools.aqua.smt.OperatorComparator.F2L;
+import static tools.aqua.smt.OperatorComparator.I2L;
 import static tools.aqua.smt.OperatorComparator.L2D;
 import static tools.aqua.smt.OperatorComparator.L2F;
 import static tools.aqua.smt.Types.LONG;
@@ -86,21 +83,25 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         trace.addElement(new SymbolDeclaration(Annotations.annotation(av, config.getConcolicIdx())));
         return av;
     }
+
     public Object nextSymbolicBoolean() {
         AnnotatedValue av = config.nextSymbolicBoolean();
         trace.addElement(new SymbolDeclaration(Annotations.annotation(av, config.getConcolicIdx())));
         return av;
     }
+
     public Object nextSymbolicByte() {
         AnnotatedValue av = config.nextSymbolicByte();
         trace.addElement(new SymbolDeclaration(Annotations.annotation(av, config.getConcolicIdx())));
         return av;
     }
+
     public Object nextSymbolicChar() {
         AnnotatedValue av = config.nextSymbolicChar();
         trace.addElement(new SymbolDeclaration(Annotations.annotation(av, config.getConcolicIdx())));
         return av;
     }
+
     public Object nextSymbolicShort() {
         AnnotatedValue av = config.nextSymbolicShort();
         trace.addElement(new SymbolDeclaration(Annotations.annotation(av, config.getConcolicIdx())));
@@ -155,10 +156,12 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     public Expression ladd(long c1, long c2, Expression a1, Expression a2) {
         return binarySymbolicOp(OperatorComparator.LADD, LONG, c1, c2, a1, a2);
     }
+
     @Override
     public Expression fadd(float c1, float c2, Expression a1, Expression a2) {
         return binarySymbolicOp(OperatorComparator.FADD, Types.FLOAT, c1, c2, a1, a2);
     }
+
     @Override
     public Expression dadd(double c1, double c2, Expression a1, Expression a2) {
         return binarySymbolicOp(OperatorComparator.DADD, Types.DOUBLE, c1, c2, a1, a2);
@@ -180,9 +183,10 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     @Override
-    public Expression dsub(double c1, double c2, Expression a1, Expression a2){
+    public Expression dsub(double c1, double c2, Expression a1, Expression a2) {
         return binarySymbolicOp(OperatorComparator.DSUB, Types.DOUBLE, c2, c1, a2, a1);
     }
+
     @Override
     public Expression iinc(int incr, Expression s1) {
         Expression sym = null;
@@ -240,32 +244,52 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression ishl(int c1, int c2, Expression a1, Expression a2) {
-        return binarySymbolicOp(OperatorComparator.ISHL, Types.INT, c1, c2, a1, a2);
+        if (a1 != null || a2 != null) {
+            a1 = new ComplexExpression(OperatorComparator.IAND, a1 != null ? a1 : Constant.fromConcreteValue(c1), INT_0x1F);
+        }
+        return binarySymbolicOp(OperatorComparator.ISHL, Types.INT, c2, c1, a2, a1);
     }
 
     @Override
     public Expression lshl(int c1, long c2, Expression a1, Expression a2) {
+        if (a1 != null || a2 != null) {
+            a1 = new ComplexExpression(I2L, new ComplexExpression(OperatorComparator.IAND, a1 != null ? a1 : Constant.fromConcreteValue(c1), INT_0x3F));
+        }
         return binarySymbolicOp(OperatorComparator.LSHL, LONG, Types.INT, c2, c1, a2, a1);
     }
 
     @Override
+    @CompilerDirectives.TruffleBoundary
     public Expression lshr(int c1, long c2, Expression a1, Expression a2) {
+        if (a1 != null || a2 != null) {
+            a1 = new ComplexExpression(I2L, new ComplexExpression(OperatorComparator.IAND, a1 != null ? a1 : Constant.fromConcreteValue(c1), INT_0x3F));
+        }
         return binarySymbolicOp(OperatorComparator.LSHR, LONG, Types.INT, c2, c1, a2, a1);
     }
 
 
     @Override
+    @CompilerDirectives.TruffleBoundary
     public Expression lushr(int c1, long c2, Expression a1, Expression a2) {
+        if (a1 != null || a2 != null) {
+            a1 = new ComplexExpression(I2L, new ComplexExpression(OperatorComparator.IAND, a1 != null ? a1 : Constant.fromConcreteValue(c1), INT_0x3F));
+        }
         return binarySymbolicOp(OperatorComparator.LUSHR, LONG, Types.INT, c2, c1, a2, a1);
     }
 
     @Override
     public Expression ishr(int c1, int c2, Expression a1, Expression a2) {
+        if (a1 != null || a2 != null) {
+            a1 = new ComplexExpression(OperatorComparator.IAND, a1 != null ? a1 : Constant.fromConcreteValue(c1), INT_0x1F);
+        }
         return binarySymbolicOp(OperatorComparator.ISHR, Types.INT, c1, c2, a1, a2);
     }
 
     @Override
     public Expression iushr(int c1, int c2, Expression a1, Expression a2) {
+        if (a1 != null || a2 != null) {
+            a1 = new ComplexExpression(OperatorComparator.IAND, a1 != null ? a1 : Constant.fromConcreteValue(c1), INT_0x1F);
+        }
         return binarySymbolicOp(OperatorComparator.IUSHR, Types.INT, c1, c2, a1, a2);
     }
 
@@ -300,16 +324,16 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     @Override
-    public  Expression fmul(float c1, float c2, Expression a1, Expression a2){
+    public Expression fmul(float c1, float c2, Expression a1, Expression a2) {
         return binarySymbolicOp(OperatorComparator.FMUL, Types.FLOAT, c1, c2, a1, a2);
     }
 
     @Override
-    public Expression dmul(double c1, double c2, Expression a1, Expression a2){
+    public Expression dmul(double c1, double c2, Expression a1, Expression a2) {
         return binarySymbolicOp(OperatorComparator.DMUL, Types.DOUBLE, c1, c2, a1, a2);
     }
 
-   @Override
+    @Override
     public Expression ineg(int c1, Expression a1) {
         return unarySymbolicOp(OperatorComparator.INEG, a1);
     }
@@ -347,8 +371,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     @Override
     public Expression i2l(long c1, Expression a1) {
         Expression sym = null;
-        if ( a1 != null){
-            sym = new ComplexExpression(OperatorComparator.I2L, a1);
+        if (a1 != null) {
+            sym = new ComplexExpression(I2L, a1);
         }
         return sym;
     }
@@ -356,7 +380,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     @Override
     public Expression i2f(float c1, Expression a1) {
         Expression sym = null;
-        if(a1 != null){
+        if (a1 != null) {
             sym = new ComplexExpression(OperatorComparator.I2F, a1);
         }
         return sym;
@@ -365,7 +389,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     @Override
     public Expression i2d(double c1, Expression a1) {
         Expression sym = null;
-        if(a1 != null){
+        if (a1 != null) {
             sym = new ComplexExpression(OperatorComparator.I2F, a1);
         }
         return sym;
@@ -388,12 +412,49 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression f2i(int c1, Expression a1) {
-        return unarySymbolicOp(F2I, a1);
+        ComplexExpression intMinAsFloat =
+                new ComplexExpression(OperatorComparator.I2F_RTZ, Constant.INT_MIN);
+        ComplexExpression intMaxAsFloat =
+                new ComplexExpression(OperatorComparator.I2F_RTZ, Constant.INT_MAX);
+        ComplexExpression rtz = new ComplexExpression(OperatorComparator.F2I_RTZ, a1);
+
+        return getExpressionInt(a1, intMinAsFloat, intMaxAsFloat, rtz);
     }
 
     @Override
     public Expression f2l(long c1, Expression a1) {
-        return unarySymbolicOp(F2L, a1);
+        ComplexExpression longMinAsFloat =
+                new ComplexExpression(OperatorComparator.L2F_RTZ, Constant.LONG_MIN);
+        ComplexExpression longMaxAsFloat =
+                new ComplexExpression(OperatorComparator.L2F_RTZ, Constant.LONG_MAX);
+        ComplexExpression rtz = new ComplexExpression(OperatorComparator.F2L_RTZ, a1);
+
+        return getExpressionLong(a1, longMinAsFloat, longMaxAsFloat, rtz);
+    }
+
+    private Expression getExpressionLong(Expression a1, ComplexExpression longMinAsFloat, ComplexExpression longMaxAsFloat, ComplexExpression rtz) {
+        if( a1 == null){
+            return null;
+        }
+        return new ComplexExpression(
+                OperatorComparator.ITE,
+                /* cond */ new ComplexExpression(OperatorComparator.FP_ISNAN, a1),
+                /* then */ Constant.LONG_ZERO,
+                /* else */ new ComplexExpression(
+                OperatorComparator.ITE,
+                /* cond */ new ComplexExpression(OperatorComparator.FP_ISNEG, a1),
+                /* then */ new ComplexExpression(
+                OperatorComparator.ITE,
+                /* cond */ new ComplexExpression(
+                OperatorComparator.FPLT, a1, longMinAsFloat),
+                /* then */ Constant.LONG_MIN,
+                /* else */ rtz),
+                /* else */ new ComplexExpression(
+                OperatorComparator.ITE,
+                /* cond */ new ComplexExpression(
+                OperatorComparator.FPGT, a1, longMaxAsFloat),
+                /* then */ Constant.LONG_MAX,
+                /* else */ rtz)));
     }
 
     @Override
@@ -402,13 +463,49 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     @Override
-    public Expression d2i(int c1, Expression a1) {
-        return unarySymbolicOp(D2I, a1);
+    public Expression d2l(long c1, Expression a1) {
+        ComplexExpression longMinAsFloat =
+                new ComplexExpression(OperatorComparator.L2D_RTZ, Constant.LONG_MIN);
+        ComplexExpression longMaxAsFloat =
+                new ComplexExpression(OperatorComparator.L2D_RTZ, Constant.LONG_MAX);
+        ComplexExpression rtz = new ComplexExpression(OperatorComparator.D2L_RTZ, a1);
+        return getExpressionLong(a1, longMinAsFloat, longMaxAsFloat, rtz);
     }
 
     @Override
-    public Expression d2l(long c1, Expression a1) {
-        return unarySymbolicOp(D2L, a1);
+    public Expression d2i(int c1, Expression a1) {
+        ComplexExpression intMinAsFloat =
+                new ComplexExpression(OperatorComparator.I2D_RTZ, Constant.INT_MIN);
+        ComplexExpression intMaxAsFloat =
+                new ComplexExpression(OperatorComparator.I2D_RTZ, Constant.INT_MAX);
+        ComplexExpression rtz = new ComplexExpression(OperatorComparator.D2I_RTZ, a1);
+
+        return getExpressionInt(a1, intMinAsFloat, intMaxAsFloat, rtz);
+    }
+
+    private Expression getExpressionInt(Expression a1, ComplexExpression intMinAsFloat, ComplexExpression intMaxAsFloat, ComplexExpression rtz) {
+        if( a1 == null){
+            return null;
+        }
+        return new ComplexExpression(
+                OperatorComparator.ITE,
+                /* cond */ new ComplexExpression(OperatorComparator.FP_ISNAN, a1),
+                /* then */ INT_ZERO,
+                /* else */ new ComplexExpression(
+                OperatorComparator.ITE,
+                /* cond */ new ComplexExpression(OperatorComparator.FP_ISNEG, a1),
+                /* then */ new ComplexExpression(
+                OperatorComparator.ITE,
+                /* cond */ new ComplexExpression(
+                OperatorComparator.FPLT, a1, intMinAsFloat),
+                /* then */ Constant.INT_MIN,
+                /* else */ rtz),
+                /* else */ new ComplexExpression(
+                OperatorComparator.ITE,
+                /* cond */ new ComplexExpression(
+                OperatorComparator.FPGT, a1, intMaxAsFloat),
+                /* then */ Constant.INT_MAX,
+                /* else */ rtz)));
     }
 
     @Override
@@ -487,7 +584,6 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     // branching helpers ...
-
     @Override
     public void takeBranchPrimitive1(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, Expression a) {
         if (a == null || a instanceof Constant) {
@@ -1101,13 +1197,13 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return stringAnnotation != null && stringAnnotation[stringAnnotation.length - 1].getAnnotations()[config.getConcolicIdx()] != null;
     }
 
-    public void addNotZeroToTrace(Annotations a, Expression zero){
+    public void addNotZeroToTrace(Annotations a, Expression zero) {
         trace.addElement(
                 new PathCondition(
                         new ComplexExpression(OperatorComparator.BVNE, (Expression) a.getAnnotations()[config.getConcolicIdx()], zero), 0, 2));
     }
 
-    public void addZeroToTrace(Annotations a, Expression zero){
+    public void addZeroToTrace(Annotations a, Expression zero) {
         trace.addElement(
                 new PathCondition(
                         new ComplexExpression(OperatorComparator.BVEQ, (Expression) a.getAnnotations()[config.getConcolicIdx()], zero), 1, 2));

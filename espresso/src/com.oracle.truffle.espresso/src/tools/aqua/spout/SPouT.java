@@ -37,6 +37,7 @@ import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.smt.Expression;
 import tools.aqua.taint.PostDominatorAnalysis;
 
 import java.util.Arrays;
@@ -399,7 +400,7 @@ public class SPouT {
         double c2 = popDouble(frame, top - 3);
         putInt(frame, top - 4, compareDoubleLess(c1, c2));
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 2, analysis.dcmpl(c1, c2,
+        AnnotatedVM.putAnnotations(frame, top - 4, analysis.dcmpl(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 3)));
     }
@@ -409,7 +410,7 @@ public class SPouT {
         double c2 = popDouble(frame, top - 3);
         putInt(frame, top - 4, compareDoubleGreater(c1, c2));
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 2, analysis.dcmpg(c1, c2,
+        AnnotatedVM.putAnnotations(frame, top - 4, analysis.dcmpg(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 3)));
     }
@@ -431,10 +432,9 @@ public class SPouT {
         long c2 = popLong(frame, top - 3);
         putLong(frame, top - 4, c1 * c2);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 4, analysis.lmul(c1, c2,
+        AnnotatedVM.putAnnotations(frame, top - 3, analysis.lmul(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 3)));
-
     }
 
     public static void fmul(VirtualFrame frame, int top) {
@@ -452,7 +452,7 @@ public class SPouT {
         double c2 = popDouble(frame, top - 3);
         putDouble(frame, top - 4, c1 * c2);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 2, analysis.dmul(c1, c2,
+        AnnotatedVM.putAnnotations(frame, top - 3, analysis.dmul(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 3)));
     }
@@ -700,7 +700,7 @@ public class SPouT {
         long c1 = (long) popFloat(frame, top-1);
         putLong(frame, top -1 , c1);
         if(analyze)
-            AnnotatedVM.putAnnotations(frame, top -1 , analysis.f2l(c1,
+            AnnotatedVM.putAnnotations(frame, top, analysis.f2l(c1,
                     AnnotatedVM.popAnnotations(frame, top -1)));
     }
 
@@ -716,7 +716,7 @@ public class SPouT {
         int c1 = (int) popDouble(frame, top -1);
         putInt(frame, top -2, c1);
         if(analyze)
-            AnnotatedVM.putAnnotations(frame, top -1, analysis.d2i(c1,
+            AnnotatedVM.putAnnotations(frame, top -2, analysis.d2i(c1,
                     AnnotatedVM.popAnnotations(frame, top -1)));
     }
 
@@ -724,7 +724,7 @@ public class SPouT {
         long c1 = (long) popDouble(frame, top -1);
         putLong(frame, top -2, c1);
         if(analyze)
-            AnnotatedVM.putAnnotations(frame, top -2, analysis.d2l(c1,
+            AnnotatedVM.putAnnotations(frame, top -1, analysis.d2l(c1,
                     AnnotatedVM.popAnnotations(frame, top-1)));
 
     }
@@ -1437,6 +1437,21 @@ public class SPouT {
     @CompilerDirectives.TruffleBoundary
     public static void debug(String message) {
         if (DEBUG) System.out.println("[debug] " + message);
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static void debug(String method, Expression a1, Expression a2) {
+        if (DEBUG) System.out.println("[debug] bytecode: %s a1: %s a2: %s".formatted(method, a1, a2));
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static void debug(String method, int slot, Annotations a) {
+        if (DEBUG) System.out.println("[debug] bytecode: %s slot: %s a1: %s ".formatted(method, slot, a));
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static void debug(String method, int slot, int slot2, Annotations a) {
+        if (DEBUG) System.out.println("[debug] bytecode: %s slot: %s  slot2: %s a1: %s ".formatted(method, slot, slot2, a));
     }
 
     @CompilerDirectives.TruffleBoundary

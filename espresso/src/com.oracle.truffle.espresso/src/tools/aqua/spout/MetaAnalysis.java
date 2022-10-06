@@ -532,22 +532,22 @@ public class MetaAnalysis implements Analysis<Annotations> {
 
     @Override
     public Annotations fcmpl(float c1, float c2, Annotations a1, Annotations a2) {
-        return Analysis.super.fcmpl(c1, c2, a1, a2);
+        return fexecute(c1, c2, a1, a2, Analysis::fcmpl);
     }
 
     @Override
     public Annotations fcmpg(float c1, float c2, Annotations a1, Annotations a2) {
-        return Analysis.super.fcmpg(c1, c2, a1, a2);
+        return fexecute(c1, c2, a1, a2, Analysis::fcmpg);
     }
 
     @Override
     public Annotations dcmpl(double c1, double c2, Annotations a1, Annotations a2) {
-        return Analysis.super.dcmpl(c1, c2, a1, a2);
+        return dexecute(c1, c2, a1, a2, Analysis::dcmpl);
     }
 
     @Override
     public Annotations dcmpg(double c1, double c2, Annotations a1, Annotations a2) {
-        return Analysis.super.dcmpg(c1, c2, a1, a2);
+        return dexecute(c1, c2, a1, a2, Analysis::dcmpg);
     }
 
     @Override
