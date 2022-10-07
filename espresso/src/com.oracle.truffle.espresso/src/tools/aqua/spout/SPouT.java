@@ -282,7 +282,7 @@ public class SPouT {
         long c2 = popLong(frame, top - 3);
         putLong(frame, top - 4, c1 + c2);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 2, analysis.ladd(c1, c2,
+        AnnotatedVM.putAnnotations(frame, top - 3, analysis.ladd(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 3)));
     }
@@ -302,7 +302,7 @@ public class SPouT {
         double c2 = popDouble(frame, top - 3);
         putDouble(frame, top - 4, c1 + c2);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 2, analysis.dadd(c1, c2,
+        AnnotatedVM.putAnnotations(frame, top - 3, analysis.dadd(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 3)));
     }
@@ -327,7 +327,7 @@ public class SPouT {
         long concResult = c2 - c1;
         putLong(frame, top - 4, concResult);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 4, analysis.lsub(c1, c2,
+        AnnotatedVM.putAnnotations(frame, top - 3, analysis.lsub(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 3)));
     }
@@ -349,7 +349,7 @@ public class SPouT {
         double c2 = popDouble(frame, top - 3);
         putDouble(frame, top - 4, c2 - c1);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 4, analysis.dsub(c1, c2,
+        AnnotatedVM.putAnnotations(frame, top - 3, analysis.dsub(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 3)));
     }
@@ -474,9 +474,9 @@ public class SPouT {
         long c2 = popLong(frame, top - 3);
         putLong(frame, top - 4, c2 / c1);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 2, analysis.ldiv(c1, c2,
+        AnnotatedVM.putAnnotations(frame, top - 3, analysis.ldiv(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
-                AnnotatedVM.popAnnotations(frame, top - 2)));
+                AnnotatedVM.popAnnotations(frame, top - 3)));
     }
 
     public static void fdiv(VirtualFrame frame, int top) {
@@ -494,7 +494,7 @@ public class SPouT {
         double c2 = popDouble(frame, top - 3);
         putDouble(frame, top - 4, c2 / c1);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 4, analysis.ddiv(c1, c2,
+        AnnotatedVM.putAnnotations(frame, top - 3, analysis.ddiv(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 3)));
     }
@@ -546,7 +546,7 @@ public class SPouT {
         long c2 = popLong(frame, top - 3);
         putLong(frame, top - 4, c2 % c1);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 2, analysis.lrem(c1, c2,
+        AnnotatedVM.putAnnotations(frame, top - 3, analysis.lrem(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 3)));
     }
@@ -563,7 +563,7 @@ public class SPouT {
         double c2 = popDouble(frame, top - 3);
         putDouble(frame, top - 4, c2 % c1);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 4, analysis.drem(c1, c2,
+        AnnotatedVM.putAnnotations(frame, top - 3, analysis.drem(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 3)));
     }
@@ -585,7 +585,7 @@ public class SPouT {
         long c2 = popLong(frame, top - 2);
         putLong(frame, top - 3, c2 << c1);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 3, analysis.lshl(c1, c2,
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.lshl(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 2)));
     }
@@ -605,7 +605,7 @@ public class SPouT {
         long c2 = popLong(frame, top - 2);
         putLong(frame, top - 3, c2 >> c1);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 3, analysis.lshr(c1, c2,
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.lshr(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 2)));
     }
@@ -622,7 +622,7 @@ public class SPouT {
         long c1 = popLong(frame, top - 1);
         putLong(frame, top - 2, -c1);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 2, analysis.lneg(c1,
+        AnnotatedVM.putAnnotations(frame, top - 1, analysis.lneg(c1,
                 AnnotatedVM.popAnnotations(frame, top - 1)));
     }
     public static void fneg(VirtualFrame frame, int top) {
@@ -636,7 +636,7 @@ public class SPouT {
         double c1 = popDouble(frame, top - 1);
         putDouble(frame, top - 2, -c1);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 2, analysis.dneg(c1,
+        AnnotatedVM.putAnnotations(frame, top - 1, analysis.dneg(c1,
                 AnnotatedVM.popAnnotations(frame, top - 1)));
     }
 
@@ -644,7 +644,7 @@ public class SPouT {
         int c1 = popInt(frame, top - 1);
         putLong(frame, top - 1, c1);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 1, analysis.i2l(c1,
+        AnnotatedVM.putAnnotations(frame, top, analysis.i2l(c1,
                 AnnotatedVM.popAnnotations(frame, top - 1)));
     }
 
@@ -660,7 +660,7 @@ public class SPouT {
         double c1 = popInt(frame, top - 1);
         putDouble(frame, top - 1, c1);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 1, analysis.i2d(c1,
+        AnnotatedVM.putAnnotations(frame, top, analysis.i2d(c1,
                 AnnotatedVM.popAnnotations(frame, top - 1)));
     }
 
@@ -684,7 +684,7 @@ public class SPouT {
         double c1 = (double) popLong(frame, top- 1);
         putDouble(frame, top-2, c1);
         if(analyze)
-            AnnotatedVM.putAnnotations(frame, top - 2, analysis.l2d(c1,
+            AnnotatedVM.putAnnotations(frame, top - 1, analysis.l2d(c1,
                     AnnotatedVM.popAnnotations(frame, top-2)));
     }
     public static void f2i (VirtualFrame frame, int top){
@@ -708,7 +708,7 @@ public class SPouT {
         double c1 = (double) popFloat(frame, top-1);
         putDouble(frame, top - 1, c1);
         if(analyze)
-            AnnotatedVM.putAnnotations(frame, top -1 , analysis.f2d(c1,
+            AnnotatedVM.putAnnotations(frame, top , analysis.f2d(c1,
                     AnnotatedVM.popAnnotations(frame, top-1)));
     }
 
@@ -775,7 +775,7 @@ public class SPouT {
         long c2 = popLong(frame, top - 2);
         putLong(frame, top - 3, c2 >>> c1);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 3, analysis.lushr(c1, c2,
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.lushr(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 2)));
     }
@@ -796,7 +796,7 @@ public class SPouT {
         long c2 = popLong(frame, top - 3);
         putLong(frame, top - 4, c1 & c2);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 4, analysis.land(c1, c2,
+        AnnotatedVM.putAnnotations(frame, top - 3, analysis.land(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 3)));
     }
@@ -817,7 +817,7 @@ public class SPouT {
         long c2 = popLong(frame, top - 3);
         putLong(frame, top - 4, c1 | c2);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 4, analysis.lor(c1, c2,
+        AnnotatedVM.putAnnotations(frame, top - 3, analysis.lor(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 3)));
     }
@@ -838,7 +838,7 @@ public class SPouT {
         long c2 = popLong(frame, top - 3);
         putLong(frame, top - 4, c1 ^ c2);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 4, analysis.lxor(c1, c2,
+        AnnotatedVM.putAnnotations(frame, top - 3, analysis.lxor(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 3)));
     }
@@ -1134,7 +1134,7 @@ public class SPouT {
     @CompilerDirectives.TruffleBoundary
     public static Object stringEquals(StaticObject self, StaticObject other, Meta meta) {
         boolean areEqual = meta.toHostString(self).equals(meta.toHostString(other));
-        if (!analyze) {
+        if (!analyze || !self.hasAnnotations() && !other.hasAnnotations()) {
             return areEqual;
         }
         AnnotatedValue av = new AnnotatedValue(areEqual, Annotations.emptyArray());
@@ -1437,6 +1437,11 @@ public class SPouT {
     @CompilerDirectives.TruffleBoundary
     public static void debug(String message) {
         if (DEBUG) System.out.println("[debug] " + message);
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static void debug(String message, Object o) {
+        if (DEBUG) System.out.println("[debug] %s with Object %s".formatted(message, o));
     }
 
     @CompilerDirectives.TruffleBoundary

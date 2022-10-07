@@ -1676,15 +1676,73 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                 if (rBool instanceof AnnotatedValue){
                     popInt(frame, top -1);
                     return rBool;
+                }else if (rBool instanceof Annotations){
+                    return new AnnotatedValue(stackIntToBoolean(popInt(frame, top -1)), (Annotations) rBool);
                 }
                 return stackIntToBoolean(popInt(frame, top -1));
-            case 'B' : return (byte) popInt(frame, top - 1);
-            case 'S' : return (short) popInt(frame, top - 1);
-            case 'C' : return (char) popInt(frame, top - 1);
-            case 'I' : return popInt(frame, top - 1);
-            case 'J' : return popLong(frame, top - 1);
-            case 'F' : return popFloat(frame, top - 1);
-            case 'D' : return popDouble(frame, top - 1);
+            case 'B' :
+                Object rByte =  AnnotatedVM.popAnnotations(frame, top - 1);
+                if (rByte instanceof AnnotatedValue){
+                    popInt(frame, top -1);
+                    return rByte;
+                }else if(rByte instanceof Annotations){
+                    return new AnnotatedValue((byte) popInt(frame, top - 1), (Annotations) rByte);
+                }
+                return (byte) popInt(frame, top - 1);
+            case 'S' :
+                Object rShort =  AnnotatedVM.popAnnotations(frame, top - 1);
+                if (rShort instanceof AnnotatedValue){
+                    popInt(frame, top -1);
+                    return rShort;
+                }else if(rShort instanceof Annotations){
+                    return new AnnotatedValue((short) popInt(frame, top - 1), (Annotations) rShort);
+                }
+                return (short) popInt(frame, top - 1);
+            case 'C' :
+                Object rChar =  AnnotatedVM.popAnnotations(frame, top - 1);
+                if (rChar instanceof AnnotatedValue){
+                    popInt(frame, top -1);
+                    return rChar;
+                } else if(rChar instanceof Annotations){
+                    return new AnnotatedValue((short) popInt(frame, top - 1), (Annotations) rChar);
+                }
+                return (char) popInt(frame, top - 1);
+            case 'I' :
+                Object rInt =  AnnotatedVM.popAnnotations(frame, top - 1);
+                if (rInt instanceof AnnotatedValue){
+                    popInt(frame, top -1);
+                    return rInt;
+                }else if(rInt instanceof Annotations){
+                    return new AnnotatedValue(popInt(frame, top - 1), (Annotations) rInt);
+                }
+                return popInt(frame, top - 1);
+            case 'J' :
+                Object rLong =  AnnotatedVM.popAnnotations(frame, top - 1);
+                if (rLong instanceof AnnotatedValue){
+                    popLong(frame, top -1);
+                    return rLong;
+                }else if(rLong instanceof Annotations){
+                    return new AnnotatedValue(popLong(frame, top - 1), (Annotations) rLong);
+                }
+                return popLong(frame, top - 1);
+            case 'F' :
+                Object rFloat =  AnnotatedVM.popAnnotations(frame, top - 1);
+                if (rFloat instanceof AnnotatedValue){
+                    popFloat(frame, top -1);
+                    return rFloat;
+                }else if(rFloat instanceof Annotations){
+                    return new AnnotatedValue(popFloat(frame, top - 1), (Annotations) rFloat);
+                }
+                return popFloat(frame, top - 1);
+            case 'D' :
+                Object rDouble =  AnnotatedVM.popAnnotations(frame, top - 1);
+                if (rDouble instanceof AnnotatedValue){
+                    popDouble(frame, top -1);
+                    return rDouble;
+                }else if(rDouble instanceof Annotations){
+                    return new AnnotatedValue(popDouble(frame, top - 1), (Annotations) rDouble);
+                }
+                return popDouble(frame, top - 1);
             case 'V' : return StaticObject.NULL; // void
             case '[' : // fall through
             case 'L' : return popObject(frame, top - 1);
