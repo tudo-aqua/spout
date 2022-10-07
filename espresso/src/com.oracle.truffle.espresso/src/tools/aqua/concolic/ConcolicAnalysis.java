@@ -944,6 +944,26 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return self;
     }
 
+    public void makeConcatWithConstants(StaticObject result, Object[] args, Meta meta){
+        StaticObject gso = (StaticObject) args[0];
+        Annotations[] a = gso.getAnnotations();
+        Expression expr = a != null && a[a.length -1] != null && a[a.length -1].getAnnotations()[config.getConcolicIdx()] != null?
+                (Expression) a[a.length -1].getAnnotations()[config.getConcolicIdx()] : Constant.fromConcreteValue(gso.toString());
+        boolean anySymbolic = hasConcolicStringAnnotations((StaticObject) args[0]);
+        for(int i = 1; i < args.length; i++) {
+            StaticObject so = (StaticObject) args[i];
+            anySymbolic = anySymbolic? anySymbolic: hasConcolicStringAnnotations(so);
+            gso = (StaticObject) args[i];
+            a = gso.getAnnotations();
+            Expression expr2 = a != null && a[a.length -1] != null && a[a.length -1].getAnnotations()[config.getConcolicIdx()] != null?
+                    (Expression) a[a.length -1].getAnnotations()[config.getConcolicIdx()] : Constant.fromConcreteValue(gso.toString());
+            expr = new ComplexExpression(SCONCAT, expr, expr2);
+        }
+        if(anySymbolic){
+            annotateStringWithExpression(result, expr);
+        }
+    }
+
     public AnnotatedValue stringBufferLength(AnnotatedValue result, StaticObject self, Meta meta) {
         Expression sLength = makeStringLengthExpr(self, meta);
         result.set(config.getConcolicIdx(), sLength);
@@ -1186,6 +1206,10 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     private StaticObject annotateStringWithExpression(StaticObject self, Expression value) {
         Annotations[] stringAnnotation = self.getAnnotations();
+        if (stringAnnotation == null){
+            SPouT.initStringAnnotations(self);
+            stringAnnotation = self.getAnnotations();
+        }
         stringAnnotation[stringAnnotation.length - 1].set(config.getConcolicIdx(),
                 value);
         self.setAnnotations(stringAnnotation);

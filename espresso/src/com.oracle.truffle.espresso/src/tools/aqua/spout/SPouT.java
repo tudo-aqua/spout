@@ -1480,4 +1480,10 @@ public class SPouT {
     private static boolean hasConcolicAnnotations(StaticObject v) {
         return v.hasAnnotations() && config.hasConcolicAnalysis() && v.getAnnotations()[config.getConcolicIdx()] != null;
     }
+
+    public static void makeConcatWithConstantsSymbolically(Object result, Object[] args, Meta meta) {
+        if(analyze && config.hasConcolicAnalysis()){
+            config.getConcolicAnalysis().makeConcatWithConstants((StaticObject) result, args, meta);
+        }
+    }
 }

@@ -2426,14 +2426,13 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
 
         // Resolution should happen outside of the bytecode patching lock.
         InvokeDynamicConstant.CallSiteLink link = pool.linkInvokeDynamic(getMethod().getDeclaringKlass(), indyIndex);
-
         // re-lock to check if someone did the job for us, since this was a heavy operation.
         synchronized (this) {
             if (bs.currentVolatileBC(curBCI) == QUICK) {
                 // someone beat us to it, just trust him.
                 quick = nodes[readCPI(curBCI)];
             } else {
-                quick = injectQuick(curBCI, new InvokeDynamicCallSiteNode(link.getMemberName(), link.getUnboxedAppendix(), link.getParsedSignature(), getMeta(), top, curBCI), QUICK);
+                quick = injectQuick(curBCI, new InvokeDynamicCallSiteNode(link.getMemberName(), link.getUnboxedAppendix(), link.getParsedSignature(), getMeta(), top, curBCI, link.getOriginalTargetName()), QUICK);
             }
         }
         return quick.execute(frame) - Bytecodes.stackEffectOf(opcode);

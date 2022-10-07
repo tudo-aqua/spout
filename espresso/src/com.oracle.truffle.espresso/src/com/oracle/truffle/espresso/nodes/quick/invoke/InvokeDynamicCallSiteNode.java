@@ -35,6 +35,7 @@ import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.nodes.quick.QuickNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.spout.SPouT;
 
 public final class InvokeDynamicCallSiteNode extends QuickNode {
 
@@ -45,6 +46,8 @@ public final class InvokeDynamicCallSiteNode extends QuickNode {
     @Child private DirectCallNode callNode;
     final int resultAt;
     final boolean returnsPrimitiveType;
+
+    final Symbol originalLinkName;
 
     @CompilerDirectives.CompilationFinal(dimensions = 1) private Symbol<Type>[] parsedSignature;
 
@@ -59,6 +62,20 @@ public final class InvokeDynamicCallSiteNode extends QuickNode {
         this.callNode = DirectCallNode.create(target.getCallTarget());
         this.resultAt = top - Signatures.slotsForParameters(parsedSignature); // no receiver
         this.returnsPrimitiveType = Types.isPrimitive(returnType);
+        this.originalLinkName = null;
+    }
+    public InvokeDynamicCallSiteNode(StaticObject memberName, StaticObject appendix, Symbol<Type>[] parsedSignature, Meta meta, int top, int curBCI, Symbol originalLinkName) {
+        super(top, curBCI);
+        Method target = (Method) meta.HIDDEN_VMTARGET.getHiddenObject(memberName);
+        this.appendix = appendix;
+        this.parsedSignature = parsedSignature;
+        this.returnType = Signatures.returnType(parsedSignature);
+        this.returnKind = Signatures.returnKind(parsedSignature);
+        this.hasAppendix = !StaticObject.isNull(appendix);
+        this.callNode = DirectCallNode.create(target.getCallTarget());
+        this.resultAt = top - Signatures.slotsForParameters(parsedSignature); // no receiver
+        this.returnsPrimitiveType = Types.isPrimitive(returnType);
+        this.originalLinkName = originalLinkName;
     }
 
     @Override
@@ -69,6 +86,9 @@ public final class InvokeDynamicCallSiteNode extends QuickNode {
             args[args.length - 1] = appendix;
         }
         Object result = callNode.call(args);
+        if(originalLinkName.equals(getNames().getOrCreate("makeConcatWithConstants"))){
+            SPouT.makeConcatWithConstantsSymbolically(result, args, getMeta());
+        }
         if (!returnsPrimitiveType) {
             getBytecodeNode().checkNoForeignObjectAssumption((StaticObject) result);
         }

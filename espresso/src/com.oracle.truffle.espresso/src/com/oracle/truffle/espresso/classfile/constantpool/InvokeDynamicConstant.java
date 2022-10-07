@@ -188,7 +188,7 @@ public interface InvokeDynamicConstant extends BootstrapMethodConstant {
                 }
                 StaticObject unboxedAppendix = appendix.get(meta.getLanguage(), 0);
 
-                return new CallSiteLink(memberName, unboxedAppendix, parsedInvokeSignature);
+                return new CallSiteLink(memberName, unboxedAppendix, parsedInvokeSignature, nameSymbol);
             } catch (EspressoException e) {
                 throw new CallSiteLinkingFailure(e);
             }
@@ -222,12 +222,21 @@ public interface InvokeDynamicConstant extends BootstrapMethodConstant {
     final class CallSiteLink {
         final StaticObject memberName;
         final StaticObject unboxedAppendix;
+
+        final Symbol originalTargetName;
         @CompilerDirectives.CompilationFinal(dimensions = 1) final Symbol<Type>[] parsedSignature;
 
         public CallSiteLink(StaticObject memberName, StaticObject unboxedAppendix, Symbol<Type>[] parsedSignature) {
             this.memberName = memberName;
             this.unboxedAppendix = unboxedAppendix;
             this.parsedSignature = parsedSignature;
+            this.originalTargetName = null;
+        }
+        public CallSiteLink(StaticObject memberName, StaticObject unboxedAppendix, Symbol<Type>[] parsedSignature, Symbol originalTargetName) {
+            this.memberName = memberName;
+            this.unboxedAppendix = unboxedAppendix;
+            this.parsedSignature = parsedSignature;
+            this.originalTargetName = originalTargetName;
         }
 
         public StaticObject getMemberName() {
@@ -241,6 +250,8 @@ public interface InvokeDynamicConstant extends BootstrapMethodConstant {
         public Symbol<Type>[] getParsedSignature() {
             return parsedSignature;
         }
+
+        public Symbol getOriginalTargetName(){return originalTargetName;}
     }
 
     final class CallSiteLinkingFailure extends RuntimeException {
