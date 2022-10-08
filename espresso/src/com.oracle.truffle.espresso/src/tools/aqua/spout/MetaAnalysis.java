@@ -352,7 +352,7 @@ public class MetaAnalysis implements Analysis<Annotations> {
 
     @Override
     public Annotations ladd(long c1, long c2, Annotations a1, Annotations a2) {
-        return lexecute(c1, c2, a1, a2, Analysis::land);
+        return lexecute(c1, c2, a1, a2, Analysis::ladd);
     }
 
     @Override
