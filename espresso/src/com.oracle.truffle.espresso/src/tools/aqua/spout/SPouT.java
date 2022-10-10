@@ -55,7 +55,7 @@ public class SPouT {
 
     public static final boolean DEBUG = true;
 
-    private static boolean analyze = false, oldAnalyze=analyze;
+    private static boolean analyze = false, oldAnalyze = analyze;
 
     private static MetaAnalysis analysis = null;
 
@@ -202,6 +202,7 @@ public class SPouT {
         //GWIT.trackLocationForWitness("" + concrete);
         return av;
     }
+
     @CompilerDirectives.TruffleBoundary
     public static Object nextSymbolicChar() {
         if (!analyze || !config.hasConcolicAnalysis()) return 0;
@@ -541,6 +542,7 @@ public class SPouT {
                 AnnotatedVM.popAnnotations(frame, top - 2),
                 AnnotatedVM.popAnnotations(frame, top - 1)));
     }
+
     public static void lrem(VirtualFrame frame, int top, BytecodeNode bn) {
         long c1 = popLong(frame, top - 1);
         checkNotZero(c1, AnnotatedVM.peekAnnotations(frame, top - 1), bn);
@@ -551,6 +553,7 @@ public class SPouT {
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 3)));
     }
+
     public static void frem(VirtualFrame frame, int top) {
         float c1 = popFloat(frame, top - 1);
         float c2 = popFloat(frame, top - 2);
@@ -559,7 +562,9 @@ public class SPouT {
         AnnotatedVM.putAnnotations(frame, top - 2, analysis.frem(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 2)));
-    }public static void drem(VirtualFrame frame, int top) {
+    }
+
+    public static void drem(VirtualFrame frame, int top) {
         double c1 = popDouble(frame, top - 1);
         double c2 = popDouble(frame, top - 3);
         putDouble(frame, top - 4, c2 % c1);
@@ -590,6 +595,7 @@ public class SPouT {
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 2)));
     }
+
     public static void ishr(VirtualFrame frame, int top) {
         int c1 = popInt(frame, top - 1);
         int c2 = popInt(frame, top - 2);
@@ -619,6 +625,7 @@ public class SPouT {
         AnnotatedVM.putAnnotations(frame, top - 1, analysis.ineg(c1,
                 AnnotatedVM.popAnnotations(frame, top - 1)));
     }
+
     public static void lneg(VirtualFrame frame, int top) {
         long c1 = popLong(frame, top - 1);
         putLong(frame, top - 2, -c1);
@@ -626,6 +633,7 @@ public class SPouT {
         AnnotatedVM.putAnnotations(frame, top - 1, analysis.lneg(c1,
                 AnnotatedVM.popAnnotations(frame, top - 1)));
     }
+
     public static void fneg(VirtualFrame frame, int top) {
         float c1 = popFloat(frame, top - 1);
         putFloat(frame, top - 1, -c1);
@@ -633,6 +641,7 @@ public class SPouT {
         AnnotatedVM.putAnnotations(frame, top - 1, analysis.fneg(c1,
                 AnnotatedVM.popAnnotations(frame, top - 1)));
     }
+
     public static void dneg(VirtualFrame frame, int top) {
         double c1 = popDouble(frame, top - 1);
         putDouble(frame, top - 2, -c1);
@@ -665,98 +674,102 @@ public class SPouT {
                 AnnotatedVM.popAnnotations(frame, top - 1)));
     }
 
-    public static void l2i(VirtualFrame frame, int top){
+    public static void l2i(VirtualFrame frame, int top) {
         int c1 = (int) popLong(frame, top - 1);
-        putInt(frame, top-2, c1);
-        if(analyze)
-            AnnotatedVM.putAnnotations(frame, top -2, analysis.l2i(c1,
-                    AnnotatedVM.popAnnotations(frame, top -1)));
+        putInt(frame, top - 2, c1);
+        if (analyze)
+            AnnotatedVM.putAnnotations(frame, top - 2, analysis.l2i(c1,
+                    AnnotatedVM.popAnnotations(frame, top - 1)));
     }
 
-    public static void l2f(VirtualFrame frame, int top){
-        float c1 = (float) popLong(frame, top- 1);
-        putFloat(frame, top-2, c1);
-        if(analyze)
+    public static void l2f(VirtualFrame frame, int top) {
+        float c1 = (float) popLong(frame, top - 1);
+        putFloat(frame, top - 2, c1);
+        if (analyze)
             AnnotatedVM.putAnnotations(frame, top - 2, analysis.l2f(c1,
-                    AnnotatedVM.popAnnotations(frame, top-2)));
+                    AnnotatedVM.popAnnotations(frame, top - 2)));
     }
 
-    public static void l2d(VirtualFrame frame, int top){
-        double c1 = (double) popLong(frame, top- 1);
-        putDouble(frame, top-2, c1);
-        if(analyze)
+    public static void l2d(VirtualFrame frame, int top) {
+        double c1 = (double) popLong(frame, top - 1);
+        putDouble(frame, top - 2, c1);
+        if (analyze)
             AnnotatedVM.putAnnotations(frame, top - 1, analysis.l2d(c1,
-                    AnnotatedVM.popAnnotations(frame, top-2)));
+                    AnnotatedVM.popAnnotations(frame, top - 2)));
     }
-    public static void f2i (VirtualFrame frame, int top){
-        int c1 = (int) popFloat(frame, top -1);
-        putInt(frame, top-1, c1);
-        if(analyze)
-            AnnotatedVM.putAnnotations(frame, top -1 , analysis.f2i(c1,
-                    AnnotatedVM.popAnnotations(frame, top -1)));
+
+    public static void f2i(VirtualFrame frame, int top) {
+        int c1 = (int) popFloat(frame, top - 1);
+        putInt(frame, top - 1, c1);
+        if (analyze)
+            AnnotatedVM.putAnnotations(frame, top - 1, analysis.f2i(c1,
+                    AnnotatedVM.popAnnotations(frame, top - 1)));
 
     }
 
-    public static void f2l (VirtualFrame frame, int top){
-        long c1 = (long) popFloat(frame, top-1);
-        putLong(frame, top -1 , c1);
-        if(analyze)
+    public static void f2l(VirtualFrame frame, int top) {
+        long c1 = (long) popFloat(frame, top - 1);
+        putLong(frame, top - 1, c1);
+        if (analyze)
             AnnotatedVM.putAnnotations(frame, top, analysis.f2l(c1,
-                    AnnotatedVM.popAnnotations(frame, top -1)));
+                    AnnotatedVM.popAnnotations(frame, top - 1)));
     }
 
-    public static void f2d (VirtualFrame frame, int top){
-        double c1 = (double) popFloat(frame, top-1);
+    public static void f2d(VirtualFrame frame, int top) {
+        double c1 = (double) popFloat(frame, top - 1);
         putDouble(frame, top - 1, c1);
-        if(analyze)
-            AnnotatedVM.putAnnotations(frame, top , analysis.f2d(c1,
-                    AnnotatedVM.popAnnotations(frame, top-1)));
+        if (analyze)
+            AnnotatedVM.putAnnotations(frame, top, analysis.f2d(c1,
+                    AnnotatedVM.popAnnotations(frame, top - 1)));
     }
 
-    public static void d2i (VirtualFrame frame, int top){
-        int c1 = (int) popDouble(frame, top -1);
-        putInt(frame, top -2, c1);
-        if(analyze)
-            AnnotatedVM.putAnnotations(frame, top -2, analysis.d2i(c1,
-                    AnnotatedVM.popAnnotations(frame, top -1)));
+    public static void d2i(VirtualFrame frame, int top) {
+        int c1 = (int) popDouble(frame, top - 1);
+        putInt(frame, top - 2, c1);
+        if (analyze)
+            AnnotatedVM.putAnnotations(frame, top - 2, analysis.d2i(c1,
+                    AnnotatedVM.popAnnotations(frame, top - 1)));
     }
 
-    public static void d2l (VirtualFrame frame, int top){
-        long c1 = (long) popDouble(frame, top -1);
-        putLong(frame, top -2, c1);
-        if(analyze)
-            AnnotatedVM.putAnnotations(frame, top -1, analysis.d2l(c1,
-                    AnnotatedVM.popAnnotations(frame, top-1)));
+    public static void d2l(VirtualFrame frame, int top) {
+        long c1 = (long) popDouble(frame, top - 1);
+        putLong(frame, top - 2, c1);
+        if (analyze)
+            AnnotatedVM.putAnnotations(frame, top - 1, analysis.d2l(c1,
+                    AnnotatedVM.popAnnotations(frame, top - 1)));
 
     }
-    public static void d2f (VirtualFrame frame, int top){
-        float c1 = (float) popDouble(frame, top -1);
-        putFloat(frame, top -2, c1);
-        if(analyze)
-            AnnotatedVM.putAnnotations(frame, top-2, analysis.d2f(c1,
-                    AnnotatedVM.popAnnotations(frame, top-1)));
+
+    public static void d2f(VirtualFrame frame, int top) {
+        float c1 = (float) popDouble(frame, top - 1);
+        putFloat(frame, top - 2, c1);
+        if (analyze)
+            AnnotatedVM.putAnnotations(frame, top - 2, analysis.d2f(c1,
+                    AnnotatedVM.popAnnotations(frame, top - 1)));
     }
 
-    public static void i2b (VirtualFrame frame, int top){
-        byte c1 = (byte) popInt(frame, top -1);
-        putInt(frame, top -1, c1);
-        if(analyze)
-            AnnotatedVM.putAnnotations(frame, top -1 , analysis.i2b(c1,
-                    AnnotatedVM.popAnnotations(frame, top -1)));
+    public static void i2b(VirtualFrame frame, int top) {
+        byte c1 = (byte) popInt(frame, top - 1);
+        putInt(frame, top - 1, c1);
+        if (analyze)
+            AnnotatedVM.putAnnotations(frame, top - 1, analysis.i2b(c1,
+                    AnnotatedVM.popAnnotations(frame, top - 1)));
     }
-    public static void i2c (VirtualFrame frame, int top){
-        char c1 = (char) popInt(frame, top -1);
-        putInt(frame, top -1, c1);
-        if(analyze)
-            AnnotatedVM.putAnnotations(frame, top -1 , analysis.i2c(c1,
-                    AnnotatedVM.popAnnotations(frame, top -1)));
+
+    public static void i2c(VirtualFrame frame, int top) {
+        char c1 = (char) popInt(frame, top - 1);
+        putInt(frame, top - 1, c1);
+        if (analyze)
+            AnnotatedVM.putAnnotations(frame, top - 1, analysis.i2c(c1,
+                    AnnotatedVM.popAnnotations(frame, top - 1)));
     }
-    public static void i2s (VirtualFrame frame, int top){
-        short c1 = (short) popInt(frame, top -1);
-        putInt(frame, top -1, c1);
-        if(analyze)
-            AnnotatedVM.putAnnotations(frame, top -1 , analysis.i2s(c1,
-                    AnnotatedVM.popAnnotations(frame, top -1)));
+
+    public static void i2s(VirtualFrame frame, int top) {
+        short c1 = (short) popInt(frame, top - 1);
+        putInt(frame, top - 1, c1);
+        if (analyze)
+            AnnotatedVM.putAnnotations(frame, top - 1, analysis.i2s(c1,
+                    AnnotatedVM.popAnnotations(frame, top - 1)));
     }
 
 
@@ -1283,9 +1296,9 @@ public class SPouT {
         StaticObject bytes = (StaticObject) getValue.invokeDirect(self);
         Object xlength = length.invokeDirect(self);
         int ilength;
-        if(xlength instanceof AnnotatedValue){
+        if (xlength instanceof AnnotatedValue) {
             ilength = ((AnnotatedValue) xlength).getValue();
-        }else{
+        } else {
             ilength = (int) xlength;
         }
         StaticObject result =
@@ -1363,7 +1376,7 @@ public class SPouT {
         return meta.toGuestString(ret);
     }
 
-    public static StaticObject valueOf_byte(Object v, Meta meta){
+    public static StaticObject valueOf_byte(Object v, Meta meta) {
         if (v instanceof AnnotatedValue) {
             stopRecording("concolic type conversion to string not supported, yet.", meta);
         }
@@ -1393,8 +1406,8 @@ public class SPouT {
         }
         int coffset = (int) offset;
         int ccount = (int) count;
-        char [] value = v.unwrap(meta.getLanguage());
-        return meta.toGuestString(new String(Arrays.copyOfRange(value, coffset, coffset+ccount)));
+        char[] value = v.unwrap(meta.getLanguage());
+        return meta.toGuestString(new String(Arrays.copyOfRange(value, coffset, coffset + ccount)));
     }
 
     public static StaticObject valueOf_short(Object v, Meta meta) {
@@ -1439,15 +1452,17 @@ public class SPouT {
 
     // Numeric Classes
 
-    public static double parseDouble(StaticObject s, Meta meta){
-        if(analyze && config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(s)){
+    @CompilerDirectives.TruffleBoundary
+    public static double parseDouble(StaticObject s, Meta meta) {
+        if (analyze && config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(s)) {
             stopRecording("Concolic type conversion from string to double is not supported", meta);
         }
         return Double.parseDouble(meta.toHostString(s));
     }
 
-    public static float parseFloat(StaticObject s, Meta meta){
-        if(analyze && config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(s)){
+    @CompilerDirectives.TruffleBoundary
+    public static float parseFloat(StaticObject s, Meta meta) {
+        if (analyze && config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(s)) {
             stopRecording("Concolic type conversion from string to float is not supported", meta);
         }
         return Float.parseFloat(meta.toHostString(s));
@@ -1478,7 +1493,8 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static void debug(String method, int slot, int slot2, Annotations a) {
-        if (DEBUG) System.out.println("[debug] bytecode: %s slot: %s  slot2: %s a1: %s ".formatted(method, slot, slot2, a));
+        if (DEBUG)
+            System.out.println("[debug] bytecode: %s slot: %s  slot2: %s a1: %s ".formatted(method, slot, slot2, a));
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -1499,22 +1515,23 @@ public class SPouT {
         target.setAnnotations(annotations);
         return target;
     }
+
     private static boolean hasConcolicAnnotations(StaticObject v) {
         return v.hasAnnotations() && config.hasConcolicAnalysis() && v.getAnnotations()[config.getConcolicIdx()] != null;
     }
 
     public static void makeConcatWithConstantsSymbolically(Object result, Object[] args, Meta meta) {
-        if(analyze && config.hasConcolicAnalysis()){
+        if (analyze && config.hasConcolicAnalysis()) {
             config.getConcolicAnalysis().makeConcatWithConstants((StaticObject) result, args, meta);
         }
     }
 
-    public static void pauseAnalyze(){
+    public static void pauseAnalyze() {
         oldAnalyze = analyze;
         analyze = false;
     }
 
-    public static void resumeAnalyze(){
+    public static void resumeAnalyze() {
         analyze = oldAnalyze;
     }
 }
