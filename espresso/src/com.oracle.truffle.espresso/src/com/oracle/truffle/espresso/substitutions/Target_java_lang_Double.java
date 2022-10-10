@@ -22,6 +22,10 @@
  */
 package com.oracle.truffle.espresso.substitutions;
 
+import com.oracle.truffle.espresso.meta.Meta;
+import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.spout.SPouT;
+
 /**
  * These substitutions are just for performance. Directly uses the optimized host intrinsics
  * avoiding expensive guest native calls.
@@ -37,4 +41,7 @@ public final class Target_java_lang_Double {
     public static long doubleToRawLongBits(double value) {
         return Double.doubleToRawLongBits(value);
     }
+
+    @Substitution()
+    public static double parseDouble(@JavaType(String.class) StaticObject s, @Inject Meta meta){return SPouT.parseDouble(s, meta);}
 }

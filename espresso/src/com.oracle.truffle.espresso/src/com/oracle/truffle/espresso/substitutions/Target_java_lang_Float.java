@@ -22,6 +22,10 @@
  */
 package com.oracle.truffle.espresso.substitutions;
 
+import com.oracle.truffle.espresso.meta.Meta;
+import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.spout.SPouT;
+
 /**
  * These substitutions are just for performance. Directly uses the optimized host intrinsics
  * avoiding expensive guest native calls.
@@ -36,5 +40,10 @@ public final class Target_java_lang_Float {
     @Substitution(isTrivial = true)
     public static float intBitsToFloat(int bits) {
         return Float.intBitsToFloat(bits);
+    }
+
+    @Substitution
+    public static float parseFloat(@JavaType(String.class)StaticObject s, @Inject Meta meta){
+        return SPouT.parseFloat(s, meta);
     }
 }

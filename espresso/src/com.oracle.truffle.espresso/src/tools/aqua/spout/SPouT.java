@@ -37,6 +37,7 @@ import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.concolic.ConcolicAnalysis;
 import tools.aqua.smt.Expression;
 import tools.aqua.taint.PostDominatorAnalysis;
 
@@ -1196,7 +1197,7 @@ public class SPouT {
     @CompilerDirectives.TruffleBoundary
     public static StaticObject stringToLowerCase(StaticObject self, Meta meta) {
         String host = meta.toHostString(self);
-        StaticObject result = meta.toGuestString(host.toUpperCase());
+        StaticObject result = meta.toGuestString(host.toLowerCase());
         if (analyze && config.hasConcolicAnalysis() && self.hasAnnotations()) {
             initStringAnnotations(result);
             result = config.getConcolicAnalysis().stringToLower(result, self, meta);
@@ -1436,6 +1437,21 @@ public class SPouT {
         return meta.toGuestString(ret);
     }
 
+    // Numeric Classes
+
+    public static double parseDouble(StaticObject s, Meta meta){
+        if(analyze && config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(s)){
+            stopRecording("Concolic type conversion from string to double is not supported", meta);
+        }
+        return Double.parseDouble(meta.toHostString(s));
+    }
+
+    public static float parseFloat(StaticObject s, Meta meta){
+        if(analyze && config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(s)){
+            stopRecording("Concolic type conversion from string to float is not supported", meta);
+        }
+        return Float.parseFloat(meta.toHostString(s));
+    }
     // --------------------------------------------------------------------------
     //
     // helpers
