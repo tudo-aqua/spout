@@ -54,7 +54,7 @@ public class SPouT {
 
     public static final boolean DEBUG = true;
 
-    private static boolean analyze = false;
+    private static boolean analyze = false, oldAnalyze=analyze;
 
     private static MetaAnalysis analysis = null;
 
@@ -1156,7 +1156,7 @@ public class SPouT {
         }
 
         if (!self.hasAnnotations() && !(index instanceof AnnotatedValue)) {
-            return concreteString.charAt(concreteIndex);
+            return (int) concreteString.charAt(concreteIndex);
         }
         boolean sat1 = (0 <= concreteIndex);
         boolean sat2 = (concreteIndex < concreteString.length());
@@ -1175,7 +1175,7 @@ public class SPouT {
             meta.throwException(meta.java_lang_StringIndexOutOfBoundsException);
             return null;
         }
-        AnnotatedValue av = new AnnotatedValue(concreteString.charAt(concreteIndex), Annotations.emptyArray());
+        AnnotatedValue av = new AnnotatedValue((int) concreteString.charAt(concreteIndex), Annotations.emptyArray());
         if (analyze && config.hasConcolicAnalysis()) {
             config.getConcolicAnalysis().charAtContent(av, self, index, meta);
         }
@@ -1280,7 +1280,13 @@ public class SPouT {
         Method length = abstractSB.lookupMethod(meta.getNames().getOrCreate("length"), Signature._int);
         Method isLatin = abstractSB.lookupMethod(meta.getNames().getOrCreate("isLatin1"), Signature._boolean);
         StaticObject bytes = (StaticObject) getValue.invokeDirect(self);
-        int ilength = (int) length.invokeDirect(self);
+        Object xlength = length.invokeDirect(self);
+        int ilength;
+        if(xlength instanceof AnnotatedValue){
+            ilength = ((AnnotatedValue) xlength).getValue();
+        }else{
+            ilength = (int) xlength;
+        }
         StaticObject result =
                 (boolean) isLatin.invokeDirect(self)
                         ?
@@ -1485,5 +1491,14 @@ public class SPouT {
         if(analyze && config.hasConcolicAnalysis()){
             config.getConcolicAnalysis().makeConcatWithConstants((StaticObject) result, args, meta);
         }
+    }
+
+    public static void pauseAnalyze(){
+        oldAnalyze = analyze;
+        analyze = false;
+    }
+
+    public static void resumeAnalyze(){
+        analyze = oldAnalyze;
     }
 }

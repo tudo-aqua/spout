@@ -82,12 +82,18 @@ public final class InvokeDynamicCallSiteNode extends QuickNode {
     public int execute(VirtualFrame frame) {
         int argCount = Signatures.parameterCount(parsedSignature);
         Object[] args = BytecodeNode.popBasicArgumentsWithArray(frame, top, parsedSignature, new Object[argCount + (hasAppendix ? 1 : 0)], argCount, 0);
+        Object[] args2 = null;
+        if(originalLinkName.equals(getNames().getOrCreate("makeConcatWithConstants"))) {
+            SPouT.pauseAnalyze();
+            args2 = args.clone();
+        }
         if (hasAppendix) {
             args[args.length - 1] = appendix;
         }
         Object result = callNode.call(args);
         if(originalLinkName.equals(getNames().getOrCreate("makeConcatWithConstants"))){
-            SPouT.makeConcatWithConstantsSymbolically(result, args, getMeta());
+            SPouT.resumeAnalyze();
+            SPouT.makeConcatWithConstantsSymbolically(result, args2, getMeta());
         }
         if (!returnsPrimitiveType) {
             getBytecodeNode().checkNoForeignObjectAssumption((StaticObject) result);

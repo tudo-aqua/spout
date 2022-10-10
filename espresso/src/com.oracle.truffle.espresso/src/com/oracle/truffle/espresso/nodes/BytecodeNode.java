@@ -2937,16 +2937,17 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
         int argAt = top - 1;
         for (int i = argCount - 1; i >= 0; --i) {
             Symbol<Type> argType = Signatures.parameterType(signature, i);
+            Annotations a = AnnotatedVM.popAnnotations(frame, argAt);
             // @formatter:off
             switch (argType.byteAt(0)) {
                 case 'Z' : // fall through
                 case 'B' : // fall through
                 case 'S' : // fall through
                 case 'C' : // fall through
-                case 'I' : args[i + start] = popInt(frame, argAt);    break;
-                case 'F' : args[i + start] = popFloat(frame, argAt);  break;
-                case 'J' : args[i + start] = popLong(frame, argAt);   --argAt; break;
-                case 'D' : args[i + start] = popDouble(frame, argAt); --argAt; break;
+                case 'I' : args[i + start] = (a == null) ? popInt(frame, argAt) : new AnnotatedValue(popInt(frame, argAt) , a); break;
+                case 'F' : args[i + start] = (a == null) ? popFloat(frame, argAt) : new AnnotatedValue(popFloat(frame, argAt) , a); break;
+                case 'J' : args[i + start] = (a == null) ? popLong(frame, argAt) : new AnnotatedValue(popLong(frame, argAt) , a);   --argAt; break;
+                case 'D' : args[i + start] = (a == null) ? popDouble(frame, argAt) : new AnnotatedValue(popDouble(frame, argAt) , a); --argAt; break;
                 case '[' : // fall through
                 case 'L' : args[i + start] = popObject(frame, argAt); break;
                 default  :
@@ -2977,14 +2978,51 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
             AnnotatedVM.putAnnotations(frame, index, (Annotations) value);
             value = ((AnnotatedValue) value).getValue();
         }
+        int value2;
+        if (value instanceof Integer) {
+            value2 = ((Integer) value).intValue();
+        }else if(value instanceof Character){
+            value2 = ((Character) value).charValue();
+        } else if(value instanceof Byte){
+            value2 = ((Byte) value).byteValue();
+        } else if (value instanceof Short){
+            value2 = ((Short) value).shortValue();
+        } else if(value instanceof Long)
+        {
+            value2 = (int) ((Long) value).longValue();
+        } else if(value instanceof Double){
+            value2 = (int) ((Double) value).doubleValue();
+        } else if(value instanceof Float){
+            value2 = (int) ((Float) value).floatValue();
+        }else{
+            value2 = 0;
+        }
         //FIXME, without concolic execution, the unboxing is broken? Check this.
         // @formatter:off
         switch (kind) {
             case Boolean : putInt(frame, top, ((boolean) value) ? 1 : 0); break;
-            case Byte    : putInt(frame, top, (byte) value);              break;
-            case Short   : putInt(frame, top, (short) value);             break;
-            case Char    : putInt(frame, top, (char) value);              break;
-            case Int     : putInt(frame, top, (int) value);               break;
+            case Byte    :
+                if(value instanceof Character){
+                    putInt(frame, top, (byte) value);
+                }else {
+                    putInt(frame, top, (byte) value2);
+                }
+                break;
+            case Short   :
+                if(value instanceof Character){
+                    putInt(frame, top, (short) value);
+                }else {
+                    putInt(frame, top, (short) value2);
+                }
+                break;
+            case Char    :
+                if(value instanceof Character){
+                    putInt(frame, top, (char) value);
+                }else {
+                    putInt(frame, top, (char) value2);
+                }
+                break;
+            case Int     : putInt(frame, top, value2);               break;
             case Float   : putFloat(frame, top, (float) value);           break;
             case Long    : putLong(frame, top, (long) value);             break;
             case Double  : putDouble(frame, top, (double) value);         break;

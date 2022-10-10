@@ -433,7 +433,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     private Expression getExpressionLong(Expression a1, ComplexExpression longMinAsFloat, ComplexExpression longMaxAsFloat, ComplexExpression rtz) {
-        if( a1 == null){
+        if (a1 == null) {
             return null;
         }
         return new ComplexExpression(
@@ -484,7 +484,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     private Expression getExpressionInt(Expression a1, ComplexExpression intMinAsFloat, ComplexExpression intMaxAsFloat, ComplexExpression rtz) {
-        if( a1 == null){
+        if (a1 == null) {
             return null;
         }
         return new ComplexExpression(
@@ -944,22 +944,45 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return self;
     }
 
-    public void makeConcatWithConstants(StaticObject result, Object[] args, Meta meta){
-        StaticObject gso = (StaticObject) args[0];
-        Annotations[] a = gso.getAnnotations();
-        Expression expr = a != null && a[a.length -1] != null && a[a.length -1].getAnnotations()[config.getConcolicIdx()] != null?
-                (Expression) a[a.length -1].getAnnotations()[config.getConcolicIdx()] : Constant.fromConcreteValue(gso.toString());
-        boolean anySymbolic = hasConcolicStringAnnotations((StaticObject) args[0]);
-        for(int i = 1; i < args.length; i++) {
-            StaticObject so = (StaticObject) args[i];
-            anySymbolic = anySymbolic? anySymbolic: hasConcolicStringAnnotations(so);
-            gso = (StaticObject) args[i];
-            a = gso.getAnnotations();
-            Expression expr2 = a != null && a[a.length -1] != null && a[a.length -1].getAnnotations()[config.getConcolicIdx()] != null?
-                    (Expression) a[a.length -1].getAnnotations()[config.getConcolicIdx()] : Constant.fromConcreteValue(gso.toString());
-            expr = new ComplexExpression(SCONCAT, expr, expr2);
+    private final class ConvRes{
+        public Expression expr;
+        public boolean fromSymbolic;
+        ConvRes(Expression e, boolean b){
+            expr = e;
+            fromSymbolic = b;
         }
-        if(anySymbolic){
+    }
+    @CompilerDirectives.TruffleBoundary
+    private ConvRes convertArgToExpression(Object arg) {
+        if (arg instanceof StaticObject) {
+            StaticObject so = (StaticObject) arg;
+            Annotations[] a = so.getAnnotations();
+            return a != null && a[a.length - 1] != null && a[a.length - 1].getAnnotations()[config.getConcolicIdx()] != null ?
+                    new ConvRes((Expression) a[a.length - 1].getAnnotations()[config.getConcolicIdx()], true) :
+                    new ConvRes(Constant.fromConcreteValue(so.toString()), false);
+        } else if (arg instanceof AnnotatedValue) {
+            Object[] a = ((AnnotatedValue) arg).getAnnotations();
+            return a != null && a[config.getConcolicIdx()] != null ?
+                    new ConvRes((Expression) a[config.getConcolicIdx()], true) :
+                    new ConvRes(Constant.fromConcreteValue("%s".formatted(((AnnotatedValue) arg).getValue())), false);
+        } else {
+            return new ConvRes(Constant.fromConcreteValue("%s".formatted(arg)), false);
+        }
+    }
+
+    public void makeConcatWithConstants(StaticObject result, Object[] args, Meta meta) {
+        ConvRes cr =  convertArgToExpression(args[0]);
+        Expression expr = cr.expr;
+        boolean anySymbolic = cr.fromSymbolic;
+        int i = 1;
+        while (args[i] != null){
+            cr = convertArgToExpression(args[i]);
+            anySymbolic = anySymbolic ? true : cr.fromSymbolic;
+            Expression expr2 = cr.expr;
+            expr = new ComplexExpression(SCONCAT, expr, expr2);
+            ++i;
+        }
+        if (anySymbolic) {
             annotateStringWithExpression(result, expr);
         }
     }
@@ -1206,7 +1229,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     private StaticObject annotateStringWithExpression(StaticObject self, Expression value) {
         Annotations[] stringAnnotation = self.getAnnotations();
-        if (stringAnnotation == null){
+        if (stringAnnotation == null) {
             SPouT.initStringAnnotations(self);
             stringAnnotation = self.getAnnotations();
         }

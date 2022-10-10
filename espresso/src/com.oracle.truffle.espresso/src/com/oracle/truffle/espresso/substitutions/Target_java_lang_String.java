@@ -93,32 +93,32 @@ public final class Target_java_lang_String {
     }
 
     //Value Of Methods
-    @Substitution(methodName = "valueOf")
+    @Substitution(methodName = "valueOf", passAnnotations = true)
     @CompilerDirectives.TruffleBoundary
     public static @JavaType(String.class) StaticObject valueOf_bool(@JavaType(internalName = "Z") Object v, @Inject Meta meta) {
         return SPouT.valueOf_bool(v, meta);
     }
 
-    @Substitution(methodName = "valueOf")
+    @Substitution(methodName = "valueOf", passAnnotations = true)
     @CompilerDirectives.TruffleBoundary
     public static @JavaType(String.class) StaticObject valueOf_byte(@JavaType(internalName = "B") Object v, @Inject Meta meta) {
         return SPouT.valueOf_byte(v, meta);
     }
 
-    @Substitution(methodName = "valueOf")
+    @Substitution(methodName = "valueOf", passAnnotations = true)
     @CompilerDirectives.TruffleBoundary
     public static @JavaType(String.class) StaticObject valueOf_char(@JavaType(internalName = "C") Object v, @Inject Meta meta) {
         return SPouT.valueOf_char(v, meta);
     }
 
-    @Substitution(methodName = "valueOf")
+    @Substitution(methodName = "valueOf", passAnnotations = true)
     @CompilerDirectives.TruffleBoundary
     public static @JavaType(String.class) StaticObject valueOf_char_array(
             @JavaType(internalName = "[C") StaticObject v, @Inject Meta meta) {
         return SPouT.valueOf_char_array(v, meta);
     }
 
-    @Substitution(methodName = "valueOf")
+    @Substitution(methodName = "valueOf", passAnnotations = true)
     @CompilerDirectives.TruffleBoundary
     public static @JavaType(String.class) StaticObject valueOf_char_array(
             @JavaType(internalName = "[C") StaticObject v,
@@ -128,31 +128,31 @@ public final class Target_java_lang_String {
         return SPouT.valueOf_char_array(v, offset, count, meta);
     }
 
-    @Substitution(methodName = "valueOf")
+    @Substitution(methodName = "valueOf", passAnnotations = true)
     @CompilerDirectives.TruffleBoundary
     public static @JavaType(String.class) StaticObject valueOf_short(@JavaType(internalName = "S") Object v, @Inject Meta meta) {
         return SPouT.valueOf_short(v, meta);
     }
 
-    @Substitution(methodName = "valueOf")
+    @Substitution(methodName = "valueOf", passAnnotations = true)
     @CompilerDirectives.TruffleBoundary
     public static @JavaType(String.class) StaticObject valueOf_int(@JavaType(internalName = "I") Object v, @Inject Meta meta) {
         return SPouT.valueOf_int(v, meta);
     }
 
-    @Substitution(methodName = "valueOf")
+    @Substitution(methodName = "valueOf", passAnnotations = true)
     @CompilerDirectives.TruffleBoundary
     public static @JavaType(String.class) StaticObject valueOf_long(@JavaType(internalName = "J") Object v, @Inject Meta meta) {
         return SPouT.valueOf_long(v, meta);
     }
 
-    @Substitution(methodName = "valueOf")
+    @Substitution(methodName = "valueOf", passAnnotations = true)
     @CompilerDirectives.TruffleBoundary
     public static @JavaType(String.class) StaticObject valueOf_float(@JavaType(internalName = "F") Object v, @Inject Meta meta) {
         return SPouT.valueOf_float(v, meta);
     }
 
-    @Substitution(methodName = "valueOf")
+    @Substitution(methodName = "valueOf", passAnnotations = true)
     @CompilerDirectives.TruffleBoundary
     public static @JavaType(String.class) StaticObject valueOf_double(@JavaType(internalName = "D") Object v, @Inject Meta meta) {
         return SPouT.valueOf_double(v, meta);
