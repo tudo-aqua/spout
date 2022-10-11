@@ -1879,17 +1879,34 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
             EspressoLanguage language = getLanguage();
             // @formatter:off
             switch (loadOpcode) {
-                case BALOAD: putInt(frame, top - 2, getInterpreterToVM().getArrayByte(language, index, array, this));      break;
-                case SALOAD: putInt(frame, top - 2, getInterpreterToVM().getArrayShort(language, index, array, this));     break;
-                case CALOAD: putInt(frame, top - 2, getInterpreterToVM().getArrayChar(language, index, array, this));      break;
+                case BALOAD:
+                    putInt(frame, top - 2, getInterpreterToVM().getArrayByte(language, index, array, this));
+                    SPouT.getArrayAnnotations(frame, array, index, top-1, top-2, language);
+                    break;
+                case SALOAD:
+                    putInt(frame, top - 2, getInterpreterToVM().getArrayShort(language, index, array, this));
+                    SPouT.getArrayAnnotations(frame, array, index, top-1, top-2, language);break;
+                case CALOAD:
+                    putInt(frame, top - 2, getInterpreterToVM().getArrayChar(language, index, array, this));
+                    SPouT.getArrayAnnotations(frame, array, index, top-1, top-2, language);
+                    break;
                 case IALOAD:
                     // putInt(frame, top - 2, getInterpreterToVM().getArrayInt(language, index, array, this));       break;
                     putInt(frame, top - 2, getInterpreterToVM().getArrayInt(language, index, array, this));
                     SPouT.getArrayAnnotations(frame, array, index, top-1, top-2, language);
                     break;
-                case FALOAD: putFloat(frame, top - 2, getInterpreterToVM().getArrayFloat(language, index, array, this));   break;
-                case LALOAD: putLong(frame, top - 2, getInterpreterToVM().getArrayLong(language, index, array, this));     break;
-                case DALOAD: putDouble(frame, top - 2, getInterpreterToVM().getArrayDouble(language, index, array, this)); break;
+                case FALOAD:
+                    putFloat(frame, top - 2, getInterpreterToVM().getArrayFloat(language, index, array, this));
+                    SPouT.getArrayAnnotations(frame, array, index, top-1, top-2, language);
+                    break;
+                case LALOAD:
+                    putLong(frame, top - 2, getInterpreterToVM().getArrayLong(language, index, array, this));
+                    SPouT.getArrayAnnotations(frame, array, index, top-1, top-2, language);
+                    break;
+                case DALOAD:
+                    putDouble(frame, top - 2, getInterpreterToVM().getArrayDouble(language, index, array, this));
+                    SPouT.getArrayAnnotations(frame, array, index, top-1, top-2, language);
+                    break;
                 case AALOAD: putObject(frame, top - 2, getInterpreterToVM().getArrayObject(language, index, array, this));       break;
                 default:
                     CompilerDirectives.transferToInterpreterAndInvalidate();
@@ -1916,17 +1933,35 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
             EspressoLanguage language = getLanguage();
             // @formatter:off
             switch (storeOpcode) {
-                case BASTORE: getInterpreterToVM().setArrayByte(language, (byte) popInt(frame, top - 1), index, array, this);   break;
-                case SASTORE: getInterpreterToVM().setArrayShort(language, (short) popInt(frame, top - 1), index, array, this); break;
-                case CASTORE: getInterpreterToVM().setArrayChar(language, (char) popInt(frame, top - 1), index, array, this);   break;
+                case BASTORE:
+                    getInterpreterToVM().setArrayByte(language, (byte) popInt(frame, top - 1), index, array, this);
+                    SPouT.setArrayAnnotations(frame, array, index, top -1, top - 1 - offset, language);
+                    break;
+                case SASTORE:
+                    getInterpreterToVM().setArrayShort(language, (short) popInt(frame, top - 1), index, array, this);
+                    SPouT.setArrayAnnotations(frame, array, index, top -1, top - 1 - offset, language);
+                    break;
+                case CASTORE:
+                    getInterpreterToVM().setArrayChar(language, (char) popInt(frame, top - 1), index, array, this);
+                    SPouT.setArrayAnnotations(frame, array, index, top -1, top - 1 - offset, language);
+                    break;
                 case IASTORE:
                     //getInterpreterToVM().setArrayInt(language, popInt(frame, top - 1), index, array, this);           break;
                     getInterpreterToVM().setArrayInt(language, popInt(frame, top - 1), index, array, this);
                     SPouT.setArrayAnnotations(frame, array, index, top -1, top - 1 - offset, language);
                     break;
-                case FASTORE: getInterpreterToVM().setArrayFloat(language, popFloat(frame, top - 1), index, array, this);       break;
-                case LASTORE: getInterpreterToVM().setArrayLong(language, popLong(frame, top - 1), index, array, this);         break;
-                case DASTORE: getInterpreterToVM().setArrayDouble(language, popDouble(frame, top - 1), index, array, this);     break;
+                case FASTORE:
+                    getInterpreterToVM().setArrayFloat(language, popFloat(frame, top - 1), index, array, this);
+                    SPouT.setArrayAnnotations(frame, array, index, top -1, top - 1 - offset, language);
+                    break;
+                case LASTORE:
+                    getInterpreterToVM().setArrayLong(language, popLong(frame, top - 1), index, array, this);
+                    SPouT.setArrayAnnotations(frame, array, index, top -1, top - 1 - offset, language);
+                    break;
+                case DASTORE:
+                    getInterpreterToVM().setArrayDouble(language, popDouble(frame, top - 1), index, array, this);
+                    SPouT.setArrayAnnotations(frame, array, index, top -1, top - 1 - offset, language);
+                    break;
                 case AASTORE: referenceArrayStore(frame, top, index, array);     break;
                 default:
                     CompilerDirectives.transferToInterpreterAndInvalidate();
@@ -2730,6 +2765,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     instrumentation.notifyFieldModification(frame, statementIndex, field, receiver, booleanValue);
                 }
                 InterpreterToVM.setFieldBoolean(booleanValue, receiver, field);
+                AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
                 break;
             case 'B':
                 byte byteValue = (byte) popInt(frame, top - 1);
@@ -2737,6 +2773,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     instrumentation.notifyFieldModification(frame, statementIndex, field, receiver, byteValue);
                 }
                 InterpreterToVM.setFieldByte(byteValue, receiver, field);
+                AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
                 break;
             case 'C':
                 char charValue = (char) popInt(frame, top - 1);
@@ -2744,6 +2781,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     instrumentation.notifyFieldModification(frame, statementIndex, field, receiver, charValue);
                 }
                 InterpreterToVM.setFieldChar(charValue, receiver, field);
+                AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
                 break;
             case 'S':
                 short shortValue = (short) popInt(frame, top - 1);
@@ -2751,6 +2789,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     instrumentation.notifyFieldModification(frame, statementIndex, field, receiver, shortValue);
                 }
                 InterpreterToVM.setFieldShort(shortValue, receiver, field);
+                AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
                 break;
             case 'I':
                 int intValue = popInt(frame, top - 1);
@@ -2766,6 +2805,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     instrumentation.notifyFieldModification(frame, statementIndex, field, receiver, doubleValue);
                 }
                 InterpreterToVM.setFieldDouble(doubleValue, receiver, field);
+                AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
                 break;
             case 'F':
                 float floatValue = popFloat(frame, top - 1);
@@ -2773,6 +2813,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     instrumentation.notifyFieldModification(frame, statementIndex, field, receiver, floatValue);
                 }
                 InterpreterToVM.setFieldFloat(floatValue, receiver, field);
+                AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
                 break;
             case 'J':
                 long longValue = popLong(frame, top - 1);
@@ -2780,6 +2821,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     instrumentation.notifyFieldModification(frame, statementIndex, field, receiver, longValue);
                 }
                 InterpreterToVM.setFieldLong(longValue, receiver, field);
+                AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
                 break;
             case '[': // fall through
             case 'L':
@@ -2852,17 +2894,26 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
         // @formatter:off
         byte typeHeader = field.getType().byteAt(0);
         switch (typeHeader) {
-            case 'Z' : putInt(frame, resultAt, InterpreterToVM.getFieldBoolean(receiver, field) ? 1 : 0); break;
-            case 'B' : putInt(frame, resultAt, InterpreterToVM.getFieldByte(receiver, field));      break;
-            case 'C' : putInt(frame, resultAt, InterpreterToVM.getFieldChar(receiver, field));      break;
-            case 'S' : putInt(frame, resultAt, InterpreterToVM.getFieldShort(receiver, field));     break;
+            case 'Z' : putInt(frame, resultAt, InterpreterToVM.getFieldBoolean(receiver, field) ? 1 : 0);
+                AnnotatedVM.putAnnotations(frame, resultAt, AnnotatedVM.getFieldAnnotation(receiver, field));break;
+            case 'B' : putInt(frame, resultAt, InterpreterToVM.getFieldByte(receiver, field));
+                AnnotatedVM.putAnnotations(frame, resultAt, AnnotatedVM.getFieldAnnotation(receiver, field));
+                break;
+            case 'C' : putInt(frame, resultAt, InterpreterToVM.getFieldChar(receiver, field));
+                AnnotatedVM.putAnnotations(frame, resultAt, AnnotatedVM.getFieldAnnotation(receiver, field));break;
+            case 'S' : putInt(frame, resultAt, InterpreterToVM.getFieldShort(receiver, field));
+                AnnotatedVM.putAnnotations(frame, resultAt, AnnotatedVM.getFieldAnnotation(receiver, field));break;
             case 'I' :
                 putInt(frame, resultAt, InterpreterToVM.getFieldInt(receiver, field));
                 AnnotatedVM.putAnnotations(frame, resultAt, AnnotatedVM.getFieldAnnotation(receiver, field));
                 break;
-            case 'D' : putDouble(frame, resultAt, InterpreterToVM.getFieldDouble(receiver, field)); break;
-            case 'F' : putFloat(frame, resultAt, InterpreterToVM.getFieldFloat(receiver, field));   break;
-            case 'J' : putLong(frame, resultAt, InterpreterToVM.getFieldLong(receiver, field));     break;
+            case 'D' : putDouble(frame, resultAt, InterpreterToVM.getFieldDouble(receiver, field));
+                AnnotatedVM.putAnnotations(frame, resultAt + 1, AnnotatedVM.getFieldAnnotation(receiver, field));
+                break;
+            case 'F' : putFloat(frame, resultAt, InterpreterToVM.getFieldFloat(receiver, field));
+                AnnotatedVM.putAnnotations(frame, resultAt, AnnotatedVM.getFieldAnnotation(receiver, field));break;
+            case 'J' : putLong(frame, resultAt, InterpreterToVM.getFieldLong(receiver, field));
+                AnnotatedVM.putAnnotations(frame, resultAt +1, AnnotatedVM.getFieldAnnotation(receiver, field));break;
             case '[' : // fall through
             case 'L' : {
                 StaticObject value = InterpreterToVM.getFieldObject(receiver, field);

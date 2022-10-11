@@ -23,20 +23,21 @@
  */
 package com.oracle.truffle.espresso.substitutions;
 
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.spout.SPouT;
 
 @EspressoSubstitutions
 public final class Target_tools_aqua_concolic_Verifier {
-/*
+
     //    public static void assume(boolean condition)
     @Substitution(hasReceiver = false)
     @CompilerDirectives.TruffleBoundary
-    public static void assume(@Host(typeName = "Z") Object condition, @InjectMeta Meta meta) {
-        Analysis.getInstance().assume( condition, meta );
+    public static void assume(@JavaType(internalName = "Z") Object condition, @Inject Meta meta) {
+        SPouT.assume( condition, meta );
     }
-*/
+
     @Substitution(hasReceiver = false, passAnnotations = true)
     public static @JavaType(internalName = "Z") Object nondetBoolean() {
         return SPouT.nextSymbolicBoolean();

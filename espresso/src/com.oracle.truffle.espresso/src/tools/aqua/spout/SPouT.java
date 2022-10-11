@@ -114,17 +114,18 @@ public class SPouT {
 
 
     @CompilerDirectives.TruffleBoundary
-    public void assume(Object condition, Meta meta) {
+    public static void assume(Object condition, Meta meta) {
         if (!analyze || !config.hasConcolicAnalysis()) {
             // FIXME: dont care about assumptions outside of concolic analysis?
             return;
         }
-        /*
-        boolean cont = concolicAnalysis.assume(condition, meta);
-        if (!cont) {
+
+        if(condition instanceof AnnotatedValue){
+            stopRecording("Unexpected annotated Value observed", meta);
+        }
+        if (!((boolean) condition)) {
             stopRecording("assumption violation", meta);
         }
-        */
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -1016,7 +1017,7 @@ public class SPouT {
         assert IF_ICMPEQ <= opcode && opcode <= IF_ICMPLE;
         int c1 = popInt(frame, top - 1);
         int c2 = popInt(frame, top - 2);
-
+        
         // concrete
         boolean takeBranch = true;
 

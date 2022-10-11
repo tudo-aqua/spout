@@ -93,18 +93,21 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     public Object nextSymbolicByte() {
         AnnotatedValue av = config.nextSymbolicByte();
         trace.addElement(new SymbolDeclaration(Annotations.annotation(av, config.getConcolicIdx())));
+        av.set(config.getConcolicIdx(), new ComplexExpression(B2I, (Expression) Annotations.annotation(av, config.getConcolicIdx())));
         return av;
     }
 
     public Object nextSymbolicChar() {
         AnnotatedValue av = config.nextSymbolicChar();
         trace.addElement(new SymbolDeclaration(Annotations.annotation(av, config.getConcolicIdx())));
+        av.set(config.getConcolicIdx(), new ComplexExpression(C2I, (Expression) Annotations.annotation(av, config.getConcolicIdx())));
         return av;
     }
 
     public Object nextSymbolicShort() {
         AnnotatedValue av = config.nextSymbolicShort();
         trace.addElement(new SymbolDeclaration(Annotations.annotation(av, config.getConcolicIdx())));
+        av.set(config.getConcolicIdx(), new ComplexExpression(S2I, (Expression) Annotations.annotation(av, config.getConcolicIdx())));
         return av;
     }
 
@@ -355,17 +358,17 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression i2b(byte c1, Expression a1) {
-        return unarySymbolicOp(OperatorComparator.I2B, a1);
+        return unarySymbolicOp(OperatorComparator.B2I, unarySymbolicOp(OperatorComparator.I2B, a1));
     }
 
     @Override
     public Expression i2c(char c1, Expression a1) {
-        return unarySymbolicOp(OperatorComparator.I2C, a1);
+        return unarySymbolicOp(OperatorComparator.C2I, unarySymbolicOp(OperatorComparator.I2C, a1));
     }
 
     @Override
     public Expression i2s(short c1, Expression a1) {
-        return unarySymbolicOp(OperatorComparator.I2S, a1);
+        return unarySymbolicOp(OperatorComparator.S2I, unarySymbolicOp(OperatorComparator.I2S, a1));
     }
 
     @Override
