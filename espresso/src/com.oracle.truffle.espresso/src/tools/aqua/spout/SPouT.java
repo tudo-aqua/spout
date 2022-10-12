@@ -1270,10 +1270,14 @@ public class SPouT {
         if (analyze && config.hasConcolicAnalysis()) {
             self = config.getConcolicAnalysis().stringBuilderAppend(self, string, meta);
         }
-        pauseAnalyze();
+        Annotations[] selfAnnotations = self.getAnnotations();
+        Annotations[] stringAnnotations = string.getAnnotations();
+        self.setAnnotations(null);
+        string.setAnnotations(null);
         Method m = self.getKlass().getSuperKlass().lookupMethod(meta.getNames().getOrCreate("append"), Signature.java_lang_AbstractStringBuilder_java_lang_String);
         m.invokeDirect(self, string);
-        resumeAnalyze();
+        self.setAnnotations(selfAnnotations);
+        string.setAnnotations(stringAnnotations);
         return self;
     }
 
