@@ -77,6 +77,7 @@ public class SPouT {
         System.out.println("======================== START PATH [END].");
         // TODO: should be deferred to latest possible point in time
         analyze = true;
+        oldAnalyze = true;
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -1266,14 +1267,13 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static StaticObject stringBuXXAppendString(StaticObject self, StaticObject string, Meta meta) {
-        boolean isAnalyze = analyze;
         if (analyze && config.hasConcolicAnalysis()) {
             self = config.getConcolicAnalysis().stringBuilderAppend(self, string, meta);
         }
-        analyze = false;
+        pauseAnalyze();
         Method m = self.getKlass().getSuperKlass().lookupMethod(meta.getNames().getOrCreate("append"), Signature.java_lang_AbstractStringBuilder_java_lang_String);
         m.invokeDirect(self, string);
-        analyze = isAnalyze;
+        resumeAnalyze();
         return self;
     }
 
