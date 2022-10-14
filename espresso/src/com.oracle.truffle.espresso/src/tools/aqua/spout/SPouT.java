@@ -40,6 +40,7 @@ import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.concolic.ConcolicAnalysis;
 import tools.aqua.smt.Expression;
 import tools.aqua.taint.PostDominatorAnalysis;
+import tools.aqua.witnesses.GWIT;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -63,6 +64,8 @@ public class SPouT {
 
     private static Trace trace = null;
 
+    private static GWIT gwit;
+
     // --------------------------------------------------------------------------
     //
     // start and stop
@@ -74,6 +77,7 @@ public class SPouT {
         config.configureAnalysis();
         analysis = new MetaAnalysis(config);
         trace = config.getTrace();
+        gwit = new GWIT(trace);
         System.out.println("======================== START PATH [END].");
         // TODO: should be deferred to latest possible point in time
         analyze = true;
@@ -148,12 +152,15 @@ public class SPouT {
         }
     }
 
+    // --------------------------------------------------------------------------
+    //
+    // concolic values
 
     @CompilerDirectives.TruffleBoundary
     public static Object nextSymbolicInt() {
         if (!analyze || !config.hasConcolicAnalysis()) return 0;
         Object av = config.getConcolicAnalysis().nextSymbolicInt();
-        //GWIT.trackLocationForWitness("" + concrete);
+        gwit.trackLocationForWitness("" + (int) ((AnnotatedValue) av).getValue());
         return av;
     }
 
@@ -161,7 +168,7 @@ public class SPouT {
     public static Object nextSymbolicLong() {
         if (!analyze || !config.hasConcolicAnalysis()) return 0;
         Object av = config.getConcolicAnalysis().nextSymbolicLong();
-        //GWIT.trackLocationForWitness("" + concrete);
+        gwit.trackLocationForWitness("" + (long) ((AnnotatedValue) av).getValue() + "L");
         return av;
     }
 
@@ -169,7 +176,8 @@ public class SPouT {
     public static Object nextSymbolicFloat() {
         if (!analyze || !config.hasConcolicAnalysis()) return 0;
         Object av = config.getConcolicAnalysis().nextSymbolicFloat();
-        //GWIT.trackLocationForWitness("" + concrete);
+        gwit.trackLocationForWitness("Float.parseFloat(\"" +
+                (float) ((AnnotatedValue) av).getValue() + "\")");
         return av;
     }
 
@@ -177,7 +185,8 @@ public class SPouT {
     public static Object nextSymbolicDouble() {
         if (!analyze || !config.hasConcolicAnalysis()) return 0;
         Object av = config.getConcolicAnalysis().nextSymbolicDouble();
-        //GWIT.trackLocationForWitness("" + concrete);
+        gwit.trackLocationForWitness("Double.parseDouble(\"" +
+                (double) ((AnnotatedValue) av).getValue() + "\")");
         return av;
     }
 
@@ -185,7 +194,7 @@ public class SPouT {
     public static Object nextSymbolicBoolean() {
         if (!analyze || !config.hasConcolicAnalysis()) return 0;
         Object av = config.getConcolicAnalysis().nextSymbolicBoolean();
-        //GWIT.trackLocationForWitness("" + concrete);
+        gwit.trackLocationForWitness("" + (boolean) ((AnnotatedValue) av).getValue());
         return av;
     }
 
@@ -193,7 +202,7 @@ public class SPouT {
     public static Object nextSymbolicByte() {
         if (!analyze || !config.hasConcolicAnalysis()) return 0;
         Object av = config.getConcolicAnalysis().nextSymbolicByte();
-        //GWIT.trackLocationForWitness("" + concrete);
+        gwit.trackLocationForWitness("" + (int) ((AnnotatedValue) av).getValue());
         return av;
     }
 
@@ -201,7 +210,7 @@ public class SPouT {
     public static Object nextSymbolicShort() {
         if (!analyze || !config.hasConcolicAnalysis()) return 0;
         Object av = config.getConcolicAnalysis().nextSymbolicShort();
-        //GWIT.trackLocationForWitness("" + concrete);
+        gwit.trackLocationForWitness("" + (int) ((AnnotatedValue) av).getValue());
         return av;
     }
 
@@ -209,7 +218,7 @@ public class SPouT {
     public static Object nextSymbolicChar() {
         if (!analyze || !config.hasConcolicAnalysis()) return 0;
         Object av = config.getConcolicAnalysis().nextSymbolicChar();
-        //GWIT.trackLocationForWitness("" + concrete);
+        gwit.trackLocationForWitness("" + (int) ((AnnotatedValue) av).getValue());
         return av;
     }
 
@@ -217,7 +226,7 @@ public class SPouT {
     public static StaticObject nextSymbolicString(Meta meta) {
         if (!analyze || !config.hasConcolicAnalysis()) return meta.toGuestString("");
         StaticObject annotatedObject = config.getConcolicAnalysis().nextSymbolicString(meta);
-        //GWIT.trackLocationForWitness("" + concrete);
+        gwit.trackLocationForWitness("\"" + annotatedObject + "\"");
         return annotatedObject;
     }
 
