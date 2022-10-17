@@ -8,6 +8,19 @@ import tools.aqua.spout.SPouT;
 @EspressoSubstitutions
 public final class Target_java_lang_StringBuffer {
 
+
+    /*
+     * If we do not intercept the constructor, we get side effects from the length comparison in the trace that are
+     * irrelevant for the symbolic encoding.
+     */
+    @Substitution(hasReceiver = true, methodName = "<init>")
+    public static void init_string(
+            @JavaType(StringBuilder.class) StaticObject self,
+            @JavaType(String.class) StaticObject other,
+            @Inject Meta meta) {
+        SPouT.initStringBuxxString(self, other, meta);
+    }
+
     @Substitution(methodName = "append", hasReceiver = true)
     public static @JavaType(StringBuffer.class) StaticObject append_string(
             @JavaType(StringBuffer.class) StaticObject self,

@@ -1028,7 +1028,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                                 BNEG,
                                 new ComplexExpression(
                                         BAND,
-                                        new ComplexExpression(GE, NAT_ZERO, symbolicOffset),
+                                        new ComplexExpression(LE, NAT_ZERO, symbolicOffset),
                                         new ComplexExpression(LE, symbolicOffset, symbolicSelfLength)));
                 PathCondition pc = new PathCondition(lengthCheck, 1, 2);
                 trace.addElement(pc);
@@ -1037,7 +1037,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                 Expression lengthCheck =
                         new ComplexExpression(
                                 BAND,
-                                new ComplexExpression(GE, NAT_ZERO, symbolicOffset),
+                                new ComplexExpression(LE, NAT_ZERO, symbolicOffset),
                                 new ComplexExpression(LE, symbolicOffset, symbolicSelfLength));
                 PathCondition pc = new PathCondition(lengthCheck, 0, 2);
                 trace.addElement(pc);
@@ -1221,7 +1221,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     private Expression makeStringToExpr(StaticObject self, Meta meta) {
         if (self.hasAnnotations()) {
             Annotations[] fields = self.getAnnotations();
-            return (Expression) fields[fields.length - 1].getAnnotations()[config.getConcolicIdx()];
+            return (Expression) Annotations.annotation(fields[fields.length - 1], config.getConcolicIdx());
         }
         return Constant.fromConcreteValue(meta.toHostString(self));
     }

@@ -1,17 +1,26 @@
 package com.oracle.truffle.espresso.substitutions;
 
-import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.spout.SPouT;
 
 @EspressoSubstitutions
 public final class Target_java_lang_StringBuilder {
+
+
     /*
-     * It is not necessary to substitute the constructor,
-     * as the super implementation calls append_string and this method
-     * is substituted.
+     * If we do not intercept the constructor, we get side effects from the length comparison in the trace that are
+     * irrelevant for the symbolic encoding.
      */
+    @Substitution(hasReceiver = true, methodName = "<init>")
+    public static void init_string(
+            @JavaType(StringBuilder.class) StaticObject self,
+            @JavaType(String.class) StaticObject other,
+            @Inject Meta meta) {
+        SPouT.initStringBuxxString(self, other, meta);
+    }
+
+
     @Substitution(methodName = "append", hasReceiver = true)
     public static @JavaType(StringBuilder.class) StaticObject append_string(
             @JavaType(StringBuilder.class) StaticObject self,

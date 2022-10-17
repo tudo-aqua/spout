@@ -1336,6 +1336,20 @@ public class SPouT {
         return stringBuxxInsert(self, offset, toInsertCasted, meta);
     }
 
+    public static void initStringBuxxString(StaticObject self, StaticObject other, Meta meta) {
+        Method m = self.getKlass().getSuperKlass().lookupMethod(Symbol.Name._init_, Signature._void_String);
+        Annotations[] selfAnnotations = self.getAnnotations();
+        Annotations[] stringAnnotations = other.getAnnotations();
+        self.setAnnotations(null);
+        other.setAnnotations(null);
+        m.invokeDirect(self, other);
+        self.setAnnotations(selfAnnotations);
+        other.setAnnotations(stringAnnotations);
+        if(analyze && config.hasConcolicAnalysis()){
+            config.getConcolicAnalysis().stringBuilderAppend(self, other, meta);
+        }
+    }
+
     @CompilerDirectives.TruffleBoundary
     public static StaticObject stringBuxxInsert(StaticObject self, Object offset, StaticObject toInsert, Meta meta) {
         if (offset instanceof AnnotatedValue) {
