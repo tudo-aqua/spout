@@ -37,8 +37,11 @@ import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.smt.*;
 import tools.aqua.spout.*;
 
+import java.lang.reflect.AnnotatedParameterizedType;
+
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.*;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPLE;
+import static tools.aqua.concolic.PathCondition.*;
 import static tools.aqua.smt.Constant.*;
 import static tools.aqua.smt.OperatorComparator.*;
 import static tools.aqua.smt.OperatorComparator.D2F;
@@ -581,7 +584,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                     new ComplexExpression(BVLT, sIndex, sLen));
 
             trace.addElement(new PathCondition(
-                    safe ? arrayBound : new ComplexExpression(BNEG, arrayBound), safe ? 1 : 0, 2));
+                    safe ? arrayBound : new ComplexExpression(BNEG, arrayBound), safe ? FAILURE : SUCCESS, BINARY_SPLIT));
         }
         return safe;
     }
@@ -689,7 +692,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             }
             expr = takeBranch ? expr : new ComplexExpression(BNEG, expr);
         }
-        trace.addElement(new PathCondition(expr, takeBranch ? 1 : 0, 2));
+        trace.addElement(new PathCondition(expr, takeBranch ? FAILURE : SUCCESS, BINARY_SPLIT));
     }
 
     @Override
@@ -761,7 +764,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             }
         }
 
-        PathCondition pc = new PathCondition(expr, takeBranch ? 1 : 0, 2);
+        PathCondition pc = new PathCondition(expr, takeBranch ? FAILURE : SUCCESS, BINARY_SPLIT);
         trace.addElement(pc);
     }
 
@@ -872,19 +875,19 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         if (!sat1 && concolicIndex) {
             Expression indexGreaterEqualsZero =
                     new ComplexExpression(GT, INT_ZERO, indexExpr);
-            trace.addElement(new PathCondition(indexGreaterEqualsZero, 1, 2));
+            trace.addElement(new PathCondition(indexGreaterEqualsZero, FAILURE, BINARY_SPLIT));
         } else if (sat1 && concolicIndex) {
             Expression indexGreaterEqualsZero =
                     new ComplexExpression(LE, INT_ZERO, indexExpr);
-            trace.addElement(new PathCondition(indexGreaterEqualsZero, 0, 2));
+            trace.addElement(new PathCondition(indexGreaterEqualsZero, SUCCESS, BINARY_SPLIT));
         }
 
         if (!sat2) {
             Expression indexLTSymbolicStringLength = new ComplexExpression(GE, indexExpr, bvSymbolicStrLen);
-            trace.addElement(new PathCondition(indexLTSymbolicStringLength, 1, 2));
+            trace.addElement(new PathCondition(indexLTSymbolicStringLength, FAILURE, BINARY_SPLIT));
         } else {
             Expression indexLTSymbolicStringLength = new ComplexExpression(LT, indexExpr, bvSymbolicStrLen);
-            trace.addElement(new PathCondition(indexLTSymbolicStringLength, 0, 2));
+            trace.addElement(new PathCondition(indexLTSymbolicStringLength, SUCCESS, BINARY_SPLIT));
         }
     }
 
@@ -932,6 +935,57 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return annotateStringWithExpression(result, new ComplexExpression(STOLOWER, value));
     }
 
+    public StaticObject stringSubstring(StaticObject result, StaticObject self, int cBegin, Annotations sBegin, Meta meta) {
+        if (sBegin != null || hasConcolicStringAnnotations(self)) {
+            Expression sself = makeStringToExpr(self, meta);
+            Expression startIndex = sBegin == null ?
+                    Constant.createNatConstant(cBegin) :
+                    new ComplexExpression(BV2NAT, Annotations.annotation(sBegin, config.getConcolicIdx()));
+            Expression maxLength = new ComplexExpression(SLENGTH, sself);
+
+            Expression indexWithinBound = new ComplexExpression(BAND,
+                    new ComplexExpression(LE, NAT_ZERO, startIndex),
+                    new ComplexExpression(LT, startIndex, maxLength));
+
+            if (result == null) {
+                trace.addElement(new PathCondition(new ComplexExpression(BNEG, indexWithinBound), FAILURE, BINARY_SPLIT));
+            } else {
+                trace.addElement(new PathCondition(indexWithinBound, SUCCESS, BINARY_SPLIT));
+                Expression substring = new ComplexExpression(SSUBSTR, sself, startIndex, maxLength);
+                annotateStringWithExpression(result, substring);
+            }
+        }
+        return result;
+    }
+
+    public StaticObject stringSubstring(StaticObject result, StaticObject self, int cBegin, Annotations sBegin, int cEnd, Annotations sEnd, Meta meta) {
+        if (sEnd != null || sBegin != null || hasConcolicStringAnnotations(self)) {
+            Expression sself = makeStringToExpr(self, meta);
+            Expression startIndex = sBegin == null ?
+                    Constant.createNatConstant(cBegin) :
+                    new ComplexExpression(BV2NAT, (Expression) Annotations.annotation(sBegin, config.getConcolicIdx()));
+            Expression endIndex = sEnd == null ?
+                    Constant.createNatConstant(cEnd) :
+                    new ComplexExpression(BV2NAT, (Expression) Annotations.annotation(sEnd, config.getConcolicIdx()));
+            Expression maxLength = new ComplexExpression(NATMINUS, endIndex, startIndex);
+
+            Expression indexWithinBound = new ComplexExpression(BAND,
+                    new ComplexExpression(LE, NAT_ZERO, startIndex),
+                    new ComplexExpression(LT, endIndex, new ComplexExpression(SLENGTH, sself)));
+            indexWithinBound = new ComplexExpression(BAND, indexWithinBound,
+                    new ComplexExpression(LE, startIndex, endIndex));
+
+            if (result == null) {
+                trace.addElement(new PathCondition(new ComplexExpression(BNEG, indexWithinBound), FAILURE, BINARY_SPLIT));
+            } else {
+                trace.addElement(new PathCondition(indexWithinBound, SUCCESS, BINARY_SPLIT));
+                Expression substring = new ComplexExpression(SSUBSTR, sself, startIndex, new ComplexExpression(SLENGTH, sself));
+                annotateStringWithExpression(result, substring);
+            }
+        }
+        return result;
+    }
+
     public StaticObject stringBuilderAppend(StaticObject self, StaticObject string, Meta meta) {
         if (!self.hasAnnotations() && !string.hasAnnotations()) {
             return self;
@@ -947,14 +1001,17 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return self;
     }
 
-    private final class ConvRes{
+
+    private final class ConvRes {
         public Expression expr;
         public boolean fromSymbolic;
-        ConvRes(Expression e, boolean b){
+
+        ConvRes(Expression e, boolean b) {
             expr = e;
             fromSymbolic = b;
         }
     }
+
     @CompilerDirectives.TruffleBoundary
     private ConvRes convertArgToExpression(Object arg) {
         if (arg instanceof StaticObject) {
@@ -974,11 +1031,11 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     public void makeConcatWithConstants(StaticObject result, Object[] args, Meta meta) {
-        ConvRes cr =  convertArgToExpression(args[0]);
+        ConvRes cr = convertArgToExpression(args[0]);
         Expression expr = cr.expr;
         boolean anySymbolic = cr.fromSymbolic;
         int i = 1;
-        while (args[i] != null){
+        while (args[i] != null) {
             cr = convertArgToExpression(args[i]);
             anySymbolic = anySymbolic ? true : cr.fromSymbolic;
             Expression expr2 = cr.expr;
@@ -1072,6 +1129,62 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         }
     }
 
+    private Object makeChar(char cRes, Annotations sChar, OperatorComparator oc){
+        if(sChar != null && Annotations.annotation(sChar, config.getConcolicIdx()) != null){
+            Object[] annotations = sChar.getAnnotations();
+            Annotations newAnnotation = Annotations.create(annotations);
+            newAnnotation.set(config.getConcolicIdx(),
+                    new ComplexExpression(oc, (Expression) Annotations.annotation(sChar, config.getConcolicIdx())));
+            SPouT.debug("makeChar", newAnnotation);
+            return new AnnotatedValue(cRes, newAnnotation);
+        }
+        return cRes;
+    }
+
+    public Object characterToUpperCase(char cRes, Annotations sChar) {
+        return makeChar(cRes, sChar, STOUPPER);
+    }
+
+    public Object characterToLowerCase(char cRes, Annotations sChar) {
+        return makeChar(cRes, sChar, STOLOWER);
+    }
+
+    public Object characterIsDefined(boolean res, char cChar,  Annotations sChar, Meta meta){
+        int CODEPOINT_BOUND = 1000;
+        if (sChar != null) {
+            Expression cAsInt = new ComplexExpression(NAT2BV32, new ComplexExpression(STOCODE, Annotations.annotation(sChar, config.getConcolicIdx())));
+            Expression codepointLT5000 =
+                    new ComplexExpression(BVLE, cAsInt, Constant.fromConcreteValue(CODEPOINT_BOUND));
+            if (cChar > CODEPOINT_BOUND) {
+                PathCondition pc =
+                        new PathCondition(
+                                new ComplexExpression(BVGT, cAsInt, Constant.fromConcreteValue(CODEPOINT_BOUND)),
+                                FAILURE,
+                                BINARY_SPLIT);
+                trace.addElement(pc);
+                SPouT.stopRecording("Analysis of defined code points over 1000 is not supported.", meta);
+            }
+            PathCondition pc = new PathCondition(codepointLT5000, SUCCESS, BINARY_SPLIT);
+            trace.addElement(pc);
+            Expression undefined = Constant.fromConcreteValue(false);
+            for (int i = 0; i <= CODEPOINT_BOUND; i++) {
+                if (!Character.isDefined(i)) {
+                    undefined =
+                            new ComplexExpression(
+                                    BOR,
+                                    undefined,
+                                    new ComplexExpression(BVEQ, cAsInt, Constant.fromConcreteValue(i)));
+                }
+            }
+            if (res) {
+                undefined = new ComplexExpression(BNEG, undefined);
+            }
+            Annotations newAnn = Annotations.create(sChar.getAnnotations());
+            newAnn.set(config.getConcolicIdx(), undefined);
+            return new AnnotatedValue(res, newAnn);
+        }
+        return res;
+    }
 
     public Object regionMatches(StaticObject self, StaticObject other, boolean ignore, int ctoffset, int cooffset, int clen, Meta meta) {
         String cSelf = meta.toHostString(self);

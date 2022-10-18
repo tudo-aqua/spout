@@ -1208,6 +1208,64 @@ public class SPouT {
     }
 
     @CompilerDirectives.TruffleBoundary
+    public static StaticObject substring(StaticObject self, Object begin, Meta meta) {
+        int cbegin;
+        Annotations sbegin = null;
+        if(begin instanceof AnnotatedValue){
+            cbegin = ((AnnotatedValue) begin).getValue();
+            sbegin = (AnnotatedValue) begin;
+        }else{
+            cbegin = (int) begin;
+        }
+        try {
+            String res = meta.toHostString(self).substring(cbegin);
+            StaticObject result = meta.toGuestString(res);
+            if(analyze && config.hasConcolicAnalysis()){
+                config.getConcolicAnalysis().stringSubstring(result, self, cbegin, sbegin, meta);
+            }
+            return result;
+        }catch (IndexOutOfBoundsException e){
+            if(analyze && config.hasConcolicAnalysis()){
+                config.getConcolicAnalysis().stringSubstring(null, self, cbegin, sbegin, meta);
+            }
+            meta.throwException(meta.java_lang_StringIndexOutOfBoundsException);
+            throw e;
+        }
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static StaticObject substring(StaticObject self, Object begin, Object end, Meta meta) {
+        int cBegin, cEnd;
+        Annotations sBegin = null, sEnd = null;
+        if(begin instanceof AnnotatedValue){
+            cBegin = ((AnnotatedValue) begin).getValue();
+            sBegin = (AnnotatedValue) begin;
+        }else{
+            cBegin = (int) begin;
+        }
+        if(end instanceof AnnotatedValue){
+            cEnd = ((AnnotatedValue) end).getValue();
+            sEnd = (AnnotatedValue) end;
+        }else{
+            cEnd = (int) end;
+        }
+        try {
+            String res = meta.toHostString(self).substring(cBegin, cEnd);
+            StaticObject result = meta.toGuestString(res);
+            if(analyze && config.hasConcolicAnalysis()){
+                config.getConcolicAnalysis().stringSubstring(result, self, cBegin, sBegin, cEnd, sEnd, meta);
+            }
+            return result;
+        }catch (IndexOutOfBoundsException e){
+            if(analyze && config.hasConcolicAnalysis()){
+                config.getConcolicAnalysis().stringSubstring(null, self, cBegin, sBegin, cEnd, sEnd, meta);
+            }
+            meta.throwException(meta.java_lang_StringIndexOutOfBoundsException);
+            throw e;
+        }
+    }
+
+    @CompilerDirectives.TruffleBoundary
     public static StaticObject stringToUpperCase(StaticObject self, Meta meta) {
         String host = meta.toHostString(self);
         StaticObject result = meta.toGuestString(host.toUpperCase());
@@ -1374,6 +1432,56 @@ public class SPouT {
         }
         Method m = self.getKlass().getSuperKlass().lookupMethod(meta.getNames().getOrCreate("getChars"), Signature._void_int_int_char_array_int);
         m.invokeDirect(self, srcBegin, srcEnd, dst, dstBegin);
+    }
+
+    public static Object characterToUpperCase(Object c, Meta meta) {
+        char cChar;
+        Annotations sChar = null;
+        if(c instanceof AnnotatedValue){
+            cChar = ((AnnotatedValue) c).getValue();
+            sChar = (AnnotatedValue) c;
+        }else{
+            cChar = (char) c;
+        }
+
+        char cRes = Character.toUpperCase(cChar);
+        if(analyze && config.hasConcolicAnalysis()){
+            return config.getConcolicAnalysis().characterToUpperCase(cRes, sChar);
+        }
+        return cRes;
+    }
+
+    public static Object characterToLowerCase(Object c, Meta meta) {
+        char cChar;
+        Annotations sChar = null;
+        if(c instanceof AnnotatedValue){
+            cChar = ((AnnotatedValue) c).getValue();
+            sChar = (AnnotatedValue) c;
+        }else{
+            cChar = (char) c;
+        }
+
+        char cRes = Character.toLowerCase(cChar);
+        if(analyze && config.hasConcolicAnalysis()){
+            return config.getConcolicAnalysis().characterToLowerCase(cRes, sChar);
+        }
+        return cRes;
+    }
+
+    public static Object isCharDefined(Object c, Meta meta) {
+        char cChar;
+        Annotations sChar = null;
+        if(c instanceof AnnotatedValue){
+            cChar = ((AnnotatedValue) c).getValue();
+            sChar = (AnnotatedValue) c;
+        }else{
+            cChar = (char) c;
+        }
+        Object res  = Character.isDefined(cChar);
+        if(analyze && config.hasConcolicAnalysis()){
+            res = config.getConcolicAnalysis().characterIsDefined((boolean) res, cChar, sChar, meta);
+        }
+        return res;
     }
 
     @CompilerDirectives.TruffleBoundary

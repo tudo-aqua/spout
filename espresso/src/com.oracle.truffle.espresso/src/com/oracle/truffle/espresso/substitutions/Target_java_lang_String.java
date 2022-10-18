@@ -158,4 +158,13 @@ public final class Target_java_lang_String {
         return SPouT.valueOf_double(v, meta);
     }
 
+    @Substitution(hasReceiver = true, passAnnotations = true, methodName="substring")
+    public static @JavaType(String.class) StaticObject substring(@JavaType(String.class) StaticObject self,@JavaType(internalName = "I") Object begin, @Inject Meta meta){
+        return SPouT.substring(self, begin, meta);
+    }
+
+    @Substitution(hasReceiver = true, passAnnotations = true, methodName = "substring")
+    public static @JavaType(String.class) StaticObject substring(@JavaType(String.class) StaticObject self,@JavaType(internalName = "I") Object begin, @JavaType(internalName = "I") Object end, @Inject Meta meta){
+        return SPouT.substring(self, begin, end, meta);
+    }
 }

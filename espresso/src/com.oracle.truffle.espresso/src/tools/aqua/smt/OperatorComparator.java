@@ -151,6 +151,7 @@ public enum OperatorComparator {
     NAT2BV32,
     BV2NAT,
     NATADD,
+    NATMINUS,
     SLT;
 
 
@@ -339,6 +340,8 @@ public enum OperatorComparator {
                 return ">=";
             case NATADD:
                 return "+";
+            case NATMINUS:
+                return "-";
 
             default:
                 return super.toString();
