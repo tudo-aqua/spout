@@ -114,7 +114,7 @@ public class SPouT {
         log(message);
         trace.addElement(new ExceptionalEvent(message));
         stopAnalysis();
-        meta.throwException(meta.java_lang_RuntimeException);
+        throw meta.throwException(meta.java_lang_RuntimeException);
     }
 
 
@@ -1188,8 +1188,8 @@ public class SPouT {
 
         if (!sat1 && !(index instanceof AnnotatedValue)) {
             // index is negative
-            meta.throwException(meta.java_lang_StringIndexOutOfBoundsException);
-            return null;
+            self.setAnnotations(null);
+            throw meta.throwExceptionWithMessage(meta.java_lang_StringIndexOutOfBoundsException, "Index is less than zero");
         }
         if (analyze && config.hasConcolicAnalysis()) {
             config.getConcolicAnalysis().charAtPCCheck(self, index, meta);
@@ -1197,8 +1197,8 @@ public class SPouT {
 
         if (!sat2) {
             // index is greater than string length
-            meta.throwException(meta.java_lang_StringIndexOutOfBoundsException);
-            return null;
+            self.setAnnotations(null);
+            throw meta.throwExceptionWithMessage(meta.java_lang_StringIndexOutOfBoundsException, "Index must be less than string length");
         }
         AnnotatedValue av = new AnnotatedValue((int) concreteString.charAt(concreteIndex), Annotations.emptyArray());
         if (analyze && config.hasConcolicAnalysis()) {
@@ -1351,7 +1351,12 @@ public class SPouT {
     @CompilerDirectives.TruffleBoundary
     public static Object stringBuxxLength(StaticObject self, Meta meta) {
         Method m = self.getKlass().getSuperKlass().lookupMethod(meta.getNames().getOrCreate("length"), Symbol.Signature._int);
-        int cresult = (int) m.invokeDirect(self);
+        Object[] o = self.getAnnotations();
+        Annotations [] a = self.getAnnotations();
+        self.setAnnotations(null);
+        Object invokeResult = m.invokeDirect(self);
+        self.setAnnotations(a);
+        int cresult = (int) invokeResult;
         if (analyze && self.hasAnnotations() && config.hasConcolicAnalysis()) {
             AnnotatedValue av = new AnnotatedValue(cresult, Annotations.emptyArray());
             return config.getConcolicAnalysis().stringBufferLength(av, self, meta);
@@ -1432,6 +1437,24 @@ public class SPouT {
         }
         Method m = self.getKlass().getSuperKlass().lookupMethod(meta.getNames().getOrCreate("getChars"), Signature._void_int_int_char_array_int);
         m.invokeDirect(self, srcBegin, srcEnd, dst, dstBegin);
+    }
+
+    public static void setBuxxCharAt(StaticObject self, Object i, Object ch, Meta meta) {
+        if(i instanceof AnnotatedValue ||
+        ch instanceof AnnotatedValue){
+            stopRecording("Symbolic index and symbolic chars are not supported", meta);
+        }
+        int index = (int) i;
+        char cha = (char) ch;
+        String val = String.valueOf(cha);
+        Method m = self.getKlass().getSuperKlass().lookupMethod(meta.getNames().getOrCreate("setCharAt"), Signature._void_int_char);
+        if (analyze && config.hasConcolicAnalysis() && index >= 0) {
+            config.getConcolicAnalysis().stringBuilderCharAt(self, index, val, meta);
+        }
+        Annotations[] a = self.getAnnotations();
+        self.setAnnotations(null);
+        m.invokeDirect(self, i, ch);
+        self.setAnnotations(a);
     }
 
     public static Object characterToUpperCase(Object c, Meta meta) {

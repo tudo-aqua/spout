@@ -42,6 +42,7 @@ public abstract class Constant extends Atom {
     public final static LongConstant LONG_ZERO = new LongConstant(0L);
 
     public final static NatConstant NAT_ZERO = new NatConstant(0);
+    public final static NatConstant NAT_ONE = new NatConstant(1);
 
 
     private final static class NatConstant extends Constant {

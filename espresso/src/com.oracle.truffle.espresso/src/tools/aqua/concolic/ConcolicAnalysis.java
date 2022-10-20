@@ -27,6 +27,7 @@ package tools.aqua.concolic;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.EspressoLanguage;
+import com.oracle.truffle.espresso.classfile.constantpool.InvokeDynamicConstant;
 import com.oracle.truffle.espresso.descriptors.Symbol;
 import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.impl.ObjectKlass;
@@ -987,7 +988,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     public StaticObject stringBuilderAppend(StaticObject self, StaticObject string, Meta meta) {
-        if (!self.hasAnnotations() && !string.hasAnnotations()) {
+        if (!(hasConcolicStringAnnotations(self) || hasConcolicStringAnnotations(string))) {
             return self;
         }
         Expression sself = makeStringToExpr(self, meta);
@@ -999,6 +1000,29 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         }
         self = annotateStringWithExpression(self, resExpr);
         return self;
+    }
+
+    public void stringBuilderCharAt(StaticObject self, int index, String val, Meta meta) {
+        if(!hasConcolicStringAnnotations(self)){
+            return;
+        }
+        String cSelf = meta.toHostString(self);
+        Expression sself = makeStringToExpr(self, meta);
+        Expression symbolicIndex = Constant.createNatConstant(index);
+        Expression sval = Constant.fromConcreteValue(val);
+
+        // As index might not be symbolic, we cannot do somehting, if it is less than zero. Just check the other bound.
+        Expression stringBound = new ComplexExpression(GE, symbolicIndex, new ComplexExpression(SLENGTH, sself));
+        if(index >= cSelf.length()) {
+            trace.addElement(new PathCondition(stringBound, FAILURE, BINARY_SPLIT));
+            return;
+        }
+        trace.addElement(new PathCondition(new ComplexExpression(BNEG, stringBound), SUCCESS, BINARY_SPLIT));
+
+        Expression left = new ComplexExpression(SSUBSTR, sself, NAT_ZERO, symbolicIndex);
+        Expression right = new ComplexExpression(SSUBSTR, sself, new ComplexExpression(NATADD,symbolicIndex, NAT_ONE), new ComplexExpression(SLENGTH, sself));
+        Expression res = new ComplexExpression(SCONCAT, new ComplexExpression(SCONCAT, left, sval), right);
+        annotateStringWithExpression(self, res);
     }
 
 
@@ -1135,7 +1159,6 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             Annotations newAnnotation = Annotations.create(annotations);
             newAnnotation.set(config.getConcolicIdx(),
                     new ComplexExpression(oc, (Expression) Annotations.annotation(sChar, config.getConcolicIdx())));
-            SPouT.debug("makeChar", newAnnotation);
             return new AnnotatedValue(cRes, newAnnotation);
         }
         return cRes;

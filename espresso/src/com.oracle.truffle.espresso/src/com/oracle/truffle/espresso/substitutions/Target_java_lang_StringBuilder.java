@@ -59,10 +59,11 @@ public final class Target_java_lang_StringBuilder {
             @JavaType(StringBuilder.class) StaticObject self,
             @JavaType(internalName = "I") Object index,
             @Inject Meta meta) {
-        return SPouT.stringBuxxCharAt(self, index, meta);
+        Object res = SPouT.stringBuxxCharAt(self, index, meta);
+        return res;
     }
 
-    @Substitution(hasReceiver = true)
+    @Substitution(hasReceiver = true, methodName = "getChars", passAnnotations = true)
     public static void getChars(
             @JavaType(StringBuilder.class) StaticObject self,
             @JavaType(internalName = "I") Object srcBegin,
@@ -70,6 +71,7 @@ public final class Target_java_lang_StringBuilder {
             @JavaType(char[].class) StaticObject dst,
             @JavaType(internalName = "I") Object dstBegin,
             @Inject Meta meta) {
+        SPouT.debug("getChars", self);
         SPouT.stringBuxxGetChars(self, srcBegin, srcEnd, dst, dstBegin, meta);
     }
 
@@ -79,4 +81,14 @@ public final class Target_java_lang_StringBuilder {
             @Inject Meta meta) {
         return SPouT.stringBuxxLength(self, meta);
     }
+
+    @Substitution(hasReceiver = true, methodName = "setCharAt", passAnnotations = true)
+    public static void setCharAt(
+            @JavaType(StringBuilder.class) StaticObject self,
+            @JavaType(internalName = "I") Object index,
+            @JavaType(internalName = "C") Object ch,
+            @Inject Meta meta) {
+        SPouT.setBuxxCharAt(self, index, ch, meta);
+    }
+
 }
