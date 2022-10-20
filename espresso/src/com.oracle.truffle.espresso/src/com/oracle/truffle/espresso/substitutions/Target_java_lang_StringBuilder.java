@@ -71,7 +71,6 @@ public final class Target_java_lang_StringBuilder {
             @JavaType(char[].class) StaticObject dst,
             @JavaType(internalName = "I") Object dstBegin,
             @Inject Meta meta) {
-        SPouT.debug("getChars", self);
         SPouT.stringBuxxGetChars(self, srcBegin, srcEnd, dst, dstBegin, meta);
     }
 

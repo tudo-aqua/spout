@@ -1211,7 +1211,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     public Object regionMatches(StaticObject self, StaticObject other, boolean ignore, int ctoffset, int cooffset, int clen, Meta meta) {
         String cSelf = meta.toHostString(self);
-        String cOther = meta.toHostString(self);
+        String cOther = meta.toHostString(other);
         boolean isSelfSymbolic = self.hasAnnotations()
                 && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
         boolean isOtherSymbolic = other.hasAnnotations()
