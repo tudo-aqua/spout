@@ -40,6 +40,7 @@ import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.concolic.ConcolicAnalysis;
 import tools.aqua.smt.Expression;
 import tools.aqua.taint.PostDominatorAnalysis;
+import tools.aqua.taint.Taint;
 import tools.aqua.witnesses.GWIT;
 
 import java.util.Arrays;
@@ -270,8 +271,10 @@ public class SPouT {
 
     public static void markWithIFTaint(VirtualFrame frame, int top){
         if(!analyze || !config.analyzeControlFlowTaint()) return;
+        Taint t = config.getTaintAnalysis().getIfTaint();
+        if (t == null) return;
         Annotations a = new Annotations();
-        a.set(config.getTaintIdx(), config.getTaintAnalysis().getIfTaint());
+        a.set(config.getTaintIdx(), t);
         AnnotatedVM.putAnnotations(frame, top, a);
     }
 
@@ -1585,10 +1588,11 @@ public class SPouT {
     }
 
     public static StaticObject valueOf_int(Object v, Meta meta) {
-        if (v instanceof AnnotatedValue) {
+        if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
             stopRecording("concolic type conversion to string not supported, yet.", meta);
         }
-        String ret = "" + (int) v;
+
+        String ret = "" + (int) AnnotatedValue.value(v);
         return meta.toGuestString(ret);
     }
 

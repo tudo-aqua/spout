@@ -170,7 +170,10 @@ public class TaintAnalysis implements Analysis<Taint> {
         return iflowScopes.endOfScope;
     }
 
-    public Taint getIfTaint() {return ifTaint;}
+    public Taint getIfTaint() {
+        if (!tainted || ifExceptionThrown) return null;
+        return ifTaint;}
+
 
     // --------------------------------------------------------------------------
     //
