@@ -850,7 +850,10 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case ICONST_2: // fall through
                     case ICONST_3: // fall through
                     case ICONST_4: // fall through
-                    case ICONST_5: putInt(frame, top, curOpcode - ICONST_0); break;
+                    case ICONST_5:
+                        putInt(frame, top, curOpcode - ICONST_0);
+                        SPouT.markWithIFTaint(frame, top);
+                        break;
 
                     case LCONST_0: // fall through
                     case LCONST_1: putLong(frame, top, curOpcode - LCONST_0); break;

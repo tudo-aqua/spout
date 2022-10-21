@@ -268,6 +268,13 @@ public class SPouT {
         return config.getTaintAnalysis().iflowGetIpdBCI();
     }
 
+    public static void markWithIFTaint(VirtualFrame frame, int top){
+        if(!analyze || !config.analyzeControlFlowTaint()) return;
+        Annotations a = new Annotations();
+        a.set(config.getTaintIdx(), config.getTaintAnalysis().getIfTaint());
+        AnnotatedVM.putAnnotations(frame, top, a);
+    }
+
     public static PostDominatorAnalysis iflowGetPDA(Method method) {
         if (!analyze || !config.analyzeControlFlowTaint()) return null;
         return new PostDominatorAnalysis(method);
