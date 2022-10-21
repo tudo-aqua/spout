@@ -71,8 +71,17 @@ public class TaintAnalysis implements Analysis<Taint> {
     // taint
 
     public Object taint(Object o, int color) {
-        AnnotatedValue av = new AnnotatedValue(o);
-        av.set(config.getTaintIdx(), new Taint(color));
+        AnnotatedValue av;
+        if (o instanceof AnnotatedValue) {
+            AnnotatedValue ao = (AnnotatedValue) o;
+            av = new AnnotatedValue( ao.getValue(), ao);
+            av.set(config.getTaintIdx(), ColorUtil.joinColors(
+                    (Taint) ao.getAnnotations()[config.getTaintIdx()], new Taint(color)));
+        }
+        else {
+            av = new AnnotatedValue(o);
+            av.set(config.getTaintIdx(), new Taint(color));
+        }
         SPouT.debug("Tainting with color " + color);
         tainted = true;
         return av;

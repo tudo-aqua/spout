@@ -37,7 +37,13 @@ public final class Target_tools_aqua_concolic_Tainting {
     public static @JavaType(internalName = "I") Object taint_int(@JavaType(internalName = "I") Object o, @JavaType(internalName = "I") Object color) {
         return SPouT.taint(o, AnnotatedValue.value(color));
     }
-/*
+
+    @Substitution(passAnnotations = true, methodName = "taint")
+    public static @JavaType(internalName = "Z") Object taint_bool(@JavaType(internalName = "Z") Object o, @JavaType(internalName = "I") Object color) {
+        return SPouT.taint(o, AnnotatedValue.value(color));
+    }
+
+    /*
     // clean o from taint of color
     @Substitution(hasReceiver = false, methodName = "clean")
     public static @Host(typeName = "I") Object clean_int(@Host(typeName = "I") Object o, @Host(typeName = "I") Object color) {
@@ -49,7 +55,13 @@ public final class Target_tools_aqua_concolic_Tainting {
     public static void check_int(@JavaType(internalName = "I") Object o, @JavaType(internalName = "I") Object color) {
         SPouT.checkTaint(o, AnnotatedValue.value(color));
     }
-/*
+
+    @Substitution(passAnnotations = true, methodName = "check")
+    public static void check_bool(@JavaType(internalName = "Z") Object o, @JavaType(internalName = "I") Object color) {
+        SPouT.checkTaint(o, AnnotatedValue.value(color));
+    }
+
+    /*
     @Substitution(hasReceiver = false)
     public static void stopAnalysis() {
         TaintAnalysis.stopTaintAnalysis();
