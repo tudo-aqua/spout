@@ -1389,7 +1389,8 @@ public class SPouT {
             ilength = (int) xlength;
         }
         StaticObject result =
-                (boolean) isLatin.invokeDirect(self)
+                // FIXME: Not sure if annotations should be able to reach here?
+                (boolean) AnnotatedValue.value(isLatin.invokeDirect(self))
                         ?
                         (StaticObject) meta.java_lang_StringLatin1_newString.invokeDirect(self, bytes, 0, ilength)
                         :

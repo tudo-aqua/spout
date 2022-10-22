@@ -39,6 +39,7 @@ import tools.aqua.smt.*;
 import tools.aqua.spout.*;
 
 import java.lang.reflect.AnnotatedParameterizedType;
+import java.util.Arrays;
 
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.*;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPLE;
@@ -1379,8 +1380,16 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     public boolean hasConcolicStringAnnotations(StaticObject self) {
+        //return stringAnnotation != null && stringAnnotation[stringAnnotation.length - 1].getAnnotations()[config.getConcolicIdx()] != null;
         Annotations[] stringAnnotation = self.getAnnotations();
-        return stringAnnotation != null && stringAnnotation[stringAnnotation.length - 1].getAnnotations()[config.getConcolicIdx()] != null;
+        if (stringAnnotation != null) {
+            Annotations annotations = stringAnnotation[stringAnnotation.length - 1];
+            if (annotations != null) {
+                return annotations.getAnnotations()[config.getConcolicIdx()] != null;
+            }
+            //FIXME: it can happen that no length annotation is present. Not sure if this is expected?
+        }
+        return false;
     }
 
     public void addNotZeroToTrace(Annotations a, Expression zero) {

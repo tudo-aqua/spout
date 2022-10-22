@@ -3054,7 +3054,15 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
         //FIXME, without concolic execution, the unboxing is broken? Check this.
         // @formatter:off
         switch (kind) {
-            case Boolean : putInt(frame, top, ((boolean) value) ? 1 : 0); break;
+            case Boolean :
+                //FIXME: we have to fix boolean representation. It should not be possible that different representations edn up here
+                if (value instanceof Integer) {
+                    putInt(frame, top, ((int) value > 0) ? 1 : 0);
+                }
+                else {
+                    putInt(frame, top, ((boolean) value) ? 1 : 0);
+                }
+                break;
             case Byte    :
                 if(value instanceof Character){
                     putInt(frame, top, (byte) value);
