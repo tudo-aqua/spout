@@ -46,6 +46,7 @@ import com.oracle.truffle.espresso.perf.DebugCounter;
 import com.oracle.truffle.espresso.runtime.EspressoException;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import com.oracle.truffle.espresso.vm.VM;
+import tools.aqua.spout.SPouT;
 
 @EspressoSubstitutions
 public final class Target_java_lang_System {
@@ -75,6 +76,13 @@ public final class Target_java_lang_System {
     public static int identityHashCode(@JavaType(Object.class) StaticObject self) {
         SYSTEM_IDENTITY_HASH_CODE_COUNT.inc();
         return VM.JVM_IHashCode(self);
+    }
+
+    @Substitution()
+    public static void exit(int status, @Inject Meta meta) {
+        SPouT.endPath();
+        Object runtime = meta.java_lang_Runtime_getRuntime.invokeMethod(null, new Object[]{});
+        meta.java_lang_Runtime_exit.invokeMethod(runtime, new Object[]{ status });
     }
 
     @ReportPolymorphism

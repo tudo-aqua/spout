@@ -407,6 +407,11 @@ public final class Meta extends ContextAccessImpl {
 
         java_lang_System = knownKlass(Type.java_lang_System);
         java_lang_System_exit = java_lang_System.requireDeclaredMethod(Name.exit, Signature._void_int);
+
+        java_lang_Runtime = knownKlass(Type.java_lang_Runtime);
+        java_lang_Runtime_exit = java_lang_Runtime.requireDeclaredMethod(Name.exit, Signature._void_int);
+        java_lang_Runtime_getRuntime = java_lang_Runtime.requireDeclaredMethod(Name.getRuntime, Signature.Runtime);
+
         java_lang_System_securityManager = java_lang_System.requireDeclaredField(Name.security, Type.java_lang_SecurityManager);
 
         java_security_ProtectionDomain = knownKlass(Type.java_security_ProtectionDomain);
@@ -1219,12 +1224,17 @@ public final class Meta extends ContextAccessImpl {
     public final Field sun_misc_SignalHandler_SIG_DFL;
     public final Field sun_misc_SignalHandler_SIG_IGN;
 
+    public final ObjectKlass java_lang_Runtime;
     public final ObjectKlass java_lang_System;
     public final Method java_lang_System_initializeSystemClass;
     public final Method java_lang_System_initPhase1;
     public final Method java_lang_System_initPhase2;
     public final Method java_lang_System_initPhase3;
     public final Method java_lang_System_exit;
+
+    public final Method java_lang_Runtime_exit;
+    public final Method java_lang_Runtime_getRuntime;
+
     public final Field java_lang_System_securityManager;
 
     public final ObjectKlass java_security_ProtectionDomain;

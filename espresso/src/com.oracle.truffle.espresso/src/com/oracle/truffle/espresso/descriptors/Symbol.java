@@ -171,6 +171,9 @@ public final class Symbol<T> extends ByteSequence {
         public static final Symbol<Name> run = StaticSymbols.putName("run");
         // Thread and System
         public static final Symbol<Name> exit = StaticSymbols.putName("exit");
+
+        public static final Symbol<Name> getRuntime = StaticSymbols.putName("getRuntime");
+
         // Object and arrays
         public static final Symbol<Name> clone = StaticSymbols.putName("clone");
         public static final Symbol<Name> toString = StaticSymbols.putName("toString");
@@ -593,6 +596,8 @@ public final class Symbol<T> extends ByteSequence {
         public static final Symbol<Type> java_lang_Throwable = StaticSymbols.putType("Ljava/lang/Throwable;");
         public static final Symbol<Type> java_lang_Exception = StaticSymbols.putType("Ljava/lang/Exception;");
         public static final Symbol<Type> java_lang_System = StaticSymbols.putType("Ljava/lang/System;");
+
+        public static final Symbol<Type> java_lang_Runtime = StaticSymbols.putType("Ljava/lang/Runtime;");
         public static final Symbol<Type> java_security_ProtectionDomain = StaticSymbols.putType("Ljava/security/ProtectionDomain;");
         public static final Symbol<Type> java_security_ProtectionDomain_array = StaticSymbols.putType("[Ljava/security/ProtectionDomain;");
         public static final Symbol<Type> java_security_AccessControlContext = StaticSymbols.putType("Ljava/security/AccessControlContext;");
@@ -908,6 +913,8 @@ public final class Symbol<T> extends ByteSequence {
         public static final Symbol<Signature> LocalTime = StaticSymbols.putSignature(Type.java_time_LocalTime);
         public static final Symbol<Signature> Instant = StaticSymbols.putSignature(Type.java_time_Instant);
         public static final Symbol<Signature> ZoneId = StaticSymbols.putSignature(Type.java_time_ZoneId);
+        public static final Symbol<Signature> Runtime = StaticSymbols.putSignature(Type.java_lang_Runtime);
+
         public static final Symbol<Signature> ZonedDateTime_ZoneId = StaticSymbols.putSignature(Type.java_time_ZonedDateTime, Type.java_time_ZoneId);
         public static final Symbol<Signature> ZoneId_String = StaticSymbols.putSignature(Type.java_time_ZoneId, Type.java_lang_String);
 
