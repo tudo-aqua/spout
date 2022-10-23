@@ -1148,10 +1148,11 @@ public class SPouT {
     @CompilerDirectives.TruffleBoundary
     public static Object stringLength(StaticObject self, Meta meta) {
         int length = meta.toHostString(self).length();
-        if (!analyze || !config.hasConcolicAnalysis() || !self.hasAnnotations()) {
+        if (!analyze || !self.hasAnnotations()) {
             return length;
         }
-        return config.getConcolicAnalysis().stringLength(new AnnotatedValue(length, Annotations.emptyArray()), self, meta);
+        Annotations aLength = analysis.stringLength(length, Annotations.annotation(self.getAnnotations(), -1));
+        return aLength != null ? aLength : length;
     }
 
     @CompilerDirectives.TruffleBoundary

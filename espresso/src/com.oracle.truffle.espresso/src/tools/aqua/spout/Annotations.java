@@ -59,6 +59,11 @@ public class Annotations {
         return a != null ? (T) a.annotations[i] : null;
     }
 
+    @SuppressWarnings("unchecked")
+    public static Annotations annotation(Annotations[] a, int reverseIdx) {
+        return a != null && a.length <= -reverseIdx ? a[a.length-reverseIdx] : null;
+    }
+
     public <T> void set(int i, T annotation) {
         annotations[i] = annotation;
     }
@@ -78,6 +83,7 @@ public class Annotations {
                 '}';
     }
 
+    //FIXME: why not use constructor with checks instead?
     public static Annotations create(Object[] annotations){
         return new Annotations(annotations);
     }

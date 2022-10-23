@@ -25,7 +25,10 @@
 package tools.aqua.spout;
 
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
+import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.smt.Expression;
 
 import java.util.function.UnaryOperator;
 
@@ -596,5 +599,13 @@ public class MetaAnalysis implements Analysis<Annotations> {
         for (Analysis<?> analysis : analyses) {
            analysis.lookupSwitch(frame, bcn, bci, vals, key, Annotations.annotation(a1, i));
         }
+    }
+
+    // Strings
+
+    @Override
+    public Annotations stringLength(int c, Annotations s) {
+        if (s==null) return null;
+        return execute(c, s, Analysis::stringLength);
     }
 }

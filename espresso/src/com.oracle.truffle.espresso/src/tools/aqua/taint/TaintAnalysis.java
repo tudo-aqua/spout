@@ -38,6 +38,7 @@ import java.util.TreeMap;
 
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.*;
 import static tools.aqua.spout.Config.TaintType.CONTROL;
+import static tools.aqua.spout.Config.TaintType.DATA;
 import static tools.aqua.spout.Config.TaintType.INFORMATION;
 
 public class TaintAnalysis implements Analysis<Taint> {
@@ -292,4 +293,10 @@ public class TaintAnalysis implements Analysis<Taint> {
         }
     }
 
+    // Strings
+
+    @Override
+    public Taint stringLength(int c, Taint s) {
+        return type != DATA ? s : null;
+    }
 }

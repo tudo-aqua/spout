@@ -26,7 +26,9 @@ package tools.aqua.spout;
 
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.impl.Method;
+import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
+import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.smt.Expression;
 
 public interface Analysis<T> {
@@ -287,5 +289,6 @@ public interface Analysis<T> {
                               int[] vals, int key, T a1) {
     }
 
-
+    // Strings
+    default T stringLength(int c, T s) { return null; }
 }

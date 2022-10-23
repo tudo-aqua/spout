@@ -913,11 +913,9 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return av;
     }
 
-
-    public Object stringLength(AnnotatedValue annotatedValue, StaticObject self, Meta meta) {
-        Expression expr = makeStringToExpr(self, meta);
-        annotatedValue.set(config.getConcolicIdx(), new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, expr)));
-        return annotatedValue;
+    @Override
+    public Expression stringLength(int c, Expression s) {
+        return s != null ? new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, s)) : null;
     }
 
     public StaticObject stringConcat(StaticObject result, StaticObject self, StaticObject other, Meta meta) {
@@ -1049,7 +1047,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             Object[] a = ((AnnotatedValue) arg).getAnnotations();
             return a != null && a[config.getConcolicIdx()] != null ?
                     new ConvRes((Expression) a[config.getConcolicIdx()], true) :
-                    new ConvRes(Constant.fromConcreteValue("%s".formatted(((AnnotatedValue) arg).getValue())), false);
+                    //FIXME: replaced the fromatted call here. Not sure if this works in general
+                    new ConvRes(Constant.fromConcreteValue("" + AnnotatedValue.value(arg)), false);
         } else {
             return new ConvRes(Constant.fromConcreteValue("%s".formatted(arg)), false);
         }
