@@ -1161,7 +1161,7 @@ public class SPouT {
             return length;
         }
         Annotations aLength = analysis.stringLength(length, Annotations.annotation(self.getAnnotations(), -1));
-        return aLength != null ? aLength : length;
+        return aLength != null ? new AnnotatedValue(length, aLength) : length;
     }
 
     @CompilerDirectives.TruffleBoundary

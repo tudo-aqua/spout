@@ -61,7 +61,7 @@ public class Annotations {
 
     @SuppressWarnings("unchecked")
     public static Annotations annotation(Annotations[] a, int reverseIdx) {
-        return a != null && a.length <= -reverseIdx ? a[a.length-reverseIdx] : null;
+        return a != null && -reverseIdx <= a.length ? a[a.length+reverseIdx] : null;
     }
 
     public <T> void set(int i, T annotation) {

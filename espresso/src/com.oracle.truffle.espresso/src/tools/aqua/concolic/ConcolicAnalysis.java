@@ -121,8 +121,9 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         StaticObject guestString = meta.toGuestString(ssv.concrete);
         int lengthAnnotations = ((ObjectKlass) guestString.getKlass()).getFieldTable().length + 1;
         Annotations[] annotations = new Annotations[lengthAnnotations];
-        Object[] stringDescription = {ssv.symbolic, null};
-        annotations[annotations.length - 1] = Annotations.create(stringDescription);
+        Annotations stringDescription = Annotations.emptyArray();
+        stringDescription.set(config.getConcolicIdx(), ssv.symbolic);
+        annotations[annotations.length - 1] = stringDescription;
         guestString.setAnnotations(annotations);
         trace.addElement(new SymbolDeclaration(ssv.symbolic));
         return guestString;
