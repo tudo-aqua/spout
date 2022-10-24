@@ -24,12 +24,14 @@
 package com.oracle.truffle.espresso.nodes.quick.interop;
 
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.espresso.EspressoLanguage;
 import com.oracle.truffle.espresso.bytecode.Bytecodes;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.nodes.bytecodes.FloatArrayStore;
 import com.oracle.truffle.espresso.nodes.bytecodes.FloatArrayStoreNodeGen;
 import com.oracle.truffle.espresso.nodes.quick.QuickNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.spout.SPouT;
 
 /**
  * @see FloatArrayStore
@@ -50,6 +52,7 @@ public final class FloatArrayStoreQuickNode extends QuickNode {
         float value = BytecodeNode.popFloat(frame, top - 1);
         int index = BytecodeNode.popInt(frame, top - 2);
         StaticObject array = nullCheck(BytecodeNode.popObject(frame, top - 3));
+        SPouT.setArrayAnnotations(frame, array, index, top -1, top - 2, EspressoLanguage.get(this));
         floatArrayStore.execute(array, index, value);
         return stackEffectOf_FASTORE;
     }

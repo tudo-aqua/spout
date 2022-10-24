@@ -133,6 +133,7 @@ abstract class BooleanSetFieldNode extends AbstractSetFieldNode {
         boolean value = BytecodeNode.popInt(frame, top - 1) != 0;
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
     }
 
     abstract void executeSetField(StaticObject receiver, boolean value);
@@ -162,6 +163,7 @@ abstract class CharSetFieldNode extends AbstractSetFieldNode {
         char value = (char) BytecodeNode.popInt(frame, top - 1);
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
     }
 
     abstract void executeSetField(StaticObject receiver, char value);
@@ -191,6 +193,7 @@ abstract class ShortSetFieldNode extends AbstractSetFieldNode {
         short value = (short) BytecodeNode.popInt(frame, top - 1);
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
     }
 
     abstract void executeSetField(StaticObject receiver, short value);
@@ -220,6 +223,7 @@ abstract class ByteSetFieldNode extends AbstractSetFieldNode {
         byte value = (byte) BytecodeNode.popInt(frame, top - 1);
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
     }
 
     abstract void executeSetField(StaticObject receiver, byte value);
@@ -249,6 +253,7 @@ abstract class LongSetFieldNode extends AbstractSetFieldNode {
         long value = BytecodeNode.popLong(frame, top - 1);
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
     }
 
     abstract void executeSetField(StaticObject receiver, long value);
@@ -278,6 +283,7 @@ abstract class FloatSetFieldNode extends AbstractSetFieldNode {
         float value = BytecodeNode.popFloat(frame, top - 1);
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
     }
 
     abstract void executeSetField(StaticObject receiver, float value);
@@ -307,6 +313,7 @@ abstract class DoubleSetFieldNode extends AbstractSetFieldNode {
         double value = BytecodeNode.popDouble(frame, top - 1);
         root.notifyFieldModification(frame, statementIndex, field, receiver, value);
         executeSetField(receiver, value);
+        AnnotatedVM.setFieldAnnotation(receiver, field, AnnotatedVM.popAnnotations(frame, top -1));
     }
 
     abstract void executeSetField(StaticObject receiver, double value);

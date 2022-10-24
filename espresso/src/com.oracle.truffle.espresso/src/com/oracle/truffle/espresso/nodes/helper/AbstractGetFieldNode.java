@@ -160,6 +160,7 @@ abstract class BooleanGetFieldNode extends AbstractGetFieldNode {
     public int getField(VirtualFrame frame, BytecodeNode root, StaticObject receiver, int at, int statementIndex) {
         root.notifyFieldAccess(frame, statementIndex, getField(), receiver);
         BytecodeNode.putInt(frame, at, executeGetField(receiver) ? 1 : 0);
+        AnnotatedVM.putAnnotations(frame, at, AnnotatedVM.getFieldAnnotation(receiver, field));
         return slotCount;
     }
 
@@ -214,6 +215,7 @@ abstract class CharGetFieldNode extends AbstractGetFieldNode {
     public int getField(VirtualFrame frame, BytecodeNode root, StaticObject receiver, int at, int statementIndex) {
         root.notifyFieldAccess(frame, statementIndex, getField(), receiver);
         BytecodeNode.putInt(frame, at, executeGetField(receiver));
+        AnnotatedVM.putAnnotations(frame, at, AnnotatedVM.getFieldAnnotation(receiver, field));
         return slotCount;
     }
 
@@ -273,6 +275,7 @@ abstract class ShortGetFieldNode extends AbstractGetFieldNode {
     public int getField(VirtualFrame frame, BytecodeNode root, StaticObject receiver, int at, int statementIndex) {
         root.notifyFieldAccess(frame, statementIndex, getField(), receiver);
         BytecodeNode.putInt(frame, at, executeGetField(receiver));
+        AnnotatedVM.putAnnotations(frame, at, AnnotatedVM.getFieldAnnotation(receiver, field));
         return slotCount;
     }
 
@@ -327,6 +330,7 @@ abstract class ByteGetFieldNode extends AbstractGetFieldNode {
     public int getField(VirtualFrame frame, BytecodeNode root, StaticObject receiver, int at, int statementIndex) {
         root.notifyFieldAccess(frame, statementIndex, getField(), receiver);
         BytecodeNode.putInt(frame, at, executeGetField(receiver));
+        AnnotatedVM.putAnnotations(frame, at, AnnotatedVM.getFieldAnnotation(receiver, field));
         return slotCount;
     }
 
@@ -381,6 +385,7 @@ abstract class LongGetFieldNode extends AbstractGetFieldNode {
     public int getField(VirtualFrame frame, BytecodeNode root, StaticObject receiver, int at, int statementIndex) {
         root.notifyFieldAccess(frame, statementIndex, getField(), receiver);
         BytecodeNode.putLong(frame, at, executeGetField(receiver));
+        AnnotatedVM.putAnnotations(frame, at + 1, AnnotatedVM.getFieldAnnotation(receiver, field));
         return slotCount;
     }
 
@@ -435,6 +440,7 @@ abstract class FloatGetFieldNode extends AbstractGetFieldNode {
     public int getField(VirtualFrame frame, BytecodeNode root, StaticObject receiver, int at, int statementIndex) {
         root.notifyFieldAccess(frame, statementIndex, getField(), receiver);
         BytecodeNode.putFloat(frame, at, executeGetField(receiver));
+        AnnotatedVM.putAnnotations(frame, at, AnnotatedVM.getFieldAnnotation(receiver, field));
         return slotCount;
     }
 
@@ -489,6 +495,7 @@ abstract class DoubleGetFieldNode extends AbstractGetFieldNode {
     public int getField(VirtualFrame frame, BytecodeNode root, StaticObject receiver, int at, int statementIndex) {
         root.notifyFieldAccess(frame, statementIndex, getField(), receiver);
         BytecodeNode.putDouble(frame, at, executeGetField(receiver));
+        AnnotatedVM.putAnnotations(frame, at + 1, AnnotatedVM.getFieldAnnotation(receiver, field));
         return slotCount;
     }
 

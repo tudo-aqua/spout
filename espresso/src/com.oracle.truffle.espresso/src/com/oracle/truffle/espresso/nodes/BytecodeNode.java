@@ -1883,32 +1883,33 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
             // @formatter:off
             switch (loadOpcode) {
                 case BALOAD:
-                    putInt(frame, top - 2, getInterpreterToVM().getArrayByte(language, index, array, this));
                     SPouT.getArrayAnnotations(frame, array, index, top-1, top-2, language);
+                    putInt(frame, top - 2, getInterpreterToVM().getArrayByte(language, index, array, this));
                     break;
                 case SALOAD:
-                    putInt(frame, top - 2, getInterpreterToVM().getArrayShort(language, index, array, this));
-                    SPouT.getArrayAnnotations(frame, array, index, top-1, top-2, language);break;
-                case CALOAD:
-                    putInt(frame, top - 2, getInterpreterToVM().getArrayChar(language, index, array, this));
                     SPouT.getArrayAnnotations(frame, array, index, top-1, top-2, language);
+                    putInt(frame, top - 2, getInterpreterToVM().getArrayShort(language, index, array, this));
+                    break;
+                case CALOAD:
+                    SPouT.getArrayAnnotations(frame, array, index, top-1, top-2, language);
+                    putInt(frame, top - 2, getInterpreterToVM().getArrayChar(language, index, array, this));
                     break;
                 case IALOAD:
                     // putInt(frame, top - 2, getInterpreterToVM().getArrayInt(language, index, array, this));       break;
-                    putInt(frame, top - 2, getInterpreterToVM().getArrayInt(language, index, array, this));
                     SPouT.getArrayAnnotations(frame, array, index, top-1, top-2, language);
+                    putInt(frame, top - 2, getInterpreterToVM().getArrayInt(language, index, array, this));
                     break;
                 case FALOAD:
-                    putFloat(frame, top - 2, getInterpreterToVM().getArrayFloat(language, index, array, this));
                     SPouT.getArrayAnnotations(frame, array, index, top-1, top-2, language);
+                    putFloat(frame, top - 2, getInterpreterToVM().getArrayFloat(language, index, array, this));
                     break;
                 case LALOAD:
-                    putLong(frame, top - 2, getInterpreterToVM().getArrayLong(language, index, array, this));
                     SPouT.getArrayAnnotations(frame, array, index, top-1, top-2, language);
+                    putLong(frame, top - 2, getInterpreterToVM().getArrayLong(language, index, array, this));
                     break;
                 case DALOAD:
-                    putDouble(frame, top - 2, getInterpreterToVM().getArrayDouble(language, index, array, this));
                     SPouT.getArrayAnnotations(frame, array, index, top-1, top-2, language);
+                    putDouble(frame, top - 2, getInterpreterToVM().getArrayDouble(language, index, array, this));
                     break;
                 case AALOAD: putObject(frame, top - 2, getInterpreterToVM().getArrayObject(language, index, array, this));       break;
                 default:
