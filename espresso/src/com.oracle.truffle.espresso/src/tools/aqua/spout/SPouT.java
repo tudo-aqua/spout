@@ -975,6 +975,15 @@ public class SPouT {
                     array, cIndex, Annotations.annotation(aIndex, config.getConcolicIdx()), lang);
         }
 
+        if (analyze && config.hasTaintAnalysis() && array.hasAnnotations()) {
+            Annotations[] annotations = array.getAnnotations();
+            Annotations aLength = annotations[annotations.length - 1];
+            config.getTaintAnalysis().setArrayAccessInformationFlow(
+                    Annotations.annotation(aIndex, config.getTaintIdx()),
+                    Annotations.annotation(aLength, config.getTaintIdx())
+            );
+        }
+
         Annotations a = AnnotatedVM.getArrayAnnotations(array, cIndex);
         AnnotatedVM.putAnnotations(frame, toSlot, a);
     }

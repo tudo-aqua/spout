@@ -30,6 +30,7 @@ import com.oracle.truffle.espresso.bytecode.Bytecodes;
 import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.runtime.EspressoContext;
+import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.concolic.SymbolDeclaration;
 import tools.aqua.spout.*;
 
@@ -149,6 +150,15 @@ public class TaintAnalysis implements Analysis<Taint> {
             iflowScopes = iflowScopes.parent;
             ifTaint = iflowScopes.taint;
         }
+    }
+
+    public void setArrayAccessInformationFlow(Taint idx, Taint arraySize) {
+        if (!tainted || type == DATA || (arraySize == null && idx == null)) return;
+        // TODO: check if this is the proper way of doing this ...
+        // reasoning: array access is a control flow branch influenced
+        // by symbolic index and symbolic array size
+        ifTaint = ColorUtil.joinColors(ifTaint, arraySize, idx);
+        iflowScopes.taint = ifTaint;
     }
 
     private boolean outofscope(Method m) {
@@ -299,4 +309,5 @@ public class TaintAnalysis implements Analysis<Taint> {
     public Taint stringLength(int c, Taint s) {
         return type != DATA ? s : null;
     }
+
 }
