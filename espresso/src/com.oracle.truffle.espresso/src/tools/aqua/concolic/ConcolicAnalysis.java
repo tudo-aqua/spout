@@ -821,97 +821,82 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     //__________________________________________________________________
     // Concolic String library
     //__________________________________________________________________
-    public AnnotatedValue stringContains(AnnotatedValue concreteRes, StaticObject self, StaticObject s, Meta meta) {
-        Expression symbolicSelf = makeStringToExpr(self, meta);
-        Expression symbolicOther = makeStringToExpr(s, meta);
-        concreteRes.set(config.getConcolicIdx(), new ComplexExpression(SCONTAINS, symbolicSelf, symbolicOther));
-        return concreteRes;
+
+
+    @Override
+    public Expression stringContains(String self, String other, Expression a1, Expression a2) {
+        if(a1 == null) a1 = Constant.fromConcreteValue(self);
+        if(a2 == null) a2 = Constant.fromConcreteValue(other);
+        return new ComplexExpression(SCONTAINS, a1, a2);
     }
 
-    public AnnotatedValue stringCompareTo(AnnotatedValue av, StaticObject self, StaticObject other, Meta meta) {
-        Expression symbolicSelf = makeStringToExpr(self, meta);
-        Expression symbolicOther = makeStringToExpr(other, meta);
+    @Override
+    public Expression stringCompareTo(String self, String other, Expression a1, Expression a2) {
+        if(a1 == null) a1 = Constant.fromConcreteValue(self);
+        if(a2 == null) a2 = Constant.fromConcreteValue(other);
+        int res = self.compareTo(other);
         PathCondition pc;
-        if (av.<Integer>getValue() > 0) {
-            pc = new PathCondition(new ComplexExpression(OperatorComparator.SLT, symbolicOther, symbolicSelf), 0, 3);
-        } else if (av.<Integer>getValue() < 0) {
-            pc = new PathCondition(new ComplexExpression(OperatorComparator.SLT, symbolicSelf, symbolicOther), 1, 3);
+        Expression expr;
+        if (res > 0) {
+            expr = new ComplexExpression(OperatorComparator.SLT, a2, a1);
+            pc = new PathCondition(expr, 0, 3);
+        } else if (res < 0) {
+            expr = new ComplexExpression(OperatorComparator.SLT, a1, a2);
+            pc = new PathCondition(expr, 1, 3);
         } else {
-            pc = new PathCondition(new ComplexExpression(
-                    STRINGEQ, symbolicSelf, symbolicOther), 2, 3);
+            expr = new ComplexExpression(STRINGEQ, a1, a2);
+            pc = new PathCondition(expr, 2, 3);
         }
         trace.addElement(pc);
-        return av;
-
+        return expr;
     }
 
-    public AnnotatedValue stringEqual(AnnotatedValue av, StaticObject self, StaticObject other, Meta meta) {
-        Expression sself = makeStringToExpr(self, meta);
-        Expression sother = makeStringToExpr(other, meta);
-        Expression symbolicResult = new ComplexExpression(STRINGEQ, sself, sother);
-        av.set(config.getConcolicIdx(), symbolicResult);
-        return av;
+    @Override
+    public Expression stringEquals(String self, String other, Expression a1, Expression a2) {
+        if(a1 == null) a1 = Constant.fromConcreteValue(self);
+        if(a2 == null) a2 = Constant.fromConcreteValue(other);
+        return new ComplexExpression(STRINGEQ, a1, a2);
     }
 
-    //FIXME
-    public void charAtPCCheck(StaticObject self, Object index, Meta meta) {
-        String concreteString = meta.toHostString(self);
-        int concreteIndex = 0;
-        Expression indexExpr;
-        boolean concolicIndex = false;
-        if (index instanceof AnnotatedValue) {
-            AnnotatedValue a = (AnnotatedValue) index;
-            concreteIndex = a.<Integer>getValue();
-            indexExpr = (Expression) a.getAnnotations()[config.getConcolicIdx()];
-            concolicIndex = true;
-        } else {
-            concreteIndex = (int) index;
-            indexExpr = Constant.fromConcreteValue(concreteIndex);
+
+    @Override
+    public Expression charAtPCCheck(String concreteString, int cIndex, Expression sString, Expression sIndex) {
+        boolean concolicIndex = sIndex != null;
+        if (sIndex == null) {
+            sIndex = Constant.fromConcreteValue(cIndex);
         }
-        Expression symbolicString = makeStringToExpr(self, meta);
-        Expression intIndexExpr = new ComplexExpression(BV2NAT, indexExpr);
+        Expression symbolicString = sString != null ? sString: Constant.fromConcreteValue(concreteString);
+        Expression intIndexExpr = new ComplexExpression(BV2NAT, sIndex);
         Expression symbolicStrLen = new ComplexExpression(SLENGTH, symbolicString);
         Expression bvSymbolicStrLen = new ComplexExpression(NAT2BV32, symbolicStrLen);
 
-        boolean sat1 = (0 <= concreteIndex);
-        boolean sat2 = (concreteIndex < concreteString.length());
+        boolean sat1 = (0 <= cIndex);
+        boolean sat2 = (cIndex < concreteString.length());
         if (!sat1 && concolicIndex) {
             Expression indexGreaterEqualsZero =
-                    new ComplexExpression(GT, INT_ZERO, indexExpr);
+                    new ComplexExpression(GT, INT_ZERO, sIndex);
             trace.addElement(new PathCondition(indexGreaterEqualsZero, FAILURE, BINARY_SPLIT));
         } else if (sat1 && concolicIndex) {
             Expression indexGreaterEqualsZero =
-                    new ComplexExpression(LE, INT_ZERO, indexExpr);
+                    new ComplexExpression(LE, INT_ZERO, sIndex);
             trace.addElement(new PathCondition(indexGreaterEqualsZero, SUCCESS, BINARY_SPLIT));
         }
 
         if (!sat2) {
-            Expression indexLTSymbolicStringLength = new ComplexExpression(GE, indexExpr, bvSymbolicStrLen);
+            Expression indexLTSymbolicStringLength = new ComplexExpression(GE, sIndex, bvSymbolicStrLen);
             trace.addElement(new PathCondition(indexLTSymbolicStringLength, FAILURE, BINARY_SPLIT));
         } else {
-            Expression indexLTSymbolicStringLength = new ComplexExpression(LT, indexExpr, bvSymbolicStrLen);
+            Expression indexLTSymbolicStringLength = new ComplexExpression(LT, sIndex, bvSymbolicStrLen);
             trace.addElement(new PathCondition(indexLTSymbolicStringLength, SUCCESS, BINARY_SPLIT));
         }
+        return null;
     }
 
-    public AnnotatedValue charAtContent(AnnotatedValue av, StaticObject self, Object index, Meta meta) {
-        String concreteString = meta.toHostString(self);
-        int concreteIndex = 0;
-        Expression indexExpr;
-        boolean concolicIndex = false;
-        if (index instanceof AnnotatedValue) {
-            AnnotatedValue a = (AnnotatedValue) index;
-            concreteIndex = a.<Integer>getValue();
-            indexExpr = (Expression) a.getAnnotations()[config.getConcolicIdx()];
-            concolicIndex = true;
-        } else {
-            concreteIndex = (int) index;
-            indexExpr = Constant.fromConcreteValue(concreteIndex);
-        }
-        Expression symbolicString = makeStringToExpr(self, meta);
-        Expression charAtExpr = new ComplexExpression(SAT, symbolicString, indexExpr);
-        av.set(config.getConcolicIdx(), charAtExpr);
-        return av;
+    @Override
+    public Expression charAt(String self, int index, Expression a1, Expression a2) {
+        if (a1 == null) a1 = Constant.fromConcreteValue(self);
+        if(a2 == null) a2 = Constant.fromConcreteValue(index);
+        return new ComplexExpression(SAT, a1, new ComplexExpression(BV2NAT, a2));
     }
 
     @Override
@@ -919,11 +904,11 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return s != null ? new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, s)) : null;
     }
 
-    public StaticObject stringConcat(StaticObject result, StaticObject self, StaticObject other, Meta meta) {
-        Expression sself = makeStringToExpr(self, meta);
-        Expression sother = makeStringToExpr(other, meta);
-        annotateStringWithExpression(result, new ComplexExpression(SCONCAT, sself, sother));
-        return result;
+    @Override
+    public Expression stringConcat(String self, String other, Expression a1, Expression a2) {
+        if(a1 == null) a1 = Constant.fromConcreteValue(self);
+        if(a2 == null) a2 = Constant.fromConcreteValue(other);
+        return new ComplexExpression(SCONCAT, a1, a2);
     }
 
     public StaticObject stringToUpper(StaticObject result, StaticObject self, Meta meta) {

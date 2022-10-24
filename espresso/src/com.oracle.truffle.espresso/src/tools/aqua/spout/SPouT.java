@@ -1107,11 +1107,11 @@ public class SPouT {
         if (!self.hasAnnotations() && !s.hasAnnotations() || !analyze) {
             return concreteRes;
         }
-        AnnotatedValue result = new AnnotatedValue(concreteRes, Annotations.emptyArray());
-        if (config.hasConcolicAnalysis()) {
-            result = config.getConcolicAnalysis().stringContains(result, self, s, meta);
-        }
-        return result;
+        Annotations a =  analysis.stringContains(concreteSelf,
+                other,
+                Annotations.annotation(self.getAnnotations(), -1),
+                Annotations.annotation(s.getAnnotations(), -1));
+        return  new AnnotatedValue(concreteRes, a);
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -1143,15 +1143,16 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static Object stringCompareTo(StaticObject self, StaticObject other, Meta meta) {
-        int conreteResult = meta.toHostString(self).compareTo(meta.toHostString(other));
-        if (!analyze) {
-            return conreteResult;
+        String cSelf = meta.toHostString(self);
+        String cOther = meta.toHostString(other);
+        int concreteResult = cSelf.compareTo(cOther);
+        if (!analyze || !self.hasAnnotations() && !other.hasAnnotations()) {
+            return concreteResult;
         }
-        AnnotatedValue av = new AnnotatedValue(conreteResult, Annotations.emptyArray());
-        if (config.hasConcolicAnalysis() && (self.hasAnnotations() || other.hasAnnotations())) {
-            av = config.getConcolicAnalysis().stringCompareTo(av, self, other, meta);
-        }
-        return av;
+        Annotations a = analysis.stringCompareTo(cSelf, cOther,
+                Annotations.annotation(self.getAnnotations(), -1),
+                Annotations.annotation(other.getAnnotations(), -1));
+        return new AnnotatedValue(concreteResult, a);
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -1169,61 +1170,58 @@ public class SPouT {
         String concreteSelf = meta.toHostString(self);
         String concreteOther = meta.toHostString(other);
         StaticObject result = meta.toGuestString(concreteSelf.concat(concreteOther));
-        if (!analyze || !config.hasConcolicAnalysis() || !self.hasAnnotations() && !other.hasAnnotations()) {
+        if (!analyze || !self.hasAnnotations() && !other.hasAnnotations()) {
             return result;
         }
-        initStringAnnotations(result);
-        return config.getConcolicAnalysis().stringConcat(result, self, other, meta);
+        Annotations a = analysis.stringConcat(concreteSelf,
+                concreteOther,
+                Annotations.annotation(self.getAnnotations(), -1),
+                Annotations.annotation(other.getAnnotations(), -1));
+        return setStringAnnotations(result, a);
+
     }
 
     @CompilerDirectives.TruffleBoundary
     public static Object stringEquals(StaticObject self, StaticObject other, Meta meta) {
-        boolean areEqual = meta.toHostString(self).equals(meta.toHostString(other));
+        String cSelf = meta.toHostString(self);
+        String cOther = meta.toHostString(other);
+        boolean areEqual = cSelf.equals(cOther);
         if (!analyze || !self.hasAnnotations() && !other.hasAnnotations()) {
             return areEqual;
         }
-        AnnotatedValue av = new AnnotatedValue(areEqual, Annotations.emptyArray());
-        if (config.hasConcolicAnalysis()) {
-            av = config.getConcolicAnalysis().stringEqual(av, self, other, meta);
-        }
+        AnnotatedValue av = new AnnotatedValue(areEqual, analysis.stringEquals(cSelf,
+                cOther,
+                getStringAnnotations(self),
+                getStringAnnotations(other)));
         return av;
     }
 
     @CompilerDirectives.TruffleBoundary
-    public static Object stringCharAt(StaticObject self, Object index, Meta meta) {
-        String concreteString = meta.toHostString(self);
-        int concreteIndex = 0;
-        if (index instanceof AnnotatedValue) {
-            AnnotatedValue a = (AnnotatedValue) index;
-            concreteIndex = a.<Integer>getValue();
-        } else {
-            concreteIndex = (int) index;
-        }
+    public static Object stringCharAt(StaticObject self, Object oIndex, Meta meta) {
+        String cString = meta.toHostString(self);
+        int index = AnnotatedValue.value(oIndex);
+        Annotations sIndex = AnnotatedValue.svalue(oIndex);
 
-        if (!self.hasAnnotations() && !(index instanceof AnnotatedValue)) {
-            return (int) concreteString.charAt(concreteIndex);
+        if (!self.hasAnnotations() && sIndex == null) {
+            return (int) cString.charAt(index);
         }
-        boolean sat1 = (0 <= concreteIndex);
-        boolean sat2 = (concreteIndex < concreteString.length());
+        boolean sat1 = (0 <= index);
+        boolean sat2 = (index < cString.length());
 
-        if (!sat1 && !(index instanceof AnnotatedValue)) {
-            // index is negative
+        if (!sat1 && sIndex == null) {
+            // index is negative and cannot be influenced by a SMT solver
             self.setAnnotations(null);
             throw meta.throwExceptionWithMessage(meta.java_lang_StringIndexOutOfBoundsException, "Index is less than zero");
         }
-        if (analyze && config.hasConcolicAnalysis()) {
-            config.getConcolicAnalysis().charAtPCCheck(self, index, meta);
-        }
+        if (analyze) analysis.charAtPCCheck(cString, index, getStringAnnotations(self), sIndex);
 
         if (!sat2) {
             // index is greater than string length
             self.setAnnotations(null);
             throw meta.throwExceptionWithMessage(meta.java_lang_StringIndexOutOfBoundsException, "Index must be less than string length");
         }
-        AnnotatedValue av = new AnnotatedValue((int) concreteString.charAt(concreteIndex), Annotations.emptyArray());
-        if (analyze && config.hasConcolicAnalysis()) {
-            config.getConcolicAnalysis().charAtContent(av, self, index, meta);
-        }
+        AnnotatedValue av = new AnnotatedValue((int) cString.charAt(index), Annotations.emptyArray());
+        if (analyze) analysis.charAt(cString, index,getStringAnnotations(self), sIndex);
         return av;
     }
 
@@ -1696,6 +1694,22 @@ public class SPouT {
         target.setAnnotations(annotations);
         return target;
     }
+
+    private static StaticObject setStringAnnotations(StaticObject self, Annotations a) {
+        Annotations[] stringAnnotation = self.getAnnotations();
+        if (stringAnnotation == null) {
+            SPouT.initStringAnnotations(self);
+            stringAnnotation = self.getAnnotations();
+        }
+        stringAnnotation[stringAnnotation.length - 1] = a;
+        self.setAnnotations(stringAnnotation);
+        return self;
+    }
+
+    private static Annotations getStringAnnotations(StaticObject self){
+        return  Annotations.annotation(self.getAnnotations(), -1);
+    }
+
 
     private static boolean hasConcolicAnnotations(StaticObject v) {
         return v.hasAnnotations() && config.hasConcolicAnalysis() && v.getAnnotations()[config.getConcolicIdx()] != null;

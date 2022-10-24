@@ -48,6 +48,18 @@ public class MetaAnalysis implements Analysis<Annotations> {
         <T> T execute(Analysis<T> analysis, int c1, int c2, T s1, T s2);
     }
 
+    interface BinaryStringCompOperation {
+        <T> T execute(Analysis<T> analysis, boolean b1, T s1, T s2);
+    }
+
+    interface BinaryStringOperation {
+        <T> T execute(Analysis<T> analysis, String self, String other, T s1, T s2);
+    }
+
+    interface BinaryStringIntOperation {
+        <T> T execute(Analysis<T> analysis, String self, int other, T s1, T s2);
+    }
+
     interface BinaryLongOperation {
         <T> T execute(Analysis<T> analysis, long c1, long c2, T s1, T s2);
     }
@@ -211,6 +223,22 @@ public class MetaAnalysis implements Analysis<Annotations> {
         return hasResult ? new Annotations(annotations) : null;
     }
 
+    private Annotations sexecute(String self, String other, Annotations a1, Annotations a2, BinaryStringOperation executor) {
+        if (a1 == null && a2 == null) return null;
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[analyses.length];
+        for (Analysis<?> analysis : analyses) {
+            Object result = executor.execute(analysis, self, other, Annotations.annotation(a1, i), Annotations.annotation(a2, i));
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? new Annotations(annotations) : null;
+    }
+
     private Annotations execute(int c1, Annotations a1, UnaryOperation executor) {
         int i = 0;
         boolean hasResult = false;
@@ -261,6 +289,38 @@ public class MetaAnalysis implements Analysis<Annotations> {
         Object[] annotations = new Object[analyses.length];
         for (Analysis<?> analysis : analyses) {
             Object result = executor.execute(analysis, c1, Annotations.annotation(a1, i));
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? new Annotations(annotations) : null;
+    }
+
+    private Annotations sexecute(boolean comp, Annotations a1, Annotations a2, BinaryStringCompOperation executor) {
+        if (a1 == null && a2 == null) return null;
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[analyses.length];
+        for (Analysis<?> analysis : analyses) {
+            Object result = executor.execute(analysis, comp, Annotations.annotation(a1, i), Annotations.annotation(a2, i));
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? new Annotations(annotations) : null;
+    }
+
+    private Annotations sexecute(String self, int index, Annotations a1, Annotations a2, BinaryStringIntOperation executor) {
+        if (a1 == null && a2 == null) return null;
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[analyses.length];
+        for (Analysis<?> analysis : analyses) {
+            Object result = executor.execute(analysis, self, index, Annotations.annotation(a1, i), Annotations.annotation(a2, i));
             if (result != null) {
                 annotations[i] = result;
                 hasResult = true;
@@ -607,5 +667,35 @@ public class MetaAnalysis implements Analysis<Annotations> {
     public Annotations stringLength(int c, Annotations s) {
         if (s==null) return null;
         return execute(c, s, Analysis::stringLength);
+    }
+
+    @Override
+    public Annotations stringContains(String self, String other, Annotations a1, Annotations a2){
+        return sexecute(self, other, a1, a2, Analysis::stringContains);
+    }
+
+    @Override
+    public Annotations stringCompareTo(String self, String other, Annotations a1, Annotations a2){
+        return sexecute(self, other, a1, a2, Analysis::stringContains);
+    }
+
+    @Override
+    public Annotations stringConcat(String self, String other, Annotations a1, Annotations a2) {
+        return sexecute(self, other, a1, a2, Analysis::stringConcat);
+    }
+
+    @Override
+    public Annotations stringEquals(String self, String other, Annotations a1, Annotations a2) {
+        return sexecute(self, other, a1, a2, Analysis::stringEquals);
+    }
+
+    @Override
+    public Annotations charAtPCCheck(String self, int index, Annotations a1, Annotations a2) {
+        return sexecute(self, index, a1, a2, Analysis::charAtPCCheck);
+    }
+
+    @Override
+    public Annotations charAt(String self, int index, Annotations a1, Annotations a2) {
+        return sexecute(self, index, a1, a2, Analysis::charAt);
     }
 }

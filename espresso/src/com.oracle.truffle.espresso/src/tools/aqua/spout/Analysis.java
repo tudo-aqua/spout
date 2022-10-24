@@ -291,4 +291,16 @@ public interface Analysis<T> {
 
     // Strings
     default T stringLength(int c, T s) { return null; }
+
+    default T stringContains(String self, String other, T a1, T a2){return null;}
+
+    default T stringCompareTo(String self, String other, T a1, T a2){return null;}
+
+    default T stringConcat(String self, String other, T a1, T a2){return null;}
+
+    default T stringEquals(String self, String other, T a1, T a2){return null;}
+
+    default T charAtPCCheck(String self, int index, T a1, T a2){return null;}
+
+    default T charAt(String self, int index, T a1, T a2){return null;}
 }

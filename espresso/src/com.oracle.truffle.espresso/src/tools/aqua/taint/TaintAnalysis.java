@@ -26,21 +26,13 @@ package tools.aqua.taint;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
-import com.oracle.truffle.espresso.bytecode.Bytecodes;
 import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
-import com.oracle.truffle.espresso.runtime.EspressoContext;
-import com.oracle.truffle.espresso.runtime.StaticObject;
-import tools.aqua.concolic.SymbolDeclaration;
 import tools.aqua.spout.*;
 
-import java.util.Arrays;
 import java.util.TreeMap;
 
-import static com.oracle.truffle.espresso.bytecode.Bytecodes.*;
-import static tools.aqua.spout.Config.TaintType.CONTROL;
-import static tools.aqua.spout.Config.TaintType.DATA;
-import static tools.aqua.spout.Config.TaintType.INFORMATION;
+import static tools.aqua.spout.Config.TaintType.*;
 
 public class TaintAnalysis implements Analysis<Taint> {
 
@@ -310,4 +302,23 @@ public class TaintAnalysis implements Analysis<Taint> {
         return type != DATA ? s : null;
     }
 
+    @Override
+    public Taint stringContains(String self, String other, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint stringCompareTo(String self, String other, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2);
+    }
+
+    @Override
+    public Taint stringConcat(String self, String other, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint stringEquals(String self, String other, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
 }

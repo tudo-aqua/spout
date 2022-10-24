@@ -49,6 +49,9 @@ public final class AnnotatedValue extends Annotations {
     public static <T> T value(Object a) {
         return (a instanceof AnnotatedValue) ? ((AnnotatedValue) a).getValue() : (T) a;
     }
+    public static Annotations svalue(Object a) {
+        return (a instanceof AnnotatedValue) ? (AnnotatedValue) a : null;
+    }
 
     @SuppressWarnings("unchecked")
     public <T> T getValue() {
