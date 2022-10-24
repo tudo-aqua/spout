@@ -1550,7 +1550,7 @@ public class SPouT {
 
     public static StaticObject valueOf_bool(Object v, Meta meta) {
         if (v instanceof AnnotatedValue) {
-            stopRecording("concolic type conversion to string not supported, yet.", meta);
+            stopRecording("concolic type conversion from boolean to string not supported, yet.", meta);
         }
         String ret = "" + (boolean) v;
         return meta.toGuestString(ret);
@@ -1558,7 +1558,7 @@ public class SPouT {
 
     public static StaticObject valueOf_byte(Object v, Meta meta) {
         if (v instanceof AnnotatedValue) {
-            stopRecording("concolic type conversion to string not supported, yet.", meta);
+            stopRecording("concolic type conversion from byte to string not supported, yet.", meta);
         }
         String ret = "" + (byte) v;
         return meta.toGuestString(ret);
@@ -1592,7 +1592,7 @@ public class SPouT {
 
     public static StaticObject valueOf_short(Object v, Meta meta) {
         if (v instanceof AnnotatedValue) {
-            stopRecording("concolic type conversion to string not supported, yet.", meta);
+            stopRecording("concolic type conversion from short to string not supported, yet.", meta);
         }
         String ret = "" + (short) v;
         return meta.toGuestString(ret);
@@ -1600,7 +1600,7 @@ public class SPouT {
 
     public static StaticObject valueOf_int(Object v, Meta meta) {
         if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
-            stopRecording("concolic type conversion to string not supported, yet.", meta);
+            stopRecording("concolic type conversion from int to string not supported, yet.", meta);
         }
 
         String ret = "" + (int) AnnotatedValue.value(v);
@@ -1609,7 +1609,7 @@ public class SPouT {
 
     public static StaticObject valueOf_long(Object v, Meta meta) {
         if (v instanceof AnnotatedValue) {
-            stopRecording("concolic type conversion to string not supported, yet.", meta);
+            stopRecording("concolic type conversion from long to string not supported, yet.", meta);
         }
         String ret = "" + (long) v;
         return meta.toGuestString(ret);
@@ -1617,17 +1617,17 @@ public class SPouT {
 
     public static StaticObject valueOf_float(Object v, Meta meta) {
         if (v instanceof AnnotatedValue) {
-            stopRecording("concolic type conversion to string not supported, yet.", meta);
+            stopRecording("concolic type conversion from float to string not supported, yet.", meta);
         }
         String ret = "" + (float) v;
         return meta.toGuestString(ret);
     }
 
     public static StaticObject valueOf_double(Object v, Meta meta) {
-        if (v instanceof AnnotatedValue) {
-            stopRecording("concolic type conversion to string not supported, yet.", meta);
+        if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
+            stopRecording("concolic type conversion from double to string not supported, yet.", meta);
         }
-        String ret = "" + (double) v;
+        String ret = "" + (double) AnnotatedValue.value(v);
         return meta.toGuestString(ret);
     }
 
