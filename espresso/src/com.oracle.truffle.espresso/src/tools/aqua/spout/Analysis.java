@@ -303,4 +303,6 @@ public interface Analysis<T> {
     default T charAtPCCheck(String self, int index, T a1, T a2){return null;}
 
     default T charAt(String self, int index, T a1, T a2){return null;}
+
+    default T substring(boolean success, String self, int start, int end, T a1, T a2, T a3){return null;}
 }

@@ -38,7 +38,10 @@ import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.concolic.ConcolicAnalysis;
+import tools.aqua.smt.ComplexExpression;
+import tools.aqua.smt.Constant;
 import tools.aqua.smt.Expression;
+import tools.aqua.smt.OperatorComparator;
 import tools.aqua.taint.PostDominatorAnalysis;
 import tools.aqua.taint.Taint;
 import tools.aqua.witnesses.GWIT;
@@ -1200,11 +1203,12 @@ public class SPouT {
         if (!analyze || !self.hasAnnotations() && !other.hasAnnotations()) {
             return areEqual;
         }
-        AnnotatedValue av = new AnnotatedValue(areEqual, analysis.stringEquals(cSelf,
+        Annotations a = analysis.stringEquals(cSelf,
                 cOther,
                 getStringAnnotations(self),
-                getStringAnnotations(other)));
-        return av;
+                getStringAnnotations(other));
+        if(a != null) return new AnnotatedValue(areEqual, a);
+        else return areEqual;
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -1213,7 +1217,7 @@ public class SPouT {
         int index = AnnotatedValue.value(oIndex);
         Annotations sIndex = AnnotatedValue.svalue(oIndex);
 
-        if (!self.hasAnnotations() && sIndex == null) {
+        if (getStringAnnotations(self) == null && sIndex == null) {
             return (int) cString.charAt(index);
         }
         boolean sat1 = (0 <= index);
@@ -1238,24 +1242,36 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static StaticObject substring(StaticObject self, Object begin, Meta meta) {
-        int cbegin;
-        Annotations sbegin = null;
-        if(begin instanceof AnnotatedValue){
-            cbegin = ((AnnotatedValue) begin).getValue();
-            sbegin = (AnnotatedValue) begin;
-        }else{
-            cbegin = (int) begin;
+        int cbegin = AnnotatedValue.value(begin);
+        Annotations sbegin = AnnotatedValue.svalue(begin);
+        String cSelf = meta.toHostString(self);
+        Annotations a3 = null;
+        if (analyze && config.hasConcolicAnalysis()) {
+            Annotations aself = getStringAnnotations(self);
+            Expression sself = Annotations.annotation(aself, config.getConcolicIdx());
+            if (sself != null){
+                a3 = Annotations.emptyArray();
+                ComplexExpression sLength = new ComplexExpression(OperatorComparator.SLENGTH, sself);
+                Expression tmpBegin = Annotations.annotation(sbegin, config.getConcolicIdx());
+                if(tmpBegin == null){
+                    tmpBegin = Constant.createNatConstant(cbegin);
+                }else{
+                    tmpBegin = new ComplexExpression(OperatorComparator.BV2NAT, tmpBegin);
+                }
+                a3.set(config.getConcolicIdx(), new ComplexExpression(OperatorComparator.NATMINUS, sLength, tmpBegin));
+            }
         }
         try {
-            String res = meta.toHostString(self).substring(cbegin);
+            String res = cSelf.substring(cbegin);
             StaticObject result = meta.toGuestString(res);
-            if(analyze && config.hasConcolicAnalysis()){
-                config.getConcolicAnalysis().stringSubstring(result, self, cbegin, sbegin, meta);
+            if(analyze){
+                Annotations a = analysis.substring(true, cSelf, cbegin, cSelf.length(), getStringAnnotations(self), sbegin, a3);
+                setStringAnnotations(result, a);
             }
             return result;
         }catch (IndexOutOfBoundsException e){
-            if(analyze && config.hasConcolicAnalysis()){
-                config.getConcolicAnalysis().stringSubstring(null, self, cbegin, sbegin, meta);
+            if(analyze ){
+                analysis.substring(false, cSelf, cbegin, cSelf.length(), getStringAnnotations(self), sbegin, a3);
             }
             meta.throwException(meta.java_lang_StringIndexOutOfBoundsException);
             throw e;
@@ -1264,30 +1280,20 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static StaticObject substring(StaticObject self, Object begin, Object end, Meta meta) {
-        int cBegin, cEnd;
-        Annotations sBegin = null, sEnd = null;
-        if(begin instanceof AnnotatedValue){
-            cBegin = ((AnnotatedValue) begin).getValue();
-            sBegin = (AnnotatedValue) begin;
-        }else{
-            cBegin = (int) begin;
-        }
-        if(end instanceof AnnotatedValue){
-            cEnd = ((AnnotatedValue) end).getValue();
-            sEnd = (AnnotatedValue) end;
-        }else{
-            cEnd = (int) end;
-        }
+        int cBegin  = AnnotatedValue.value(begin), cEnd = AnnotatedValue.value(end);
+        Annotations sBegin = AnnotatedValue.svalue(begin), sEnd = AnnotatedValue.svalue(end);
+        String cSelf = meta.toHostString(self);
         try {
-            String res = meta.toHostString(self).substring(cBegin, cEnd);
+            String res = cSelf.substring(cBegin, cEnd);
             StaticObject result = meta.toGuestString(res);
-            if(analyze && config.hasConcolicAnalysis()){
-                config.getConcolicAnalysis().stringSubstring(result, self, cBegin, sBegin, cEnd, sEnd, meta);
+            if(analyze){
+                Annotations a = analysis.substring(true, cSelf, cBegin, cEnd, getStringAnnotations(self), sBegin, sEnd);
+                setStringAnnotations(result, a);
             }
             return result;
         }catch (IndexOutOfBoundsException e){
-            if(analyze && config.hasConcolicAnalysis()){
-                config.getConcolicAnalysis().stringSubstring(null, self, cBegin, sBegin, cEnd, sEnd, meta);
+            if(analyze){
+                analysis.substring(false, cSelf, cBegin, cEnd, getStringAnnotations(self), sBegin, sEnd);
             }
             meta.throwException(meta.java_lang_StringIndexOutOfBoundsException);
             throw e;
@@ -1340,9 +1346,9 @@ public class SPouT {
         } else {
             clen = (int) len;
         }
-        boolean isSelfSymbolic = self.hasAnnotations()
+        boolean isSelfSymbolic = self.hasAnnotations() && self.getAnnotations()[self.getAnnotations().length - 1] != null
                 && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
-        boolean isOtherSymbolic = other.hasAnnotations()
+        boolean isOtherSymbolic = other.hasAnnotations() && other.getAnnotations()[self.getAnnotations().length - 1] != null
                 && other.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
         if ((isSelfSymbolic || isOtherSymbolic) && analyze && config.hasConcolicAnalysis()) {
             return config.getConcolicAnalysis().regionMatches(self, other, ignore, ctoffset, cooffset, clen, meta);

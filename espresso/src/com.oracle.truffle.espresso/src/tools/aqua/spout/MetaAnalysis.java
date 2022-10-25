@@ -60,6 +60,10 @@ public class MetaAnalysis implements Analysis<Annotations> {
         <T> T execute(Analysis<T> analysis, String self, int other, T s1, T s2);
     }
 
+    interface StringSubstringOperation {
+        <T> T execute(Analysis<T> analysis, boolean success, String self, int start, int end, T s1, T s2, T s3);
+    }
+
     interface BinaryLongOperation {
         <T> T execute(Analysis<T> analysis, long c1, long c2, T s1, T s2);
     }
@@ -76,15 +80,15 @@ public class MetaAnalysis implements Analysis<Annotations> {
         <T> T execute(Analysis<T> analysis, double c1, double c2, T s1, T s2);
     }
 
-    interface UnaryByteOperation{
+    interface UnaryByteOperation {
         <T> T execute(Analysis<T> analysis, byte c1, T s1);
     }
 
-    interface UnaryCharOperation{
+    interface UnaryCharOperation {
         <T> T execute(Analysis<T> analysis, char c1, T s1);
     }
 
-    interface UnaryShortOperation{
+    interface UnaryShortOperation {
         <T> T execute(Analysis<T> analysis, short c1, T s1);
     }
 
@@ -133,6 +137,7 @@ public class MetaAnalysis implements Analysis<Annotations> {
         }
         return hasResult ? new Annotations(annotations) : null;
     }
+
     private Annotations lShiftExecute(int c1, long c2, Annotations a1, Annotations a2, BinaryLongShiftOperation executor) {
         int i = 0;
         boolean hasResult = false;
@@ -268,6 +273,7 @@ public class MetaAnalysis implements Analysis<Annotations> {
         }
         return hasResult ? new Annotations(annotations) : null;
     }
+
     private Annotations fexecute(float c1, Annotations a1, UnaryFloatOperation executor) {
         int i = 0;
         boolean hasResult = false;
@@ -321,6 +327,30 @@ public class MetaAnalysis implements Analysis<Annotations> {
         Object[] annotations = new Object[analyses.length];
         for (Analysis<?> analysis : analyses) {
             Object result = executor.execute(analysis, self, index, Annotations.annotation(a1, i), Annotations.annotation(a2, i));
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? new Annotations(annotations) : null;
+    }
+
+    private Annotations sexecute(boolean success, String self, int index, int end, Annotations a1, Annotations a2, Annotations a3, StringSubstringOperation executor) {
+        if (a1 == null && a2 == null && a3 == null) return null;
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[analyses.length];
+        for (Analysis<?> analysis : analyses) {
+            Object result = executor.execute(
+                    analysis,
+                    success,
+                    self,
+                    index,
+                    end,
+                    Annotations.annotation(a1, i),
+                    Annotations.annotation(a2, i),
+                    Annotations.annotation(a3, i));
             if (result != null) {
                 annotations[i] = result;
                 hasResult = true;
@@ -389,6 +419,7 @@ public class MetaAnalysis implements Analysis<Annotations> {
     public Annotations fsub(float c1, float c2, Annotations a1, Annotations a2) {
         return fexecute(c1, c2, a1, a2, Analysis::fsub);
     }
+
     @Override
     public Annotations dsub(double c1, double c2, Annotations a1, Annotations a2) {
         return dexecute(c1, c2, a1, a2, Analysis::dsub);
@@ -657,7 +688,7 @@ public class MetaAnalysis implements Analysis<Annotations> {
                              int[] vals, int key, Annotations a1) {
         int i = 0;
         for (Analysis<?> analysis : analyses) {
-           analysis.lookupSwitch(frame, bcn, bci, vals, key, Annotations.annotation(a1, i));
+            analysis.lookupSwitch(frame, bcn, bci, vals, key, Annotations.annotation(a1, i));
         }
     }
 
@@ -665,17 +696,17 @@ public class MetaAnalysis implements Analysis<Annotations> {
 
     @Override
     public Annotations stringLength(int c, Annotations s) {
-        if (s==null) return null;
+        if (s == null) return null;
         return execute(c, s, Analysis::stringLength);
     }
 
     @Override
-    public Annotations stringContains(String self, String other, Annotations a1, Annotations a2){
+    public Annotations stringContains(String self, String other, Annotations a1, Annotations a2) {
         return sexecute(self, other, a1, a2, Analysis::stringContains);
     }
 
     @Override
-    public Annotations stringCompareTo(String self, String other, Annotations a1, Annotations a2){
+    public Annotations stringCompareTo(String self, String other, Annotations a1, Annotations a2) {
         return sexecute(self, other, a1, a2, Analysis::stringContains);
     }
 
@@ -697,5 +728,10 @@ public class MetaAnalysis implements Analysis<Annotations> {
     @Override
     public Annotations charAt(String self, int index, Annotations a1, Annotations a2) {
         return sexecute(self, index, a1, a2, Analysis::charAt);
+    }
+
+    @Override
+    public Annotations substring(boolean success, String self, int start, int end, Annotations a1, Annotations a2, Annotations a3) {
+        return sexecute(success, self, start, end, a1, a2, a3, Analysis::substring);
     }
 }

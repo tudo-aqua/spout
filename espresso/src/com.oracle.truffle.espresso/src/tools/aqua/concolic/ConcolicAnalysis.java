@@ -921,55 +921,30 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return annotateStringWithExpression(result, new ComplexExpression(STOLOWER, value));
     }
 
-    public StaticObject stringSubstring(StaticObject result, StaticObject self, int cBegin, Annotations sBegin, Meta meta) {
-        if (sBegin != null || hasConcolicStringAnnotations(self)) {
-            Expression sself = makeStringToExpr(self, meta);
-            Expression startIndex = sBegin == null ?
-                    Constant.createNatConstant(cBegin) :
-                    new ComplexExpression(BV2NAT, Annotations.annotation(sBegin, config.getConcolicIdx()));
-            Expression maxLength = new ComplexExpression(SLENGTH, sself);
 
-            Expression indexWithinBound = new ComplexExpression(BAND,
-                    new ComplexExpression(LE, NAT_ZERO, startIndex),
-                    new ComplexExpression(LT, startIndex, maxLength));
+    @Override
+    public Expression substring(boolean success, String self, int start, int end, Expression a1, Expression a2, Expression a3) {
+        if (a1 == null) a1 = Constant.fromConcreteValue(self);
+        if (a2 == null) a2 = Constant.createNatConstant(start);
+        else a2 = new ComplexExpression(BV2NAT, a2);
+        if (a3 == null) a3 = Constant.createNatConstant(end);
+        else if (!((ComplexExpression)a3).getOperator().equals(SLENGTH) &&
+                !((ComplexExpression)a3).getOperator().equals(NATMINUS)
+                && !((ComplexExpression)a3).getOperator().equals(NATADD)) a3 = new ComplexExpression(BV2NAT, a3);
 
-            if (result == null) {
-                trace.addElement(new PathCondition(new ComplexExpression(BNEG, indexWithinBound), FAILURE, BINARY_SPLIT));
-            } else {
-                trace.addElement(new PathCondition(indexWithinBound, SUCCESS, BINARY_SPLIT));
-                Expression substring = new ComplexExpression(SSUBSTR, sself, startIndex, maxLength);
-                annotateStringWithExpression(result, substring);
-            }
+        Expression maxLength = new ComplexExpression(NATMINUS, a3, a2);
+        Expression indexWithinBound = new ComplexExpression(BAND,
+                new ComplexExpression(LE, NAT_ZERO, a2),
+                new ComplexExpression(LT, a3, new ComplexExpression(SLENGTH, a1)));
+        indexWithinBound = new ComplexExpression(BAND, indexWithinBound,
+                new ComplexExpression(LE, a2, a3));
+        if (success) {
+            trace.addElement(new PathCondition(indexWithinBound, SUCCESS, BINARY_SPLIT));
+            return new ComplexExpression(SSUBSTR, a1, a2, maxLength);
+        } else {
+            trace.addElement(new PathCondition(new ComplexExpression(BNEG, indexWithinBound), FAILURE, BINARY_SPLIT));
+            return null;
         }
-        return result;
-    }
-
-    public StaticObject stringSubstring(StaticObject result, StaticObject self, int cBegin, Annotations sBegin, int cEnd, Annotations sEnd, Meta meta) {
-        if (sEnd != null || sBegin != null || hasConcolicStringAnnotations(self)) {
-            Expression sself = makeStringToExpr(self, meta);
-            Expression startIndex = sBegin == null ?
-                    Constant.createNatConstant(cBegin) :
-                    new ComplexExpression(BV2NAT, (Expression) Annotations.annotation(sBegin, config.getConcolicIdx()));
-            Expression endIndex = sEnd == null ?
-                    Constant.createNatConstant(cEnd) :
-                    new ComplexExpression(BV2NAT, (Expression) Annotations.annotation(sEnd, config.getConcolicIdx()));
-            Expression maxLength = new ComplexExpression(NATMINUS, endIndex, startIndex);
-
-            Expression indexWithinBound = new ComplexExpression(BAND,
-                    new ComplexExpression(LE, NAT_ZERO, startIndex),
-                    new ComplexExpression(LT, endIndex, new ComplexExpression(SLENGTH, sself)));
-            indexWithinBound = new ComplexExpression(BAND, indexWithinBound,
-                    new ComplexExpression(LE, startIndex, endIndex));
-
-            if (result == null) {
-                trace.addElement(new PathCondition(new ComplexExpression(BNEG, indexWithinBound), FAILURE, BINARY_SPLIT));
-            } else {
-                trace.addElement(new PathCondition(indexWithinBound, SUCCESS, BINARY_SPLIT));
-                Expression substring = new ComplexExpression(SSUBSTR, sself, startIndex, new ComplexExpression(SLENGTH, sself));
-                annotateStringWithExpression(result, substring);
-            }
-        }
-        return result;
     }
 
     public StaticObject stringBuilderAppend(StaticObject self, StaticObject string, Meta meta) {

@@ -350,4 +350,9 @@ public class TaintAnalysis implements Analysis<Taint> {
     public Taint stringEquals(String self, String other, Taint a1, Taint a2) {
         return ColorUtil.joinColors(a1, a2, ifTaint);
     }
+
+    @Override
+    public Taint substring(boolean success, String self, int start, int end, Taint a1, Taint a2, Taint a3) {
+        return ColorUtil.joinColors(a1, a2, a3, ifTaint);
+    }
 }
