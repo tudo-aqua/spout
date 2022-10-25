@@ -237,10 +237,21 @@ public class SPouT {
         return config.getTaintAnalysis().taint(o, color);
     }
 
+    public static void taintObject(StaticObject o, int color) {
+        if (!analyze || !config.hasTaintAnalysis()) return;
+        config.getTaintAnalysis().taintObject(o, color);
+    }
+
     @CompilerDirectives.TruffleBoundary
     public static void checkTaint(Object o, int color) {
         if (!analyze || !config.hasTaintAnalysis()) return;
         config.getTaintAnalysis().checkTaint(o instanceof AnnotatedValue ? (AnnotatedValue) o : null, color);
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static void checkTaintObject(StaticObject o, int color) {
+        if (!analyze || !config.hasTaintAnalysis()) return;
+        config.getTaintAnalysis().checkTaintObject(o, color);
     }
 
     public static void nextBytecode(VirtualFrame frame, int bci) {

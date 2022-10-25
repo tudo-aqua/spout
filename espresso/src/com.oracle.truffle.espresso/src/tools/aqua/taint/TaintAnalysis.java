@@ -27,7 +27,9 @@ package tools.aqua.taint;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.impl.Method;
+import com.oracle.truffle.espresso.impl.ObjectKlass;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
+import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.spout.*;
 
 import java.util.TreeMap;
@@ -81,8 +83,35 @@ public class TaintAnalysis implements Analysis<Taint> {
         return av;
     }
 
+    public void taintObject(StaticObject o, int color) {
+        // TODO: maybe most of this code should move to SPouT?
+        if (!o.hasAnnotations()) {
+            int lengthAnnotations = ((ObjectKlass) o.getKlass()).getFieldTable().length + 1;
+            Annotations[] annotations = new Annotations[lengthAnnotations];
+            o.setAnnotations(annotations);
+        }
+
+        Annotations a = Annotations.annotation(o.getAnnotations(), -1);
+        a.set(config.getTaintIdx(), ColorUtil.joinColors(
+                (Taint) a.getAnnotations()[config.getTaintIdx()], new Taint(color)));
+    }
+
     public void checkTaint(AnnotatedValue o, int color) {
         Taint taint = Annotations.annotation( o, config.getTaintIdx());
+        if (type.equals(INFORMATION)) {
+            trace.addElement(new TaintCheck(color, taint, ifColorNames));
+        }
+        else if (ColorUtil.hasColor(taint, color)) {
+            trace.addElement(new TaintViolation(color));
+        }
+        else {
+            SPouT.debug("Checking for taint with color " + color);
+        }
+    }
+
+    public void checkTaintObject(StaticObject o, int color) {
+        Annotations a = Annotations.annotation(o.getAnnotations(), -1);
+        Taint taint = (Taint) Annotations.annotation(a, config.getTaintIdx());
         if (type.equals(INFORMATION)) {
             trace.addElement(new TaintCheck(color, taint, ifColorNames));
         }
