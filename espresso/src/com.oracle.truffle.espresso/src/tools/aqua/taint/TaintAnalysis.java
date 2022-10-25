@@ -140,12 +140,12 @@ public class TaintAnalysis implements Analysis<Taint> {
         if (outofscope(bcn.getMethod())) return;
 
         int ipdBCI = bcn.getPostDominatorAnalysis().immediatePostDominatorStartForBCI(bci);
-        //SPouT.log("new scope at bci=" + bci + ", ipdStart=" + ipdBCI);
 
         // new taint
         Taint decisionTaint = ColorUtil.joinColors(ifTaint, a1, a2);
         String decisionName = iflowScopes.nextDecisionName();
         Taint scopeTaint = ColorUtil.addColor(decisionTaint, ++nextFreeColor);
+        SPouT.debug("new scope [" + bcn.getMethod().getNameAsString() + "] at bci=" + bci + ", ipdStart=" + ipdBCI + ", " + decisionName);
 
         iflowScopes = new InformationFlowScope(iflowScopes, frame, branch, scopeTaint, ipdBCI);
         ifTaint = scopeTaint;
@@ -163,7 +163,7 @@ public class TaintAnalysis implements Analysis<Taint> {
     public void informationFlowNextBytecode(VirtualFrame frame, int bci) {
         if (!tainted || ifExceptionThrown) return;
         while (iflowScopes.isEnd(frame, bci)) {
-            //SPouT.debug("pop iflow scope at ipd=" + bci);
+            SPouT.debug("pop iflow scope at ipd=" + bci);
             iflowScopes = iflowScopes.parent;
             ifTaint = iflowScopes.taint;
         }

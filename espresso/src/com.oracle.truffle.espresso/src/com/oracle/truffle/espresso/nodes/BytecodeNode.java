@@ -810,10 +810,10 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
         loop: while (true) {
             final int curOpcode = bs.opcode(curBCI);
             EXECUTED_BYTECODES_COUNT.inc();
+            ipdBCI = SPouT.iflowGetIpdBCI();
             if (curBCI == ipdBCI) {
                 SPouT.nextBytecode(frame, curBCI);
             }
-            ipdBCI = SPouT.iflowGetIpdBCI();
             try {
                 CompilerAsserts.partialEvaluationConstant(top);
                 CompilerAsserts.partialEvaluationConstant(curBCI);
