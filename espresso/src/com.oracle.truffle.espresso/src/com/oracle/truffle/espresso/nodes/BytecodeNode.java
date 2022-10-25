@@ -405,7 +405,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
 
     private final LivenessAnalysis livenessAnalysis;
 
-    private final PostDominatorAnalysis postDominatorAnalysis;
+    private PostDominatorAnalysis postDominatorAnalysis;
 
     private byte trivialBytecodesCache = -1;
 
@@ -3374,6 +3374,9 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
     }
 
     public PostDominatorAnalysis getPostDominatorAnalysis() {
+        if (postDominatorAnalysis == null) {
+            postDominatorAnalysis = SPouT.iflowGetPDA(getMethod());
+        }
         return postDominatorAnalysis;
     }
 }

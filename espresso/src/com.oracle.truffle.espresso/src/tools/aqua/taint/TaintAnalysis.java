@@ -189,9 +189,15 @@ public class TaintAnalysis implements Analysis<Taint> {
     }
 
     private boolean outofscope(Method m) {
-        return m.getDeclaringKlass().getNameAsString().startsWith("java/") ||
-                m.getDeclaringKlass().getNameAsString().startsWith("jdk/") ||
-                m.getDeclaringKlass().getNameAsString().startsWith("sun/");
+        String declaringClassName = m.getDeclaringKlass().getNameAsString();
+        if (declaringClassName.startsWith("java/")) {
+            return !declaringClassName.startsWith("java/util/") &&
+                    !declaringClassName.startsWith("java/lang/reflect/");
+        }
+        if (declaringClassName.startsWith("sun/")) {
+            return !declaringClassName.startsWith("sun/reflect/");
+        }
+        return declaringClassName.startsWith("jdk/");
     }
 
     public void iflowRegisterException() {
