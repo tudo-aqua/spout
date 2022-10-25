@@ -232,6 +232,21 @@ public class TaintAnalysis implements Analysis<Taint> {
     }
 
     @Override
+    public Taint ladd(long c1, long c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint fadd(float c1, float c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint dadd(double c1, double c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
     public Taint isub(int c1, int c2, Taint a1, Taint a2) {
         return ColorUtil.joinColors(a1, a2, ifTaint);
     }
@@ -247,12 +262,27 @@ public class TaintAnalysis implements Analysis<Taint> {
     }
 
     @Override
-    public Taint iinc(int incr, Taint a1) {
-        return ColorUtil.joinColors(a1, ifTaint);
+    public Taint dsub(double c1, double c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
     }
 
     @Override
     public Taint imul(int c1, int c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint lmul(long c1, long c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint fmul(float c1, float c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint dmul(double c1, double c2, Taint a1, Taint a2) {
         return ColorUtil.joinColors(a1, a2, ifTaint);
     }
 
@@ -262,7 +292,37 @@ public class TaintAnalysis implements Analysis<Taint> {
     }
 
     @Override
+    public Taint ldiv(long c1, long c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint fdiv(float c1, float c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint ddiv(double c1, double c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
     public Taint irem(int c1, int c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint lrem(long c1, long c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint frem(float c1, float c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint drem(double c1, double c2, Taint a1, Taint a2) {
         return ColorUtil.joinColors(a1, a2, ifTaint);
     }
 
@@ -282,7 +342,42 @@ public class TaintAnalysis implements Analysis<Taint> {
     }
 
     @Override
+    public Taint lshl(int c1, long c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint lshr(int c1, long c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint lushr(int c1, long c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint iinc(int incr, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
     public Taint ineg(int c1, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint lneg(long c1, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint fneg(float c1, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint dneg(double c1, Taint a1) {
         return ColorUtil.joinColors(a1, ifTaint);
     }
 
@@ -295,6 +390,72 @@ public class TaintAnalysis implements Analysis<Taint> {
     public Taint i2f(float c1, Taint a1) {
         return ColorUtil.joinColors(a1, ifTaint);
     }
+
+    @Override
+    public Taint i2b(byte c1, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint i2c(char c1, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint i2d(double c1, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint i2s(short c1, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint l2d(double c1, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint l2f(float c1, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint l2i(int c1, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint f2d(double c1, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint f2i(int c1, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint f2l(long c1, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint d2f(float c1, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint d2i(int c1, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint d2l(long c1, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
 
     @Override
     public Taint iand(int c1, int c2, Taint a1, Taint a2) {
@@ -312,7 +473,42 @@ public class TaintAnalysis implements Analysis<Taint> {
     }
 
     @Override
+    public Taint land(long c1, long c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint lor(long c1, long c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint lxor(long c1, long c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
     public Taint lcmp(long c1, long c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint fcmpg(float c1, float c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint fcmpl(float c1, float c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint dcmpg(double c1, double c2, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint dcmpl(double c1, double c2, Taint a1, Taint a2) {
         return ColorUtil.joinColors(a1, a2, ifTaint);
     }
 
@@ -327,6 +523,28 @@ public class TaintAnalysis implements Analysis<Taint> {
     public void takeBranchPrimitive2(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, int c1, int c2, Taint a1, Taint a2) {
         if (type == INFORMATION || (type == CONTROL && (a1 != null || a2 != null))) {
             informationFlowAddScope(frame, bcn, bci, takeBranch ? 0 : 1, a1, a2);
+        }
+    }
+
+    @Override
+    public void lookupSwitch(VirtualFrame frame, BytecodeNode bcn, int bci, int[] vals, int key, Taint a1) {
+        if (type == INFORMATION || (type == CONTROL && a1 != null)) {
+            int idx = vals.length;
+            for (int i = 0; i < vals.length; i++) {
+                if (vals[i] == key) {
+                    idx = i;
+                    break;
+                }
+            }
+            informationFlowAddScope(frame, bcn, bci, idx, a1, null);
+        }
+    }
+
+    @Override
+    public void tableSwitch(VirtualFrame frame, BytecodeNode bcn, int bci, int low, int high, int concIndex, Taint a1) {
+        if (type == INFORMATION || (type == CONTROL && a1 != null)) {
+            int bId = (low <= concIndex && concIndex <= high) ? concIndex - low :  high - low + 1;
+            informationFlowAddScope(frame, bcn, bci,bId, a1, null);
         }
     }
 
