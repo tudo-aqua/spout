@@ -1220,9 +1220,9 @@ public class SPouT {
             self.setAnnotations(null);
             throw meta.throwExceptionWithMessage(meta.java_lang_StringIndexOutOfBoundsException, "Index must be less than string length");
         }
-        AnnotatedValue av = new AnnotatedValue((int) cString.charAt(index), Annotations.emptyArray());
-        if (analyze) analysis.charAt(cString, index,getStringAnnotations(self), sIndex);
-        return av;
+
+        if (analyze) return new AnnotatedValue((int) cString.charAt(index), analysis.charAt(cString, index, getStringAnnotations(self), sIndex));
+        else return (int) cString.charAt(index);
     }
 
     @CompilerDirectives.TruffleBoundary
