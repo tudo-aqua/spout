@@ -1749,6 +1749,9 @@ public class SPouT {
         if (analyze && config.hasConcolicAnalysis()) {
             config.getConcolicAnalysis().makeConcatWithConstants((StaticObject) result, args, meta);
         }
+        if(analyze && config.hasTaintAnalysis()) {
+            config.getTaintAnalysis().makeConcatWithConstants((StaticObject) result, args);
+        }
     }
 
     public static void pauseAnalyze() {

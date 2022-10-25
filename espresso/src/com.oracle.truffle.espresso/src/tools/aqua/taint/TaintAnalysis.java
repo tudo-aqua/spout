@@ -28,12 +28,18 @@ import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.impl.ObjectKlass;
+import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.concolic.ConcolicAnalysis;
+import tools.aqua.smt.ComplexExpression;
+import tools.aqua.smt.Constant;
+import tools.aqua.smt.Expression;
 import tools.aqua.spout.*;
 
 import java.util.TreeMap;
 
+import static tools.aqua.smt.OperatorComparator.SCONCAT;
 import static tools.aqua.spout.Config.TaintType.*;
 
 public class TaintAnalysis implements Analysis<Taint> {
@@ -414,5 +420,67 @@ public class TaintAnalysis implements Analysis<Taint> {
     @Override
     public Taint charAt(String self, int index, Taint a1, Taint a2) {
         return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    private TaintAnalysis.ConvRes convertArgToExpression(Object arg) {
+        if (arg instanceof StaticObject) {
+            StaticObject so = (StaticObject) arg;
+            Annotations[] a = so.getAnnotations();
+            return a != null && a[a.length - 1] != null && a[a.length - 1].getAnnotations()[config.getTaintIdx()] != null ?
+                    new TaintAnalysis.ConvRes((Taint) a[a.length - 1].getAnnotations()[config.getTaintIdx()], true) :
+                    new TaintAnalysis.ConvRes(ifTaint, false);
+        } else if (arg instanceof AnnotatedValue) {
+            Object[] a = ((AnnotatedValue) arg).getAnnotations();
+            return a != null && a[config.getTaintIdx()] != null ?
+                    new TaintAnalysis.ConvRes((Taint) a[config.getTaintIdx()], true) :
+                    //FIXME: replaced the fromatted call here. Not sure if this works in general
+                    new TaintAnalysis.ConvRes(ifTaint, false);
+        } else {
+            return new TaintAnalysis.ConvRes(ifTaint, false);
+        }
+    }
+
+    public void makeConcatWithConstants(StaticObject result, Object[] args) {
+        TaintAnalysis.ConvRes cr = convertArgToExpression(args[0]);
+        Taint taint = cr.taint;
+        boolean anySymbolic = cr.fromSymbolic;
+        int i = 1;
+        while (args[i] != null) {
+            cr = convertArgToExpression(args[i]);
+            anySymbolic = anySymbolic ? true : cr.fromSymbolic;
+            Taint expr2 = cr.taint;
+            taint = ColorUtil.joinColors(taint, expr2);
+            ++i;
+        }
+        taint = ColorUtil.joinColors(taint, ifTaint);
+        if (anySymbolic) {
+            annotateStringWithTaint(result, taint);
+        }
+    }
+
+    private final class ConvRes {
+        public Taint taint;
+        public boolean fromSymbolic;
+
+        ConvRes(Taint e, boolean b) {
+            taint = e;
+            fromSymbolic = b;
+        }
+    }
+
+    private StaticObject annotateStringWithTaint(StaticObject self, Taint value) {
+        Annotations[] stringAnnotation = self.getAnnotations();
+        if (stringAnnotation == null) {
+            SPouT.initStringAnnotations(self);
+            stringAnnotation = self.getAnnotations();
+        }
+        if(stringAnnotation[stringAnnotation.length - 1] == null){
+            stringAnnotation[stringAnnotation.length - 1] = Annotations.emptyArray();
+        }
+        stringAnnotation[stringAnnotation.length - 1].set(config.getTaintIdx(),
+                value);
+        self.setAnnotations(stringAnnotation);
+        return self;
     }
 }
