@@ -52,8 +52,13 @@ public class MetaAnalysis implements Analysis<Annotations> {
         <T> T execute(Analysis<T> analysis, boolean b1, T s1, T s2);
     }
 
+
     interface BinaryStringOperation {
         <T> T execute(Analysis<T> analysis, String self, String other, T s1, T s2);
+    }
+
+    interface TwoStringsOneIntOperation{
+        <T> T execute(Analysis<T> analysis, String c1, String c2, int c3, T s1, T s2, T s3);
     }
 
     interface BinaryStringIntOperation {
@@ -106,6 +111,10 @@ public class MetaAnalysis implements Analysis<Annotations> {
 
     interface UnaryDoubleOperation {
         <T> T execute(Analysis<T> analysis, double c1, T s1);
+    }
+
+    interface UnaryStringOperation {
+        <T> T execute(Analysis<T> analysis, String c1, T s1);
     }
 
     private Annotations execute(int c1, int c2, Annotations a1, Annotations a2, BinaryOperation executor) {
@@ -351,6 +360,64 @@ public class MetaAnalysis implements Analysis<Annotations> {
                     Annotations.annotation(a1, i),
                     Annotations.annotation(a2, i),
                     Annotations.annotation(a3, i));
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? new Annotations(annotations) : null;
+    }
+
+    private Annotations sexecute(String self, Annotations a1, UnaryStringOperation executor) {
+        if (a1 == null) return null;
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[analyses.length];
+        for (Analysis<?> analysis : analyses) {
+            Object result = executor.execute(analysis, self, Annotations.annotation(a1, i));
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? new Annotations(annotations) : null;
+    }
+
+    private Annotations sexecute(String self, String other, int index, Annotations a1, Annotations a2, Annotations a3, TwoStringsOneIntOperation executor){
+        if (a1 == null && a2 == null && a3 == null) return null;
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[analyses.length];
+        for (Analysis<?> analysis : analyses) {
+            Object result = executor.execute(
+                    analysis,
+                    self,
+                    other,
+                    index,
+                    Annotations.annotation(a1, i),
+                    Annotations.annotation(a2, i),
+                    Annotations.annotation(a3, i));
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? new Annotations(annotations) : null;
+    }
+
+    private Annotations sexecute(char c1, Annotations a1, UnaryCharOperation executor){
+        if (a1 == null) return null;
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[analyses.length];
+        for (Analysis<?> analysis : analyses) {
+            Object result = executor.execute(
+                    analysis,
+                    c1,
+                    Annotations.annotation(a1, i));
             if (result != null) {
                 annotations[i] = result;
                 hasResult = true;
@@ -733,5 +800,55 @@ public class MetaAnalysis implements Analysis<Annotations> {
     @Override
     public Annotations substring(boolean success, String self, int start, int end, Annotations a1, Annotations a2, Annotations a3) {
         return sexecute(success, self, start, end, a1, a2, a3, Analysis::substring);
+    }
+
+    @Override
+    public Annotations stringToLowerCase(String self, Annotations a1) {
+        return sexecute(self, a1, Analysis::stringToLowerCase);
+    }
+
+    @Override
+    public Annotations stringToUpperCase(String self, Annotations a1) {
+        return sexecute(self, a1, Analysis::stringToUpperCase);
+    }
+
+    @Override
+    public Annotations stringBuilderAppend(String self, String other, Annotations a1, Annotations a2) {
+        return sexecute(self, other, a1, a2, Analysis::stringBuilderAppend);
+    }
+
+    @Override
+    public Annotations stringBuxxLength(String self, Annotations a1) {
+        return sexecute(self, a1, Analysis::stringBuxxLength);
+    }
+
+    @Override
+    public Annotations stringBuxxToString(String self, Annotations a1) {
+        return sexecute(self, a1, Analysis::stringBuxxToString);
+    }
+
+    @Override
+    public Annotations stringBuxxInsert(String self, String other, int i, Annotations a1, Annotations a2, Annotations a3) {
+        return sexecute(self, other, i, a1, a2, a3, Analysis::stringBuxxInsert);
+    }
+
+    @Override
+    public Annotations stringBuxxCharAt(String self, String val, int index, Annotations a1, Annotations a2, Annotations a3) {
+        return sexecute(self, val , index, a1, a2, a3, Analysis::stringBuxxCharAt);
+    }
+
+    @Override
+    public Annotations characterToLowerCase(char self, Annotations a1) {
+        return sexecute(self, a1, Analysis::characterToLowerCase);
+    }
+
+    @Override
+    public Annotations characterToUpperCase(char self, Annotations a1) {
+        return sexecute(self, a1, Analysis::characterToUpperCase);
+    }
+
+    @Override
+    public Annotations isCharDefined(char self, Annotations a1) {
+        return sexecute(self, a1, Analysis::isCharDefined);
     }
 }

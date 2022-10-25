@@ -305,4 +305,18 @@ public interface Analysis<T> {
     default T charAt(String self, int index, T a1, T a2){return null;}
 
     default T substring(boolean success, String self, int start, int end, T a1, T a2, T a3){return null;}
+
+    default T stringToLowerCase(String self, T a1){return null;}
+    default T stringToUpperCase(String self, T a1){return null;}
+    default T characterToLowerCase(char self, T a1){return null;}
+    default T characterToUpperCase(char self, T a1){return null;}
+
+    default T stringBuilderAppend(String self, String other, T a1, T a2){return null;}
+    default T stringBuxxLength(String self, T a1){return null;}
+    default  T stringBuxxToString(String self, T a1){return null;}
+
+    default T stringBuxxInsert(String self, String other, int i, T a1, T a2, T a3){return null;}
+
+    default T stringBuxxCharAt(String self,  String val,int index, T a1, T a2, T a3){return null;}
+    default T isCharDefined(char self, T a1){return null;}
 }

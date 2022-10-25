@@ -355,4 +355,64 @@ public class TaintAnalysis implements Analysis<Taint> {
     public Taint substring(boolean success, String self, int start, int end, Taint a1, Taint a2, Taint a3) {
         return ColorUtil.joinColors(a1, a2, a3, ifTaint);
     }
+
+    @Override
+    public Taint stringToLowerCase(String self, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint stringToUpperCase(String self, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint stringBuilderAppend(String self, String other, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2);
+    }
+
+    @Override
+    public Taint stringBuxxLength(String self, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint stringBuxxToString(String self, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint stringBuxxInsert(String self, String other, int i, Taint a1, Taint a2, Taint a3) {
+        return ColorUtil.joinColors(a1, a2, a3, ifTaint);
+    }
+
+    @Override
+    public Taint stringBuxxCharAt(String self, String val, int index, Taint a1, Taint a2, Taint a3) {
+        return ColorUtil.joinColors(a1, a2, a3, ifTaint);
+    }
+
+    @Override
+    public Taint characterToLowerCase(char self, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint characterToUpperCase(char self, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint isCharDefined(char self, Taint a1) {
+        return ColorUtil.joinColors(a1, ifTaint);
+    }
+
+    @Override
+    public Taint charAtPCCheck(String self, int index, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
+    public Taint charAt(String self, int index, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
 }

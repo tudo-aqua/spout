@@ -53,6 +53,7 @@ import java.util.List;
 
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.*;
 import static com.oracle.truffle.espresso.nodes.BytecodeNode.*;
+import static com.oracle.truffle.espresso.runtime.dispatch.EspressoInterop.getMeta;
 import static tools.aqua.smt.Constant.INT_ZERO;
 import static tools.aqua.smt.Constant.LONG_ZERO;
 
@@ -119,6 +120,15 @@ public class SPouT {
         trace.addElement(new ExceptionalEvent(message));
         stopAnalysis();
         throw meta.throwException(meta.java_lang_RuntimeException);
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static void stopRecordingWithoutMeta(String s) {
+        log(s);
+        trace.addElement(new ExceptionalEvent(s));
+        stopAnalysis();
+        Meta m = getMeta();
+        throw m.throwExceptionWithMessage(m.java_lang_RuntimeException, s);
     }
 
 
@@ -1304,9 +1314,8 @@ public class SPouT {
     public static StaticObject stringToUpperCase(StaticObject self, Meta meta) {
         String host = meta.toHostString(self);
         StaticObject result = meta.toGuestString(host.toUpperCase());
-        if (analyze && config.hasConcolicAnalysis() && self.hasAnnotations()) {
-            initStringAnnotations(result);
-            result = config.getConcolicAnalysis().stringToUpper(result, self, meta);
+        if (analyze) {
+            setStringAnnotations(result, analysis.stringToUpperCase(host, getStringAnnotations(self)));
         }
         return result;
     }
@@ -1315,9 +1324,8 @@ public class SPouT {
     public static StaticObject stringToLowerCase(StaticObject self, Meta meta) {
         String host = meta.toHostString(self);
         StaticObject result = meta.toGuestString(host.toLowerCase());
-        if (analyze && config.hasConcolicAnalysis() && self.hasAnnotations()) {
-            initStringAnnotations(result);
-            result = config.getConcolicAnalysis().stringToLower(result, self, meta);
+        if (analyze) {
+            setStringAnnotations(result, analysis.stringToLowerCase(host, getStringAnnotations(self)));
         }
         return result;
     }
@@ -1369,10 +1377,18 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static StaticObject stringBuXXAppendString(StaticObject self, StaticObject string, Meta meta) {
-        if (analyze && config.hasConcolicAnalysis()) {
-            self = config.getConcolicAnalysis().stringBuilderAppend(self, string, meta);
-        }
         Annotations[] selfAnnotations = self.getAnnotations();
+        if (analyze) {
+            Annotations a = analysis.stringBuilderAppend(meta.toHostString(self),
+                    meta.toHostString(string),
+                    getStringAnnotations(self),
+                    getStringAnnotations(string));
+            if(selfAnnotations == null){
+                initStringAnnotations(self);
+                selfAnnotations = self.getAnnotations();
+            }
+            selfAnnotations[selfAnnotations.length - 1] = a;
+        }
         Annotations[] stringAnnotations = string.getAnnotations();
         self.setAnnotations(null);
         string.setAnnotations(null);
@@ -1386,15 +1402,14 @@ public class SPouT {
     @CompilerDirectives.TruffleBoundary
     public static Object stringBuxxLength(StaticObject self, Meta meta) {
         Method m = self.getKlass().getSuperKlass().lookupMethod(meta.getNames().getOrCreate("length"), Symbol.Signature._int);
-        Object[] o = self.getAnnotations();
         Annotations [] a = self.getAnnotations();
         self.setAnnotations(null);
         Object invokeResult = m.invokeDirect(self);
         self.setAnnotations(a);
         int cresult = (int) invokeResult;
-        if (analyze && self.hasAnnotations() && config.hasConcolicAnalysis()) {
-            AnnotatedValue av = new AnnotatedValue(cresult, Annotations.emptyArray());
-            return config.getConcolicAnalysis().stringBufferLength(av, self, meta);
+        if (analyze) {
+            Annotations ana = analysis.stringBuxxLength(meta.toHostString(self), getStringAnnotations(self));
+            if(a != null) return new AnnotatedValue(cresult, ana);
         }
         return cresult;
     }
@@ -1407,12 +1422,7 @@ public class SPouT {
         Method isLatin = abstractSB.lookupMethod(meta.getNames().getOrCreate("isLatin1"), Signature._boolean);
         StaticObject bytes = (StaticObject) getValue.invokeDirect(self);
         Object xlength = length.invokeDirect(self);
-        int ilength;
-        if (xlength instanceof AnnotatedValue) {
-            ilength = ((AnnotatedValue) xlength).getValue();
-        } else {
-            ilength = (int) xlength;
-        }
+        int ilength = AnnotatedValue.value(xlength);
         StaticObject result =
                 // FIXME: Not sure if annotations should be able to reach here?
                 (boolean) AnnotatedValue.value(isLatin.invokeDirect(self))
@@ -1421,7 +1431,8 @@ public class SPouT {
                         :
                         (StaticObject) meta.java_lang_StringUTF16_newString.invokeDirect(self, bytes, 0, ilength);
         if (analyze && config.hasConcolicAnalysis()) {
-            result = config.getConcolicAnalysis().stringBuilderToString(result, self, meta);
+            setStringAnnotations(result,
+                    analysis.stringBuxxToString(meta.toHostString(result), getStringAnnotations(self)));
         }
         return result;
     }
@@ -1438,16 +1449,25 @@ public class SPouT {
     public static void initStringBuxxString(StaticObject self, StaticObject other, Meta meta) {
         Method m = self.getKlass().getSuperKlass().lookupMethod(Symbol.Name._init_, Signature._void_String);
         Annotations[] selfAnnotations = self.getAnnotations();
+        if(analyze){
+            Annotations a = analysis.stringBuilderAppend(meta.toHostString(self),
+                    meta.toHostString(other),
+                    getStringAnnotations(self),
+                    getStringAnnotations(other));
+            if(selfAnnotations == null){
+                initStringAnnotations(self);
+                selfAnnotations = self.getAnnotations();
+            }
+            selfAnnotations[selfAnnotations.length - 1] = a;
+        }
         Annotations[] stringAnnotations = other.getAnnotations();
         self.setAnnotations(null);
         other.setAnnotations(null);
         m.invokeDirect(self, other);
         self.setAnnotations(selfAnnotations);
         other.setAnnotations(stringAnnotations);
-        if(analyze && config.hasConcolicAnalysis()){
-            config.getConcolicAnalysis().stringBuilderAppend(self, other, meta);
-        }
     }
+
 
     @CompilerDirectives.TruffleBoundary
     public static StaticObject stringBuxxInsert(StaticObject self, Object offset, StaticObject toInsert, Meta meta) {
@@ -1455,8 +1475,14 @@ public class SPouT {
             SPouT.stopRecording("Cannot handle symbolic offset values for insert into StringBu* yet.", meta);
         }
         int concreteOffset = (int) offset;
-        if (analyze && config.hasConcolicAnalysis()) {
-            config.getConcolicAnalysis().stringBuilderInsert(self, concreteOffset, toInsert, meta);
+        if (analyze) {
+            Annotations a = analysis.stringBuxxInsert(meta.toHostString(self),
+                    meta.toHostString(toInsert),
+                    concreteOffset,
+                    getStringAnnotations(self),
+                    getStringAnnotations(toInsert),
+                    null);
+            setStringAnnotations(self, a);
         }
         Method m = self.getKlass().getSuperKlass().lookupMethod(meta.getNames().getOrCreate("insert"), Signature.AbstractStringBuilder_int_String);
         return (StaticObject) m.invokeDirect(self, concreteOffset, toInsert);
@@ -1464,10 +1490,10 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static void stringBuxxGetChars(StaticObject self, Object srcBegin, Object srcEnd, StaticObject dst, Object dstBegin, Meta meta) {
-        if (srcBegin instanceof AnnotatedValue
-                || srcEnd instanceof AnnotatedValue
+        if (analyze && config.hasConcolicAnalysis() && AnnotatedValue.annotation(AnnotatedValue.svalue(srcBegin), config.getConcolicIdx()) != null
+                || AnnotatedValue.annotation(AnnotatedValue.svalue(srcEnd), config.getConcolicIdx()) != null
                 || config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(dst)
-                || dstBegin instanceof AnnotatedValue
+                || AnnotatedValue.annotation(AnnotatedValue.svalue(dstBegin), config.getConcolicIdx()) != null
                 || config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(self)) {
             SPouT.stopRecording("symbolic getChars is not supported", meta);
         }
@@ -1476,69 +1502,54 @@ public class SPouT {
     }
 
     public static void setBuxxCharAt(StaticObject self, Object i, Object ch, Meta meta) {
-        if(i instanceof AnnotatedValue ||
-        ch instanceof AnnotatedValue){
+        if(analyze && config.hasConcolicAnalysis() && (AnnotatedValue.annotation(AnnotatedValue.svalue(i), config.getConcolicIdx()) != null ||
+                AnnotatedValue.annotation(AnnotatedValue.svalue(ch), config.getConcolicIdx()) != null)){
             stopRecording("Symbolic index and symbolic chars are not supported", meta);
         }
         int index = (int) i;
         char cha = (char) ch;
         String val = String.valueOf(cha);
         Method m = self.getKlass().getSuperKlass().lookupMethod(meta.getNames().getOrCreate("setCharAt"), Signature._void_int_char);
-        if (analyze && config.hasConcolicAnalysis() && index >= 0) {
-            config.getConcolicAnalysis().stringBuilderCharAt(self, index, val, meta);
-        }
         Annotations[] a = self.getAnnotations();
         self.setAnnotations(null);
         m.invokeDirect(self, i, ch);
         self.setAnnotations(a);
+        if (analyze){
+            setStringAnnotations(self,
+                    analysis.stringBuxxCharAt(meta.toHostString(self), val, index, getStringAnnotations(self), null, null));
+        }
     }
 
-    public static Object characterToUpperCase(Object c, Meta meta) {
-        char cChar;
-        Annotations sChar = null;
-        if(c instanceof AnnotatedValue){
-            cChar = ((AnnotatedValue) c).getValue();
-            sChar = (AnnotatedValue) c;
-        }else{
-            cChar = (char) c;
-        }
 
+    public static Object characterToUpperCase(Object c, Meta meta) {
+        char cChar = AnnotatedValue.value(c);
+        Annotations sChar = AnnotatedValue.svalue(c);
         char cRes = Character.toUpperCase(cChar);
-        if(analyze && config.hasConcolicAnalysis()){
-            return config.getConcolicAnalysis().characterToUpperCase(cRes, sChar);
+        if(analyze){
+            Annotations a = analysis.characterToUpperCase(cChar, sChar);
+            if (a != null) return new AnnotatedValue(cRes, a);
         }
         return cRes;
     }
 
     public static Object characterToLowerCase(Object c, Meta meta) {
-        char cChar;
-        Annotations sChar = null;
-        if(c instanceof AnnotatedValue){
-            cChar = ((AnnotatedValue) c).getValue();
-            sChar = (AnnotatedValue) c;
-        }else{
-            cChar = (char) c;
-        }
-
-        char cRes = Character.toLowerCase(cChar);
-        if(analyze && config.hasConcolicAnalysis()){
-            return config.getConcolicAnalysis().characterToLowerCase(cRes, sChar);
+        char cChar = AnnotatedValue.value(c);
+        Annotations sChar = AnnotatedValue.svalue(c);
+        char cRes = Character.toUpperCase(cChar);
+        if(analyze){
+            Annotations a = analysis.characterToLowerCase(cChar, sChar);
+            if (a != null) return new AnnotatedValue(cRes, a);
         }
         return cRes;
     }
 
     public static Object isCharDefined(Object c, Meta meta) {
-        char cChar;
-        Annotations sChar = null;
-        if(c instanceof AnnotatedValue){
-            cChar = ((AnnotatedValue) c).getValue();
-            sChar = (AnnotatedValue) c;
-        }else{
-            cChar = (char) c;
-        }
-        Object res  = Character.isDefined(cChar);
-        if(analyze && config.hasConcolicAnalysis()){
-            res = config.getConcolicAnalysis().characterIsDefined((boolean) res, cChar, sChar, meta);
+        char cChar = AnnotatedValue.value(c);
+        Annotations sChar = AnnotatedValue.svalue(c);
+        boolean res  = Character.isDefined(cChar);
+        if(analyze){
+            Annotations a = analysis.isCharDefined(cChar, sChar);
+            if(a != null) return new AnnotatedValue(res, a);
         }
         return res;
     }
@@ -1713,13 +1724,15 @@ public class SPouT {
     }
 
     private static StaticObject setStringAnnotations(StaticObject self, Annotations a) {
-        Annotations[] stringAnnotation = self.getAnnotations();
-        if (stringAnnotation == null) {
-            SPouT.initStringAnnotations(self);
-            stringAnnotation = self.getAnnotations();
+        if(a != null) {
+            Annotations[] stringAnnotation = self.getAnnotations();
+            if (stringAnnotation == null) {
+                SPouT.initStringAnnotations(self);
+                stringAnnotation = self.getAnnotations();
+            }
+            stringAnnotation[stringAnnotation.length - 1] = a;
+            self.setAnnotations(stringAnnotation);
         }
-        stringAnnotation[stringAnnotation.length - 1] = a;
-        self.setAnnotations(stringAnnotation);
         return self;
     }
 

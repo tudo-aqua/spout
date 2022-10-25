@@ -825,15 +825,15 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression stringContains(String self, String other, Expression a1, Expression a2) {
-        if(a1 == null) a1 = Constant.fromConcreteValue(self);
-        if(a2 == null) a2 = Constant.fromConcreteValue(other);
+        if (a1 == null) a1 = Constant.fromConcreteValue(self);
+        if (a2 == null) a2 = Constant.fromConcreteValue(other);
         return new ComplexExpression(SCONTAINS, a1, a2);
     }
 
     @Override
     public Expression stringCompareTo(String self, String other, Expression a1, Expression a2) {
-        if(a1 == null) a1 = Constant.fromConcreteValue(self);
-        if(a2 == null) a2 = Constant.fromConcreteValue(other);
+        if (a1 == null) a1 = Constant.fromConcreteValue(self);
+        if (a2 == null) a2 = Constant.fromConcreteValue(other);
         int res = self.compareTo(other);
         PathCondition pc;
         Expression expr;
@@ -853,8 +853,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression stringEquals(String self, String other, Expression a1, Expression a2) {
-        if(a1 == null) a1 = Constant.fromConcreteValue(self);
-        if(a2 == null) a2 = Constant.fromConcreteValue(other);
+        if (a1 == null) a1 = Constant.fromConcreteValue(self);
+        if (a2 == null) a2 = Constant.fromConcreteValue(other);
         return new ComplexExpression(STRINGEQ, a1, a2);
     }
 
@@ -865,7 +865,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         if (sIndex == null) {
             sIndex = Constant.fromConcreteValue(cIndex);
         }
-        Expression symbolicString = sString != null ? sString: Constant.fromConcreteValue(concreteString);
+        Expression symbolicString = sString != null ? sString : Constant.fromConcreteValue(concreteString);
         Expression intIndexExpr = new ComplexExpression(BV2NAT, sIndex);
         Expression symbolicStrLen = new ComplexExpression(SLENGTH, symbolicString);
         Expression bvSymbolicStrLen = new ComplexExpression(NAT2BV32, symbolicStrLen);
@@ -895,7 +895,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     @Override
     public Expression charAt(String self, int index, Expression a1, Expression a2) {
         if (a1 == null) a1 = Constant.fromConcreteValue(self);
-        if(a2 == null) a2 = Constant.fromConcreteValue(index);
+        if (a2 == null) a2 = Constant.fromConcreteValue(index);
         return new ComplexExpression(SAT, a1, new ComplexExpression(BV2NAT, a2));
     }
 
@@ -906,19 +906,19 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression stringConcat(String self, String other, Expression a1, Expression a2) {
-        if(a1 == null) a1 = Constant.fromConcreteValue(self);
-        if(a2 == null) a2 = Constant.fromConcreteValue(other);
+        if (a1 == null) a1 = Constant.fromConcreteValue(self);
+        if (a2 == null) a2 = Constant.fromConcreteValue(other);
         return new ComplexExpression(SCONCAT, a1, a2);
     }
 
-    public StaticObject stringToUpper(StaticObject result, StaticObject self, Meta meta) {
-        Expression value = makeStringToExpr(self, meta);
-        return annotateStringWithExpression(result, new ComplexExpression(STOUPPER, value));
+    @Override
+    public Expression stringToLowerCase(String self, Expression a1) {
+        return a1 == null ? null : new ComplexExpression(STOLOWER, a1);
     }
 
-    public StaticObject stringToLower(StaticObject result, StaticObject self, Meta meta) {
-        Expression value = makeStringToExpr(self, meta);
-        return annotateStringWithExpression(result, new ComplexExpression(STOLOWER, value));
+    @Override
+    public Expression stringToUpperCase(String self, Expression a1) {
+        return a1 == null ? null : new ComplexExpression(STOUPPER, a1);
     }
 
 
@@ -928,9 +928,9 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         if (a2 == null) a2 = Constant.createNatConstant(start);
         else a2 = new ComplexExpression(BV2NAT, a2);
         if (a3 == null) a3 = Constant.createNatConstant(end);
-        else if (!((ComplexExpression)a3).getOperator().equals(SLENGTH) &&
-                !((ComplexExpression)a3).getOperator().equals(NATMINUS)
-                && !((ComplexExpression)a3).getOperator().equals(NATADD)) a3 = new ComplexExpression(BV2NAT, a3);
+        else if (!((ComplexExpression) a3).getOperator().equals(SLENGTH) &&
+                !((ComplexExpression) a3).getOperator().equals(NATMINUS)
+                && !((ComplexExpression) a3).getOperator().equals(NATADD)) a3 = new ComplexExpression(BV2NAT, a3);
 
         Expression maxLength = new ComplexExpression(NATMINUS, a3, a2);
         Expression indexWithinBound = new ComplexExpression(BAND,
@@ -947,42 +947,11 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         }
     }
 
-    public StaticObject stringBuilderAppend(StaticObject self, StaticObject string, Meta meta) {
-        if (!(hasConcolicStringAnnotations(self) || hasConcolicStringAnnotations(string))) {
-            return self;
-        }
-        Expression sself = makeStringToExpr(self, meta);
-        Expression sother = makeStringToExpr(string, meta);
-        Expression resExpr = new ComplexExpression(SCONCAT, sself, sother);
-        if (!hasConcolicStringAnnotations(self)) {
-            SPouT.initStringAnnotations(self);
-            resExpr = sother;
-        }
-        self = annotateStringWithExpression(self, resExpr);
-        return self;
-    }
-
-    public void stringBuilderCharAt(StaticObject self, int index, String val, Meta meta) {
-        if(!hasConcolicStringAnnotations(self)){
-            return;
-        }
-        String cSelf = meta.toHostString(self);
-        Expression sself = makeStringToExpr(self, meta);
-        Expression symbolicIndex = Constant.createNatConstant(index);
-        Expression sval = Constant.fromConcreteValue(val);
-
-        // As index might not be symbolic, we cannot do somehting, if it is less than zero. Just check the other bound.
-        Expression stringBound = new ComplexExpression(GE, symbolicIndex, new ComplexExpression(SLENGTH, sself));
-        if(index >= cSelf.length()) {
-            trace.addElement(new PathCondition(stringBound, FAILURE, BINARY_SPLIT));
-            return;
-        }
-        trace.addElement(new PathCondition(new ComplexExpression(BNEG, stringBound), SUCCESS, BINARY_SPLIT));
-
-        Expression left = new ComplexExpression(SSUBSTR, sself, NAT_ZERO, symbolicIndex);
-        Expression right = new ComplexExpression(SSUBSTR, sself, new ComplexExpression(NATADD,symbolicIndex, NAT_ONE), new ComplexExpression(SLENGTH, sself));
-        Expression res = new ComplexExpression(SCONCAT, new ComplexExpression(SCONCAT, left, sval), right);
-        annotateStringWithExpression(self, res);
+    @Override
+    public Expression stringBuilderAppend(String self, String other, Expression a1, Expression a2) {
+        if (a2 == null) a2 = Constant.fromConcreteValue(other);
+        if (a1 == null) return a2;
+        return new ComplexExpression(SCONCAT, a1, a2);
     }
 
 
@@ -1032,121 +1001,127 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         }
     }
 
+    @Override
+    public Expression stringBuxxLength(String self, Expression a1) {
+        return new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, a1));
+    }
+
     public AnnotatedValue stringBufferLength(AnnotatedValue result, StaticObject self, Meta meta) {
         Expression sLength = makeStringLengthExpr(self, meta);
         result.set(config.getConcolicIdx(), sLength);
         return result;
     }
 
-    public StaticObject stringBuilderToString(StaticObject result, StaticObject self, Meta meta) {
-        if (hasConcolicStringAnnotations(self)) {
-            result = SPouT.initStringAnnotations(result);
-            annotateStringWithExpression(result, makeStringToExpr(self, meta));
-        }
-        return result;
+    @Override
+    public Expression stringBuxxToString(String self, Expression a1) {
+        return a1;
     }
 
-    public void stringBuilderInsert(
-            StaticObject self,
-            int offset,
-            StaticObject toInsert,
-            Meta meta) {
-        Expression symbolicOffset = Constant.createNatConstant(offset);
-        if (hasConcolicStringAnnotations(self) || hasConcolicStringAnnotations(toInsert)) {
-            Method m = self.getKlass().lookupMethod(meta.getNames().getOrCreate("toString"), Symbol.Signature.java_lang_String);
-            StaticObject stringValue = (StaticObject) m.invokeDirect(self);
-            String concreteSelf = meta.toHostString(stringValue);
+    @Override
+    public Expression stringBuxxInsert(String self, String other, int offset, Expression a1, Expression a2, Expression a3) {
+        if(a3 == null) a3 = Constant.createNatConstant(offset);
+        if (a1 == null) a1 = Constant.fromConcreteValue(self);
+        if (a2 == null) a2 = Constant.fromConcreteValue(other);
 
-            Expression symbolicSelf = makeStringToExpr(self, meta);
-            Expression symbolicToInsert = makeStringToExpr(toInsert, meta);
+        Expression symbolicSelfLength = new ComplexExpression(SLENGTH, a1);
+        Expression symbolicToInsertLength = new ComplexExpression(SLENGTH, a2);
 
-            Expression symbolicSelfLength = new ComplexExpression(SLENGTH, makeStringToExpr(self, meta));
-            Expression symbolicToInsertLength = new ComplexExpression(SLENGTH, makeStringToExpr(toInsert, meta));
-
-            boolean validOffset = 0 <= offset && offset <= concreteSelf.length();
-            if (!validOffset) {
-                Expression lengthCheck =
+        boolean validOffset = 0 <= offset && offset <= self.length();
+        if (!validOffset) {
+            Expression lengthCheck =
+                    new ComplexExpression(
+                            BNEG,
+                            new ComplexExpression(
+                                    BAND,
+                                    new ComplexExpression(LE, NAT_ZERO, a3),
+                                    new ComplexExpression(LE, a3, symbolicSelfLength)));
+            PathCondition pc = new PathCondition(lengthCheck, 1, 2);
+            trace.addElement(pc);
+            return null;
+        } else {
+            Expression lengthCheck =
+                    new ComplexExpression(
+                            BAND,
+                            new ComplexExpression(LE, NAT_ZERO, a3),
+                            new ComplexExpression(LE, a3, symbolicSelfLength));
+            PathCondition pc = new PathCondition(lengthCheck, 0, 2);
+            trace.addElement(pc);
+        }
+        Expression resultingSymbolicValue;
+        if (self.isEmpty()) {
+            resultingSymbolicValue = a2;
+        } else {
+            if (offset != 0) {
+                Expression symbolicLeft =
+                        new ComplexExpression(SSUBSTR, a1, NAT_ZERO, a3);
+                Expression symbolicRight =
                         new ComplexExpression(
-                                BNEG,
-                                new ComplexExpression(
-                                        BAND,
-                                        new ComplexExpression(LE, NAT_ZERO, symbolicOffset),
-                                        new ComplexExpression(LE, symbolicOffset, symbolicSelfLength)));
-                PathCondition pc = new PathCondition(lengthCheck, 1, 2);
-                trace.addElement(pc);
-                return;
-            } else {
-                Expression lengthCheck =
+                                SSUBSTR,
+                                a1,
+                                new ComplexExpression(NATADD, a3, symbolicToInsertLength),
+                                symbolicSelfLength);
+                resultingSymbolicValue =
                         new ComplexExpression(
-                                BAND,
-                                new ComplexExpression(LE, NAT_ZERO, symbolicOffset),
-                                new ComplexExpression(LE, symbolicOffset, symbolicSelfLength));
-                PathCondition pc = new PathCondition(lengthCheck, 0, 2);
-                trace.addElement(pc);
-            }
-            Expression resultingSymbolicValue;
-            if (concreteSelf.isEmpty()) {
-                resultingSymbolicValue = symbolicToInsert;
+                                SCONCAT,
+                                symbolicLeft,
+                                new ComplexExpression(SCONCAT, a2, symbolicRight));
             } else {
-                if (offset != 0) {
-                    Expression symbolicLeft =
-                            new ComplexExpression(SSUBSTR, symbolicSelf, NAT_ZERO, symbolicOffset);
-                    Expression symbolicRight =
-                            new ComplexExpression(
-                                    SSUBSTR,
-                                    symbolicSelf,
-                                    new ComplexExpression(NATADD, symbolicOffset, symbolicToInsertLength),
-                                    symbolicSelfLength);
-                    resultingSymbolicValue =
-                            new ComplexExpression(
-                                    SCONCAT,
-                                    symbolicLeft,
-                                    new ComplexExpression(SCONCAT, symbolicToInsert, symbolicRight));
-                } else {
-                    resultingSymbolicValue =
-                            new ComplexExpression(
-                                    SCONCAT,
-                                    symbolicToInsert,
-                                    symbolicSelf);
-                }
+                resultingSymbolicValue =
+                        new ComplexExpression(
+                                SCONCAT,
+                                a2,
+                                a1);
             }
-            annotateStringWithExpression(self, resultingSymbolicValue);
         }
+        return resultingSymbolicValue;
     }
 
-    private Object makeChar(char cRes, Annotations sChar, OperatorComparator oc){
-        if(sChar != null && Annotations.annotation(sChar, config.getConcolicIdx()) != null){
-            Object[] annotations = sChar.getAnnotations();
-            Annotations newAnnotation = Annotations.create(annotations);
-            newAnnotation.set(config.getConcolicIdx(),
-                    new ComplexExpression(oc, (Expression) Annotations.annotation(sChar, config.getConcolicIdx())));
-            return new AnnotatedValue(cRes, newAnnotation);
+    @Override
+    public Expression stringBuxxCharAt(String self, String val, int index, Expression a1, Expression a2, Expression a3) {
+        if (a1 == null) {
+            return null;
         }
-        return cRes;
+        if(a3 == null) a3 = Constant.createNatConstant(index);
+        if(a2 == null) a2 = Constant.fromConcreteValue(val);
+
+        // As index might not be symbolic, we cannot do somehting, if it is less than zero. Just check the other bound.
+        Expression stringBound = new ComplexExpression(GE, a3, new ComplexExpression(SLENGTH, a1));
+        if (index >= self.length()) {
+            trace.addElement(new PathCondition(stringBound, FAILURE, BINARY_SPLIT));
+            return null;
+        }
+        trace.addElement(new PathCondition(new ComplexExpression(BNEG, stringBound), SUCCESS, BINARY_SPLIT));
+
+        Expression left = new ComplexExpression(SSUBSTR, a1, NAT_ZERO, a3);
+        Expression right = new ComplexExpression(SSUBSTR, a1, new ComplexExpression(NATADD, a3, NAT_ONE), new ComplexExpression(SLENGTH, a1));
+        return new ComplexExpression(SCONCAT, new ComplexExpression(SCONCAT, left, a2), right);
     }
 
-    public Object characterToUpperCase(char cRes, Annotations sChar) {
-        return makeChar(cRes, sChar, STOUPPER);
+    @Override
+    public Expression characterToLowerCase(char self, Expression a1) {
+        return new ComplexExpression(STOLOWER, a1);
     }
 
-    public Object characterToLowerCase(char cRes, Annotations sChar) {
-        return makeChar(cRes, sChar, STOLOWER);
+    @Override
+    public Expression characterToUpperCase(char self, Expression a1) {
+        return new ComplexExpression(STOUPPER, a1);
     }
 
-    public Object characterIsDefined(boolean res, char cChar,  Annotations sChar, Meta meta){
+    @Override
+    public Expression isCharDefined(char self, Expression a1) {
         int CODEPOINT_BOUND = 1000;
-        if (sChar != null) {
-            Expression cAsInt = new ComplexExpression(NAT2BV32, new ComplexExpression(STOCODE, Annotations.annotation(sChar, config.getConcolicIdx())));
+        if (a1 != null) {
+            Expression cAsInt = new ComplexExpression(NAT2BV32, new ComplexExpression(STOCODE, a1));
             Expression codepointLT5000 =
                     new ComplexExpression(BVLE, cAsInt, Constant.fromConcreteValue(CODEPOINT_BOUND));
-            if (cChar > CODEPOINT_BOUND) {
+            if (self > CODEPOINT_BOUND) {
                 PathCondition pc =
                         new PathCondition(
                                 new ComplexExpression(BVGT, cAsInt, Constant.fromConcreteValue(CODEPOINT_BOUND)),
                                 FAILURE,
                                 BINARY_SPLIT);
                 trace.addElement(pc);
-                SPouT.stopRecording("Analysis of defined code points over 1000 is not supported.", meta);
+                SPouT.stopRecordingWithoutMeta("Analysis of defined code points over 1000 is not supported.");
             }
             PathCondition pc = new PathCondition(codepointLT5000, SUCCESS, BINARY_SPLIT);
             trace.addElement(pc);
@@ -1160,14 +1135,12 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                                     new ComplexExpression(BVEQ, cAsInt, Constant.fromConcreteValue(i)));
                 }
             }
-            if (res) {
+            if (Character.isDefined(self)) {
                 undefined = new ComplexExpression(BNEG, undefined);
             }
-            Annotations newAnn = Annotations.create(sChar.getAnnotations());
-            newAnn.set(config.getConcolicIdx(), undefined);
-            return new AnnotatedValue(res, newAnn);
+            return undefined;
         }
-        return res;
+        return null;
     }
 
     public Object regionMatches(StaticObject self, StaticObject other, boolean ignore, int ctoffset, int cooffset, int clen, Meta meta) {
