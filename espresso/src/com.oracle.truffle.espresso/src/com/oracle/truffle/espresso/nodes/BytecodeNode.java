@@ -856,17 +856,32 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                         break;
 
                     case LCONST_0: // fall through
-                    case LCONST_1: putLong(frame, top, curOpcode - LCONST_0); break;
+                    case LCONST_1:
+                        putLong(frame, top, curOpcode - LCONST_0);
+                        SPouT.markWithIFTaint(frame, top + 1);
+                        break;
 
                     case FCONST_0: // fall through
                     case FCONST_1: // fall through
-                    case FCONST_2: putFloat(frame, top, curOpcode - FCONST_0); break;
+                    case FCONST_2:
+                        putFloat(frame, top, curOpcode - FCONST_0);
+                        SPouT.markWithIFTaint(frame, top);
+                        break;
 
                     case DCONST_0: // fall through
-                    case DCONST_1: putDouble(frame, top, curOpcode - DCONST_0); break;
+                    case DCONST_1:
+                        putDouble(frame, top, curOpcode - DCONST_0);
+                        SPouT.markWithIFTaint(frame, top + 1);
+                        break;
 
-                    case BIPUSH: putInt(frame, top, bs.readByte(curBCI)); break;
-                    case SIPUSH: putInt(frame, top, bs.readShort(curBCI)); break;
+                    case BIPUSH:
+                        putInt(frame, top, bs.readByte(curBCI));
+                        SPouT.markWithIFTaint(frame, top);
+                        break;
+                    case SIPUSH:
+                        putInt(frame, top, bs.readShort(curBCI));
+                        SPouT.markWithIFTaint(frame, top);
+                        break;
 
                     case LDC   : putPoolConstant(frame, top, bs.readCPI1(curBCI), curOpcode); break;
                     case LDC_W : // fall through
@@ -2065,18 +2080,23 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
         if (constant instanceof IntegerConstant) {
             assert opcode == LDC || opcode == LDC_W;
             putInt(frame, top, ((IntegerConstant) constant).value());
+            SPouT.markWithIFTaint(frame, top);
         } else if (constant instanceof LongConstant) {
             assert opcode == LDC2_W;
             putLong(frame, top, ((LongConstant) constant).value());
+            SPouT.markWithIFTaint(frame, top + 1);
         } else if (constant instanceof DoubleConstant) {
             assert opcode == LDC2_W;
             putDouble(frame, top, ((DoubleConstant) constant).value());
+            SPouT.markWithIFTaint(frame, top + 1);
         } else if (constant instanceof FloatConstant) {
             assert opcode == LDC || opcode == LDC_W;
             putFloat(frame, top, ((FloatConstant) constant).value());
+            SPouT.markWithIFTaint(frame, top);
         } else if (constant instanceof StringConstant) {
             assert opcode == LDC || opcode == LDC_W;
             StaticObject internedString = pool.resolvedStringAt(cpi);
+            //TODO: (annotate string and maybe clone?)
             putObject(frame, top, internedString);
         } else if (constant instanceof ClassConstant) {
             assert opcode == LDC || opcode == LDC_W;
