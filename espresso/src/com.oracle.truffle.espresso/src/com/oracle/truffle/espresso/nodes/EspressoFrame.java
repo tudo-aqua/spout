@@ -26,6 +26,7 @@ import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.frame.FrameSlotKind;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.meta.EspressoError;
+import tools.aqua.spout.AnnotatedVM;
 
 final class EspressoFrame {
 
@@ -59,6 +60,7 @@ final class EspressoFrame {
     public static void dup1(VirtualFrame frame, int top) {
         // value1 -> value1, value1
         frame.copy(top - 1, top);
+        AnnotatedVM.copy(frame, top - 1, top);
     }
 
     public static void dupx1(VirtualFrame frame, int top) {

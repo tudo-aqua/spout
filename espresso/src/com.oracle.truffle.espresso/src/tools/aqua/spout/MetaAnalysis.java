@@ -117,6 +117,14 @@ public class MetaAnalysis implements Analysis<Annotations> {
         <T> T execute(Analysis<T> analysis, String c1, T s1);
     }
 
+    interface UnaryObjectOperation {
+        <T> T execute(Analysis<T> analysis, StaticObject o1, T s1, boolean branch);
+    }
+
+    interface BinaryObjectOperation {
+        <T> T execute(Analysis<T> analysis, StaticObject o1, StaticObject o2, T s1, T s2);
+    }
+
     private Annotations execute(int c1, int c2, Annotations a1, Annotations a2, BinaryOperation executor) {
         int i = 0;
         boolean hasResult = false;
@@ -427,6 +435,36 @@ public class MetaAnalysis implements Analysis<Annotations> {
         return hasResult ? new Annotations(annotations) : null;
     }
 
+    private Annotations oexecute(StaticObject o, Annotations a, boolean branch, UnaryObjectOperation executor) {
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[analyses.length];
+        for (Analysis<?> analysis : analyses) {
+            Object result = executor.execute(analysis, o, Annotations.annotation(a, i), branch);
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? new Annotations(annotations) : null;
+    }
+
+    private Annotations oexecute(StaticObject c1, StaticObject c2, Annotations a1, Annotations a2, BinaryObjectOperation executor) {
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[analyses.length];
+        for (Analysis<?> analysis : analyses) {
+            Object result = executor.execute(analysis, c1, c2, Annotations.annotation(a1, i), Annotations.annotation(a2, i));
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? new Annotations(annotations) : null;
+    }
+
     @Override
     public Annotations iadd(int c1, int c2, Annotations a1, Annotations a2) {
         return execute(c1, c2, a1, a2, Analysis::iadd);
@@ -721,6 +759,15 @@ public class MetaAnalysis implements Analysis<Annotations> {
         return execute(c1, c2, a1, a2, Analysis::ixor);
     }
 
+    @Override
+    public Annotations instanceOf(StaticObject c, Annotations a, boolean isInstance) {
+        return oexecute(c, a, isInstance, Analysis::instanceOf);
+    }
+
+    @Override
+    public Annotations isNull(StaticObject c, Annotations a, boolean isInstance) {
+        return oexecute(c, a, isInstance, Analysis::isNull);
+    }
 
     @Override
     public void takeBranchPrimitive1(VirtualFrame frame, BytecodeNode bcn, int bci,

@@ -842,7 +842,13 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                 // @formatter:off
                 switch (curOpcode) {
                     case NOP: break;
-                    case ACONST_NULL: putObject(frame, top, StaticObject.NULL); break;
+                    case ACONST_NULL:
+                        // Since NULL is a singleton, we do not annotate it.
+                        // Assumption is that control-flow taint will affect branches
+                        // based on null checks directly.
+                        // TODO: validate assumption
+                        putObject(frame, top, StaticObject.NULL);
+                        break;
 
                     case ICONST_M1: // fall through
                     case ICONST_0: // fall through
@@ -1373,7 +1379,9 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
 
                     case NEW         :
                         Klass klass = resolveType(NEW, bs.readCPI2(curBCI));
-                        putObject(frame, top, newReferenceObject(klass)); break;
+                        StaticObject obj = newReferenceObject(klass);
+                        SPouT.markObjectWithIFTaint(obj);
+                        putObject(frame, top, obj); break;
                     case NEWARRAY    :
                         byte jvmPrimitiveType = bs.readByte(curBCI);
                         //int length = popInt(frame, top - 1);
@@ -1402,9 +1410,11 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                         if (StaticObject.isNull(receiver)) {
                             // Skip resolution.
                             putInt(frame, top - 1, /* false */ 0);
+                            SPouT.instanceOf(frame, receiver, false, top -1);
                         } else if (receiver.getKlass() == resolveType(INSTANCEOF, readOriginalCPI(curBCI))) {
                             // Quick-check, avoid spawning a node.
                             putInt(frame, top - 1, /* true */ 1);
+                            SPouT.instanceOf(frame, receiver, true, top -1);
                         } else {
                             CompilerDirectives.transferToInterpreterAndInvalidate();
                             putObject(frame, top - 1, receiver);

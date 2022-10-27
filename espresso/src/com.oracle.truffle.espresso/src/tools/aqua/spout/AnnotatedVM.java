@@ -152,4 +152,14 @@ public class AnnotatedVM {
         return args;
     }
 
+    // --------------------------------------------------------------------------
+    //
+    // stack operations
+
+    public static void copy(VirtualFrame frame, int from, int to) {
+        Annotations[] stack = getAnnotations(frame);
+        if (stack[from - VALUES_START] != null) {
+            stack[to - VALUES_START] = new Annotations(stack[from - VALUES_START]);
+        }
+    }
 }

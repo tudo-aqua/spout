@@ -31,6 +31,8 @@ import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.smt.Expression;
 
+import java.util.List;
+
 public interface Analysis<T> {
 
     //default void terminate();
@@ -272,6 +274,20 @@ public interface Analysis<T> {
     default T dcmpg(double c1, double c2, T a1, T a2) {
         return null;
     }
+
+    default void newArray(T[] arr) { }
+
+    default void newMultiArray(List<StaticObject> arr) { }
+
+    default T instanceOf(StaticObject c, T a, boolean isInstance) { return null; }
+
+    default T isNull(StaticObject c, T a, boolean isInstance) { return null; }
+
+    default void takeBranchRef1(VirtualFrame frame, BytecodeNode bcn, int bci,
+                                int opcode, boolean takeBranch, T a1) { }
+
+    default void takeBranchRef2(VirtualFrame frame, BytecodeNode bcn, int bci,
+                                int opcode, boolean takeBranch, StaticObject c1, StaticObject c2, T a1, T a2) { }
 
     default void takeBranchPrimitive1(VirtualFrame frame, BytecodeNode bcn, int bci,
                                       int opcode, boolean takeBranch, T a1) {

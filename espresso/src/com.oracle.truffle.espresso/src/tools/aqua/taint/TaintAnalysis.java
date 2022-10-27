@@ -519,6 +519,16 @@ public class TaintAnalysis implements Analysis<Taint> {
     }
 
     @Override
+    public Taint instanceOf(StaticObject c, Taint a, boolean isInstance) {
+        return ColorUtil.joinColors(a, ifTaint);
+    }
+
+    @Override
+    public Taint isNull(StaticObject c, Taint a, boolean isInstance) {
+        return ColorUtil.joinColors(a, ifTaint);
+    }
+
+    @Override
     public void takeBranchPrimitive1(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, Taint a) {
         if (type == INFORMATION || (type == CONTROL && a != null)) {
             informationFlowAddScope(frame, bcn, bci, takeBranch ? 0 : 1, a, null);

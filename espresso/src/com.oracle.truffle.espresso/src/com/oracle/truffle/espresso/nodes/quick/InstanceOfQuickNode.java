@@ -28,6 +28,7 @@ import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.nodes.bytecodes.InstanceOf;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.spout.SPouT;
 
 public final class InstanceOfQuickNode extends QuickNode {
 
@@ -46,6 +47,7 @@ public final class InstanceOfQuickNode extends QuickNode {
         StaticObject receiver = BytecodeNode.popObject(frame, top - 1);
         boolean result = StaticObject.notNull(receiver) && instanceOf.execute(receiver.getKlass());
         BytecodeNode.putInt(frame, top - 1, result ? 1 : 0);
+        SPouT.instanceOf(frame, receiver, result, top - 1);
         return stackEffectOf_INSTANCEOF;
     }
 }

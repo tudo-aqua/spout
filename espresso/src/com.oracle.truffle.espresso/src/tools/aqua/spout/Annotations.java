@@ -24,6 +24,9 @@
 
 package tools.aqua.spout;
 
+import com.oracle.truffle.espresso.impl.ObjectKlass;
+import com.oracle.truffle.espresso.runtime.StaticObject;
+
 import java.util.Arrays;
 
 public class Annotations {
@@ -62,6 +65,24 @@ public class Annotations {
     @SuppressWarnings("unchecked")
     public static Annotations annotation(Annotations[] a, int reverseIdx) {
         return a != null && -reverseIdx <= a.length ? a[a.length+reverseIdx] : null;
+    }
+
+    public static Annotations objectAnnotation(StaticObject o) {
+        return annotation(o.getAnnotations(), -1);
+    }
+
+    public static void setObjectAnnotation(StaticObject o, Annotations a) {
+        if (!o.hasAnnotations()) {
+            initObjectAnnotations(o);
+        }
+        o.getAnnotations()[o.getAnnotations().length-1] = a;
+    }
+
+    public static void initObjectAnnotations(StaticObject o) {
+        if (o.hasAnnotations()) return;
+        int lengthAnnotations = ((ObjectKlass) o.getKlass()).getFieldTable().length + 1;
+        Annotations[] annotations = new Annotations[lengthAnnotations];
+        o.setAnnotations(annotations);
     }
 
     public <T> void set(int i, T annotation) {

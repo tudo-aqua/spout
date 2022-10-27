@@ -302,6 +302,16 @@ public class SPouT {
         AnnotatedVM.putAnnotations(frame, top, a);
     }
 
+    public static void markObjectWithIFTaint(StaticObject obj) {
+        if(!analyze || !config.analyzeControlFlowTaint()) return;
+        Taint t = config.getTaintAnalysis().getIfTaint();
+        if (t == null) return;
+        Annotations.initObjectAnnotations(obj);
+        Annotations a = new Annotations();
+        a.set(config.getTaintIdx(), t);
+        Annotations.setObjectAnnotation(obj, a);
+    }
+
     public static PostDominatorAnalysis iflowGetPDA(Method method) {
         if (!analyze || !config.analyzeControlFlowTaint()) return null;
         return new PostDominatorAnalysis(method);
@@ -1118,6 +1128,23 @@ public class SPouT {
             analysis.lookupSwitch(frame, bcn, bci, vals, key, annotatedKey);
         }
     }
+
+    // --------------------------------------------------------------------------
+    //
+    // Objects
+
+    public static void instanceOf(VirtualFrame frame, StaticObject object, boolean isInstance, int top) {
+        if (!analyze || !object.hasAnnotations()) return;
+        Annotations a = analysis.instanceOf(object, Annotations.objectAnnotation(object), isInstance);
+        AnnotatedVM.putAnnotations(frame, top, a);
+    }
+
+    public static void isNull(VirtualFrame frame, StaticObject object, boolean isNull, int top) {
+        if (!analyze || !object.hasAnnotations()) return;
+        Annotations a = analysis.isNull(object, Annotations.objectAnnotation(object), isNull);
+        AnnotatedVM.putAnnotations(frame, top, a);
+    }
+
 
     // --------------------------------------------------------------------------
     //
