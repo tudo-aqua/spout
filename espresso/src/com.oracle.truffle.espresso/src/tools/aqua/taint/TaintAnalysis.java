@@ -529,6 +529,13 @@ public class TaintAnalysis implements Analysis<Taint> {
     }
 
     @Override
+    public void checkcast(VirtualFrame frame, BytecodeNode bcn, int bci, boolean takeBranch, Taint a) {
+        if (type == INFORMATION || (type == CONTROL && a != null)) {
+            informationFlowAddScope(frame, bcn, bci, takeBranch ? 0 : 1, a, null);
+        }
+    }
+
+    @Override
     public void takeBranchPrimitive1(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, Taint a) {
         if (type == INFORMATION || (type == CONTROL && a != null)) {
             informationFlowAddScope(frame, bcn, bci, takeBranch ? 0 : 1, a, null);

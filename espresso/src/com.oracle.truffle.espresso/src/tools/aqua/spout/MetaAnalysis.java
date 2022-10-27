@@ -770,6 +770,14 @@ public class MetaAnalysis implements Analysis<Annotations> {
     }
 
     @Override
+    public void checkcast(VirtualFrame frame, BytecodeNode bcn, int bci, boolean takeBranch, Annotations a) {
+        int i = 0;
+        for (Analysis<?> analysis : analyses) {
+            analysis.checkcast(frame, bcn, bci, takeBranch, Annotations.annotation(a, i++));
+        }
+    }
+
+    @Override
     public void takeBranchPrimitive1(VirtualFrame frame, BytecodeNode bcn, int bci,
                                      int opcode, boolean takeBranch, Annotations a) {
         int i = 0;

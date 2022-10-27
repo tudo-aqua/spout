@@ -1399,6 +1399,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                         StaticObject receiver = peekObject(frame, top - 1);
                         if (StaticObject.isNull(receiver) || receiver.getKlass() == resolveType(CHECKCAST, readOriginalCPI(curBCI))) {
                             // Most common case, avoid spawning a node.
+                            SPouT.checkcast(frame, receiver, this, curBCI, false);
                         } else {
                             CompilerDirectives.transferToInterpreterAndInvalidate();
                             quickenCheckCast(frame, top, curBCI, CHECKCAST);

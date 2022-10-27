@@ -283,6 +283,8 @@ public interface Analysis<T> {
 
     default T isNull(StaticObject c, T a, boolean isInstance) { return null; }
 
+    default void checkcast(VirtualFrame frame, BytecodeNode bcn, int bci, boolean takeBranch, T a1) { }
+
     default void takeBranchRef1(VirtualFrame frame, BytecodeNode bcn, int bci,
                                 int opcode, boolean takeBranch, T a1) { }
 

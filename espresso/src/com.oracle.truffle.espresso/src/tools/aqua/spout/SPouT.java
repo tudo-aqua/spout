@@ -1038,6 +1038,12 @@ public class SPouT {
 
     // branching
 
+    public static void checkcast(VirtualFrame frame, StaticObject obj,BytecodeNode bcn, int bci, boolean cast) {
+        if (!analyze) return;
+        Annotations a = Annotations.objectAnnotation(obj);
+        analysis.checkcast(frame, bcn, bci, cast, a);
+    }
+
     public static boolean takeBranchPrimitive1(VirtualFrame frame, int top, int opcode, BytecodeNode bcn, int bci) {
 
         assert IFEQ <= opcode && opcode <= IFLE;
