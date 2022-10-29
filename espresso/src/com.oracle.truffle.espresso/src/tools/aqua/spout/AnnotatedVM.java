@@ -162,4 +162,11 @@ public class AnnotatedVM {
             stack[to - VALUES_START] = new Annotations(stack[from - VALUES_START]);
         }
     }
+
+    public static void swap(VirtualFrame frame, int from, int to) {
+        Annotations[] stack = getAnnotations(frame);
+        Annotations tmp = stack[to - VALUES_START];
+        stack[to - VALUES_START] = stack[from - VALUES_START];
+        stack[from - VALUES_START] = tmp;
+    }
 }
