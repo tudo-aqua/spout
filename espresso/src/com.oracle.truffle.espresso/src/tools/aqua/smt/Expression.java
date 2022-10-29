@@ -79,4 +79,17 @@ public interface Expression {
         return false;
     }
 
+    static boolean isString(Expression e) {
+        if (e instanceof Atom) {
+            Atom a = (Atom) e;
+            return a.getType().equals(Types.STRING);
+        }
+        else if (e instanceof ComplexExpression) {
+            ComplexExpression c = (ComplexExpression) e;
+            return c.getOperator().isString();
+        }
+        else {
+            return false;
+        }
+    }
 }

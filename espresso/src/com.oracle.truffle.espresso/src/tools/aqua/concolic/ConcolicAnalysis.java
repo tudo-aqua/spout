@@ -960,8 +960,15 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         public boolean fromSymbolic;
 
         ConvRes(Expression e, boolean b) {
-            expr = e;
-            fromSymbolic = b;
+            // FIXME: only accept string expressions
+            if (Expression.isString(e)) {
+                expr = e;
+                fromSymbolic = b;
+            }
+            else {
+                expr = Constant.fromConcreteValue("[could not convert: " + e.toString() + "]");
+                fromSymbolic = false;
+            }
         }
     }
 
