@@ -1448,7 +1448,7 @@ public class SPouT {
         int cresult = (int) invokeResult;
         if (analyze) {
             Annotations ana = analysis.stringBuxxLength(meta.toHostString(self), getStringAnnotations(self));
-            if(a != null) return new AnnotatedValue(cresult, ana);
+            if(ana != null) return new AnnotatedValue(cresult, ana);
         }
         return cresult;
     }
@@ -1489,9 +1489,9 @@ public class SPouT {
         Method m = self.getKlass().getSuperKlass().lookupMethod(Symbol.Name._init_, Signature._void_String);
         Annotations[] selfAnnotations = self.getAnnotations();
         if(analyze){
-            Annotations a = analysis.stringBuilderAppend(meta.toHostString(self),
+            Annotations a = analysis.stringBuilderAppend("",
                     meta.toHostString(other),
-                    getStringAnnotations(self),
+                    null, //getStringAnnotations(self),
                     getStringAnnotations(other));
             if(selfAnnotations == null){
                 initStringAnnotations(self);
