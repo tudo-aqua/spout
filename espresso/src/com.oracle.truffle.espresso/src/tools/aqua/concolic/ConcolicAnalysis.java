@@ -592,6 +592,26 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return safe;
     }
 
+    @Override
+    public void checkNotZeroInt(VirtualFrame frame, BytecodeNode bcn, int bci, boolean isZero, Expression a) {
+        if (a == null) return;
+        if (isZero) {
+            addZeroToTrace(a, INT_ZERO);
+        } else {
+            addNotZeroToTrace(a, INT_ZERO);
+        }
+    }
+
+    @Override
+    public void checkNotZeroLong(VirtualFrame frame, BytecodeNode bcn, int bci, boolean isZero, Expression a) {
+        if (a == null) return;
+        if (isZero) {
+            addZeroToTrace(a, LONG_ZERO);
+        } else {
+            addNotZeroToTrace(a, LONG_ZERO);
+        }
+    }
+
     // branching helpers ...
     @Override
     public void takeBranchPrimitive1(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, Expression a) {
@@ -1332,16 +1352,16 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return false;
     }
 
-    public void addNotZeroToTrace(Annotations a, Expression zero) {
+    public void addNotZeroToTrace(Expression a, Expression zero) {
         trace.addElement(
                 new PathCondition(
-                        new ComplexExpression(OperatorComparator.BVNE, (Expression) a.getAnnotations()[config.getConcolicIdx()], zero), 0, 2));
+                        new ComplexExpression(OperatorComparator.BVNE, a, zero), 0, 2));
     }
 
-    public void addZeroToTrace(Annotations a, Expression zero) {
+    public void addZeroToTrace(Expression a, Expression zero) {
         trace.addElement(
                 new PathCondition(
-                        new ComplexExpression(OperatorComparator.BVEQ, (Expression) a.getAnnotations()[config.getConcolicIdx()], zero), 1, 2));
+                        new ComplexExpression(OperatorComparator.BVEQ, a, zero), 1, 2));
     }
 
 }

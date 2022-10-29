@@ -69,7 +69,12 @@ public final class Target_tools_aqua_concolic_Tainting {
     }
 
     @Substitution(passAnnotations = false, methodName = "check")
-    public static void check_string(@JavaType(String.class) StaticObject o,int color) {
+    public static void check_string(@JavaType(String.class) StaticObject o, int color) {
+        SPouT.checkTaintObject(o, color);
+    }
+
+    @Substitution(passAnnotations = false, methodName = "check")
+    public static void check_object(@JavaType(Object.class) StaticObject o, int color) {
         SPouT.checkTaintObject(o, color);
     }
 

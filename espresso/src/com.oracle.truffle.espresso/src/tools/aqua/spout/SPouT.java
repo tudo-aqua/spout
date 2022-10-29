@@ -514,9 +514,9 @@ public class SPouT {
                 AnnotatedVM.popAnnotations(frame, top - 3)));
     }
 
-    public static void idiv(VirtualFrame frame, int top, BytecodeNode bn) {
+    public static void idiv(VirtualFrame frame, int top, BytecodeNode bn, int bci) {
         int c1 = popInt(frame, top - 1);
-        checkNotZero(c1, AnnotatedVM.peekAnnotations(frame, top - 1), bn);
+        checkNotZero(frame, c1, AnnotatedVM.peekAnnotations(frame, top - 1), bn, bci);
         int c2 = popInt(frame, top - 2);
         putInt(frame, top - 2, c2 / c1);
         if (!analyze) return;
@@ -525,9 +525,9 @@ public class SPouT {
                 AnnotatedVM.popAnnotations(frame, top - 2)));
     }
 
-    public static void ldiv(VirtualFrame frame, int top, BytecodeNode bn) {
+    public static void ldiv(VirtualFrame frame, int top, BytecodeNode bn, int bci) {
         long c1 = popLong(frame, top - 1);
-        checkNotZero(c1, AnnotatedVM.peekAnnotations(frame, top - 1), bn);
+        checkNotZero(frame, c1, AnnotatedVM.peekAnnotations(frame, top - 1), bn, bci);
         long c2 = popLong(frame, top - 3);
         putLong(frame, top - 4, c2 / c1);
         if (!analyze) return;
@@ -557,39 +557,45 @@ public class SPouT {
     }
 
 
-    private static void checkNotZero(int c1, Annotations a, BytecodeNode bn) {
+    private static void checkNotZero(VirtualFrame frame, int c1, Annotations a, BytecodeNode bcn, int bci) {
+        if (analyze) {
+            analysis.checkNotZeroInt(frame, bcn, bci, c1 == 0, a);
+        }
         if (c1 == 0) {
-            if (a != null && analyze && config.hasConcolicAnalysis()) {
-                config.getConcolicAnalysis().addZeroToTrace(a, INT_ZERO);
+            bcn.enterImplicitExceptionProfile();
+            Meta meta = bcn.getMeta();
+            StaticObject message = meta.toGuestString("/ by zero");
+            if (analyze && config.hasTaintAnalysis()) {
+                Annotations.initObjectAnnotations(message);
+                Annotations aNew = new Annotations();
+                aNew.set(config.getTaintIdx(), config.getTaintAnalysis().getIfTaint());
+                Annotations.setObjectAnnotation(message, aNew);
             }
-            bn.enterImplicitExceptionProfile();
-            Meta meta = bn.getMeta();
-            throw meta.throwExceptionWithMessage(meta.java_lang_ArithmeticException, "/ by zero");
-        } else {
-            if (a != null && analyze && config.hasConcolicAnalysis()) {
-                config.getConcolicAnalysis().addNotZeroToTrace(a, INT_ZERO);
-            }
+            throw meta.throwExceptionWithMessage(meta.java_lang_ArithmeticException, message);
         }
     }
 
-    private static void checkNotZero(long c1, Annotations a, BytecodeNode bn) {
-        if (c1 == 0l) {
-            if (a != null && analyze && config.hasConcolicAnalysis()) {
-                config.getConcolicAnalysis().addZeroToTrace(a, LONG_ZERO);
+    private static void checkNotZero(VirtualFrame frame, long c1, Annotations a, BytecodeNode bcn, int bci) {
+        if (analyze) {
+            analysis.checkNotZeroInt(frame, bcn, bci, c1 == 0L, a);
+        }
+        if (c1 == 0L) {
+            bcn.enterImplicitExceptionProfile();
+            Meta meta = bcn.getMeta();
+            StaticObject message = meta.toGuestString("/ by zero");
+            if (analyze && config.hasTaintAnalysis()) {
+                Annotations.initObjectAnnotations(message);
+                Annotations aNew = new Annotations();
+                aNew.set(config.getTaintIdx(), config.getTaintAnalysis().getIfTaint());
+                Annotations.setObjectAnnotation(message, aNew);
             }
-            bn.enterImplicitExceptionProfile();
-            Meta meta = bn.getMeta();
-            throw meta.throwExceptionWithMessage(meta.java_lang_ArithmeticException, "/ by zero");
-        } else {
-            if (a != null && analyze && config.hasConcolicAnalysis()) {
-                config.getConcolicAnalysis().addNotZeroToTrace(a, LONG_ZERO);
-            }
+            throw meta.throwExceptionWithMessage(meta.java_lang_ArithmeticException, message);
         }
     }
 
-    public static void irem(VirtualFrame frame, int top, BytecodeNode bn) {
+    public static void irem(VirtualFrame frame, int top, BytecodeNode bn, int bci) {
         int c1 = popInt(frame, top - 1);
-        checkNotZero(c1, AnnotatedVM.peekAnnotations(frame, top - 1), bn);
+        checkNotZero(frame, c1, AnnotatedVM.peekAnnotations(frame, top - 1), bn, bci);
         int c2 = popInt(frame, top - 2);
         putInt(frame, top - 2, c2 % c1);
         if (!analyze) return;
@@ -598,9 +604,9 @@ public class SPouT {
                 AnnotatedVM.popAnnotations(frame, top - 1)));
     }
 
-    public static void lrem(VirtualFrame frame, int top, BytecodeNode bn) {
+    public static void lrem(VirtualFrame frame, int top, BytecodeNode bn, int bci) {
         long c1 = popLong(frame, top - 1);
-        checkNotZero(c1, AnnotatedVM.peekAnnotations(frame, top - 1), bn);
+        checkNotZero(frame, c1, AnnotatedVM.peekAnnotations(frame, top - 1), bn, bci);
         long c2 = popLong(frame, top - 3);
         putLong(frame, top - 4, c2 % c1);
         if (!analyze) return;
@@ -1608,26 +1614,26 @@ public class SPouT {
     }
 
     public static StaticObject valueOf_bool(Object v, Meta meta) {
-        if (v instanceof AnnotatedValue) {
+        if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
             stopRecording("concolic type conversion from boolean to string not supported, yet.", meta);
         }
-        String ret = "" + (boolean) v;
+        String ret = "" + (boolean) AnnotatedValue.value(v);
         return meta.toGuestString(ret);
     }
 
     public static StaticObject valueOf_byte(Object v, Meta meta) {
-        if (v instanceof AnnotatedValue) {
+        if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
             stopRecording("concolic type conversion from byte to string not supported, yet.", meta);
         }
-        String ret = "" + (byte) v;
+        String ret = "" + (byte) AnnotatedValue.value(v);
         return meta.toGuestString(ret);
     }
 
     public static StaticObject valueOf_char(Object v, Meta meta) {
-        if (v instanceof AnnotatedValue) {
+        if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
             stopRecording("concolic type char conversion to string not supported, yet.", meta);
         }
-        String ret = "" + (char) v;
+        String ret = "" + (char) AnnotatedValue.value(v);
         return meta.toGuestString(ret);
     }
 
@@ -1650,10 +1656,10 @@ public class SPouT {
     }
 
     public static StaticObject valueOf_short(Object v, Meta meta) {
-        if (v instanceof AnnotatedValue) {
+        if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
             stopRecording("concolic type conversion from short to string not supported, yet.", meta);
         }
-        String ret = "" + (short) v;
+        String ret = "" + (short) AnnotatedValue.value(v);
         return meta.toGuestString(ret);
     }
 
@@ -1667,18 +1673,18 @@ public class SPouT {
     }
 
     public static StaticObject valueOf_long(Object v, Meta meta) {
-        if (v instanceof AnnotatedValue) {
+        if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
             stopRecording("concolic type conversion from long to string not supported, yet.", meta);
         }
-        String ret = "" + (long) v;
+        String ret = "" + (long) AnnotatedValue.value(v);
         return meta.toGuestString(ret);
     }
 
     public static StaticObject valueOf_float(Object v, Meta meta) {
-        if (v instanceof AnnotatedValue) {
+        if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
             stopRecording("concolic type conversion from float to string not supported, yet.", meta);
         }
-        String ret = "" + (float) v;
+        String ret = "" + (float) AnnotatedValue.value(v);
         return meta.toGuestString(ret);
     }
 

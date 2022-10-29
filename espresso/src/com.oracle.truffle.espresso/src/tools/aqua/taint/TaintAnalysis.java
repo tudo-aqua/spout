@@ -116,7 +116,7 @@ public class TaintAnalysis implements Analysis<Taint> {
     }
 
     public void checkTaintObject(StaticObject o, int color) {
-        Annotations a = Annotations.annotation(o.getAnnotations(), -1);
+        Annotations a = Annotations.objectAnnotation(o);
         Taint taint = (Taint) Annotations.annotation(a, config.getTaintIdx());
         if (type.equals(INFORMATION)) {
             trace.addElement(new TaintCheck(color, taint, ifColorNames));
@@ -532,6 +532,20 @@ public class TaintAnalysis implements Analysis<Taint> {
     public void checkcast(VirtualFrame frame, BytecodeNode bcn, int bci, boolean takeBranch, Taint a) {
         if (type == INFORMATION || (type == CONTROL && a != null)) {
             informationFlowAddScope(frame, bcn, bci, takeBranch ? 0 : 1, a, null);
+        }
+    }
+
+    @Override
+    public void checkNotZeroInt(VirtualFrame frame, BytecodeNode bcn, int bci, boolean isZero, Taint a) {
+        if (type == INFORMATION || (type == CONTROL && a != null)) {
+            informationFlowAddScope(frame, bcn, bci, isZero ? 0 : 1, a, null);
+        }
+    }
+
+    @Override
+    public void checkNotZeroLong(VirtualFrame frame, BytecodeNode bcn, int bci, boolean isZero, Taint a) {
+        if (type == INFORMATION || (type == CONTROL && a != null)) {
+            informationFlowAddScope(frame, bcn, bci, isZero ? 0 : 1, a, null);
         }
     }
 

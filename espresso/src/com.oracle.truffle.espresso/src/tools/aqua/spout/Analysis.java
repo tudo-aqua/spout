@@ -30,6 +30,7 @@ import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.smt.Expression;
+import tools.aqua.taint.Taint;
 
 import java.util.List;
 
@@ -290,6 +291,14 @@ public interface Analysis<T> {
 
     default void takeBranchRef2(VirtualFrame frame, BytecodeNode bcn, int bci,
                                 int opcode, boolean takeBranch, StaticObject c1, StaticObject c2, T a1, T a2) { }
+
+    default void checkNotZeroInt(VirtualFrame frame, BytecodeNode bcn, int bci, boolean isZero, T a) {
+
+    }
+
+    default void checkNotZeroLong(VirtualFrame frame, BytecodeNode bcn, int bci, boolean isZero, T a) {
+
+    }
 
     default void takeBranchPrimitive1(VirtualFrame frame, BytecodeNode bcn, int bci,
                                       int opcode, boolean takeBranch, T a1) {

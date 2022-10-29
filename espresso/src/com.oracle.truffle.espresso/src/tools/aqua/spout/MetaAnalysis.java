@@ -778,6 +778,22 @@ public class MetaAnalysis implements Analysis<Annotations> {
     }
 
     @Override
+    public void checkNotZeroInt(VirtualFrame frame, BytecodeNode bcn, int bci, boolean isZero, Annotations a) {
+        int i = 0;
+        for (Analysis<?> analysis : analyses) {
+            analysis.checkNotZeroInt(frame, bcn, bci, isZero, Annotations.annotation(a, i++));
+        }
+    }
+
+    @Override
+    public void checkNotZeroLong(VirtualFrame frame, BytecodeNode bcn, int bci, boolean isZero, Annotations a) {
+        int i = 0;
+        for (Analysis<?> analysis : analyses) {
+            analysis.checkNotZeroLong(frame, bcn, bci, isZero, Annotations.annotation(a, i++));
+        }
+    }
+
+    @Override
     public void takeBranchPrimitive1(VirtualFrame frame, BytecodeNode bcn, int bci,
                                      int opcode, boolean takeBranch, Annotations a) {
         int i = 0;
@@ -801,7 +817,7 @@ public class MetaAnalysis implements Analysis<Annotations> {
                             int low, int high, int concIndex, Annotations a1) {
         int i = 0;
         for (Analysis<?> analysis : analyses) {
-            analysis.tableSwitch(frame, bcn, bci, low, high, concIndex, Annotations.annotation(a1, i));
+            analysis.tableSwitch(frame, bcn, bci, low, high, concIndex, Annotations.annotation(a1, i++));
         }
     }
 
@@ -810,7 +826,7 @@ public class MetaAnalysis implements Analysis<Annotations> {
                              int[] vals, int key, Annotations a1) {
         int i = 0;
         for (Analysis<?> analysis : analyses) {
-            analysis.lookupSwitch(frame, bcn, bci, vals, key, Annotations.annotation(a1, i));
+            analysis.lookupSwitch(frame, bcn, bci, vals, key, Annotations.annotation(a1, i++));
         }
     }
 

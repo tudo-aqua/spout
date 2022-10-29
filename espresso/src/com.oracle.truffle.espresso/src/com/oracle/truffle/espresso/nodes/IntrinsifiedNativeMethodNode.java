@@ -27,6 +27,7 @@ import com.oracle.truffle.api.frame.Frame;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.substitutions.CallableFromNative;
+import tools.aqua.spout.AnnotatedVM;
 
 public class IntrinsifiedNativeMethodNode extends EspressoMethodNode {
     @Child private CallableFromNative nativeMethod;
@@ -50,6 +51,7 @@ public class IntrinsifiedNativeMethodNode extends EspressoMethodNode {
             System.arraycopy(args, 0, newArgs, 1, parameterCount);
             args = newArgs;
         }
+        args = AnnotatedVM.deAnnotateArguments(args, getMethod());
         return nativeMethod.invokeDirect(env, args);
     }
 

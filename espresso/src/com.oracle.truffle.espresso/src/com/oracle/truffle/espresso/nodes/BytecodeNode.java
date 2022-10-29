@@ -1087,13 +1087,13 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case FMUL: SPouT.fmul(frame, top); break;
                     case DMUL: SPouT.dmul(frame, top); break;
 
-                    case IDIV: SPouT.idiv(frame, top, this); break;
-                    case LDIV: SPouT.ldiv(frame, top, this); break;
+                    case IDIV: SPouT.idiv(frame, top, this, curBCI); break;
+                    case LDIV: SPouT.ldiv(frame, top, this, curBCI); break;
                     case FDIV: SPouT.fdiv(frame, top); break;
                     case DDIV: SPouT.ddiv(frame, top); break;
 
-                    case IREM: SPouT.irem(frame, top, this); break;
-                    case LREM: SPouT.lrem(frame, top, this); break;
+                    case IREM: SPouT.irem(frame, top, this, curBCI); break;
+                    case LREM: SPouT.lrem(frame, top, this, curBCI); break;
                     case FREM: SPouT.frem(frame, top); break;
                     case DREM: SPouT.drem(frame, top); break;
 
