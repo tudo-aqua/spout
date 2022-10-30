@@ -1550,6 +1550,13 @@ public class SPouT {
         String val = String.valueOf(cha);
         Method m = self.getKlass().getSuperKlass().lookupMethod(meta.getNames().getOrCreate("setCharAt"), Signature._void_int_char);
         Annotations[] a = self.getAnnotations();
+        if (analyze && config.hasConcolicAnalysis() && self.hasAnnotations()) {
+            self.setAnnotations(null);
+            Method toString = self.getKlass().lookupMethod(meta.getNames().getOrCreate("toString"), Signature.String);
+            StaticObject buxxStr = (StaticObject) toString.invokeDirect(self);
+            String buxx = meta.toHostString(buxxStr);
+            analysis.charAtPCCheck(buxx, index, Annotations.annotation(a, -1), AnnotatedValue.svalue(i) );
+        }
         self.setAnnotations(null);
         m.invokeDirect(self, i, ch);
         self.setAnnotations(a);
