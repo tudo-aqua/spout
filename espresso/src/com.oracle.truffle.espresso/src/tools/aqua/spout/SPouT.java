@@ -29,6 +29,7 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.EspressoLanguage;
 import com.oracle.truffle.espresso.descriptors.Symbol;
 import com.oracle.truffle.espresso.descriptors.Symbol.Signature;
+import com.oracle.truffle.espresso.descriptors.Types;
 import com.oracle.truffle.espresso.impl.Field;
 import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.impl.Method;
@@ -52,6 +53,7 @@ import java.util.LinkedList;
 import java.util.List;
 
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.*;
+import static com.oracle.truffle.espresso.descriptors.Symbol.Type.java_lang_Character_array;
 import static com.oracle.truffle.espresso.nodes.BytecodeNode.*;
 import static com.oracle.truffle.espresso.runtime.dispatch.EspressoInterop.getMeta;
 import static tools.aqua.smt.Constant.INT_ZERO;
@@ -1598,6 +1600,36 @@ public class SPouT {
             if(a != null) return new AnnotatedValue(res, a);
         }
         return res;
+    }
+
+    public static Object characterEquals(StaticObject self, StaticObject other, Meta meta) {
+        Method m = self.getKlass().lookupMethod(meta.getNames().getOrCreate("charValue"), Signature._char);
+        Annotations[] aSelf = self.getAnnotations();
+        Annotations[] aOther = other.getAnnotations();
+        self.setAnnotations(null);
+        other.setAnnotations(null);
+        char cself = (char) m.invokeDirect(self);
+        char cother = (char) m.invokeDirect(other);
+        self.setAnnotations(aSelf);
+        other.setAnnotations(aOther);
+        boolean cres = cself == cother;
+        if(analyze){
+            Annotations a = analysis.characterEquals(cself, cother, getStringAnnotations(self), getStringAnnotations(other));
+            if(a!= null) return new AnnotatedValue(cres, a);
+        }
+        return cres;
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static StaticObject characterValueOf(Object cIn, Meta meta) {
+        char ccIn = AnnotatedValue.value(cIn);
+        StaticObject result;
+        //We do not cache the Character Objects to avoid spreading annotations
+        Method m = meta.java_lang_Character.lookupMethod(Symbol.Name._init_, Signature._void_char);
+        result = meta.java_lang_Character.allocateInstance(meta.getContext());
+        m.invokeDirect(result, ccIn);
+        if (analyze) setStringAnnotations(result, AnnotatedValue.svalue(cIn));
+        return result;
     }
 
     @CompilerDirectives.TruffleBoundary

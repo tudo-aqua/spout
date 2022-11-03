@@ -47,6 +47,9 @@ public class MetaAnalysis implements Analysis<Annotations> {
     interface BinaryOperation {
         <T> T execute(Analysis<T> analysis, int c1, int c2, T s1, T s2);
     }
+    interface BinaryCharOperation {
+        <T> T execute(Analysis<T> analysis, char c1, char c2, T s1, T s2);
+    }
 
     interface BinaryStringCompOperation {
         <T> T execute(Analysis<T> analysis, boolean b1, T s1, T s2);
@@ -426,6 +429,26 @@ public class MetaAnalysis implements Analysis<Annotations> {
                     analysis,
                     c1,
                     Annotations.annotation(a1, i));
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? new Annotations(annotations) : null;
+    }
+    private Annotations sexecute(char c1, char c2, Annotations a1, Annotations a2,  BinaryCharOperation executor){
+        if (a1 == null && a2 == null) return null;
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[analyses.length];
+        for (Analysis<?> analysis : analyses) {
+            Object result = executor.execute(
+                    analysis,
+                    c1,
+                    c2,
+                    Annotations.annotation(a1, i),
+                    Annotations.annotation(a2, i));
             if (result != null) {
                 annotations[i] = result;
                 hasResult = true;
@@ -921,5 +944,10 @@ public class MetaAnalysis implements Analysis<Annotations> {
     @Override
     public Annotations isCharDefined(char self, Annotations a1) {
         return sexecute(self, a1, Analysis::isCharDefined);
+    }
+
+    @Override
+    public Annotations characterEquals(char self, char other, Annotations a1, Annotations a2) {
+        return sexecute(self, other, a1, a2, Analysis::characterEquals);
     }
 }

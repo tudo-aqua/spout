@@ -668,6 +668,11 @@ public class TaintAnalysis implements Analysis<Taint> {
     }
 
     @Override
+    public Taint characterEquals(char self, char other, Taint a1, Taint a2) {
+        return ColorUtil.joinColors(a1, a2, ifTaint);
+    }
+
+    @Override
     public Taint charAtPCCheck(String self, int index, Taint a1, Taint a2) {
         return ColorUtil.joinColors(a1, a2, ifTaint);
     }

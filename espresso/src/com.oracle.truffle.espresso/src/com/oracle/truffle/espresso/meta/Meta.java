@@ -138,6 +138,7 @@ public final class Meta extends ContextAccessImpl {
         java_lang_Boolean = knownKlass(Type.java_lang_Boolean);
         java_lang_Byte = knownKlass(Type.java_lang_Byte);
         java_lang_Character = knownKlass(Type.java_lang_Character);
+        java_lang_Character_CharacterCache = knownKlass(Type.java_lang_Character_CharacterCache);
         java_lang_Short = knownKlass(Type.java_lang_Short);
         java_lang_Float = knownKlass(Type.java_lang_Float);
         java_lang_Integer = knownKlass(Type.java_lang_Integer);
@@ -962,6 +963,9 @@ public final class Meta extends ContextAccessImpl {
     public final ObjectKlass java_lang_Boolean;
     public final ObjectKlass java_lang_Byte;
     public final ObjectKlass java_lang_Character;
+
+    public final ObjectKlass java_lang_Character_CharacterCache;
+
     public final ObjectKlass java_lang_Short;
     public final ObjectKlass java_lang_Integer;
     public final ObjectKlass java_lang_Float;

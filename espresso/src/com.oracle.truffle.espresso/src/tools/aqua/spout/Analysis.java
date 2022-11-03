@@ -346,4 +346,6 @@ public interface Analysis<T> {
 
     default T stringBuxxCharAt(String self,  String val,int index, T a1, T a2, T a3){return null;}
     default T isCharDefined(char self, T a1){return null;}
+
+    default T characterEquals(char self, char other, T a1, T a2){return null;}
 }

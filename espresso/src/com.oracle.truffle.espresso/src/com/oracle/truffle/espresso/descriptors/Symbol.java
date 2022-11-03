@@ -588,6 +588,7 @@ public final class Symbol<T> extends ByteSequence {
         public static final Symbol<Type> java_lang_Object = StaticSymbols.putType("Ljava/lang/Object;");
         public static final Symbol<Type> java_lang_Object_array = StaticSymbols.putType("[Ljava/lang/Object;");
 
+
         public static final Symbol<Type> java_lang_Class = StaticSymbols.putType("Ljava/lang/Class;");
         public static final Symbol<Type> java_lang_Class_array = StaticSymbols.putType("[Ljava/lang/Class;");
 
@@ -658,6 +659,8 @@ public final class Symbol<T> extends ByteSequence {
         public static final Symbol<Type> java_lang_Boolean = StaticSymbols.putType("Ljava/lang/Boolean;");
         public static final Symbol<Type> java_lang_Byte = StaticSymbols.putType("Ljava/lang/Byte;");
         public static final Symbol<Type> java_lang_Character = StaticSymbols.putType("Ljava/lang/Character;");
+        public static final Symbol<Type> java_lang_Character_array = StaticSymbols.putType("[Ljava/lang/Character;");
+        public static final Symbol<Type> java_lang_Character_CharacterCache = StaticSymbols.putType("Ljava/lang/Character$CharacterCache;");
         public static final Symbol<Type> java_lang_Short = StaticSymbols.putType("Ljava/lang/Short;");
         public static final Symbol<Type> java_lang_Integer = StaticSymbols.putType("Ljava/lang/Integer;");
         public static final Symbol<Type> java_lang_Float = StaticSymbols.putType("Ljava/lang/Float;");
@@ -955,6 +958,7 @@ public final class Symbol<T> extends ByteSequence {
         public static final Symbol<Signature> _void_long_int = StaticSymbols.putSignature(Type._void, Type._long, Type._int);
         public static final Symbol<Signature> _int_int_int = StaticSymbols.putSignature(Type._int, Type._int, Type._int);
         public static final Symbol<Signature> _void_char_array = StaticSymbols.putSignature(Type._void, Type._char_array);
+        public static final Symbol<Signature> _void_char = StaticSymbols.putSignature(Type._void, Type._char);
         public static final Symbol<Signature> _char_array = StaticSymbols.putSignature(Type._char_array);
         public static final Symbol<Signature> _int_boolean_boolean = StaticSymbols.putSignature(Type._int, Type._boolean, Type._boolean);
         public static final Symbol<Signature> _boolean_boolean = StaticSymbols.putSignature(Type._boolean, Type._boolean);

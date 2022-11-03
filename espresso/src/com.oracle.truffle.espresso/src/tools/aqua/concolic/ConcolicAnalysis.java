@@ -1170,6 +1170,13 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return null;
     }
 
+    @Override
+    public Expression characterEquals(char self, char other, Expression a1, Expression a2) {
+        if (a1 == null) a1 =  Constant.fromConcreteValue(self);
+        if (a2 == null) a2 = Constant.fromConcreteValue(other);
+        return new ComplexExpression(STRINGEQ, a1, a2);
+    }
+
     public Object regionMatches(StaticObject self, StaticObject other, boolean ignore, int ctoffset, int cooffset, int clen, Meta meta) {
         String cSelf = meta.toHostString(self);
         String cOther = meta.toHostString(other);
