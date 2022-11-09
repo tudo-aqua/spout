@@ -32,7 +32,7 @@ import tools.aqua.spout.SPouT;
 public final class Target_tools_aqua_concolic_Verifier {
 
     //    public static void assume(boolean condition)
-    @Substitution(hasReceiver = false)
+    @Substitution(hasReceiver = false, passAnnotations = true)
     @CompilerDirectives.TruffleBoundary
     public static void assume(@JavaType(internalName = "Z") Object condition, @Inject Meta meta) {
         SPouT.assume( condition, meta );

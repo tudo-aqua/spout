@@ -141,10 +141,11 @@ public class SPouT {
             return;
         }
 
-        if(condition instanceof AnnotatedValue){
-            stopRecording("Unexpected annotated Value observed", meta);
+        if(condition instanceof AnnotatedValue && config.hasConcolicAnalysis()){
+            config.getConcolicAnalysis().assume(AnnotatedValue.value(condition),
+                    Annotations.annotation(AnnotatedValue.svalue(condition),config.getConcolicIdx()));
         }
-        if (!((boolean) condition)) {
+        if (!((boolean) AnnotatedValue.value(condition))) {
             stopRecording("assumption violation", meta);
         }
     }

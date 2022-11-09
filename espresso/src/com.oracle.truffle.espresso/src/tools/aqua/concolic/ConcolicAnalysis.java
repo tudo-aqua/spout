@@ -974,6 +974,16 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return new ComplexExpression(SCONCAT, a1, a2);
     }
 
+    public void assume(boolean value, Expression svalue) {
+        if(svalue != null){
+            if(value){
+                trace.addElement(new PathCondition(svalue, SUCCESS, BINARY_SPLIT));
+            }else{
+                trace.addElement(new PathCondition(new ComplexExpression(BNEG, svalue), FAILURE, BINARY_SPLIT));
+            }
+        }
+    }
+
 
     private final class ConvRes {
         public Expression expr;
