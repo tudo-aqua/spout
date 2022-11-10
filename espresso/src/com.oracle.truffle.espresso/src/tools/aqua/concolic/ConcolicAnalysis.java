@@ -399,7 +399,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     public Expression i2d(double c1, Expression a1) {
         Expression sym = null;
         if (a1 != null) {
-            sym = new ComplexExpression(OperatorComparator.I2F, a1);
+            sym = new ComplexExpression(OperatorComparator.I2D, a1);
         }
         return sym;
     }
