@@ -1753,6 +1753,15 @@ public class SPouT {
         }
         return Float.parseFloat(meta.toHostString(s));
     }
+
+    @CompilerDirectives.TruffleBoundary
+    public static int parseInt(StaticObject s, Meta meta) {
+        if (analyze && config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(s)) {
+            stopRecording("Concolic type conversion from string to int is not supported", meta);
+        }
+        return Integer.parseInt(meta.toHostString(s));
+    }
+
     // --------------------------------------------------------------------------
     //
     // helpers

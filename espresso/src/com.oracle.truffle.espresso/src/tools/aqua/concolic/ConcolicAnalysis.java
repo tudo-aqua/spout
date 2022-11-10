@@ -618,7 +618,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         if (a == null || a instanceof Constant) {
             return;
         }
-
+        a = convertCharsToInt(a);
         Expression expr = null;
         if (Expression.isBoolean(a)) {
             switch (opcode) {
@@ -684,7 +684,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                     }
                     break;
             }
-            expr = new ComplexExpression(op, ce.getSubExpressions());
+            expr = new ComplexExpression(op, convertCharsToInt(ce.getSubExpressions()));
             if (!ce.getOperator().equals(OperatorComparator.LCMP)
                     && ((opcode == IFEQ && !takeBranch) || (opcode == IFNE && takeBranch))) {
                 expr = new ComplexExpression(BNEG, expr);
@@ -717,6 +717,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         }
         trace.addElement(new PathCondition(expr, takeBranch ? FAILURE : SUCCESS, BINARY_SPLIT));
     }
+
+
 
     @Override
     public void takeBranchPrimitive2(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, int c1, int c2, Expression a1, Expression a2) {
@@ -760,7 +762,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
             if (a1 == null) a1 = Expression.fromConstant(Types.INT, c1);
             if (a2 == null) a2 = Expression.fromConstant(Types.INT, c2);
-
+            a1 = convertCharsToInt(a1);
+            a2 = convertCharsToInt(a2);
             switch (opcode) {
                 case IF_ICMPEQ:
                     expr = new ComplexExpression(takeBranch ? BVEQ : BVNE, a1, a2);
@@ -1379,6 +1382,23 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         trace.addElement(
                 new PathCondition(
                         new ComplexExpression(OperatorComparator.BVEQ, a, zero), 1, 2));
+    }
+
+    private Expression[] convertCharsToInt(Expression[] subExpressions) {
+        for(int i = 0; i < subExpressions.length; i++){
+            Expression e = subExpressions[i];
+            if (e instanceof ComplexExpression && ((ComplexExpression) e).getOperator().equals(SAT)){
+                subExpressions[i] = new ComplexExpression(STOINT, e);
+            }
+        }
+        return subExpressions;
+    }
+
+    private Expression convertCharsToInt(Expression e) {
+        if (e instanceof ComplexExpression && ((ComplexExpression) e).getOperator().equals(SAT)){
+            e = new ComplexExpression(C2I, new ComplexExpression(NAT2BV16, new ComplexExpression(STOCODE, e)));
+        }
+        return e;
     }
 
 }
