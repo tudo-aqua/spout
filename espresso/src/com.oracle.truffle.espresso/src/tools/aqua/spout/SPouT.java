@@ -945,6 +945,28 @@ public class SPouT {
         BytecodeNode.putObject(frame, top - 1, array);
     }
 
+    public static void anewArray(VirtualFrame frame, Klass klassArrayType, int top, BytecodeNode bcn) {
+        int length = popInt(frame, top - 1);
+        StaticObject array = null;
+        if (analyze) {
+            Annotations a = AnnotatedVM.popAnnotations(frame, top - 1);
+            if (a != null) {
+                if (config.hasConcolicAnalysis()) {
+                    config.getConcolicAnalysis().newArrayPathConstraint(
+                            length, Annotations.annotation(a, config.getConcolicIdx()));
+                }
+                array = bcn.newReferenceArray(klassArrayType, length);
+                Annotations[] annotations = new Annotations[length + 1];
+                annotations[length] = a;
+                array.setAnnotations(annotations);
+            }
+        }
+        if (array == null) {
+            array = bcn.newReferenceArray(klassArrayType, length);
+        }
+        BytecodeNode.putObject(frame, top - 1, array);
+    }
+
     public static int newMultiArray(VirtualFrame frame, int top, Klass klass, int allocatedDimensions, BytecodeNode bcn) {
         assert klass.isArray();
         CompilerAsserts.partialEvaluationConstant(allocatedDimensions);
