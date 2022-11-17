@@ -967,8 +967,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case DLOAD_3:
                         putDouble(frame, top, getLocalDouble(frame, curOpcode - DLOAD_0));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
-                        Annotations a = AnnotatedVM.getLocalAnnotations(frame, curOpcode - DLOAD_0);
-                        AnnotatedVM.putAnnotations(frame, top + 1, a);
+                        AnnotatedVM.putAnnotations(frame, top + 1, AnnotatedVM.getLocalAnnotations(frame, curOpcode - DLOAD_0));
                         break;
                     case ALOAD_0:
                         putObject(frame, top, getLocalObject(frame, 0));
@@ -1405,7 +1404,10 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                         //int length = popInt(frame, top - 1);
                         //putObject(frame, top - 1, newPrimitiveArray(jvmPrimitiveType, length)); break;
                         SPouT.newArray(frame, jvmPrimitiveType, top, this); break;
-                    case ANEWARRAY   : putObject(frame, top - 1, newReferenceArray(resolveType(ANEWARRAY, bs.readCPI2(curBCI)), popInt(frame, top - 1))); break;
+                    case ANEWARRAY   :
+                        Klass k = resolveType(ANEWARRAY, bs.readCPI2(curBCI));
+                        SPouT.anewArray(frame, k, top, this); break;
+                        //putObject(frame, top - 1, newReferenceArray(resolveType(ANEWARRAY, bs.readCPI2(curBCI)), popInt(frame, top - 1))); break;
 
                     case ARRAYLENGTH : arrayLength(frame, top, curBCI); break;
 
@@ -1687,7 +1689,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
         return getAllocator().createNewPrimitiveArray(jvmPrimitiveType, length);
     }
 
-    private StaticObject newReferenceArray(Klass componentType, int length) {
+    public StaticObject newReferenceArray(Klass componentType, int length) {
         GuestAllocator.AllocationChecks.checkCanAllocateArray(getMeta(), length, this);
         return getAllocator().createNewReferenceArray(componentType, length);
     }

@@ -141,10 +141,11 @@ public class SPouT {
             return;
         }
 
-        if(condition instanceof AnnotatedValue){
-            stopRecording("Unexpected annotated Value observed", meta);
+        if(condition instanceof AnnotatedValue && config.hasConcolicAnalysis()){
+            config.getConcolicAnalysis().assume(AnnotatedValue.value(condition),
+                    Annotations.annotation(AnnotatedValue.svalue(condition),config.getConcolicIdx()));
         }
-        if (!((boolean) condition)) {
+        if (!((boolean) AnnotatedValue.value(condition))) {
             stopRecording("assumption violation", meta);
         }
     }
@@ -947,6 +948,28 @@ public class SPouT {
         }
         if (array == null) {
             array = bcn.newPrimitiveArray(jvmPrimitiveType, length);
+        }
+        BytecodeNode.putObject(frame, top - 1, array);
+    }
+
+    public static void anewArray(VirtualFrame frame, Klass klassArrayType, int top, BytecodeNode bcn) {
+        int length = popInt(frame, top - 1);
+        StaticObject array = null;
+        if (analyze) {
+            Annotations a = AnnotatedVM.popAnnotations(frame, top - 1);
+            if (a != null) {
+                if (config.hasConcolicAnalysis()) {
+                    config.getConcolicAnalysis().newArrayPathConstraint(
+                            length, Annotations.annotation(a, config.getConcolicIdx()));
+                }
+                array = bcn.newReferenceArray(klassArrayType, length);
+                Annotations[] annotations = new Annotations[length + 1];
+                annotations[length] = a;
+                array.setAnnotations(annotations);
+            }
+        }
+        if (array == null) {
+            array = bcn.newReferenceArray(klassArrayType, length);
         }
         BytecodeNode.putObject(frame, top - 1, array);
     }
@@ -1759,6 +1782,15 @@ public class SPouT {
         }
         return Float.parseFloat(meta.toHostString(s));
     }
+
+    @CompilerDirectives.TruffleBoundary
+    public static int parseInt(StaticObject s, Meta meta) {
+        if (analyze && config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(s)) {
+            stopRecording("Concolic type conversion from string to int is not supported", meta);
+        }
+        return Integer.parseInt(meta.toHostString(s));
+    }
+
     // --------------------------------------------------------------------------
     //
     // helpers

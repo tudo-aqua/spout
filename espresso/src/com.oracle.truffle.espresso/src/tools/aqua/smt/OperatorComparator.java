@@ -152,13 +152,13 @@ public enum OperatorComparator {
     BV2NAT,
     NATADD,
     NATMINUS,
-    SLT;
+    SLT, NAT2BV16;
 
 
     @Override
     public String toString() {
         //TODO: someone needs to check these!
-        switch(this) {
+        switch (this) {
             // int and long
             case IADD:
             case LADD:
@@ -328,6 +328,8 @@ public enum OperatorComparator {
                 return "str.substr";
             case NAT2BV32:
                 return "(_ int2bv 32)";
+            case NAT2BV16:
+                return "(_ int2bv 16)";
             case BV2NAT:
                 return "bv2int";
             case LT:
@@ -366,7 +368,7 @@ public enum OperatorComparator {
     }
 
     public boolean isCmp() {
-        return  cmpOps.contains(this);
+        return cmpOps.contains(this);
     }
 
     public boolean isString() {
