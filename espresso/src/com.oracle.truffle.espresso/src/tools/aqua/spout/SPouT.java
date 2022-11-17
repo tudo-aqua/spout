@@ -269,14 +269,19 @@ public class SPouT {
         config.getTaintAnalysis().checkTaintObject(o, color);
     }
 
-    public static void nextBytecode(VirtualFrame frame, int bci) {
+    public static void nextBytecode(VirtualFrame frame, BytecodeNode bcn, int bci) {
         if (!analyze || !config.analyzeControlFlowTaint()) return;
-        config.getTaintAnalysis().informationFlowNextBytecode(frame, bci);
+        config.getTaintAnalysis().informationFlowNextBytecode(frame, bcn, bci);
     }
 
     public static void informationFlowMethodReturn(VirtualFrame frame) {
         if (!analyze || !config.analyzeControlFlowTaint()) return;
         config.getTaintAnalysis().informationFlowMethodReturn(frame);
+    }
+
+    public static void informationFlowEnterBlockWithHandler(VirtualFrame frame, BytecodeNode bcn, int bci) {
+        if (!analyze || !config.analyzeControlFlowTaint()) return;
+        config.getTaintAnalysis().informationFlowEnterBlockWithHandler(frame, bcn, bci);
     }
 
     public static void iflowRegisterException() {
@@ -285,9 +290,9 @@ public class SPouT {
         config.getTaintAnalysis().iflowRegisterException();
     }
 
-    public static void iflowUnregisterException(VirtualFrame frame, Method method, int bci) {
+    public static void iflowUnregisterException(VirtualFrame frame, BytecodeNode bcn, int bci) {
         if (!analyze || !config.analyzeControlFlowTaint()) return;
-        config.getTaintAnalysis().iflowUnregisterException(frame, method, bci);
+        config.getTaintAnalysis().iflowUnregisterException(frame, bcn, bci);
     }
 
     public static int iflowGetIpdBCI() {
@@ -573,6 +578,7 @@ public class SPouT {
                 aNew.set(config.getTaintIdx(), config.getTaintAnalysis().getIfTaint());
                 Annotations.setObjectAnnotation(message, aNew);
             }
+            SPouT.iflowRegisterException();
             throw meta.throwExceptionWithMessage(meta.java_lang_ArithmeticException, message);
         }
     }
@@ -591,6 +597,7 @@ public class SPouT {
                 aNew.set(config.getTaintIdx(), config.getTaintAnalysis().getIfTaint());
                 Annotations.setObjectAnnotation(message, aNew);
             }
+            SPouT.iflowRegisterException();
             throw meta.throwExceptionWithMessage(meta.java_lang_ArithmeticException, message);
         }
     }

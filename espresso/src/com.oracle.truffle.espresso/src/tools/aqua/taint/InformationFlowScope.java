@@ -26,6 +26,7 @@ package tools.aqua.taint;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.espresso.nodes.BytecodeNode;
 
 import java.util.Arrays;
 
@@ -57,16 +58,28 @@ public class InformationFlowScope {
     int endOfScope;
 
     /*
+     * handlers of the current scope
+     */
+    int[] handlers;
+
+    /*
      * distinguish multiple subsequent independent branches
      */
     int nameCount = 0;
 
-    public InformationFlowScope(InformationFlowScope parent, VirtualFrame frame, int branchId, Taint taint, int end) {
+    /*
+     * color for this decision
+     */
+    int decisionColor;
+
+    public InformationFlowScope(InformationFlowScope parent, VirtualFrame frame, int branchId, Taint taint, int end, int decisionColor) {
         this.frame = frame;
         this.endOfScope = end;
         this.parent = parent;
         this.taint = taint;
         this.branchId = branchId;
+        this.decisionColor = decisionColor;
+        this.handlers = null;
     }
 
     public boolean isEnd(VirtualFrame frame, int bci) {
@@ -84,5 +97,34 @@ public class InformationFlowScope {
 
     public void setTaint(Taint taint) {
         this.taint = taint;
+    }
+
+    public void setHandlers(int[] handlers) {
+        this.handlers = handlers;
+    }
+
+    public boolean isHandledBy(VirtualFrame frame, BytecodeNode bcn, int bci) {
+        if (this.handlers == null) return false;
+        if (frame != this.frame) return false;
+        int b = bcn.getPostDominatorAnalysis().getBlock(bci);
+        for (int i=0; i<handlers.length; i++) {
+            if (b == handlers[i])
+                return true;
+        }
+        return false;
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    @Override
+    public String toString() {
+        return "InformationFlowScope{" +
+                "parent=" + parent +
+                ", branchId=" + branchId +
+                ", taint=" + taint +
+                ", endOfScope=" + endOfScope +
+                ", handlers=" + Arrays.toString(handlers) +
+                ", nameCount=" + nameCount +
+                ", decisionColor=" + decisionColor +
+                '}';
     }
 }

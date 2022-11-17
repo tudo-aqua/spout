@@ -24,6 +24,7 @@
 
 package tools.aqua.taint;
 
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.espresso.analysis.GraphBuilder;
 import com.oracle.truffle.espresso.analysis.graph.EspressoBlock;
 import com.oracle.truffle.espresso.analysis.graph.EspressoExecutionGraph;
@@ -48,17 +49,38 @@ public class PostDominatorAnalysis {
 
     private int[] ipdoms;
 
+    private int[] tries;
+
+    @CompilerDirectives.TruffleBoundary
     public PostDominatorAnalysis(Method m) {
         graph = (EspressoExecutionGraph) GraphBuilder.build(m);
         leafs = leafsOf(graph);
         ipdoms = new int[graph.totalBlocks()];
+        tries = new int[graph.totalBlocks()];
+        //if (SPouT.DEBUG) logGraph(m);
         immediatePostDominators();
+        tries();
     }
 
     public int immediatePostDominatorStartForBCI(int bci) {
         int b = getBlockForBCI(bci);
         int ipdom = ipdoms[b];
         return (ipdom != -1) ? graph.get(ipdom).start() : -1;
+    }
+
+    public int getBlock(int bci) {
+        return getBlockForBCI(bci);
+    }
+
+    public int[] getHandlers(int bci) {
+        int bId = getBlockForBCI(bci);
+        EspressoBlock b = graph. get(bId);
+        if (!b.hasExceptionHandler()) return null;
+        int[] hb = new int[b.getExceptionHandlers().length];
+        for (int i=0; i<b.getExceptionHandlers().length; i++) {
+            hb[i] = graph.getHandlerBlock(b.getExceptionHandlers()[i]);
+        }
+        return hb;
     }
 
     private int getBlockForBCI(int bci) {
@@ -160,6 +182,22 @@ public class PostDominatorAnalysis {
         }
     }
 
+    private void tries() {
+        Arrays.fill(tries, Integer.MAX_VALUE);
+        int idx = 0;
+        for (int i=0; i<graph.totalBlocks(); i++) {
+            EspressoBlock b = graph.get(i);
+            if (b.hasExceptionHandler()) {
+                tries[idx++] = b.start();
+            }
+        }
+        if (idx == 0) {
+            tries = null;
+        } else {
+            Arrays.sort(tries);
+        }
+    }
+
     private static int intersect(int a, int b, int[] pdoms) {
         int f1 = a;
         int f2 = b;
@@ -171,5 +209,23 @@ public class PostDominatorAnalysis {
                 f2 = pdoms[f2];
         }
         return f1;
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    private void logGraph(Method m) {
+        SPouT.log("CFG for " + m.getDeclaringKlass().getNameAsString() + " . " + m.getNameAsString());
+        for (int i=0; i<graph.totalBlocks(); i++) {
+            //
+            EspressoBlock b = graph.get(i);
+            SPouT.log("  id: " + i + ": , lines [" + b.start() + " - " + b.end() + "], " + ", last BCI: " + b.lastBCI() + ", " +
+                    "pred: " + Arrays.toString(b.predecessorsID()) + ", " +
+                    "succ: " + Arrays.toString(b.successorsID()) + ", " +
+                    "handlers: " + (b.hasExceptionHandler() ? Arrays.toString(b.getExceptionHandlers()) : "none") + ", " +
+                    "entry: " + (graph.entryBlock() == b) + ", leaf: " + b.isLeaf());
+        }
+    }
+
+    public int[] getTries() {
+        return tries;
     }
 }

@@ -229,6 +229,7 @@ import static com.oracle.truffle.espresso.bytecode.Bytecodes.SWAP;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.TABLESWITCH;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.WIDE;
 
+import java.lang.invoke.SwitchPoint;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -407,6 +408,8 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
 
     private PostDominatorAnalysis postDominatorAnalysis;
 
+    private int[] tries;
+
     private byte trivialBytecodesCache = -1;
 
     @CompilationFinal private Object osrMetadata;
@@ -424,6 +427,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
         this.implicitExceptionProfile = false;
         this.livenessAnalysis = LivenessAnalysis.analyze(methodVersion);
         this.postDominatorAnalysis = SPouT.iflowGetPDA(method);
+        this.tries = this.postDominatorAnalysis != null ? this.postDominatorAnalysis.getTries() : null;
         /*
          * The "triviality" is partially computed here since isTrivial is called from a compiler
          * thread where the context is not accessible.
@@ -774,6 +778,17 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
         return executeBodyFromBCI(frame, 0, startTop, 0, false);
     }
 
+    public boolean isTry(int bci) {
+        if (tries == null) return false;
+        for (int i=0; i<tries.length; i++) {
+            int c = tries[i];
+            if (bci > c) continue;
+            if (bci < c) return false;
+            return true;
+        }
+        return false;
+    }
+
     @ExplodeLoop(kind = ExplodeLoop.LoopExplosionKind.MERGE_EXPLODE)
     @BytecodeInterpreterSwitch
     Object executeBodyFromBCI(VirtualFrame frame, int startBCI, int startTop, int startStatementIndex, boolean isOSR) {
@@ -812,7 +827,10 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
             EXECUTED_BYTECODES_COUNT.inc();
             ipdBCI = SPouT.iflowGetIpdBCI();
             if (curBCI == ipdBCI) {
-                SPouT.nextBytecode(frame, curBCI);
+                SPouT.nextBytecode(frame, this, curBCI);
+            }
+            if (isTry(curBCI)) {
+                SPouT.informationFlowEnterBlockWithHandler(frame, this, curBCI);
             }
             try {
                 CompilerAsserts.partialEvaluationConstant(top);
@@ -1613,7 +1631,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                         int targetBCI = handler.getHandlerBCI();
                         nextStatementIndex = beforeJumpChecks(frame, curBCI, targetBCI, top, statementIndex, instrument, loopCount, skipLivenessActions);
                         curBCI = targetBCI;
-                        SPouT.iflowUnregisterException(frame, this.getMethod(), curBCI);
+                        SPouT.iflowUnregisterException(frame, this, curBCI);
                         continue loop; // skip bs.next()
                     } else {
                         if (instrument != null) {

@@ -28,18 +28,12 @@ import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.impl.ObjectKlass;
-import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
-import tools.aqua.concolic.ConcolicAnalysis;
-import tools.aqua.smt.ComplexExpression;
-import tools.aqua.smt.Constant;
-import tools.aqua.smt.Expression;
 import tools.aqua.spout.*;
 
 import java.util.TreeMap;
 
-import static tools.aqua.smt.OperatorComparator.SCONCAT;
 import static tools.aqua.spout.Config.TaintType.*;
 
 public class TaintAnalysis implements Analysis<Taint> {
@@ -48,7 +42,7 @@ public class TaintAnalysis implements Analysis<Taint> {
 
     private static Taint ifTaint = null;
 
-    private InformationFlowScope iflowScopes = new InformationFlowScope(null, null, 0, null, -1);
+    private InformationFlowScope iflowScopes = new InformationFlowScope(null, null, 0, null, -1, 0);
 
     private int nextFreeColor = 63;
 
@@ -132,7 +126,6 @@ public class TaintAnalysis implements Analysis<Taint> {
     // --------------------------------------------------------------------------
     //
     // information flow
-
     private void informationFlowAddScope(VirtualFrame frame, BytecodeNode bcn, int bci, int branch, Taint a1, Taint a2) {
         CompilerDirectives.transferToInterpreter();
         if (!tainted || ifExceptionThrown) return;
@@ -147,7 +140,7 @@ public class TaintAnalysis implements Analysis<Taint> {
         Taint scopeTaint = ColorUtil.addColor(decisionTaint, ++nextFreeColor);
         SPouT.debug("new scope [" + bcn.getMethod().getNameAsString() + "] at bci=" + bci + ", ipdStart=" + ipdBCI + ", " + decisionName);
 
-        iflowScopes = new InformationFlowScope(iflowScopes, frame, branch, scopeTaint, ipdBCI);
+        iflowScopes = new InformationFlowScope(iflowScopes, frame, branch, scopeTaint, ipdBCI, nextFreeColor);
         ifTaint = scopeTaint;
         informationFlowAddColor(decisionName);
         if (type == INFORMATION) {
@@ -160,7 +153,7 @@ public class TaintAnalysis implements Analysis<Taint> {
         ifColorNames.put(nextFreeColor, decisionName);
     }
 
-    public void informationFlowNextBytecode(VirtualFrame frame, int bci) {
+    public void informationFlowNextBytecode(VirtualFrame frame, BytecodeNode bcn, int bci) {
         if (!tainted || ifExceptionThrown) return;
         while (iflowScopes.isEnd(frame, bci)) {
             SPouT.debug("pop iflow scope at ipd=" + bci);
@@ -169,11 +162,18 @@ public class TaintAnalysis implements Analysis<Taint> {
         }
     }
 
+    public void informationFlowEnterBlockWithHandler(VirtualFrame frame, BytecodeNode bcn, int bci) {
+        if (!tainted || ifExceptionThrown) return;
+        informationFlowAddScope(frame, bcn, bci, 0, null, null);
+        iflowScopes.setHandlers(bcn.getPostDominatorAnalysis().getHandlers(bci));
+        //SPouT.log(iflowScopes.toString());
+    }
+
 
     public void informationFlowMethodReturn(VirtualFrame frame) {
         if (!tainted || ifExceptionThrown) return;
         while (iflowScopes.frame == frame) {
-            //SPouT.debug("pop iflow scope at return");
+            SPouT.debug("pop iflow scope at return");
             iflowScopes = iflowScopes.parent;
             ifTaint = iflowScopes.taint;
         }
@@ -202,21 +202,38 @@ public class TaintAnalysis implements Analysis<Taint> {
 
     public void iflowRegisterException() {
         if (!tainted) return;
+        SPouT.log("register exception");
         ifExceptionThrown = true;
     }
 
-    public void iflowUnregisterException(VirtualFrame frame, Method method, int bci) {
+    public void iflowUnregisterException(VirtualFrame frame, BytecodeNode bcn, int bci) {
         CompilerDirectives.transferToInterpreter();
         if (!tainted || !ifExceptionThrown)  return;
-
+        SPouT.log("unregister exception");
         ifExceptionThrown = false;
 
+        // keep taint
         Taint scopeTaint = iflowScopes.taint;
-        while (iflowScopes.frame != frame && iflowScopes.parent != null) {
+
+        // pop scopes
+        while (!iflowScopes.isHandledBy(frame, bcn, bci) && iflowScopes.parent != null) {
+            SPouT.log("remove scope that is not handled at current bci=" + bci + " ...");
             iflowScopes = iflowScopes.parent;
         }
-        iflowScopes.setTaint(scopeTaint);
-        ifTaint = scopeTaint;
+
+        // back-propagate taint
+        InformationFlowScope cur = iflowScopes;
+        while (cur != null) {
+            if (cur.isHandledBy(frame, bcn, bci)) {
+                SPouT.log("found scope that is handled at current bci");
+                if (type == INFORMATION) {
+                    trace.addElement(new InformationFlow(ifColorNames.get(iflowScopes.decisionColor), scopeTaint, ifColorNames));
+                }
+                iflowScopes.setTaint( ColorUtil.joinColors( iflowScopes.taint, scopeTaint));
+            }
+            cur = cur.parent;
+        }
+        ifTaint = iflowScopes.taint;
     }
 
     public int iflowGetIpdBCI() {
@@ -225,7 +242,8 @@ public class TaintAnalysis implements Analysis<Taint> {
 
     public Taint getIfTaint() {
         if (!tainted || ifExceptionThrown) return null;
-        return ifTaint;}
+        return ifTaint;
+    }
 
 
     // --------------------------------------------------------------------------
