@@ -52,7 +52,7 @@ public final class ByteArrayStoreQuickNode extends QuickNode {
         byte value = (byte) BytecodeNode.popInt(frame, top - 1);
         int index = BytecodeNode.popInt(frame, top - 2);
         StaticObject array = nullCheck(BytecodeNode.popObject(frame, top - 3));
-        SPouT.setArrayAnnotations(frame, array, index, top -1, top - 2, EspressoLanguage.get(this));
+        SPouT.setArrayAnnotations(frame, getBytecodeNode(), getBci(frame), array, index, top -1, top - 2, EspressoLanguage.get(this));
         byteArrayStore.execute(array, index, value);
         return stackEffectOf_BASTORE;
     }

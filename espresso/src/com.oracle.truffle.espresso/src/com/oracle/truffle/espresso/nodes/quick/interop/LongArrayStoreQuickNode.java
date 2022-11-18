@@ -52,7 +52,7 @@ public final class LongArrayStoreQuickNode extends QuickNode {
         long value = BytecodeNode.popLong(frame, top - 1);
         int index = BytecodeNode.popInt(frame, top - 3);
         StaticObject array = nullCheck(BytecodeNode.popObject(frame, top - 4));
-        SPouT.setArrayAnnotations(frame, array, index, top -1, top - 3, EspressoLanguage.get(this));
+        SPouT.setArrayAnnotations(frame, getBytecodeNode(), getBci(frame), array, index, top -1, top - 3, EspressoLanguage.get(this));
         longArrayStore.execute(array, index, value);
         return stackEffectOf_LASTORE;
     }

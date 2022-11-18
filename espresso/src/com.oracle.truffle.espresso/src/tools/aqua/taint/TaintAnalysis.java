@@ -179,15 +179,6 @@ public class TaintAnalysis implements Analysis<Taint> {
         }
     }
 
-    public void setArrayAccessInformationFlow(Taint idx, Taint arraySize) {
-        if (!tainted || type == DATA || (arraySize == null && idx == null)) return;
-        // TODO: check if this is the proper way of doing this ...
-        // reasoning: array access is a control flow branch influenced
-        // by symbolic index and symbolic array size
-        ifTaint = ColorUtil.joinColors(ifTaint, arraySize, idx);
-        iflowScopes.taint = ifTaint;
-    }
-
     private boolean outofscope(Method m) {
         String declaringClassName = m.getDeclaringKlass().getNameAsString();
         if (declaringClassName.startsWith("java/")) {
@@ -201,7 +192,7 @@ public class TaintAnalysis implements Analysis<Taint> {
     }
 
     public void iflowRegisterException() {
-        if (!tainted) return;
+        if (!tainted && !ifExceptionThrown) return;
         SPouT.log("register exception");
         ifExceptionThrown = true;
     }
@@ -564,6 +555,13 @@ public class TaintAnalysis implements Analysis<Taint> {
     public void checkNotZeroLong(VirtualFrame frame, BytecodeNode bcn, int bci, boolean isZero, Taint a) {
         if (type == INFORMATION || (type == CONTROL && a != null)) {
             informationFlowAddScope(frame, bcn, bci, isZero ? 0 : 1, a, null);
+        }
+    }
+
+    public void setArrayAccessInformationFlow(VirtualFrame frame, BytecodeNode bcn, int bci,
+                                              boolean fails, Taint idx, Taint arraySize) {
+        if (type == INFORMATION || (type == CONTROL && (arraySize != null || idx != null))) {
+            informationFlowAddScope(frame, bcn, bci, fails ? 0 : 1, idx, arraySize);
         }
     }
 

@@ -579,7 +579,7 @@ public class SPouT {
                 aNew.set(config.getTaintIdx(), config.getTaintAnalysis().getIfTaint());
                 Annotations.setObjectAnnotation(message, aNew);
             }
-            SPouT.iflowRegisterException();
+            // done in meta now: SPouT.iflowRegisterException();
             throw meta.throwExceptionWithMessage(meta.java_lang_ArithmeticException, message);
         }
     }
@@ -598,7 +598,7 @@ public class SPouT {
                 aNew.set(config.getTaintIdx(), config.getTaintAnalysis().getIfTaint());
                 Annotations.setObjectAnnotation(message, aNew);
             }
-            SPouT.iflowRegisterException();
+            // done in meta now: SPouT.iflowRegisterException();
             throw meta.throwExceptionWithMessage(meta.java_lang_ArithmeticException, message);
         }
     }
@@ -944,6 +944,8 @@ public class SPouT {
                 Annotations[] annotations = new Annotations[length + 1];
                 annotations[length] = a;
                 array.setAnnotations(annotations);
+
+                // TODO: implement new array iflow
             }
         }
         if (array == null) {
@@ -967,6 +969,8 @@ public class SPouT {
                 annotations[length] = a;
                 array.setAnnotations(annotations);
             }
+
+            // TODO: implement new array iflow
         }
         if (array == null) {
             array = bcn.newReferenceArray(klassArrayType, length);
@@ -1037,7 +1041,7 @@ public class SPouT {
         AnnotatedVM.putAnnotations(frame, top - 1, aLength);
     }
 
-    public static void getArrayAnnotations(VirtualFrame frame, StaticObject array,
+    public static void getArrayAnnotations(VirtualFrame frame, BytecodeNode bcn, int bci, StaticObject array,
                                            int cIndex, int fromIndexSlot, int toSlot, EspressoLanguage lang) {
         if (!analyze) return;
 
@@ -1048,9 +1052,11 @@ public class SPouT {
         }
 
         if (analyze && config.hasTaintAnalysis() && array.hasAnnotations()) {
+            boolean fails = cIndex < 0 || cIndex >= array.length(lang);
             Annotations[] annotations = array.getAnnotations();
             Annotations aLength = annotations[annotations.length - 1];
             config.getTaintAnalysis().setArrayAccessInformationFlow(
+                    frame, bcn, bci, fails,
                     Annotations.annotation(aIndex, config.getTaintIdx()),
                     Annotations.annotation(aLength, config.getTaintIdx())
             );
@@ -1060,7 +1066,7 @@ public class SPouT {
         AnnotatedVM.putAnnotations(frame, toSlot, a);
     }
 
-    public static void setArrayAnnotations(VirtualFrame frame, StaticObject array,
+    public static void setArrayAnnotations(VirtualFrame frame, BytecodeNode bcn, int bci, StaticObject array,
                                            int cIndex, int fromValueSlot, int fromIndexSlot, EspressoLanguage lang) {
         if (!analyze) return;
 
@@ -1068,6 +1074,17 @@ public class SPouT {
         if (analyze && config.hasConcolicAnalysis()) {
             config.getConcolicAnalysis().checkArrayAccessPathConstraint(
                     array, cIndex, Annotations.annotation(aIndex, config.getConcolicIdx()), lang);
+        }
+
+        if (analyze && config.hasTaintAnalysis() && array.hasAnnotations()) {
+            boolean fails = cIndex < 0 || cIndex >= array.length(lang);
+            Annotations[] annotations = array.getAnnotations();
+            Annotations aLength = annotations[annotations.length - 1];
+            config.getTaintAnalysis().setArrayAccessInformationFlow(
+                    frame, bcn, bci, fails,
+                    Annotations.annotation(aIndex, config.getTaintIdx()),
+                    Annotations.annotation(aLength, config.getTaintIdx())
+            );
         }
 
         Annotations aValue = AnnotatedVM.popAnnotations(frame, fromValueSlot);

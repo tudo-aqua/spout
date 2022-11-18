@@ -57,6 +57,7 @@ import com.oracle.truffle.espresso.runtime.EspressoException;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import com.oracle.truffle.espresso.substitutions.JavaType;
 import com.oracle.truffle.espresso.vm.InterpreterToVM;
+import tools.aqua.spout.SPouT;
 
 /**
  * Introspection API to access the guest world from the host. Provides seamless conversions from
@@ -1683,6 +1684,7 @@ public final class Meta extends ContextAccessImpl {
      */
     public EspressoException throwException(@JavaType(Throwable.class) StaticObject throwable) {
         assert InterpreterToVM.instanceOf(throwable, throwable.getKlass().getMeta().java_lang_Throwable);
+        SPouT.iflowRegisterException();
         throw EspressoException.wrap(throwable, this);
     }
 

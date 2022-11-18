@@ -51,7 +51,7 @@ public final class DoubleArrayLoadQuickNode extends QuickNode {
     public int execute(VirtualFrame frame) {
         int index = BytecodeNode.popInt(frame, top - 1);
         StaticObject array = nullCheck(BytecodeNode.popObject(frame, top - 2));
-        SPouT.getArrayAnnotations(frame, array, index, top-1, top-2, EspressoLanguage.get(this));
+        SPouT.getArrayAnnotations(frame, getBytecodeNode(), getBci(frame), array, index, top-1, top-2, EspressoLanguage.get(this));
         BytecodeNode.putDouble(frame, top - 2, doubleArrayLoad.execute(array, index));
         return stackEffectOf_DALOAD;
     }

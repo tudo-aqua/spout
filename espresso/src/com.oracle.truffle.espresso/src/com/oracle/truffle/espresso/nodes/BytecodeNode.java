@@ -1412,7 +1412,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case ARRAYLENGTH : arrayLength(frame, top, curBCI); break;
 
                     case ATHROW      :
-                        SPouT.iflowRegisterException();
+                        //SPouT.iflowRegisterException();
                         throw getMeta().throwException(nullCheck(popObject(frame, top - 1)));
 
                     case CHECKCAST   : {
@@ -1929,32 +1929,32 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
             // @formatter:off
             switch (loadOpcode) {
                 case BALOAD:
-                    SPouT.getArrayAnnotations(frame, array, index, top-1, top-2, language);
+                    SPouT.getArrayAnnotations(frame, this, curBCI, array, index, top-1, top-2, language);
                     putInt(frame, top - 2, getInterpreterToVM().getArrayByte(language, index, array, this));
                     break;
                 case SALOAD:
-                    SPouT.getArrayAnnotations(frame, array, index, top-1, top-2, language);
+                    SPouT.getArrayAnnotations(frame, this, curBCI, array, index, top-1, top-2, language);
                     putInt(frame, top - 2, getInterpreterToVM().getArrayShort(language, index, array, this));
                     break;
                 case CALOAD:
-                    SPouT.getArrayAnnotations(frame, array, index, top-1, top-2, language);
+                    SPouT.getArrayAnnotations(frame, this, curBCI, array, index, top-1, top-2, language);
                     putInt(frame, top - 2, getInterpreterToVM().getArrayChar(language, index, array, this));
                     break;
                 case IALOAD:
                     // putInt(frame, top - 2, getInterpreterToVM().getArrayInt(language, index, array, this));       break;
-                    SPouT.getArrayAnnotations(frame, array, index, top-1, top-2, language);
+                    SPouT.getArrayAnnotations(frame, this, curBCI, array, index, top-1, top-2, language);
                     putInt(frame, top - 2, getInterpreterToVM().getArrayInt(language, index, array, this));
                     break;
                 case FALOAD:
-                    SPouT.getArrayAnnotations(frame, array, index, top-1, top-2, language);
+                    SPouT.getArrayAnnotations(frame, this, curBCI, array, index, top-1, top-2, language);
                     putFloat(frame, top - 2, getInterpreterToVM().getArrayFloat(language, index, array, this));
                     break;
                 case LALOAD:
-                    SPouT.getArrayAnnotations(frame, array, index, top-1, top-2, language);
+                    SPouT.getArrayAnnotations(frame, this, curBCI, array, index, top-1, top-2, language);
                     putLong(frame, top - 2, getInterpreterToVM().getArrayLong(language, index, array, this));
                     break;
                 case DALOAD:
-                    SPouT.getArrayAnnotations(frame, array, index, top-1, top-2, language);
+                    SPouT.getArrayAnnotations(frame, this, curBCI, array, index, top-1, top-2, language);
                     putDouble(frame, top - 2, getInterpreterToVM().getArrayDouble(language, index, array, this));
                     break;
                 case AALOAD: putObject(frame, top - 2, getInterpreterToVM().getArrayObject(language, index, array, this));       break;
@@ -1984,33 +1984,33 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
             // @formatter:off
             switch (storeOpcode) {
                 case BASTORE:
+                    SPouT.setArrayAnnotations(frame, this, curBCI, array, index, top -1, top - 1 - offset, language);
                     getInterpreterToVM().setArrayByte(language, (byte) popInt(frame, top - 1), index, array, this);
-                    SPouT.setArrayAnnotations(frame, array, index, top -1, top - 1 - offset, language);
                     break;
                 case SASTORE:
+                    SPouT.setArrayAnnotations(frame, this, curBCI, array, index, top -1, top - 1 - offset, language);
                     getInterpreterToVM().setArrayShort(language, (short) popInt(frame, top - 1), index, array, this);
-                    SPouT.setArrayAnnotations(frame, array, index, top -1, top - 1 - offset, language);
                     break;
                 case CASTORE:
+                    SPouT.setArrayAnnotations(frame, this, curBCI, array, index, top -1, top - 1 - offset, language);
                     getInterpreterToVM().setArrayChar(language, (char) popInt(frame, top - 1), index, array, this);
-                    SPouT.setArrayAnnotations(frame, array, index, top -1, top - 1 - offset, language);
                     break;
                 case IASTORE:
                     //getInterpreterToVM().setArrayInt(language, popInt(frame, top - 1), index, array, this);           break;
+                    SPouT.setArrayAnnotations(frame, this, curBCI, array, index, top -1, top - 1 - offset, language);
                     getInterpreterToVM().setArrayInt(language, popInt(frame, top - 1), index, array, this);
-                    SPouT.setArrayAnnotations(frame, array, index, top -1, top - 1 - offset, language);
                     break;
                 case FASTORE:
+                    SPouT.setArrayAnnotations(frame, this, curBCI, array, index, top -1, top - 1 - offset, language);
                     getInterpreterToVM().setArrayFloat(language, popFloat(frame, top - 1), index, array, this);
-                    SPouT.setArrayAnnotations(frame, array, index, top -1, top - 1 - offset, language);
                     break;
                 case LASTORE:
+                    SPouT.setArrayAnnotations(frame, this, curBCI, array, index, top -1, top - 1 - offset, language);
                     getInterpreterToVM().setArrayLong(language, popLong(frame, top - 1), index, array, this);
-                    SPouT.setArrayAnnotations(frame, array, index, top -1, top - 1 - offset, language);
                     break;
                 case DASTORE:
+                    SPouT.setArrayAnnotations(frame, this, curBCI, array, index, top -1, top - 1 - offset, language);
                     getInterpreterToVM().setArrayDouble(language, popDouble(frame, top - 1), index, array, this);
-                    SPouT.setArrayAnnotations(frame, array, index, top -1, top - 1 - offset, language);
                     break;
                 case AASTORE: referenceArrayStore(frame, top, index, array);     break;
                 default:
