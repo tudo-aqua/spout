@@ -524,24 +524,34 @@ public class SPouT {
 
     public static void idiv(VirtualFrame frame, int top, BytecodeNode bn, int bci) {
         int c1 = popInt(frame, top - 1);
-        checkNotZero(frame, c1, AnnotatedVM.peekAnnotations(frame, top - 1), bn, bci);
+        Annotations a1 = null;
+        Annotations a2 = null;
+        // annotations must be cleared before exception!
+        if (analyze) {
+            a1 = AnnotatedVM.popAnnotations(frame, top - 1);
+            a2 = AnnotatedVM.popAnnotations(frame, top - 2);
+        }
+        checkNotZero(frame, c1, a1, bn, bci);
         int c2 = popInt(frame, top - 2);
         putInt(frame, top - 2, c2 / c1);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 2, analysis.idiv(c1, c2,
-                AnnotatedVM.popAnnotations(frame, top - 1),
-                AnnotatedVM.popAnnotations(frame, top - 2)));
+        AnnotatedVM.putAnnotations(frame, top - 2, analysis.idiv(c1, c2, a1, a2));
     }
 
     public static void ldiv(VirtualFrame frame, int top, BytecodeNode bn, int bci) {
         long c1 = popLong(frame, top - 1);
-        checkNotZero(frame, c1, AnnotatedVM.peekAnnotations(frame, top - 1), bn, bci);
+        Annotations a1 = null;
+        Annotations a2 = null;
+        // annotations must be cleared before exception!
+        if (analyze) {
+            a1 = AnnotatedVM.popAnnotations(frame, top - 1);
+            a2 = AnnotatedVM.popAnnotations(frame, top - 3);
+        }
+        checkNotZero(frame, c1, a1, bn, bci);
         long c2 = popLong(frame, top - 3);
         putLong(frame, top - 4, c2 / c1);
         if (!analyze) return;
-        AnnotatedVM.putAnnotations(frame, top - 3, analysis.ldiv(c1, c2,
-                AnnotatedVM.popAnnotations(frame, top - 1),
-                AnnotatedVM.popAnnotations(frame, top - 3)));
+        AnnotatedVM.putAnnotations(frame, top - 3, analysis.ldiv(c1, c2, a1, a2));
     }
 
     public static void fdiv(VirtualFrame frame, int top) {
