@@ -101,7 +101,7 @@ public class TaintAnalysis implements Analysis<Taint> {
         if (type.equals(INFORMATION)) {
             trace.addElement(new TaintCheck(color, taint, ifColorNames));
         }
-        else if (ColorUtil.hasColor(taint, color)) {
+        if (ColorUtil.hasColor(taint, color)) {
             trace.addElement(new TaintViolation(color));
         }
         else {
