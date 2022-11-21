@@ -304,6 +304,7 @@ public final class Meta extends ContextAccessImpl {
         java_io_InputStream_close = java_io_InputStream.requireDeclaredMethod(Name.close, Signature._void);
         java_io_PrintStream = knownKlass(Type.java_io_PrintStream);
         java_io_PrintStream_println = java_io_PrintStream.requireDeclaredMethod(Name.println, Signature._void_String);
+        java_io_PrintStream_println_obj = java_io_PrintStream.requireDeclaredMethod(Name.println, Signature._void_Object);
         java_nio_file_Path = knownKlass(Type.java_nio_file_Path);
         java_nio_file_Paths = knownKlass(Type.java_nio_file_Paths);
         java_nio_file_Paths_get = java_nio_file_Paths.requireDeclaredMethod(Name.get, Signature.Path_String_String_array);
@@ -409,6 +410,7 @@ public final class Meta extends ContextAccessImpl {
 
         java_lang_System = knownKlass(Type.java_lang_System);
         java_lang_System_exit = java_lang_System.requireDeclaredMethod(Name.exit, Signature._void_int);
+        java_lang_System_out = java_lang_System.requireDeclaredField(Name.out, java_io_PrintStream.getType());
 
         java_lang_Runtime = knownKlass(Type.java_lang_Runtime);
         java_lang_Runtime_exit = java_lang_Runtime.requireDeclaredMethod(Name.exit, Signature._void_int);
@@ -1157,6 +1159,7 @@ public final class Meta extends ContextAccessImpl {
 
     public final ObjectKlass java_io_PrintStream;
     public final Method java_io_PrintStream_println;
+    public final Method java_io_PrintStream_println_obj;
 
     public final ObjectKlass java_nio_file_Path;
     public final ObjectKlass java_nio_file_Paths;
@@ -1236,6 +1239,8 @@ public final class Meta extends ContextAccessImpl {
     public final Method java_lang_System_initPhase2;
     public final Method java_lang_System_initPhase3;
     public final Method java_lang_System_exit;
+
+    public final Field java_lang_System_out;
 
     public final Method java_lang_Runtime_exit;
     public final Method java_lang_Runtime_getRuntime;
