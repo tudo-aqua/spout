@@ -43,6 +43,7 @@ import tools.aqua.smt.ComplexExpression;
 import tools.aqua.smt.Constant;
 import tools.aqua.smt.Expression;
 import tools.aqua.smt.OperatorComparator;
+import tools.aqua.taint.ColorUtil;
 import tools.aqua.taint.PostDominatorAnalysis;
 import tools.aqua.taint.Taint;
 import tools.aqua.witnesses.GWIT;
@@ -305,8 +306,11 @@ public class SPouT {
         if(!analyze || !config.analyzeControlFlowTaint()) return;
         Taint t = config.getTaintAnalysis().getIfTaint();
         if (t == null) return;
-        Annotations a = new Annotations();
-        a.set(config.getTaintIdx(), t);
+        Annotations a = AnnotatedVM.popAnnotations(frame, top);
+        if (a == null) {
+            a = new Annotations();
+        }
+        a.set(config.getTaintIdx(), ColorUtil.joinColors(t, Annotations.annotation(a, config.getTaintIdx())));
         AnnotatedVM.putAnnotations(frame, top, a);
     }
 

@@ -915,21 +915,25 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                         putInt(frame, top, getLocalInt(frame, bs.readLocalIndex(curBCI)));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
                         AnnotatedVM.putAnnotations(frame, top, AnnotatedVM.getLocalAnnotations(frame, bs.readLocalIndex(curBCI)));
+                        SPouT.markWithIFTaint(frame, top);
                         break;
                     case LLOAD:
                         putLong(frame, top, getLocalLong(frame, bs.readLocalIndex(curBCI)));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
                         AnnotatedVM.putAnnotations(frame, top, AnnotatedVM.getLocalAnnotations(frame, bs.readLocalIndex(curBCI)));
+                        SPouT.markWithIFTaint(frame, top);
                         break;
                     case FLOAD:
                         putFloat(frame, top, getLocalFloat(frame, bs.readLocalIndex(curBCI)));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
                         AnnotatedVM.putAnnotations(frame, top, AnnotatedVM.getLocalAnnotations(frame, bs.readLocalIndex(curBCI)));
+                        SPouT.markWithIFTaint(frame, top);
                         break;
                     case DLOAD:
                         putDouble(frame, top, getLocalDouble(frame, bs.readLocalIndex(curBCI)));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
                         AnnotatedVM.putAnnotations(frame, top, AnnotatedVM.getLocalAnnotations(frame, bs.readLocalIndex(curBCI)));
+                        SPouT.markWithIFTaint(frame, top);
                         break;
                     case ALOAD:
                         putObject(frame, top, getLocalObject(frame, bs.readLocalIndex(curBCI)));
@@ -944,6 +948,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                         putInt(frame, top, getLocalInt(frame, curOpcode - ILOAD_0));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
                         AnnotatedVM.putAnnotations(frame, top, AnnotatedVM.getLocalAnnotations(frame, curOpcode - ILOAD_0));
+                        SPouT.markWithIFTaint(frame, top);
                         break;
                     case LLOAD_0: // fall through
                     case LLOAD_1: // fall through
@@ -952,6 +957,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                         putLong(frame, top, getLocalLong(frame, curOpcode - LLOAD_0));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
                         AnnotatedVM.putAnnotations(frame, top + 1, AnnotatedVM.getLocalAnnotations(frame, curOpcode - LLOAD_0));
+                        SPouT.markWithIFTaint(frame, top);
                         break;
                     case FLOAD_0: // fall through
                     case FLOAD_1: // fall through
@@ -960,6 +966,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                         putFloat(frame, top, getLocalFloat(frame, curOpcode - FLOAD_0));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
                         AnnotatedVM.putAnnotations(frame, top, AnnotatedVM.getLocalAnnotations(frame, curOpcode - FLOAD_0));
+                        SPouT.markWithIFTaint(frame, top);
                         break;
                     case DLOAD_0: // fall through
                     case DLOAD_1: // fall through
@@ -968,6 +975,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                         putDouble(frame, top, getLocalDouble(frame, curOpcode - DLOAD_0));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
                         AnnotatedVM.putAnnotations(frame, top + 1, AnnotatedVM.getLocalAnnotations(frame, curOpcode - DLOAD_0));
+                        SPouT.markWithIFTaint(frame, top);
                         break;
                     case ALOAD_0:
                         putObject(frame, top, getLocalObject(frame, 0));
