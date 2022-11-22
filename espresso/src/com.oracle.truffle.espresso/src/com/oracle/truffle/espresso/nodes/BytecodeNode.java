@@ -1208,7 +1208,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
 
                     case IF_ACMPEQ: // fall through
                     case IF_ACMPNE:
-                        if (takeBranchRef2(popObject(frame, top - 1), popObject(frame, top - 2), curOpcode)) {
+                        if (SPouT.takeBranchRef2(frame, this, curBCI, popObject(frame, top - 1), popObject(frame, top - 2), curOpcode)) {
                             int targetBCI = bs.readBranchDest2(curBCI);
                             top += Bytecodes.stackEffectOf(IF_ACMPNE);
                             nextStatementIndex = beforeJumpChecks(frame, curBCI, targetBCI, top, statementIndex, instrument, loopCount, skipLivenessActions);
@@ -1420,7 +1420,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case ARRAYLENGTH : arrayLength(frame, top, curBCI); break;
 
                     case ATHROW      :
-                        //SPouT.iflowRegisterException();
+                        SPouT.iflowRegisterException();
                         throw getMeta().throwException(nullCheck(popObject(frame, top - 1)));
 
                     case CHECKCAST   : {
@@ -2980,6 +2980,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
             case '[' : // fall through
             case 'L' : {
                 StaticObject value = InterpreterToVM.getFieldObject(receiver, field);
+                SPouT.markObjectWithIFTaint(value);
                 putObject(frame, resultAt, value);
                 checkNoForeignObjectAssumption(value);
                 break;

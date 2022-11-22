@@ -836,6 +836,15 @@ public class MetaAnalysis implements Analysis<Annotations> {
     }
 
     @Override
+    public void takeBranchRef2(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, StaticObject c1, StaticObject c2, Annotations a1, Annotations a2) {
+        int i = 0;
+        for (Analysis<?> analysis : analyses) {
+            analysis.takeBranchRef2(frame, bcn, bci, opcode, takeBranch, c1, c2, Annotations.annotation(a1, i), Annotations.annotation(a2, i));
+            i++;
+        }
+    }
+
+    @Override
     public void tableSwitch(VirtualFrame frame, BytecodeNode bcn, int bci,
                             int low, int high, int concIndex, Annotations a1) {
         int i = 0;

@@ -27,7 +27,6 @@ package tools.aqua.taint;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.impl.Method;
-import com.oracle.truffle.espresso.impl.ObjectKlass;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.spout.*;
@@ -117,7 +116,7 @@ public class TaintAnalysis implements Analysis<Taint> {
         if (type.equals(INFORMATION)) {
             trace.addElement(new TaintCheck(color, taint, ifColorNames));
         }
-        else if (ColorUtil.hasColor(taint, color)) {
+        if (ColorUtil.hasColor(taint, color)) {
             trace.addElement(new TaintViolation(color));
         }
         else {
@@ -565,6 +564,9 @@ public class TaintAnalysis implements Analysis<Taint> {
         if (type == INFORMATION || (type == CONTROL && (arraySize != null || idx != null))) {
             informationFlowAddScope(frame, bcn, bci, fails ? 0 : 1, idx, arraySize);
         }
+        if (fails) {
+            iflowRegisterException();
+        }
     }
 
     @Override
@@ -576,6 +578,15 @@ public class TaintAnalysis implements Analysis<Taint> {
 
     @Override
     public void takeBranchPrimitive2(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, int c1, int c2, Taint a1, Taint a2) {
+        if (type == INFORMATION || (type == CONTROL && (a1 != null || a2 != null))) {
+            informationFlowAddScope(frame, bcn, bci, takeBranch ? 0 : 1, a1, a2);
+        }
+    }
+
+    @Override
+    public void takeBranchRef2(VirtualFrame frame, BytecodeNode bcn, int bci,
+                                int opcode, boolean takeBranch, StaticObject c1, StaticObject c2, Taint a1, Taint a2) {
+
         if (type == INFORMATION || (type == CONTROL && (a1 != null || a2 != null))) {
             informationFlowAddScope(frame, bcn, bci, takeBranch ? 0 : 1, a1, a2);
         }
@@ -722,7 +733,7 @@ public class TaintAnalysis implements Analysis<Taint> {
     public void makeConcatWithConstants(StaticObject result, Object[] args) {
         TaintAnalysis.ConvRes cr = convertArgToExpression(args[0]);
         Taint taint = cr.taint;
-        boolean anySymbolic = cr.fromSymbolic;
+        boolean anySymbolic = cr.fromSymbolic; // FIXME: or control flow analysis present
         int i = 1;
         while (args[i] != null) {
             cr = convertArgToExpression(args[i]);

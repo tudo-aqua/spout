@@ -1689,7 +1689,7 @@ public final class Meta extends ContextAccessImpl {
      */
     public EspressoException throwException(@JavaType(Throwable.class) StaticObject throwable) {
         assert InterpreterToVM.instanceOf(throwable, throwable.getKlass().getMeta().java_lang_Throwable);
-        SPouT.iflowRegisterException();
+        //SPouT.iflowRegisterException();
         throw EspressoException.wrap(throwable, this);
     }
 

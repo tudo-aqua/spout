@@ -316,12 +316,28 @@ public class SPouT {
 
     public static void markObjectWithIFTaint(StaticObject obj) {
         if(!analyze || !config.analyzeControlFlowTaint()) return;
+        if (obj == StaticObject.NULL) return;
         Taint t = config.getTaintAnalysis().getIfTaint();
         if (t == null) return;
-        Annotations.initObjectAnnotations(obj);
-        Annotations a = new Annotations();
-        a.set(config.getTaintIdx(), t);
-        Annotations.setObjectAnnotation(obj, a);
+
+        if (obj.isArray()) {
+            log("Warning: currently not marking array in markObjectWithIFTaint.");
+            return;
+        }
+        else if (!obj.hasAnnotations()) {
+            Annotations.initObjectAnnotations(obj);
+            Annotations a = new Annotations();
+            a.set(config.getTaintIdx(), t);
+            Annotations.setObjectAnnotation(obj, a);
+        }
+        else {
+            Annotations a = Annotations.objectAnnotation(obj);
+            if (a == null) {
+                a = new Annotations();
+                Annotations.setObjectAnnotation(obj, a);
+            }
+            a.set(config.getTaintIdx(), ColorUtil.joinColors(t, Annotations.annotation(a, config.getTaintIdx())));
+        }
     }
 
     public static PostDominatorAnalysis iflowGetPDA(Method method) {
@@ -593,7 +609,7 @@ public class SPouT {
                 aNew.set(config.getTaintIdx(), config.getTaintAnalysis().getIfTaint());
                 Annotations.setObjectAnnotation(message, aNew);
             }
-            // done in meta now: SPouT.iflowRegisterException();
+            SPouT.iflowRegisterException();
             throw meta.throwExceptionWithMessage(meta.java_lang_ArithmeticException, message);
         }
     }
@@ -612,7 +628,7 @@ public class SPouT {
                 aNew.set(config.getTaintIdx(), config.getTaintAnalysis().getIfTaint());
                 Annotations.setObjectAnnotation(message, aNew);
             }
-            // done in meta now: SPouT.iflowRegisterException();
+            SPouT.iflowRegisterException();
             throw meta.throwExceptionWithMessage(meta.java_lang_ArithmeticException, message);
         }
     }
@@ -1190,6 +1206,27 @@ public class SPouT {
         return takeBranch;
     }
 
+    public static boolean takeBranchRef2(VirtualFrame frame, BytecodeNode bcn, int bci, StaticObject operand1, StaticObject operand2, int opcode) {
+        assert IF_ACMPEQ <= opcode && opcode <= IF_ACMPNE;
+        boolean result;
+        // @formatter:off
+        switch (opcode) {
+            case IF_ACMPEQ : result =  operand1 == operand2; break;
+            case IF_ACMPNE : result =  operand1 != operand2; break;
+            default        :
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                throw EspressoError.shouldNotReachHere("expecting IF_ACMPEQ,IF_ACMPNE");
+        }
+        // @formatter:on
+
+        if (analyze) {
+            analysis.takeBranchRef2(frame, bcn, bci, opcode, result, operand1, operand2,
+                    Annotations.objectAnnotation(operand1), Annotations.objectAnnotation(operand2));
+        }
+
+        return result;
+    }
+
     public static void tableSwitch(int concIndex, Annotations annotatedIndex, int low, int high,
                                    VirtualFrame frame, BytecodeNode bcn, int bci) {
         if (analyze) {
@@ -1338,6 +1375,7 @@ public class SPouT {
         if (!sat1 && sIndex == null) {
             // index is negative and cannot be influenced by a SMT solver
             self.setAnnotations(null);
+            SPouT.iflowRegisterException();
             throw meta.throwExceptionWithMessage(meta.java_lang_StringIndexOutOfBoundsException, "Index is less than zero");
         }
         if (analyze) analysis.charAtPCCheck(cString, index, getStringAnnotations(self), sIndex);
@@ -1345,6 +1383,7 @@ public class SPouT {
         if (!sat2) {
             // index is greater than string length
             self.setAnnotations(null);
+            SPouT.iflowRegisterException();
             throw meta.throwExceptionWithMessage(meta.java_lang_StringIndexOutOfBoundsException, "Index must be less than string length");
         }
 
@@ -1385,6 +1424,7 @@ public class SPouT {
             if(analyze ){
                 analysis.substring(false, cSelf, cbegin, cSelf.length(), getStringAnnotations(self), sbegin, a3);
             }
+            SPouT.iflowRegisterException();
             meta.throwException(meta.java_lang_StringIndexOutOfBoundsException);
             throw e;
         }
@@ -1407,6 +1447,7 @@ public class SPouT {
             if(analyze){
                 analysis.substring(false, cSelf, cBegin, cEnd, getStringAnnotations(self), sBegin, sEnd);
             }
+            SPouT.iflowRegisterException();
             meta.throwException(meta.java_lang_StringIndexOutOfBoundsException);
             throw e;
         }
