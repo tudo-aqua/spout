@@ -86,14 +86,16 @@ public class TaintAnalysis implements Analysis<Taint> {
     public void taintObject(StaticObject o, int color) {
         // TODO: maybe most of this code should move to SPouT?
         if (!o.hasAnnotations()) {
-            int lengthAnnotations = ((ObjectKlass) o.getKlass()).getFieldTable().length + 1;
-            Annotations[] annotations = new Annotations[lengthAnnotations];
-            o.setAnnotations(annotations);
+            Annotations.initObjectAnnotations(o);
+            Annotations a = Annotations.create();
+            a.set(config.getTaintIdx(), new Taint(color));
+            Annotations.setObjectAnnotation(o, a);
         }
-
-        Annotations a = Annotations.annotation(o.getAnnotations(), -1);
-        a.set(config.getTaintIdx(), ColorUtil.joinColors(
-                (Taint) a.getAnnotations()[config.getTaintIdx()], new Taint(color)));
+        else {
+            Annotations a = Annotations.objectAnnotation(o);
+            a.set(config.getTaintIdx(), ColorUtil.joinColors(
+                    (Taint) a.getAnnotations()[config.getTaintIdx()], new Taint(color)));
+        }
     }
 
     public void checkTaint(AnnotatedValue o, int color) {

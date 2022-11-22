@@ -108,4 +108,8 @@ public class Annotations {
     public static Annotations create(Object[] annotations){
         return new Annotations(annotations);
     }
+
+    public static Annotations create() {
+        return new Annotations();
+    }
 }
