@@ -297,6 +297,7 @@ import com.oracle.truffle.espresso.impl.ObjectKlass;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.ExceptionHandler;
 import com.oracle.truffle.espresso.meta.JavaKind;
+import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.helper.EspressoReferenceArrayStoreNode;
 import com.oracle.truffle.espresso.nodes.quick.BaseQuickNode;
 import com.oracle.truffle.espresso.nodes.quick.CheckCastQuickNode;
@@ -2135,8 +2136,11 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
         } else if (constant instanceof StringConstant) {
             assert opcode == LDC || opcode == LDC_W;
             StaticObject internedString = pool.resolvedStringAt(cpi);
+            Meta meta = getMeta();
+            StaticObject obj = meta.toGuestString(meta.toHostString(internedString));
+            SPouT.markObjectWithIFTaint(obj);
             //TODO: (annotate string and maybe clone?)
-            putObject(frame, top, internedString);
+            putObject(frame, top, obj);
         } else if (constant instanceof ClassConstant) {
             assert opcode == LDC || opcode == LDC_W;
             Klass klass = pool.resolvedKlassAt(getDeclaringKlass(), cpi);
