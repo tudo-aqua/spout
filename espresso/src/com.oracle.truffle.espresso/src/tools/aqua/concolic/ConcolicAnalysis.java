@@ -27,9 +27,6 @@ package tools.aqua.concolic;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.EspressoLanguage;
-import com.oracle.truffle.espresso.classfile.constantpool.InvokeDynamicConstant;
-import com.oracle.truffle.espresso.descriptors.Symbol;
-import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.impl.ObjectKlass;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
@@ -37,9 +34,6 @@ import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.smt.*;
 import tools.aqua.spout.*;
-
-import java.lang.reflect.AnnotatedParameterizedType;
-import java.util.Arrays;
 
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.*;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.IF_ICMPLE;
@@ -299,6 +293,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         if (a1 != null || a2 != null) {
             a1 = new ComplexExpression(OperatorComparator.IAND, a1 != null ? a1 : Constant.fromConcreteValue(c1), INT_0x1F);
         }
+        a2 = convertCharToInt(a2);
         return binarySymbolicOp(OperatorComparator.IUSHR, Types.INT, c1, c2, a1, a2);
     }
 
@@ -369,6 +364,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression i2c(char c1, Expression a1) {
+        a1 = convertCharToInt(a1);
         return unarySymbolicOp(OperatorComparator.C2I, unarySymbolicOp(OperatorComparator.I2C, a1));
     }
 
@@ -618,7 +614,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         if (a == null || a instanceof Constant) {
             return;
         }
-        a = convertCharsToInt(a);
+        a = convertCharToInt(a);
         Expression expr = null;
         if (Expression.isBoolean(a)) {
             switch (opcode) {
@@ -762,8 +758,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
             if (a1 == null) a1 = Expression.fromConstant(Types.INT, c1);
             if (a2 == null) a2 = Expression.fromConstant(Types.INT, c2);
-            a1 = convertCharsToInt(a1);
-            a2 = convertCharsToInt(a2);
+            a1 = convertCharToInt(a1);
+            a2 = convertCharToInt(a2);
             switch (opcode) {
                 case IF_ICMPEQ:
                     expr = new ComplexExpression(takeBranch ? BVEQ : BVNE, a1, a2);
@@ -799,6 +795,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         if (a1 == null) {
             return;
         }
+        a1 = convertCharToInt(a1);
+
         Expression expr;
         int bId;
         if (low <= concIndex && concIndex <= high) {
@@ -821,11 +819,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         if (a1 == null) {
             return;
         }
-
-        if (Expression.isString(a1)) {
-            // assuming that it is a single character
-            a1 = new ComplexExpression(NAT2BV32, new ComplexExpression(STOCODE, a1));
-        }
+        a1 = convertCharToInt(a1);
 
         for (int i = 0; i < vals.length; i++) {
             if (vals[i] == key) {
@@ -1399,7 +1393,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return subExpressions;
     }
 
-    private Expression convertCharsToInt(Expression e) {
+    private Expression convertCharToInt(Expression e) {
         if (e instanceof ComplexExpression && ((ComplexExpression) e).getOperator().equals(SAT)){
             e = new ComplexExpression(C2I, new ComplexExpression(NAT2BV16, new ComplexExpression(STOCODE, e)));
         }
