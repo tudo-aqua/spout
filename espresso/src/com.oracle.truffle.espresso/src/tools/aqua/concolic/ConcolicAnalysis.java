@@ -250,6 +250,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         if (a1 != null || a2 != null) {
             a1 = new ComplexExpression(OperatorComparator.IAND, a1 != null ? a1 : Constant.fromConcreteValue(c1), INT_0x1F);
         }
+        a2 = convertCharToInt(a2);
         return binarySymbolicOp(OperatorComparator.ISHL, Types.INT, c2, c1, a2, a1);
     }
 
@@ -285,6 +286,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         if (a1 != null || a2 != null) {
             a1 = new ComplexExpression(OperatorComparator.IAND, a1 != null ? a1 : Constant.fromConcreteValue(c1), INT_0x1F);
         }
+        a2 = convertCharToInt(a2);
         return binarySymbolicOp(OperatorComparator.ISHR, Types.INT, c1, c2, a1, a2);
     }
 
