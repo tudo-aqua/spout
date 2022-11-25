@@ -822,6 +822,11 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             return;
         }
 
+        if (Expression.isString(a1)) {
+            // assuming that it is a single character
+            a1 = new ComplexExpression(NAT2BV32, new ComplexExpression(STOCODE, a1));
+        }
+
         for (int i = 0; i < vals.length; i++) {
             if (vals[i] == key) {
                 Constant idxVal = Constant.fromConcreteValue(key);

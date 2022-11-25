@@ -214,14 +214,23 @@ public class PostDominatorAnalysis {
     @CompilerDirectives.TruffleBoundary
     private void logGraph(Method m) {
         SPouT.log("CFG for " + m.getDeclaringKlass().getNameAsString() + " . " + m.getNameAsString());
+        int maxHandler = -1;
         for (int i=0; i<graph.totalBlocks(); i++) {
             //
             EspressoBlock b = graph.get(i);
+            if (b.hasExceptionHandler()) {
+                for (int h : b.getExceptionHandlers()) {
+                    maxHandler = maxHandler < h ? h : maxHandler;
+                }
+            }
             SPouT.log("  id: " + i + ": , lines [" + b.start() + " - " + b.end() + "], " + ", last BCI: " + b.lastBCI() + ", " +
                     "pred: " + Arrays.toString(b.predecessorsID()) + ", " +
                     "succ: " + Arrays.toString(b.successorsID()) + ", " +
                     "handlers: " + (b.hasExceptionHandler() ? Arrays.toString(b.getExceptionHandlers()) : "none") + ", " +
                     "entry: " + (graph.entryBlock() == b) + ", leaf: " + b.isLeaf());
+        }
+        for (int j=0; j<=maxHandler; j++) {
+            SPouT.log("  -- handler " + j + " is block " + graph.getHandlerBlock(j));
         }
     }
 
