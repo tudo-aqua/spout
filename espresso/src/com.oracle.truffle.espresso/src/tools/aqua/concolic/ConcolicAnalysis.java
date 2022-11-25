@@ -248,7 +248,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     @Override
     public Expression ishl(int c1, int c2, Expression a1, Expression a2) {
         if (a1 != null || a2 != null) {
-            a1 = new ComplexExpression(OperatorComparator.IAND, a1 != null ? a1 : Constant.fromConcreteValue(c1), INT_0x1F);
+            a1 = new ComplexExpression(OperatorComparator.IAND, a1 != null ?
+                    convertCharToInt(a1) : Constant.fromConcreteValue(c1), INT_0x1F);
         }
         a2 = convertCharToInt(a2);
         return binarySymbolicOp(OperatorComparator.ISHL, Types.INT, c2, c1, a2, a1);
@@ -257,7 +258,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     @Override
     public Expression lshl(int c1, long c2, Expression a1, Expression a2) {
         if (a1 != null || a2 != null) {
-            a1 = new ComplexExpression(I2L, new ComplexExpression(OperatorComparator.IAND, a1 != null ? a1 : Constant.fromConcreteValue(c1), INT_0x3F));
+            a1 = new ComplexExpression(I2L, new ComplexExpression(OperatorComparator.IAND, a1 != null ?
+                    convertCharToInt(a1) : Constant.fromConcreteValue(c1), INT_0x3F));
         }
         a2 = convertCharToInt(a2);
         return binarySymbolicOp(OperatorComparator.LSHL, LONG, Types.INT, c2, c1, a2, a1);
@@ -267,7 +269,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     @CompilerDirectives.TruffleBoundary
     public Expression lshr(int c1, long c2, Expression a1, Expression a2) {
         if (a1 != null || a2 != null) {
-            a1 = new ComplexExpression(I2L, new ComplexExpression(OperatorComparator.IAND, a1 != null ? a1 : Constant.fromConcreteValue(c1), INT_0x3F));
+            a1 = new ComplexExpression(I2L, new ComplexExpression(OperatorComparator.IAND, a1 != null ?
+                    convertCharToInt(a1) : Constant.fromConcreteValue(c1), INT_0x3F));
         }
         a2 = convertCharToInt(a2);
         return binarySymbolicOp(OperatorComparator.LSHR, LONG, Types.INT, c2, c1, a2, a1);
@@ -278,7 +281,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     @CompilerDirectives.TruffleBoundary
     public Expression lushr(int c1, long c2, Expression a1, Expression a2) {
         if (a1 != null || a2 != null) {
-            a1 = new ComplexExpression(I2L, new ComplexExpression(OperatorComparator.IAND, a1 != null ? a1 : Constant.fromConcreteValue(c1), INT_0x3F));
+            a1 = new ComplexExpression(I2L, new ComplexExpression(OperatorComparator.IAND, a1 != null ?
+                    convertCharToInt(a1) : Constant.fromConcreteValue(c1), INT_0x3F));
         }
         a2 = convertCharToInt(a2);
         return binarySymbolicOp(OperatorComparator.LUSHR, LONG, Types.INT, c2, c1, a2, a1);
@@ -287,7 +291,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     @Override
     public Expression ishr(int c1, int c2, Expression a1, Expression a2) {
         if (a1 != null || a2 != null) {
-            a1 = new ComplexExpression(OperatorComparator.IAND, a1 != null ? a1 : Constant.fromConcreteValue(c1), INT_0x1F);
+            a1 = new ComplexExpression(OperatorComparator.IAND, a1 != null ?
+                    convertCharToInt(a1) : Constant.fromConcreteValue(c1), INT_0x1F);
         }
         a2 = convertCharToInt(a2);
         return binarySymbolicOp(OperatorComparator.ISHR, Types.INT, c1, c2, a1, a2);
@@ -296,7 +301,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     @Override
     public Expression iushr(int c1, int c2, Expression a1, Expression a2) {
         if (a1 != null || a2 != null) {
-            a1 = new ComplexExpression(OperatorComparator.IAND, a1 != null ? a1 : Constant.fromConcreteValue(c1), INT_0x1F);
+            a1 = new ComplexExpression(OperatorComparator.IAND, a1 != null ?
+                    convertCharToInt(a1) : Constant.fromConcreteValue(c1), INT_0x1F);
         }
         a2 = convertCharToInt(a2);
         return binarySymbolicOp(OperatorComparator.IUSHR, Types.INT, c1, c2, a1, a2);
