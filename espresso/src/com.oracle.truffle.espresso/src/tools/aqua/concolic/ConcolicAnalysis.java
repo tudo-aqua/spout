@@ -290,22 +290,20 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression ishr(int c1, int c2, Expression a1, Expression a2) {
-        if (a1 != null || a2 != null) {
-            a1 = new ComplexExpression(OperatorComparator.IAND, a1 != null ?
-                    convertCharToInt(a1) : Constant.fromConcreteValue(c1), INT_0x1F);
+        if (a1 != null) {
+            a1 = new ComplexExpression(OperatorComparator.IAND, convertCharToInt(a1), INT_0x1F);
         }
         a2 = convertCharToInt(a2);
-        return binarySymbolicOp(OperatorComparator.ISHR, Types.INT, c1, c2, a1, a2);
+        return binarySymbolicOp(OperatorComparator.ISHR, Types.INT, c2, c1, a2, a1);
     }
 
     @Override
     public Expression iushr(int c1, int c2, Expression a1, Expression a2) {
-        if (a1 != null || a2 != null) {
-            a1 = new ComplexExpression(OperatorComparator.IAND, a1 != null ?
-                    convertCharToInt(a1) : Constant.fromConcreteValue(c1), INT_0x1F);
+        if (a1 != null) {
+            a1 = new ComplexExpression(OperatorComparator.IAND, convertCharToInt(a1), INT_0x1F);
         }
         a2 = convertCharToInt(a2);
-        return binarySymbolicOp(OperatorComparator.IUSHR, Types.INT, c1, c2, a1, a2);
+        return binarySymbolicOp(OperatorComparator.IUSHR, Types.INT, c2, c1, a2, a1);
     }
 
     @Override
