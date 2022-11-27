@@ -44,12 +44,20 @@ public final class Target_tools_aqua_concolic_Tainting {
         return SPouT.taint(o, AnnotatedValue.value(color));
     }
 
+    @Substitution(passAnnotations = true, methodName = "taint")
+    public static @JavaType(internalName = "D") Object taint_double(@JavaType(internalName = "D") Object o, @JavaType(internalName = "I") Object color) {
+        return SPouT.taint(o, AnnotatedValue.value(color));
+    }
+
     @Substitution(passAnnotations = false, methodName = "taint")
     public static @JavaType(String.class) StaticObject taint_string(@JavaType(String.class) StaticObject o, int color) {
         SPouT.taintObject(o, color);
         return o;
     }
 
+    // TODO: implement missing taint and check methods!
+    // TODO: remove stop analysis everywhere
+    
     /*
     // clean o from taint of color
     @Substitution(hasReceiver = false, methodName = "clean")
