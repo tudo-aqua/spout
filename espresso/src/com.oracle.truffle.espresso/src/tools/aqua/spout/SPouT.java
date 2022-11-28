@@ -1518,6 +1518,18 @@ public class SPouT {
         return stringCharAt(stringValue, index, meta);
     }
 
+    public static StaticObject stringBuXXAppendString(StaticObject self, Object string, Meta meta) {
+        char c = AnnotatedValue.value(string);
+        StaticObject guestString = meta.toGuestString(String.valueOf(c));
+
+        Annotations a = AnnotatedValue.svalue(string);
+        if(analyze && config.hasConcolicAnalysis() && a != null){
+            a.set(config.getConcolicIdx(), config.getConcolicAnalysis().convertIntToString((Expression) a.getAnnotations()[config.getConcolicIdx()]));
+        }
+        setStringAnnotations(guestString, a);
+        return SPouT.stringBuXXAppendString(self, guestString, meta);
+    }
+
     @CompilerDirectives.TruffleBoundary
     public static StaticObject stringBuXXAppendString(StaticObject self, StaticObject string, Meta meta) {
         Annotations[] selfAnnotations = self.getAnnotations();

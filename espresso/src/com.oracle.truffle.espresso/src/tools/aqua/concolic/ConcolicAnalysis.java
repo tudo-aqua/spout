@@ -577,6 +577,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
             if (sIndex == null) {
                 sIndex = Constant.fromConcreteValue(cIndex);
+            }else{
+                sIndex = convertCharToInt(sIndex);
             }
 
             Expression sLen = null;
@@ -1405,6 +1407,13 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     private Expression convertCharToInt(Expression e) {
         if (e instanceof ComplexExpression && ((ComplexExpression) e).getOperator().equals(SAT)){
             e = new ComplexExpression(C2I, new ComplexExpression(NAT2BV16, new ComplexExpression(STOCODE, e)));
+        }
+        return e;
+    }
+
+    public Expression convertIntToString(Expression e) {
+        if (e != null && e instanceof ComplexExpression && !((ComplexExpression) e).getOperator().equals(SAT)){
+            e = new ComplexExpression(OperatorComparator.SFROMCODE,  new ComplexExpression(BV2NAT, e));
         }
         return e;
     }

@@ -6,6 +6,8 @@ import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.spout.AnnotatedValue;
 import tools.aqua.spout.SPouT;
 
+import java.util.Locale;
+
 @EspressoSubstitutions
 public final class Target_java_lang_String {
     @Substitution(hasReceiver = true)
@@ -70,7 +72,13 @@ public final class Target_java_lang_String {
     }
 
     @Substitution(hasReceiver = true, methodName = "toLowerCase")
-    public static @JavaType(String.class) StaticObject toLowerCase(@JavaType(String.class) StaticObject self, @Inject Meta meta){
+    public static @JavaType(String.class) StaticObject toLowerCase_plain(@JavaType(String.class) StaticObject self, @Inject Meta meta){
+        return SPouT.stringToLowerCase(self, meta);
+    }
+
+    @Substitution(hasReceiver = true, methodName = "toLowerCase")
+    public static @JavaType(String.class) StaticObject toLowerCase_local(@JavaType(String.class) StaticObject self, @JavaType(Locale.class) StaticObject locale,  @Inject Meta meta){
+        SPouT.log("Warning: we do not support a precise model for toLowerCase with Locales. Using normal toLowerCase without Locale instead as approximation.");
         return SPouT.stringToLowerCase(self, meta);
     }
 

@@ -2,6 +2,7 @@ package com.oracle.truffle.espresso.substitutions;
 
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.spout.AnnotatedValue;
 import tools.aqua.spout.SPouT;
 
 @EspressoSubstitutions
@@ -25,6 +26,14 @@ public final class Target_java_lang_StringBuilder {
     public static @JavaType(StringBuilder.class) StaticObject append_string(
             @JavaType(StringBuilder.class) StaticObject self,
             @JavaType(String.class) StaticObject string,
+            @Inject Meta meta) {
+        return SPouT.stringBuXXAppendString(self, string, meta);
+    }
+
+    @Substitution(methodName = "append", hasReceiver = true, passAnnotations = true)
+    public static @JavaType(StringBuilder.class) StaticObject append_char(
+            @JavaType(StringBuilder.class) StaticObject self,
+            @JavaType(internalName = "C") Object string,
             @Inject Meta meta) {
         return SPouT.stringBuXXAppendString(self, string, meta);
     }

@@ -148,6 +148,7 @@ public enum OperatorComparator {
     SINDEXOF,
     STOINT,
     STOCODE,
+    SFROMCODE,
     NAT2BV32,
     BV2NAT,
     NATADD,
@@ -324,6 +325,8 @@ public enum OperatorComparator {
                 return "str.<";
             case STOCODE:
                 return "str.to_code";
+            case SFROMCODE:
+                return "str.from_code";
             case SSUBSTR:
                 return "str.substr";
             case NAT2BV32:
