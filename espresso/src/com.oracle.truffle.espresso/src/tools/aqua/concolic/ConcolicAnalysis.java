@@ -368,6 +368,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression i2b(byte c1, Expression a1) {
+        a1 = convertCharToInt(a1);
         return unarySymbolicOp(OperatorComparator.B2I, unarySymbolicOp(OperatorComparator.I2B, a1));
     }
 
@@ -379,11 +380,13 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression i2s(short c1, Expression a1) {
+        a1 = convertCharToInt(a1);
         return unarySymbolicOp(OperatorComparator.S2I, unarySymbolicOp(OperatorComparator.I2S, a1));
     }
 
     @Override
     public Expression i2l(long c1, Expression a1) {
+        a1 = convertCharToInt(a1);
         Expression sym = null;
         if (a1 != null) {
             sym = new ComplexExpression(I2L, a1);
