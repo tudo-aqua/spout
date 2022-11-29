@@ -930,6 +930,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression charAt(String self, int index, Expression a1, Expression a2) {
+        if (a1 == null && a2 == null) return null;
         if (a1 == null) a1 = Constant.fromConcreteValue(self);
         if (a2 == null) a2 = Constant.fromConcreteValue(index);
         return new ComplexExpression(SAT, a1, new ComplexExpression(BV2NAT, a2));
@@ -942,6 +943,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression stringConcat(String self, String other, Expression a1, Expression a2) {
+        if (a1 == null && a2 == null) return null;
         if (a1 == null) a1 = Constant.fromConcreteValue(self);
         if (a2 == null) a2 = Constant.fromConcreteValue(other);
         return new ComplexExpression(SCONCAT, a1, a2);
@@ -960,6 +962,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression substring(boolean success, String self, int start, int end, Expression a1, Expression a2, Expression a3) {
+        if (a1 == null && a2 == null && a3 == null) return null;
         if (a1 == null) a1 = Constant.fromConcreteValue(self);
         if (a2 == null) a2 = Constant.createNatConstant(start);
         else a2 = new ComplexExpression(BV2NAT, a2);
@@ -985,6 +988,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression stringBuilderAppend(String self, String other, Expression a1, Expression a2) {
+        if (a1 == null && a2 == null) return null;
         if (a2 == null) a2 = Constant.fromConcreteValue(other);
         if (a1 == null) return a2;
         return new ComplexExpression(SCONCAT, a1, a2);
@@ -1072,6 +1076,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression stringBuxxInsert(String self, String other, int offset, Expression a1, Expression a2, Expression a3) {
+        if (a1 == null && a2 == null && a3 == null) return null;
         if(a3 == null) a3 = Constant.createNatConstant(offset);
         if (a1 == null) a1 = Constant.fromConcreteValue(self);
         if (a2 == null) a2 = Constant.fromConcreteValue(other);
