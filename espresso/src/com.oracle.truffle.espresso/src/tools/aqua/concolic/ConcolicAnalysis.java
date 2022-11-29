@@ -1410,7 +1410,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     private Expression convertCharToInt(Expression e) {
         if (e instanceof ComplexExpression && ((ComplexExpression) e).getOperator().equals(SAT)){
             Expression codepoint = new ComplexExpression(STOCODE, e);
-            trace.addElement(new PathCondition(new ComplexExpression(LE, new ComplexExpression(STOCODE, e), Constant.createNatConstant(65535)), 0,1));
+            trace.addElement(new Assumption(new ComplexExpression(LE, new ComplexExpression(STOCODE, e), Constant.createNatConstant(65535)), true));
             e = new ComplexExpression(C2I, new ComplexExpression(NAT2BV16, codepoint));
         }
         return e;
