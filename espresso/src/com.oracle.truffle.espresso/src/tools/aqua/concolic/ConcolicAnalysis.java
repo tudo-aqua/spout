@@ -1401,7 +1401,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         for(int i = 0; i < subExpressions.length; i++){
             Expression e = subExpressions[i];
             if (e instanceof ComplexExpression && ((ComplexExpression) e).getOperator().equals(SAT)){
-                subExpressions[i] = new ComplexExpression(STOINT, e);
+                subExpressions[i] = convertCharToInt(e);
             }
         }
         return subExpressions;
@@ -1409,7 +1409,9 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     private Expression convertCharToInt(Expression e) {
         if (e instanceof ComplexExpression && ((ComplexExpression) e).getOperator().equals(SAT)){
-            e = new ComplexExpression(C2I, new ComplexExpression(NAT2BV16, new ComplexExpression(STOCODE, e)));
+            Expression codepoint = new ComplexExpression(STOCODE, e);
+            trace.addElement(new PathCondition(new ComplexExpression(LE, new ComplexExpression(STOCODE, e), Constant.createNatConstant(65535)), 0,1));
+            e = new ComplexExpression(C2I, new ComplexExpression(NAT2BV16, codepoint));
         }
         return e;
     }
