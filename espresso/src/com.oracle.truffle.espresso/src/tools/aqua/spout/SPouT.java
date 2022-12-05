@@ -29,7 +29,6 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.EspressoLanguage;
 import com.oracle.truffle.espresso.descriptors.Symbol;
 import com.oracle.truffle.espresso.descriptors.Symbol.Signature;
-import com.oracle.truffle.espresso.descriptors.Types;
 import com.oracle.truffle.espresso.impl.Field;
 import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.impl.Method;
@@ -38,7 +37,6 @@ import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
-import tools.aqua.concolic.ConcolicAnalysis;
 import tools.aqua.smt.ComplexExpression;
 import tools.aqua.smt.Constant;
 import tools.aqua.smt.Expression;
@@ -54,11 +52,8 @@ import java.util.LinkedList;
 import java.util.List;
 
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.*;
-import static com.oracle.truffle.espresso.descriptors.Symbol.Type.java_lang_Character_array;
 import static com.oracle.truffle.espresso.nodes.BytecodeNode.*;
 import static com.oracle.truffle.espresso.runtime.dispatch.EspressoInterop.getMeta;
-import static tools.aqua.smt.Constant.INT_ZERO;
-import static tools.aqua.smt.Constant.LONG_ZERO;
 
 public class SPouT {
 
@@ -1528,6 +1523,41 @@ public class SPouT {
         }
         setStringAnnotations(guestString, a);
         return SPouT.stringBuXXAppendString(self, guestString, meta);
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static StaticObject stringBuXXAppendString(StaticObject self, StaticObject chars, Object offset, Object length, Meta meta) {
+        if(offset instanceof AnnotatedValue || length instanceof AnnotatedValue){
+            SPouT.stopRecording("SPouT does not support append from char array with symbolic indicies yet!", meta);
+        }
+        Annotations[] a = chars.getAnnotations();
+        char[] hChars = chars.unwrap(meta.getLanguage());
+        int cOffset = AnnotatedValue.value(offset);
+        int cLength = AnnotatedValue.value(length);
+        if(cOffset < 0 || cLength < 0 || cOffset + cLength > hChars.length) meta.throwException(meta.java_lang_IndexOutOfBoundsException);
+        StaticObject other = meta.toGuestString(new String(hChars, cOffset, cLength));
+        if(analyze && a != null) {
+            Annotations aNew = Annotations.emptyArray();
+            if(config.hasConcolicAnalysis()) {
+                Expression stringExpr = a[cOffset] == null ? Constant.fromConcreteValue(hChars[cOffset]) : Annotations.annotation(a[cOffset], config.getConcolicIdx());
+                for (int i = 1; i < cLength; i++) {
+                    int index = cOffset + i;
+                    Expression nextChar = a[index] == null ? Constant.fromConcreteValue(hChars[index]) : Annotations.annotation(a[index], config.getConcolicIdx());
+                    stringExpr = new ComplexExpression(OperatorComparator.SCONCAT, stringExpr, nextChar);
+                }
+                aNew.set(config.getConcolicIdx(), stringExpr);
+            }
+            if(config.hasTaintAnalysis()) {
+                Taint color = Annotations.annotation(a[cOffset], config.getTaintIdx());
+                for (int i = 1; i < cLength; i++) {
+                    int index = cOffset + i;
+                    color = ColorUtil.joinColors(color, Annotations.annotation(a[index], config.getTaintIdx()));
+                }
+                aNew.set(config.getTaintIdx(), color);
+            }
+            setStringAnnotations(other, aNew);
+        }
+        return stringBuXXAppendString(self, other, meta);
     }
 
     @CompilerDirectives.TruffleBoundary
