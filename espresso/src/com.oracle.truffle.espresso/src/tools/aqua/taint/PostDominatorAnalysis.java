@@ -57,7 +57,7 @@ public class PostDominatorAnalysis {
         leafs = leafsOf(graph);
         ipdoms = new int[graph.totalBlocks()];
         tries = new int[graph.totalBlocks()];
-        //if (SPouT.DEBUG) logGraph(m);
+        if (SPouT.DEBUG && m.getNameAsString().equals("main")) logGraph(m);
         immediatePostDominators();
         tries();
     }
