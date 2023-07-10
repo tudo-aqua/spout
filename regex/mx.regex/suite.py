@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2019, 2020, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2019, 2022, Oracle and/or its affiliates. All rights reserved.
 # DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 #
 # The Universal Permissive License (UPL), Version 1.0
@@ -39,11 +39,11 @@
 # SOFTWARE.
 #
 suite = {
-  "mxversion" : "5.292.5",
+  "mxversion": "6.27.1",
 
   "name" : "regex",
 
-  "version" : "22.0.0",
+  "version" : "23.1.0",
   "release" : False,
   "groupId" : "org.graalvm.regex",
   "url" : "http://www.graalvm.org/",
@@ -64,13 +64,10 @@ suite = {
       {
         "name" : "truffle",
         "subdir": True,
-        "urls" : [
-          {"url" : "https://curio.ssw.jku.at/nexus/content/repositories/snapshots", "kind" : "binary"},
-         ]
       },
     ]
   },
-
+  "ignore_suite_commit_info": True,
   "licenses" : {
     "upl" : {
       "name" : "Universal Permissive License, Version 1.0",
@@ -88,13 +85,18 @@ suite = {
       "sourceDirs" : ["src"],
       "dependencies" : [
         "truffle:TRUFFLE_API",
+        "truffle:TRUFFLE_ICU4J",
+      ],
+      "requires" : [
+        "java.logging",
+        "jdk.unsupported", # sun.misc.Unsafe
       ],
       "annotationProcessors" : ["truffle:TRUFFLE_DSL_PROCESSOR"],
       "exports" : [
         "com.oracle.truffle.regex.chardata",
       ],
-      "checkstyleVersion" : "8.36.1",
-      "javaCompliance" : "8+",
+      "checkstyleVersion" : "10.7.0",
+      "javaCompliance" : "17+",
       "workingSets" : "Truffle,Regex",
       "spotbugsIgnoresGenerated" : True,
     },
@@ -112,7 +114,7 @@ suite = {
         "mx:JMH_1_21",
       ],
       "checkstyle" : "com.oracle.truffle.regex",
-      "javaCompliance" : "8+",
+      "javaCompliance" : "17+",
       "workingSets" : "Truffle,Regex",
     },
   },
@@ -130,6 +132,9 @@ suite = {
       "dependencies" : ["com.oracle.truffle.regex"],
       "distDependencies" : [
         "truffle:TRUFFLE_API",
+        "truffle:TRUFFLE_ICU4J",
+      ],
+      "exclude" : [
       ],
       "maven" : {
         "artifactId" : "regex",

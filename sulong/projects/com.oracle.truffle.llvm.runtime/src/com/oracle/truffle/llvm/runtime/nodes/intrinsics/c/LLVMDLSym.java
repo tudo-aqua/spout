@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2021, 2022, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -91,6 +91,7 @@ public abstract class LLVMDLSym extends LLVMIntrinsic {
     protected Object doDefaultHandle(@SuppressWarnings("unused") LLVMNativePointer libraryHandle,
                     @SuppressWarnings("unused") LLVMPointer symbolName,
                     @SuppressWarnings("unused") @Cached() LLVMReadStringNode readStr,
+                    @Cached WrappedFunctionNode wrapper,
                     @Cached BranchProfile exception) {
         LLVMContext ctx = LLVMContext.get(this);
         String name = readStr.executeWithTarget(symbolName);
@@ -101,7 +102,7 @@ public abstract class LLVMDLSym extends LLVMIntrinsic {
                 ctx.setDLError(2);
                 return LLVMNativePointer.createNull();
             }
-            return nativeSymbol;
+            return wrapper.execute(nativeSymbol);
         }
         return ctx.getSymbol(symbol, exception);
     }
@@ -111,7 +112,9 @@ public abstract class LLVMDLSym extends LLVMIntrinsic {
         NativeContextExtension nativeContextExtension = context.getContextExtensionOrNull(NativeContextExtension.class);
         if (nativeContextExtension != null) {
             NativeLookupResult result = nativeContextExtension.getNativeFunctionOrNull(name);
-            return result.getObject();
+            if (result != null) {
+                return result.getObject();
+            }
         }
         return null;
     }

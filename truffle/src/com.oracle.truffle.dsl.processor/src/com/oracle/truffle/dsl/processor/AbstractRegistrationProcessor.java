@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -43,17 +43,16 @@ package com.oracle.truffle.dsl.processor;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
-import java.util.Properties;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.function.Predicate;
 
 import javax.annotation.processing.AbstractProcessor;
@@ -70,8 +69,10 @@ import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.ElementFilter;
 import javax.lang.model.util.Elements;
+import javax.lang.model.util.Types;
 import javax.tools.Diagnostic.Kind;
 import javax.tools.FileObject;
 import javax.tools.StandardLocation;
@@ -82,6 +83,7 @@ import com.oracle.truffle.dsl.processor.java.compiler.CompilerFactory;
 import com.oracle.truffle.dsl.processor.java.compiler.JDTCompiler;
 import com.oracle.truffle.dsl.processor.java.model.CodeAnnotationMirror;
 import com.oracle.truffle.dsl.processor.java.model.CodeExecutableElement;
+import com.oracle.truffle.dsl.processor.java.model.CodeTreeBuilder;
 import com.oracle.truffle.dsl.processor.java.model.CodeTypeElement;
 import com.oracle.truffle.dsl.processor.java.transform.FixWarningsVisitor;
 import com.oracle.truffle.dsl.processor.java.transform.GenerateOverrideVisitor;
@@ -96,12 +98,9 @@ abstract class AbstractRegistrationProcessor extends AbstractProcessor {
         return SourceVersion.latest();
     }
 
-    @SuppressWarnings({"deprecation", "unchecked"})
     @Override
     public final boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
-        ProcessorContext.enter(processingEnv);
-        try {
-            ProcessorContext context = ProcessorContext.getInstance();
+        try (ProcessorContext context = ProcessorContext.enter(processingEnv)) {
             String providerServiceBinName = processingEnv.getElementUtils().getBinaryName(context.getTypeElement(getProviderClass())).toString();
             if (roundEnv.processingOver()) {
                 generateServicesRegistration(providerServiceBinName, registrations);
@@ -130,8 +129,6 @@ abstract class AbstractRegistrationProcessor extends AbstractProcessor {
                 }
             }
             return true;
-        } finally {
-            ProcessorContext.leave();
         }
     }
 
@@ -143,39 +140,32 @@ abstract class AbstractRegistrationProcessor extends AbstractProcessor {
 
     abstract void implementMethod(TypeElement annotatedElement, CodeExecutableElement methodToImplement);
 
-    final void assertNoErrorExpected(Element e) {
-        ExpectError.assertNoErrorExpected(processingEnv, e);
+    static void assertNoErrorExpected(Element e) {
+        ExpectError.assertNoErrorExpected(e);
     }
 
     final void emitError(String msg, Element e) {
-        if (ExpectError.isExpectedError(processingEnv, e, msg)) {
+        if (ExpectError.isExpectedError(e, msg)) {
             return;
         }
         processingEnv.getMessager().printMessage(Kind.ERROR, msg, e);
     }
 
     final void emitError(String msg, Element e, AnnotationMirror mirror, AnnotationValue value) {
-        if (ExpectError.isExpectedError(processingEnv, e, msg)) {
+        if (ExpectError.isExpectedError(e, msg)) {
             return;
         }
         processingEnv.getMessager().printMessage(Kind.ERROR, msg, e, mirror, value);
     }
 
     final void emitWarning(String msg, Element e) {
-        if (ExpectError.isExpectedError(processingEnv, e, msg)) {
+        if (ExpectError.isExpectedError(e, msg)) {
             return;
         }
         processingEnv.getMessager().printMessage(Kind.WARNING, msg, e);
     }
 
-    final void emitWarning(String msg, Element e, AnnotationMirror mirror, AnnotationValue value) {
-        if (ExpectError.isExpectedError(processingEnv, e, msg)) {
-            return;
-        }
-        processingEnv.getMessager().printMessage(Kind.WARNING, msg, e, mirror, value);
-    }
-
-    static AnnotationMirror copyAnnotations(AnnotationMirror mirror, Predicate<ExecutableElement> filter) {
+    static CodeAnnotationMirror copyAnnotations(AnnotationMirror mirror, Predicate<ExecutableElement> filter) {
         CodeAnnotationMirror res = new CodeAnnotationMirror(mirror.getAnnotationType());
         for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> e : mirror.getElementValues().entrySet()) {
             ExecutableElement executable = e.getKey();
@@ -193,11 +183,10 @@ abstract class AbstractRegistrationProcessor extends AbstractProcessor {
         };
         TypeElement providerElement = context.getTypeElement(getProviderClass());
         CodeTypeElement providerClass = GeneratorUtils.createClass(model, null, EnumSet.of(Modifier.PUBLIC),
-                        createProviderSimpleName(annotatedElement), null);
+                        createProviderSimpleName(annotatedElement), providerElement.asType());
         providerClass.getModifiers().add(Modifier.FINAL);
-        providerClass.getImplements().add(providerElement.asType());
-        for (Element method : ElementFilter.methodsIn(providerElement.getEnclosedElements())) {
-            CodeExecutableElement implementedMethod = CodeExecutableElement.clone((ExecutableElement) method);
+        for (ExecutableElement method : ElementFilter.methodsIn(providerElement.getEnclosedElements())) {
+            CodeExecutableElement implementedMethod = CodeExecutableElement.clone(method);
             implementedMethod.getModifiers().remove(Modifier.ABSTRACT);
             implementMethod(annotatedElement, implementedMethod);
             providerClass.add(implementedMethod);
@@ -208,7 +197,7 @@ abstract class AbstractRegistrationProcessor extends AbstractProcessor {
         }
         DeclaredType overrideType = (DeclaredType) context.getType(Override.class);
         providerClass.accept(new GenerateOverrideVisitor(overrideType), null);
-        providerClass.accept(new FixWarningsVisitor(annotatedElement, overrideType), null);
+        providerClass.accept(new FixWarningsVisitor(overrideType), null);
         providerClass.accept(new CodeWriter(context.getEnvironment(), annotatedElement), null);
         return providerClass.getQualifiedName().toString();
     }
@@ -231,11 +220,26 @@ abstract class AbstractRegistrationProcessor extends AbstractProcessor {
         String filename = "META-INF/truffle-registrations/" + providerClassName;
         try {
             FileObject file = env.getFiler().createResource(StandardLocation.CLASS_OUTPUT, "", filename, originatingElements);
-            PrintWriter writer = new PrintWriter(new OutputStreamWriter(file.openOutputStream(), "UTF-8"));
+            PrintWriter writer = new PrintWriter(new OutputStreamWriter(file.openOutputStream(), StandardCharsets.UTF_8));
             writer.println(serviceClassName);
             writer.close();
         } catch (IOException e) {
             handleIOError(e, env, originatingElements[0]);
+        }
+    }
+
+    static void generateGetServicesClassNames(AnnotationMirror registration, CodeTreeBuilder builder, ProcessorContext context) {
+        List<TypeMirror> services = ElementUtils.getAnnotationValueList(TypeMirror.class, registration, "services");
+        if (services.isEmpty()) {
+            builder.startReturn().startStaticCall(context.getType(Collections.class), "emptySet").end().end();
+        } else {
+            Types types = context.getEnvironment().getTypeUtils();
+            builder.startReturn();
+            builder.startStaticCall(context.getType(Arrays.class), "asList");
+            for (TypeMirror service : services) {
+                builder.startGroup().doubleQuote(ElementUtils.getBinaryName((TypeElement) ((DeclaredType) types.erasure(service)).asElement())).end();
+            }
+            builder.end(2);
         }
     }
 
@@ -262,7 +266,7 @@ abstract class AbstractRegistrationProcessor extends AbstractProcessor {
         String filename = "META-INF/services/" + providerBinName;
         List<String> providerClassNames = new ArrayList<>(providerRegistrations.size());
         for (String providerFqn : providerRegistrations.keySet()) {
-            TypeElement te = ElementUtils.getTypeElement(env, providerFqn);
+            TypeElement te = ElementUtils.getTypeElement(providerFqn);
             if (te == null) {
                 providerClassNames.add(providerFqn);
             } else {
@@ -272,8 +276,8 @@ abstract class AbstractRegistrationProcessor extends AbstractProcessor {
         Collections.sort(providerClassNames);
         if (!providerClassNames.isEmpty()) {
             try {
-                FileObject file = env.getFiler().createResource(StandardLocation.CLASS_OUTPUT, "", filename, providerRegistrations.values().toArray(new Element[providerRegistrations.size()]));
-                try (PrintWriter out = new PrintWriter(new OutputStreamWriter(file.openOutputStream(), "UTF-8"))) {
+                FileObject file = env.getFiler().createResource(StandardLocation.CLASS_OUTPUT, "", filename, providerRegistrations.values().toArray(new Element[0]));
+                try (PrintWriter out = new PrintWriter(new OutputStreamWriter(file.openOutputStream(), StandardCharsets.UTF_8))) {
                     for (String providerClassName : providerClassNames) {
                         out.println(providerClassName);
                     }
@@ -282,6 +286,19 @@ abstract class AbstractRegistrationProcessor extends AbstractProcessor {
                 handleIOError(e, env, providerRegistrations.values().iterator().next());
             }
         }
+    }
+
+    static String getScopedName(TypeElement element) {
+        StringBuilder name = new StringBuilder();
+        Element current = element;
+        while (current.getKind().isClass() || current.getKind().isInterface()) {
+            if (name.length() > 0) {
+                name.insert(0, '.');
+            }
+            name.insert(0, ElementUtils.getSimpleName((TypeElement) current));
+            current = current.getEnclosingElement();
+        }
+        return name.toString();
     }
 
     private static void handleIOError(IOException e, ProcessingEnvironment env, Element element) {
@@ -296,13 +313,5 @@ abstract class AbstractRegistrationProcessor extends AbstractProcessor {
 
     static boolean shouldGenerateProviderFiles(Element currentElement) {
         return CompilerFactory.getCompiler(currentElement) instanceof JDTCompiler;
-    }
-
-    @SuppressWarnings("serial")
-    static class SortedProperties extends Properties {
-        @Override
-        public synchronized Enumeration<Object> keys() {
-            return Collections.enumeration(new TreeSet<>(super.keySet()));
-        }
     }
 }

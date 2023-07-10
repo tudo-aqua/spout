@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -34,12 +34,11 @@ import org.graalvm.compiler.options.Option;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
-import org.graalvm.nativeimage.hosted.Feature;
 
-import com.oracle.svm.core.annotate.AutomaticFeature;
 import com.oracle.svm.core.option.APIOption;
 import com.oracle.svm.core.option.HostedOptionKey;
 import com.oracle.svm.core.option.LocatableMultiOptionValue;
+import com.oracle.svm.core.feature.AutomaticallyRegisteredImageSingleton;
 import com.oracle.svm.core.util.VMError;
 
 class RuntimeAssertionsOptionTransformer implements Function<Object, Object> {
@@ -77,6 +76,7 @@ class RuntimeAssertionsOptionTransformer implements Function<Object, Object> {
     }
 }
 
+@AutomaticallyRegisteredImageSingleton
 @Platforms(Platform.HOSTED_ONLY.class)
 public final class RuntimeAssertionsSupport {
 
@@ -92,14 +92,15 @@ public final class RuntimeAssertionsSupport {
         private static final char VALUE_SEPARATOR = ':';
 
         @APIOption(name = {"-ea", "-enableassertions"}, valueSeparator = VALUE_SEPARATOR, valueTransformer = RuntimeAssertionsOptionTransformer.Enable.class, defaultValue = "", //
-                        customHelp = "also -ea[:[packagename]...|:classname] or -enableassertions[:[packagename]...|:classname]. Enable assertions with specified granularity.")//
+                        customHelp = "also -ea[:[packagename]...|:classname] or -enableassertions[:[packagename]...|:classname]. Enable assertions with specified granularity at run time.")//
         @APIOption(name = {"-da", "-disableassertions"}, valueSeparator = VALUE_SEPARATOR, valueTransformer = RuntimeAssertionsOptionTransformer.Disable.class, defaultValue = "", //
-                        customHelp = "also -da[:[packagename]...|:classname] or -disableassertions[:[packagename]...|:classname]. Disable assertions with specified granularity.")//
+                        customHelp = "also -da[:[packagename]...|:classname] or -disableassertions[:[packagename]...|:classname]. Disable assertions with specified granularity at run time.")//
         @Option(help = "Enable or disable Java assert statements at run time") //
-        public static final HostedOptionKey<LocatableMultiOptionValue.Strings> RuntimeAssertions = new HostedOptionKey<>(new LocatableMultiOptionValue.Strings());
+        public static final HostedOptionKey<LocatableMultiOptionValue.Strings> RuntimeAssertions = new HostedOptionKey<>(LocatableMultiOptionValue.Strings.build());
 
-        @APIOption(name = {"-esa", "-enablesystemassertions"}, customHelp = "also -enablesystemassertions. Enables assertions in all system classes.") //
-        @APIOption(name = {"-dsa", "-disablesystemassertions"}, kind = APIOption.APIOptionKind.Negated, customHelp = "also -disablesystemassertions. Disables assertions in all system classes.") //
+        @APIOption(name = {"-esa", "-enablesystemassertions"}, customHelp = "also -enablesystemassertions. Enables assertions in all system classes at run time.") //
+        @APIOption(name = {"-dsa", "-disablesystemassertions"}, kind = APIOption.APIOptionKind.Negated, //
+                        customHelp = "also -disablesystemassertions. Disables assertions in all system classes at run time.") //
         @Option(help = "Enable or disable Java system assertions at run time") //
         public static final HostedOptionKey<Boolean> RuntimeSystemAssertions = new HostedOptionKey<>(false);
     }
@@ -190,13 +191,5 @@ public final class RuntimeAssertionsSupport {
 
     public boolean desiredAssertionStatus(Class<?> clazz) {
         return desiredAssertionStatusImpl(clazz.getName(), clazz.getClassLoader());
-    }
-}
-
-@AutomaticFeature
-class RuntimeAssertionsFeature implements Feature {
-    @Override
-    public void afterRegistration(AfterRegistrationAccess access) {
-        ImageSingletons.add(RuntimeAssertionsSupport.class, new RuntimeAssertionsSupport());
     }
 }

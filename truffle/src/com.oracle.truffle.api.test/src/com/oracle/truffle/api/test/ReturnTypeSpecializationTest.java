@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -41,16 +41,17 @@
 package com.oracle.truffle.api.test;
 
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.oracle.truffle.api.frame.FrameDescriptor;
-import com.oracle.truffle.api.frame.FrameSlot;
 import com.oracle.truffle.api.frame.FrameSlotKind;
 import com.oracle.truffle.api.frame.FrameSlotTypeException;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.nodes.UnexpectedResultException;
+import com.oracle.truffle.tck.tests.TruffleTestAssumptions;
 
 /**
  * <h3>Specializing Return Types</h3>
@@ -67,15 +68,21 @@ import com.oracle.truffle.api.nodes.UnexpectedResultException;
  */
 public class ReturnTypeSpecializationTest {
 
+    @BeforeClass
+    public static void runWithWeakEncapsulationOnly() {
+        TruffleTestAssumptions.assumeWeakEncapsulation();
+    }
+
     @Test
     public void test() {
-        FrameDescriptor frameDescriptor = new FrameDescriptor();
-        FrameSlot slot = frameDescriptor.addFrameSlot("localVar", FrameSlotKind.Int);
+        var builder = FrameDescriptor.newBuilder();
+        int slot = builder.addSlot(FrameSlotKind.Int, "localVar", null);
+        FrameDescriptor frameDescriptor = builder.build();
         TestRootNode rootNode = new TestRootNode(frameDescriptor, new IntAssignLocal(slot, new StringTestChildNode()), new IntReadLocal(slot));
-        Assert.assertEquals(FrameSlotKind.Int, frameDescriptor.getFrameSlotKind(slot));
+        Assert.assertEquals(FrameSlotKind.Int, frameDescriptor.getSlotKind(slot));
         Object result = rootNode.getCallTarget().call();
         Assert.assertEquals("42", result);
-        Assert.assertEquals(FrameSlotKind.Object, frameDescriptor.getFrameSlotKind(slot));
+        Assert.assertEquals(FrameSlotKind.Object, frameDescriptor.getSlotKind(slot));
     }
 
     class TestRootNode extends RootNode {
@@ -114,9 +121,9 @@ public class ReturnTypeSpecializationTest {
 
     abstract class FrameSlotNode extends TestChildNode {
 
-        protected final FrameSlot slot;
+        protected final int slot;
 
-        FrameSlotNode(FrameSlot slot) {
+        FrameSlotNode(int slot) {
             this.slot = slot;
         }
     }
@@ -134,7 +141,7 @@ public class ReturnTypeSpecializationTest {
 
         @Child private TestChildNode value;
 
-        IntAssignLocal(FrameSlot slot, TestChildNode value) {
+        IntAssignLocal(int slot, TestChildNode value) {
             super(slot);
             this.value = value;
         }
@@ -145,7 +152,7 @@ public class ReturnTypeSpecializationTest {
                 int result = value.executeInt(frame);
                 frame.setInt(slot, result);
             } catch (UnexpectedResultException e) {
-                frame.getFrameDescriptor().setFrameSlotKind(slot, FrameSlotKind.Object);
+                frame.getFrameDescriptor().setSlotKind(slot, FrameSlotKind.Object);
                 frame.setObject(slot, e.getResult());
                 replace(new ObjectAssignLocal(slot, value));
             }
@@ -157,7 +164,7 @@ public class ReturnTypeSpecializationTest {
 
         @Child private TestChildNode value;
 
-        ObjectAssignLocal(FrameSlot slot, TestChildNode value) {
+        ObjectAssignLocal(int slot, TestChildNode value) {
             super(slot);
             this.value = value;
         }
@@ -165,7 +172,7 @@ public class ReturnTypeSpecializationTest {
         @Override
         Object execute(VirtualFrame frame) {
             Object o = value.execute(frame);
-            frame.getFrameDescriptor().setFrameSlotKind(slot, FrameSlotKind.Object);
+            frame.getFrameDescriptor().setSlotKind(slot, FrameSlotKind.Object);
             frame.setObject(slot, o);
             return null;
         }
@@ -173,7 +180,7 @@ public class ReturnTypeSpecializationTest {
 
     class IntReadLocal extends FrameSlotNode {
 
-        IntReadLocal(FrameSlot slot) {
+        IntReadLocal(int slot) {
             super(slot);
         }
 
@@ -198,7 +205,7 @@ public class ReturnTypeSpecializationTest {
 
     class ObjectReadLocal extends FrameSlotNode {
 
-        ObjectReadLocal(FrameSlot slot) {
+        ObjectReadLocal(int slot) {
             super(slot);
         }
 

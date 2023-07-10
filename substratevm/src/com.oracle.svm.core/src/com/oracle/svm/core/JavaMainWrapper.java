@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,43 +24,63 @@
  */
 package com.oracle.svm.core;
 
-//Checkstyle: allow reflection
-
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 
-import com.oracle.svm.core.log.Log;
+import com.oracle.svm.util.ClassUtil;
+import org.graalvm.compiler.serviceprovider.JavaVersionUtil;
 import org.graalvm.compiler.word.Word;
+import org.graalvm.nativeimage.CurrentIsolate;
 import org.graalvm.nativeimage.ImageSingletons;
+import org.graalvm.nativeimage.Isolate;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
+import org.graalvm.nativeimage.StackValue;
+import org.graalvm.nativeimage.VMRuntime;
 import org.graalvm.nativeimage.c.function.CEntryPoint;
+import org.graalvm.nativeimage.c.function.CFunctionPointer;
 import org.graalvm.nativeimage.c.struct.SizeOf;
 import org.graalvm.nativeimage.c.type.CCharPointer;
 import org.graalvm.nativeimage.c.type.CCharPointerPointer;
 import org.graalvm.nativeimage.c.type.CTypeConversion;
 import org.graalvm.nativeimage.c.type.CTypeConversion.CCharPointerHolder;
+import org.graalvm.nativeimage.c.type.WordPointer;
 import org.graalvm.word.Pointer;
+import org.graalvm.word.PointerBase;
 import org.graalvm.word.UnsignedWord;
+import org.graalvm.word.WordBase;
 import org.graalvm.word.WordFactory;
 
-import com.oracle.svm.core.annotate.AlwaysInline;
 import com.oracle.svm.core.c.CGlobalData;
 import com.oracle.svm.core.c.CGlobalDataFactory;
 import com.oracle.svm.core.c.function.CEntryPointActions;
 import com.oracle.svm.core.c.function.CEntryPointCreateIsolateParameters;
+import com.oracle.svm.core.c.function.CEntryPointErrors;
 import com.oracle.svm.core.c.function.CEntryPointOptions;
+import com.oracle.svm.core.c.function.CEntryPointOptions.NoEpilogue;
+import com.oracle.svm.core.c.function.CEntryPointOptions.NoPrologue;
+import com.oracle.svm.core.c.function.CEntryPointSetup;
 import com.oracle.svm.core.jdk.InternalVMMethod;
 import com.oracle.svm.core.jdk.RuntimeSupport;
+import com.oracle.svm.core.jni.JNIJavaVMList;
+import com.oracle.svm.core.jni.functions.JNIFunctionTables;
+import com.oracle.svm.core.log.Log;
 import com.oracle.svm.core.thread.JavaThreads;
-import com.oracle.svm.core.util.Counter;
-
-import jdk.vm.ci.code.Architecture;
+import com.oracle.svm.core.thread.PlatformThreads;
+import com.oracle.svm.core.thread.ThreadListenerSupport;
+import com.oracle.svm.core.thread.VMThreads;
+import com.oracle.svm.core.util.CounterSupport;
+import com.oracle.svm.core.util.UserError;
+import com.oracle.svm.core.util.VMError;
+import com.oracle.svm.util.ReflectionUtil;
 
 @InternalVMMethod
 public class JavaMainWrapper {
@@ -78,14 +98,41 @@ public class JavaMainWrapper {
 
     public static class JavaMainSupport {
 
-        final MethodHandle javaMainHandle;
+        private final MethodHandle javaMainHandle;
+        private final MethodHandle javaMainClassCtorHandle;
         final String javaMainClassName;
 
         public String[] mainArgs;
 
+        private final boolean mainWithoutArgs;
+        private final boolean mainNonstatic;
+
         @Platforms(Platform.HOSTED_ONLY.class)
         public JavaMainSupport(Method javaMainMethod) throws IllegalAccessException {
-            this.javaMainHandle = MethodHandles.lookup().unreflect(javaMainMethod);
+            if (instanceMainMethodSupported()) {
+                javaMainMethod.setAccessible(true);
+                int mods = javaMainMethod.getModifiers();
+                this.mainNonstatic = !Modifier.isStatic(mods);
+                this.mainWithoutArgs = javaMainMethod.getParameterCount() == 0;
+                MethodHandle mainHandle = MethodHandles.lookup().unreflect(javaMainMethod);
+                MethodHandle ctorHandle = null;
+                if (mainNonstatic) {
+                    // Instance main
+                    try {
+                        Constructor<?> ctor = ReflectionUtil.lookupConstructor(javaMainMethod.getDeclaringClass());
+                        ctorHandle = MethodHandles.lookup().unreflectConstructor(ctor);
+                    } catch (ReflectionUtil.ReflectionUtilError ex) {
+                        throw UserError.abort(ex, "No non-private zero argument constructor found in class %s", ClassUtil.getUnqualifiedName(javaMainMethod.getDeclaringClass()));
+                    }
+                }
+                this.javaMainHandle = mainHandle;
+                this.javaMainClassCtorHandle = ctorHandle;
+            } else {
+                this.mainNonstatic = false;
+                this.mainWithoutArgs = false;
+                this.javaMainHandle = MethodHandles.lookup().unreflect(javaMainMethod);
+                this.javaMainClassCtorHandle = null;
+            }
             this.javaMainClassName = javaMainMethod.getDeclaringClass().getName();
         }
 
@@ -105,7 +152,7 @@ public class JavaMainWrapper {
         public List<String> getInputArguments() {
             CEntryPointCreateIsolateParameters args = MAIN_ISOLATE_PARAMETERS.get();
             if (args.getArgv().isNonNull() && args.getArgc() > 0) {
-                String[] unmodifiedArgs = SubstrateUtil.getArgs(args.getArgc(), args.getArgv());
+                String[] unmodifiedArgs = SubstrateUtil.convertCToJavaArgs(args.getArgc(), args.getArgv());
                 List<String> inputArgs = new ArrayList<>(Arrays.asList(unmodifiedArgs));
 
                 if (mainArgs != null) {
@@ -115,19 +162,53 @@ public class JavaMainWrapper {
             }
             return Collections.emptyList();
         }
+
+    }
+
+    public static void invokeMain(String[] args) throws Throwable {
+        JavaMainSupport javaMainSupport = ImageSingletons.lookup(JavaMainSupport.class);
+        if (javaMainSupport.mainNonstatic) {
+            Object instance = javaMainSupport.javaMainClassCtorHandle.invoke();
+            if (javaMainSupport.mainWithoutArgs) {
+                javaMainSupport.javaMainHandle.invoke(instance);
+            } else {
+                javaMainSupport.javaMainHandle.invoke(instance, args);
+            }
+        } else {
+            if (javaMainSupport.mainWithoutArgs) {
+                javaMainSupport.javaMainHandle.invokeExact();
+            } else {
+                javaMainSupport.javaMainHandle.invokeExact(args);
+            }
+        }
+    }
+
+    /**
+     * Determines whether instance main methodes are enabled. See JDK-8306112: Implementation of JEP
+     * 445: Unnamed Classes and Instance Main Methods (Preview).
+     */
+    public static boolean instanceMainMethodSupported() {
+        if (JavaVersionUtil.JAVA_SPEC < 21) {
+            return false;
+        }
+        var previewFeature = ReflectionUtil.lookupClass(true, "jdk.internal.misc.PreviewFeatures");
+        try {
+            return previewFeature != null && (Boolean) previewFeature.getDeclaredMethod("isEnabled").invoke(null);
+        } catch (ReflectiveOperationException e) {
+            throw VMError.shouldNotReachHere(e);
+        }
+    }
+
+    @Uninterruptible(reason = "The caller initialized the thread state, so the callees do not need to be uninterruptible.", calleeMustBe = false)
+    private static int runCore() {
+        return runCore0();
     }
 
     /**
      * Used by JavaMainWrapper and any user supplied main entry point (from
      * {@link org.graalvm.nativeimage.hosted.Feature.AfterRegistrationAccess}).
      */
-    @AlwaysInline(value = "Single callee from the main entry point.")
-    public static int runCore() {
-        Architecture imageArchitecture = ImageSingletons.lookup(SubstrateTargetDescription.class).arch;
-        CPUFeatureAccess cpuFeatureAccess = ImageSingletons.lookup(CPUFeatureAccess.class);
-        cpuFeatureAccess.verifyHostSupportsArchitecture(imageArchitecture);
-
-        int exitCode;
+    private static int runCore0() {
         try {
             if (SubstrateOptions.ParseRuntimeOptions.getValue()) {
                 /*
@@ -135,8 +216,26 @@ public class JavaMainWrapper {
                  * because they often depend on option values. The user is expected to manually run
                  * the startup hooks after setting all option values.
                  */
-                RuntimeSupport.getRuntimeSupport().executeStartupHooks();
+                VMRuntime.initialize();
             }
+
+            if (SubstrateOptions.DumpHeapAndExit.getValue()) {
+                if (VMInspectionOptions.hasHeapDumpSupport()) {
+                    String absoluteHeapDumpPath = SubstrateOptions.getHeapDumpPath(SubstrateOptions.Name.getValue() + ".hprof");
+                    VMRuntime.dumpHeap(absoluteHeapDumpPath, true);
+                    System.out.println("Heap dump created at '" + absoluteHeapDumpPath + "'.");
+                    return 0;
+                } else {
+                    System.err.println("Unable to dump heap. Heap dumping is only supported on Linux and MacOS for native executables built with `" +
+                                    VMInspectionOptions.getHeapdumpsCommandArgument() + "`.");
+                    return 1;
+                }
+            }
+
+            ThreadListenerSupport.get().beforeThreadRun();
+
+            // Ensure that native code using JNI_GetCreatedJavaVMs finds this isolate.
+            JNIJavaVMList.addJavaVM(JNIFunctionTables.singleton().getGlobalJavaVM());
 
             /*
              * Invoke the application's main method. Invoking the main method via a method handle
@@ -144,11 +243,8 @@ public class JavaMainWrapper {
              * exceptions in a InvocationTargetException.
              */
             JavaMainSupport mainSupport = ImageSingletons.lookup(JavaMainSupport.class);
-            mainSupport.javaMainHandle.invokeExact(mainSupport.mainArgs);
-
-            /* The application terminated normally. */
-            exitCode = 0;
-
+            invokeMain(mainSupport.mainArgs);
+            return 0;
         } catch (Throwable ex) {
             JavaThreads.dispatchUncaughtException(Thread.currentThread(), ex);
 
@@ -157,30 +253,111 @@ public class JavaMainWrapper {
              * if an uncaught exception handler is registered. This behavior is the same on the Java
              * HotSpot VM.
              */
-            exitCode = 1;
-
-        } finally {
-            /*
-             * Shutdown sequence: First wait for all non-daemon threads to exit.
-             */
-            JavaThreads.singleton().joinAllNonDaemons();
-            /*
-             * Run shutdown hooks (both our own hooks and application-registered hooks. Note that
-             * this can start new non-daemon threads. We are not responsible to wait until they have
-             * exited.
-             */
-            RuntimeSupport.getRuntimeSupport().shutdown();
-
-            Counter.logValues(Log.log());
+            return 1;
         }
-        return exitCode;
     }
 
+    @Uninterruptible(reason = "The caller initialized the thread state, so the callees do not need to be uninterruptible.", calleeMustBe = false)
+    private static void runShutdown() {
+        runShutdown0();
+    }
+
+    private static void runShutdown0() {
+        PlatformThreads.ensureCurrentAssigned("DestroyJavaVM", null, false);
+
+        // Shutdown sequence: First wait for all non-daemon threads to exit.
+        PlatformThreads.singleton().joinAllNonDaemons();
+
+        /*
+         * Run shutdown hooks (both our own hooks and application-registered hooks. Note that this
+         * can start new non-daemon threads. We are not responsible to wait until they have exited.
+         */
+        RuntimeSupport.getRuntimeSupport().shutdown();
+
+        CounterSupport.singleton().logValues(Log.log());
+    }
+
+    @Uninterruptible(reason = "Thread state not set up yet.")
     @CEntryPoint(include = CEntryPoint.NotIncludedAutomatically.class)
-    @CEntryPointOptions(prologue = EnterCreateIsolateWithCArgumentsPrologue.class)
-    @SuppressWarnings("unused")
+    @CEntryPointOptions(prologue = NoPrologue.class, epilogue = NoEpilogue.class)
     public static int run(int argc, CCharPointerPointer argv) {
-        return runCore();
+        if (SubstrateOptions.RunMainInNewThread.getValue()) {
+            return doRunInNewThread(argc, argv);
+        } else {
+            return doRun(argc, argv);
+        }
+    }
+
+    @Uninterruptible(reason = "Thread state not setup yet.")
+    private static int doRun(int argc, CCharPointerPointer argv) {
+        try {
+            CPUFeatureAccess cpuFeatureAccess = ImageSingletons.lookup(CPUFeatureAccess.class);
+            cpuFeatureAccess.verifyHostSupportsArchitectureEarlyOrExit();
+            // Create the isolate and attach the current C thread as the main Java thread.
+            EnterCreateIsolateWithCArgumentsPrologue.enter(argc, argv);
+            assert !VMThreads.wasStartedByCurrentIsolate(CurrentIsolate.getCurrentThread()) : "re-attach would cause issues otherwise";
+
+            Isolate isolate = CurrentIsolate.getIsolate();
+            int exitCode = runCore();
+            CEntryPointSetup.LeaveDetachThreadEpilogue.leave();
+
+            // Re-attach the same C thread as another Java thread.
+            EnterAttachThreadForShutdown.enter(isolate);
+            runShutdown();
+            CEntryPointSetup.LeaveDetachThreadEpilogue.leave();
+
+            return exitCode;
+        } catch (Throwable e) {
+            throw VMError.shouldNotReachHere(e);
+        }
+    }
+
+    private static final CGlobalData<CCharPointer> START_THREAD_UNMANAGED_ERROR_MESSAGE = CGlobalDataFactory
+                    .createCString("Running main entry point in a new platform thread failed. Platform thread failed to start.");
+    private static final CGlobalData<CCharPointer> JOIN_THREAD_UNMANAGED_ERROR_MESSAGE = CGlobalDataFactory.createCString("Thread that the main entry point was running on failed to join.");
+
+    @Uninterruptible(reason = "Thread state not setup yet.")
+    private static int doRunInNewThread(int argc, CCharPointerPointer argv) {
+        MAIN_ISOLATE_PARAMETERS.get().setArgc(argc);
+        MAIN_ISOLATE_PARAMETERS.get().setArgv(argv);
+        long stackSize = SubstrateOptions.StackSize.getHostedValue();
+        PlatformThreads.OSThreadHandle osThreadHandle = PlatformThreads.singleton().startThreadUnmanaged(RUN_MAIN_ROUTINE.get(), WordFactory.nullPointer(), (int) stackSize);
+        if (osThreadHandle.isNull()) {
+            CEntryPointActions.failFatally(1, START_THREAD_UNMANAGED_ERROR_MESSAGE.get());
+            return 1;
+        }
+        try {
+            WordPointer threadExitStatus = StackValue.get(WordPointer.class);
+            boolean joined = PlatformThreads.singleton().joinThreadUnmanaged(osThreadHandle, threadExitStatus);
+            if (!joined) {
+                CEntryPointActions.failFatally(1, JOIN_THREAD_UNMANAGED_ERROR_MESSAGE.get());
+                return 1;
+            }
+            return (int) threadExitStatus.read().rawValue();
+        } finally {
+            PlatformThreads.singleton().closeOSThreadHandle(osThreadHandle);
+        }
+    }
+
+    private static final CGlobalData<CFunctionPointer> RUN_MAIN_ROUTINE = CGlobalDataFactory.forSymbol("__svm_JavaMainWrapper_runMainRoutine");
+
+    private static class RunMainInNewThreadBooleanSupplier implements BooleanSupplier {
+        @Override
+        public boolean getAsBoolean() {
+            if (!ImageSingletons.contains(JavaMainSupport.class)) {
+                return false;
+            }
+            return SubstrateOptions.RunMainInNewThread.getValue();
+        }
+    }
+
+    @SuppressWarnings("unused")
+    @Uninterruptible(reason = "Thread state not setup yet.")
+    @CEntryPoint(name = "__svm_JavaMainWrapper_runMainRoutine", include = RunMainInNewThreadBooleanSupplier.class)
+    @CEntryPointOptions(prologue = CEntryPointOptions.NoPrologue.class, epilogue = CEntryPointOptions.NoEpilogue.class)
+    static WordBase runMainRoutine(PointerBase data) {
+        int exitStatus = doRun(MAIN_ISOLATE_PARAMETERS.get().getArgc(), MAIN_ISOLATE_PARAMETERS.get().getArgv());
+        return WordFactory.signed(exitStatus);
     }
 
     private static boolean isArgumentBlockSupported() {
@@ -261,19 +438,35 @@ public class JavaMainWrapper {
         return CTypeConversion.toJavaString(MAIN_ISOLATE_PARAMETERS.get().getArgv().read(0));
     }
 
-    private static class EnterCreateIsolateWithCArgumentsPrologue {
+    private static class EnterCreateIsolateWithCArgumentsPrologue implements CEntryPointOptions.Prologue {
         private static final CGlobalData<CCharPointer> errorMessage = CGlobalDataFactory.createCString(
                         "Failed to create the main Isolate.");
 
         @SuppressWarnings("unused")
+        @Uninterruptible(reason = "prologue")
         public static void enter(int paramArgc, CCharPointerPointer paramArgv) {
             CEntryPointCreateIsolateParameters args = MAIN_ISOLATE_PARAMETERS.get();
-            args.setVersion(3);
+            args.setVersion(4);
             args.setArgc(paramArgc);
             args.setArgv(paramArgv);
+            args.setIgnoreUnrecognizedArguments(false);
+            args.setExitWhenArgumentParsingFails(true);
 
             int code = CEntryPointActions.enterCreateIsolate(args);
-            if (code != 0) {
+            if (code != CEntryPointErrors.NO_ERROR) {
+                CEntryPointActions.failFatally(code, errorMessage.get());
+            }
+        }
+    }
+
+    public static class EnterAttachThreadForShutdown implements CEntryPointOptions.Prologue {
+        private static final CGlobalData<CCharPointer> errorMessage = CGlobalDataFactory.createCString(
+                        "Failed to re-attach the main thread for shutting down the main isolate.");
+
+        @Uninterruptible(reason = "prologue")
+        static void enter(Isolate isolate) {
+            int code = CEntryPointActions.enterAttachThread(isolate, false);
+            if (code != CEntryPointErrors.NO_ERROR) {
                 CEntryPointActions.failFatally(code, errorMessage.get());
             }
         }

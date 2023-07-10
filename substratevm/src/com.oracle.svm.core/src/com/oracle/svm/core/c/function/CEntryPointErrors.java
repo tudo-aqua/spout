@@ -24,8 +24,6 @@
  */
 package com.oracle.svm.core.c.function;
 
-// Checkstyle: stop
-
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -33,11 +31,9 @@ import java.lang.annotation.Target;
 import java.lang.reflect.Field;
 import java.util.Arrays;
 
-import org.graalvm.util.DirectAnnotationAccess;
+import org.graalvm.nativeimage.AnnotationAccess;
 
 import com.oracle.svm.core.util.VMError;
-
-// Checkstyle: resume
 
 /**
  * Errors returned by {@link CEntryPointActions} and {@link CEntryPointNativeFunctions} and their
@@ -120,6 +116,39 @@ public final class CEntryPointErrors {
     @Description("Releasing the isolate's image heap memory failed.") //
     public static final int FREE_IMAGE_HEAP_FAILED = 20;
 
+    @Description("The auxiliary image was built from a different primary image.") //
+    public static final int AUX_IMAGE_PRIMARY_IMAGE_MISMATCH = 21;
+
+    @Description("The isolate arguments could not be parsed.") //
+    public static final int ARGUMENT_PARSING_FAILED = 22;
+
+    @Description("Current target does not support the following CPU features that are required by the image.") //
+    public static final int CPU_FEATURE_CHECK_FAILED = 23;
+
+    @Description("Image page size is incompatible with run-time page size. Rebuild image with -H:PageSize=[pagesize] to set appropriately.") //
+    public static final int PAGE_SIZE_CHECK_FAILED = 24;
+
+    @Description("Creating an in-memory file for the GOT failed.") //
+    public static final int DYNAMIC_METHOD_ADDRESS_RESOLUTION_GOT_FD_CREATE_FAILED = 25;
+
+    @Description("Resizing the in-memory file for the GOT failed.") //
+    public static final int DYNAMIC_METHOD_ADDRESS_RESOLUTION_GOT_FD_RESIZE_FAILED = 26;
+
+    @Description("Mapping and populating the in-memory file for the GOT failed.") //
+    public static final int DYNAMIC_METHOD_ADDRESS_RESOLUTION_GOT_FD_MAP_FAILED = 27;
+
+    @Description("Mapping the GOT before an isolate's heap failed (no mapping).") //
+    public static final int DYNAMIC_METHOD_ADDRESS_RESOLUTION_GOT_MMAP_FAILED = 28;
+
+    @Description("Mapping the GOT before an isolate's heap failed (wrong mapping).") //
+    public static final int DYNAMIC_METHOD_ADDRESS_RESOLUTION_GOT_WRONG_MMAP = 29;
+
+    @Description("Mapping the GOT before an isolate's heap failed (invalid file).") //
+    public static final int DYNAMIC_METHOD_ADDRESS_RESOLUTION_GOT_FD_INVALID = 30;
+
+    @Description("Could not create unique GOT file even after retrying.") //
+    public static final int DYNAMIC_METHOD_ADDRESS_RESOLUTION_GOT_UNIQUE_FILE_CREATE_FAILED = 31;
+
     public static String getDescription(int code) {
         String result = null;
         if (code >= 0 && code < DESCRIPTIONS.length) {
@@ -141,7 +170,7 @@ public final class CEntryPointErrors {
                     continue;
                 }
                 int value = field.getInt(null);
-                String description = DirectAnnotationAccess.getAnnotation(field, CEntryPointErrors.Description.class).value();
+                String description = AnnotationAccess.getAnnotation(field, CEntryPointErrors.Description.class).value();
                 maxValue = Math.max(value, maxValue);
                 if (maxValue >= array.length) {
                     array = Arrays.copyOf(array, 2 * maxValue);

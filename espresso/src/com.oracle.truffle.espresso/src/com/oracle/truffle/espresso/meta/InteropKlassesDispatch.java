@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -30,11 +30,14 @@ import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.impl.ObjectKlass;
 import com.oracle.truffle.espresso.runtime.dispatch.BaseInterop;
 import com.oracle.truffle.espresso.runtime.dispatch.EspressoInterop;
+import com.oracle.truffle.espresso.runtime.dispatch.ForeignExceptionInterop;
+import com.oracle.truffle.espresso.runtime.dispatch.InterruptedExceptionInterop;
 import com.oracle.truffle.espresso.runtime.dispatch.IterableInterop;
 import com.oracle.truffle.espresso.runtime.dispatch.IteratorInterop;
 import com.oracle.truffle.espresso.runtime.dispatch.ListInterop;
 import com.oracle.truffle.espresso.runtime.dispatch.MapEntryInterop;
 import com.oracle.truffle.espresso.runtime.dispatch.MapInterop;
+import com.oracle.truffle.espresso.runtime.dispatch.ThrowableInterop;
 
 public class InteropKlassesDispatch {
     /**
@@ -59,6 +62,7 @@ public class InteropKlassesDispatch {
                         new Pair[]{Pair.create(meta.java_util_Map, MapInterop.class)},
                         new Pair[]{Pair.create(meta.java_util_Map_Entry, MapEntryInterop.class)},
                         new Pair[]{Pair.create(meta.java_util_Iterator, IteratorInterop.class)},
+                        new Pair[]{Pair.create(meta.java_lang_InterruptedException, InterruptedExceptionInterop.class), Pair.create(meta.java_lang_Throwable, ThrowableInterop.class)}
         };
     }
 
@@ -69,6 +73,12 @@ public class InteropKlassesDispatch {
         } else if (k.isArray()) {
             result = EspressoInterop.class;
         } else {
+            // ForeignException is not injected until post system init, meaning we can't
+            // put in into the static dispatch pair mappings.
+            if (k.getMeta().polyglot != null && k.getMeta().polyglot.ForeignException == k) {
+                return ForeignExceptionInterop.class;
+            }
+
             exclusiveLoop: //
             for (Pair<ObjectKlass, Class<?>>[] exclusive : classes) {
                 for (Pair<ObjectKlass, Class<?>> pair : exclusive) {

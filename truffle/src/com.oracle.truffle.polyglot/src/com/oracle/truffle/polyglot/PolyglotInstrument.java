@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -41,6 +41,7 @@
 package com.oracle.truffle.polyglot;
 
 import static com.oracle.truffle.polyglot.EngineAccessor.INSTRUMENT;
+import static com.oracle.truffle.polyglot.EngineAccessor.LANGUAGE;
 
 import java.util.function.Supplier;
 
@@ -51,6 +52,7 @@ import org.graalvm.polyglot.Instrument;
 import com.oracle.truffle.api.InstrumentInfo;
 import com.oracle.truffle.api.instrumentation.TruffleInstrument;
 import com.oracle.truffle.polyglot.PolyglotLocals.LocalLocation;
+import org.graalvm.polyglot.SandboxPolicy;
 
 class PolyglotInstrument implements com.oracle.truffle.polyglot.PolyglotImpl.VMObject {
 
@@ -66,6 +68,7 @@ class PolyglotInstrument implements com.oracle.truffle.polyglot.PolyglotImpl.VMO
     private volatile OptionValuesImpl optionValues;
     private volatile boolean initialized;
     private volatile boolean created;
+    private volatile boolean finalized;
     private volatile boolean closed;
     int requestedAsyncStackDepth = 0;
     LocalLocation[] contextLocalLocations;
@@ -104,7 +107,7 @@ class PolyglotInstrument implements com.oracle.truffle.polyglot.PolyglotImpl.VMO
         if (optionValues == null) {
             synchronized (instrumentLock) {
                 if (optionValues == null) {
-                    optionValues = new OptionValuesImpl(engine, getAllOptionsInternal(), false);
+                    optionValues = new OptionValuesImpl(getAllOptionsInternal(), engine.sandboxPolicy, false, false);
                 }
             }
         }
@@ -136,7 +139,7 @@ class PolyglotInstrument implements com.oracle.truffle.polyglot.PolyglotImpl.VMO
                         assert verifyNoOverlap(eOptions, cOptions);
                         this.engineOptions = eOptions;
                         this.contextOptions = cOptions;
-                        this.allOptions = OptionDescriptors.createUnion(eOptions, cOptions);
+                        this.allOptions = LANGUAGE.createOptionDescriptorsUnion(eOptions, cOptions);
                     } catch (Exception e) {
                         throw new IllegalStateException(String.format("Error initializing instrument '%s' using class '%s'. Message: %s.", cache.getId(), cache.getClassName(), e.getMessage()), e);
                     }
@@ -166,6 +169,7 @@ class PolyglotInstrument implements com.oracle.truffle.polyglot.PolyglotImpl.VMO
 
     void ensureCreated() {
         if (!created) {
+            validateSandbox(engine.sandboxPolicy);
             PolyglotContextImpl[] contexts = null;
             synchronized (instrumentLock) {
                 if (!created) {
@@ -184,37 +188,24 @@ class PolyglotInstrument implements com.oracle.truffle.polyglot.PolyglotImpl.VMO
             }
             if (contexts != null) {
                 for (PolyglotContextImpl context : contexts) {
-                    synchronized (context) {
-                        if (context.localsCleared) {
-                            continue;
-                        }
-                        /*
-                         * contextLocals might not be initialized yet, in which case the context
-                         * local factory for this instrument will be invoked during contextLocals
-                         * initialization.
-                         */
-                        if (context.contextLocals != null) {
-                            context.invokeContextLocalsFactory(context.contextLocals, contextLocalLocations);
-                            context.invokeContextThreadLocalFactory(contextThreadLocalLocations);
-                        }
-                    }
+                    context.invokeLocalsFactories(contextLocalLocations, contextThreadLocalLocations);
                 }
             }
         }
     }
 
-    void notifyClosing() {
-        if (created && !closed) {
+    void ensureFinalized() {
+        if (created && !finalized && !closed) {
             synchronized (instrumentLock) {
-                if (created && !closed) {
+                if (created && !finalized && !closed) {
                     INSTRUMENT.finalizeInstrument(engine.instrumentationHandler, this);
+                    finalized = true;
                 }
             }
         }
     }
 
     void ensureClosed() {
-        assert Thread.holdsLock(engine.lock);
         if (created && !closed) {
             synchronized (instrumentLock) {
                 if (created && !closed) {
@@ -262,4 +253,16 @@ class PolyglotInstrument implements com.oracle.truffle.polyglot.PolyglotImpl.VMO
         }
     }
 
+    public String getWebsite() {
+        return PolyglotLanguage.websiteSubstitutions(cache.getWebsite());
+    }
+
+    private void validateSandbox(SandboxPolicy sandboxPolicy) {
+        SandboxPolicy instrumentSandboxPolicy = cache.getSandboxPolicy();
+        if (sandboxPolicy.isStricterThan(instrumentSandboxPolicy)) {
+            throw PolyglotEngineException.illegalArgument(PolyglotImpl.sandboxPolicyException(sandboxPolicy,
+                            String.format("The instrument %s can only be used up to the %s sandbox policy.", getId(), instrumentSandboxPolicy),
+                            String.format("do not enable %s instrument by removing any of the instrument's options from Builder.option(String,String)", getId())));
+        }
+    }
 }

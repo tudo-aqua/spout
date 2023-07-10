@@ -39,7 +39,8 @@ import org.graalvm.word.Pointer;
 import org.graalvm.word.WordFactory;
 
 import com.oracle.svm.core.SubstrateUtil;
-import com.oracle.svm.core.annotate.Uninterruptible;
+import com.oracle.svm.core.Uninterruptible;
+import com.oracle.svm.core.thread.VMOperation;
 import com.oracle.svm.core.util.TimeUtils;
 import com.oracle.svm.core.util.VMError;
 
@@ -68,6 +69,7 @@ public final class ReferenceInternals {
     }
 
     /** Barrier-less read of {@link Target_java_lang_ref_Reference#referent} as a pointer. */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static <T> Pointer getReferentPointer(Reference<T> instance) {
         return Word.objectToUntrackedPointer(ObjectAccess.readObject(instance, WordFactory.signed(Target_java_lang_ref_Reference.referentFieldOffset)));
     }
@@ -78,7 +80,7 @@ public final class ReferenceInternals {
     }
 
     /** Write {@link Target_java_lang_ref_Reference#referent}. */
-    @SuppressWarnings("unchecked")
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static void setReferent(Reference<?> instance, Object value) {
         BarrieredAccess.writeObject(instance, WordFactory.signed(Target_java_lang_ref_Reference.referentFieldOffset), value);
     }
@@ -104,6 +106,7 @@ public final class ReferenceInternals {
         ObjectAccess.writeObject(instance, WordFactory.signed(Target_java_lang_ref_Reference.referentFieldOffset), null);
     }
 
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static <T> Pointer getReferentFieldAddress(Reference<T> instance) {
         return Word.objectToUntrackedPointer(instance).add(WordFactory.unsigned(Target_java_lang_ref_Reference.referentFieldOffset));
     }
@@ -118,15 +121,29 @@ public final class ReferenceInternals {
     }
 
     /** Barrier-less read of {@link Target_java_lang_ref_Reference#discovered} as a pointer. */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static <T> Pointer getDiscoveredPointer(Reference<T> instance) {
         return Word.objectToUntrackedPointer(ObjectAccess.readObject(instance, WordFactory.signed(Target_java_lang_ref_Reference.discoveredFieldOffset)));
+    }
+
+    public static long getQueueFieldOffset() {
+        return Target_java_lang_ref_Reference.queueFieldOffset;
+    }
+
+    public static long getNextFieldOffset() {
+        return Target_java_lang_ref_Reference.nextFieldOffset;
     }
 
     public static long getNextDiscoveredFieldOffset() {
         return Target_java_lang_ref_Reference.discoveredFieldOffset;
     }
 
+    public static boolean isAnyReferenceFieldOffset(long offset) {
+        return offset == getReferentFieldOffset() || offset == getQueueFieldOffset() || offset == getNextFieldOffset() || offset == getNextDiscoveredFieldOffset();
+    }
+
     /** Write {@link Target_java_lang_ref_Reference#discovered}. */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static <T> void setNextDiscovered(Reference<T> instance, Reference<?> newNext) {
         BarrieredAccess.writeObject(instance, WordFactory.signed(Target_java_lang_ref_Reference.discoveredFieldOffset), newNext);
     }
@@ -138,8 +155,6 @@ public final class ReferenceInternals {
     /*
      * We duplicate the JDK 11 reference processing code here so we can also use it with JDK 8.
      */
-
-    // Checkstyle: allow synchronization
 
     private static final Object processPendingLock = new Object();
     private static boolean processPendingActive = false;
@@ -218,6 +233,18 @@ public final class ReferenceInternals {
 
     @SuppressFBWarnings(value = "WA_NOT_IN_LOOP", justification = "Wait for progress, not necessarily completion.")
     public static boolean waitForReferenceProcessing() throws InterruptedException {
+        assert !VMOperation.isInProgress() : "could cause a deadlock";
+        assert !ReferenceHandlerThread.isReferenceHandlerThread() : "would cause a deadlock";
+
+        if (ReferenceHandler.isExecutedManually()) {
+            /*
+             * When the reference handling is executed manually, then we don't know when pending
+             * references will be processed. So, we must not block when there are pending references
+             * as this could cause deadlocks.
+             */
+            return false;
+        }
+
         synchronized (processPendingLock) {
             if (processPendingActive || Heap.getHeap().hasReferencePendingList()) {
                 processPendingLock.wait(); // Wait for progress, not necessarily completion
@@ -228,8 +255,7 @@ public final class ReferenceInternals {
         }
     }
 
-    // Checkstyle: disallow synchronization
-
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static long getSoftReferenceClock() {
         return Target_java_lang_ref_SoftReference.clock;
     }
@@ -241,6 +267,7 @@ public final class ReferenceInternals {
         }
     }
 
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static long getSoftReferenceTimestamp(SoftReference<?> instance) {
         Target_java_lang_ref_SoftReference<?> ref = SubstrateUtil.cast(instance, Target_java_lang_ref_SoftReference.class);
         return ref.timestamp;
@@ -260,7 +287,7 @@ public final class ReferenceInternals {
                 return field;
             }
         }
-        throw new GraalError("missing field " + fieldName + " in type " + type);
+        throw new GraalError("Missing field " + fieldName + " in type " + type);
     }
 
     private ReferenceInternals() {

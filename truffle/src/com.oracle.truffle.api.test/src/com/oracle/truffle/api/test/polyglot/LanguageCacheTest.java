@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -56,8 +56,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.CodeSource;
-import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Enumeration;
@@ -66,27 +66,35 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import java.util.jar.JarFile;
-import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
+import com.oracle.truffle.api.test.ReflectionUtils;
 import org.junit.Assert;
 import org.junit.Assume;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.oracle.truffle.api.TruffleLanguage;
+import com.oracle.truffle.tck.tests.TruffleTestAssumptions;
 
 public class LanguageCacheTest {
 
+    @BeforeClass
+    public static void runWithWeakEncapsulationOnly() {
+        TruffleTestAssumptions.assumeWeakEncapsulation();
+    }
+
     @Test
     public void testDuplicateLanguageIds() throws Throwable {
+        TruffleTestAssumptions.assumeNotAOT();
         CodeSource codeSource = LanguageCacheTest.class.getProtectionDomain().getCodeSource();
         Assume.assumeNotNull(codeSource);
         Path location = Paths.get(codeSource.getLocation().toURI());
-        Function<String, List<URL>> loader = new Function<String, List<URL>>() {
+        Function<String, List<URL>> loader = new Function<>() {
             @Override
+            @SuppressWarnings("deprecation")
             public List<URL> apply(String binaryName) {
                 try {
                     URL url;
@@ -117,6 +125,7 @@ public class LanguageCacheTest {
 
     @Test
     public void testNestedArchives() throws Throwable {
+        TruffleTestAssumptions.assumeNotAOT();
         CodeSource codeSource = LanguageCacheTest.class.getProtectionDomain().getCodeSource();
         Assume.assumeNotNull(codeSource);
         URL location = codeSource.getLocation();
@@ -131,24 +140,13 @@ public class LanguageCacheTest {
     @SuppressWarnings("unchecked")
     private static Map<String, Object> invokeLanguageCacheCreateLanguages(ClassLoader... loaders) throws Throwable {
         try {
-            final Class<?> langCacheClz = Class.forName("com.oracle.truffle.polyglot.LanguageCache", true, LanguageCacheTest.class.getClassLoader());
-            final Method createLanguages = langCacheClz.getDeclaredMethod("createLanguages", List.class);
+            Class<?> strongClassLoaderSupplierClz = Class.forName("com.oracle.truffle.polyglot.EngineAccessor$StrongClassLoaderSupplier", true, LanguageCacheTest.class.getClassLoader());
+            Class<?> langCacheClz = Class.forName("com.oracle.truffle.polyglot.LanguageCache", true, LanguageCacheTest.class.getClassLoader());
+            Method createLanguages = langCacheClz.getDeclaredMethod("createLanguages", List.class);
             createLanguages.setAccessible(true);
-            class LoaderSupplier implements Supplier<ClassLoader> {
-
-                private final ClassLoader classLoader;
-
-                LoaderSupplier(ClassLoader classLoader) {
-                    this.classLoader = classLoader;
-                }
-
-                @Override
-                public ClassLoader get() {
-                    return classLoader;
-                }
-            }
-            return (Map<String, Object>) createLanguages.invoke(null,
-                            Arrays.stream(loaders).map(LoaderSupplier::new).collect(Collectors.toList()));
+            return (Map<String, Object>) createLanguages.invoke(null, Arrays.stream(loaders).//
+                            map((cl) -> ReflectionUtils.newInstance(strongClassLoaderSupplierClz, new Class<?>[]{ClassLoader.class}, cl)).//
+                            toList());
         } catch (InvocationTargetException ite) {
             throw ite.getCause();
         } catch (ReflectiveOperationException re) {
@@ -318,6 +316,7 @@ public class LanguageCacheTest {
             this.relocation = relocation;
         }
 
+        @SuppressWarnings("deprecation")
         @Override
         public List<URL> apply(String binaryName) {
             String entryName = binaryName.charAt(0) == '/' ? binaryName.substring(1) : binaryName;
@@ -356,6 +355,7 @@ public class LanguageCacheTest {
                         throw new UnsupportedOperationException("Not supported.");
                     }
 
+                    @SuppressWarnings("deprecation")
                     @Override
                     public URL getJarFileURL() {
                         try {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -46,12 +46,12 @@ import com.oracle.truffle.api.test.polyglot.ProxyInstrument;
 
 public class InstrumentRegistrationTest {
 
-    @ExpectError("Registered instrument class must be at least package protected")
+    @ExpectError("Registered instrument class must be at least package protected.")
     @Registration(id = "NonPublicInstrument")
     private static final class PrivateInstrument extends ProxyInstrument {
     }
 
-    @ExpectError("Registered instrument class must subclass TruffleInstrument")
+    @ExpectError("Registered instrument class must subclass TruffleInstrument.")
     @Registration(id = "WrongSuperClassInstrument")
     public static final class WrongSuperClassInstrument {
     }

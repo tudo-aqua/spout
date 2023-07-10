@@ -39,10 +39,10 @@
 # SOFTWARE.
 #
 suite = {
-  "mxversion" : "5.301.0",
+  "mxversion": "6.27.1",
   "name" : "wasm",
   "groupId" : "org.graalvm.wasm",
-  "version" : "22.0.0",
+  "version" : "23.1.0",
   "versionConflictResolution" : "latest",
   "url" : "http://graalvm.org/",
   "developer" : {
@@ -63,13 +63,19 @@ suite = {
       {
         "name" : "truffle",
         "subdir" : True,
-        "urls": [
-          {"url" : "https://curio.ssw.jku.at/nexus/content/repositories/snapshots", "kind" : "binary"},
-        ],
       },
     ],
   },
-
+  "libraries": {
+    "JOL": {
+      "sha1" : "553a2ba27f58b71e7efb545d7d3c657761f5b596",
+      "maven" : {
+        "groupId" : "org.openjdk.jol",
+        "artifactId" : "jol-core",
+        "version" : "0.16",
+      },
+    },
+  },
   "projects" : {
     "org.graalvm.wasm" : {
       "subDir" : "src",
@@ -78,8 +84,11 @@ suite = {
         "truffle:TRUFFLE_API",
         "sdk:GRAAL_SDK",
       ],
-      "checkstyleVersion" : "8.8",
-      "javaCompliance" : "1.8+",
+      "requires": [
+        "jdk.unsupported", # sun.misc.Unsafe
+      ],
+      "checkstyleVersion" : "10.7.0",
+      "javaCompliance" : "17+",
       "annotationProcessors" : ["truffle:TRUFFLE_DSL_PROCESSOR"],
       "workingSets" : "WebAssembly",
       "license" : "UPL",
@@ -92,7 +101,7 @@ suite = {
         "sdk:LAUNCHER_COMMON",
       ],
       "checkstyle" : "org.graalvm.wasm",
-      "javaCompliance" : "1.8+",
+      "javaCompliance" : "17+",
       "license" : "UPL",
     },
 
@@ -104,7 +113,7 @@ suite = {
         "truffle:TRUFFLE_API",
       ],
       "checkstyle" : "org.graalvm.wasm",
-      "javaCompliance" : "1.8+",
+      "javaCompliance" : "17+",
       "annotationProcessors" : ["truffle:TRUFFLE_DSL_PROCESSOR"],
       "workingSets" : "WebAssembly",
       "license" : "BSD-new",
@@ -121,7 +130,7 @@ suite = {
         "mx:JUNIT",
       ],
       "checkstyle" : "org.graalvm.wasm",
-      "javaCompliance" : "1.8+",
+      "javaCompliance" : "17+",
       "annotationProcessors" : ["truffle:TRUFFLE_DSL_PROCESSOR"],
       "workingSets" : "WebAssembly",
       "license" : "BSD-new",
@@ -147,7 +156,7 @@ suite = {
         "mx:JUNIT",
       ],
       "checkstyle" : "org.graalvm.wasm",
-      "javaCompliance" : "1.8+",
+      "javaCompliance" : "17+",
       "workingSets" : "WebAssembly",
       "testProject" : True,
       "defaultBuild" : False,
@@ -173,7 +182,7 @@ suite = {
         "mx:JMH_1_21",
       ],
       "checkstyle" : "org.graalvm.wasm",
-      "javaCompliance" : "1.8",
+      "javaCompliance" : "17+",
       "annotationProcessors" : ["mx:JMH_1_21"],
       "workingSets" : "WebAssembly",
       "testProject" : True,
@@ -188,10 +197,22 @@ suite = {
         "org.graalvm.wasm.utils",
         "mx:JMH_1_21",
       ],
-      "javaCompliance" : "1.8+",
+      "javaCompliance" : "17+",
       "annotationProcessors" : ["mx:JMH_1_21"],
       "testProject" : True,
     },
+
+    "org.graalvm.wasm.memory" : {
+      "subDir": "src",
+      "sourceDirs" : ["src"],
+      "dependencies": [
+        "org.graalvm.wasm",
+        "JOL",
+      ],
+      "workingSets": "WebAssembly",
+      "javaCompliance" : "17+",
+      "defaultBuild": False,
+    }
   },
 
   "externalProjects": {
@@ -213,6 +234,9 @@ suite = {
 
   "distributions" : {
     "WASM" : {
+      "moduleInfo" : {
+        "name" : "org.graalvm.wasm",
+      },
       "subDir" : "src",
       "dependencies" : [
         "org.graalvm.wasm",

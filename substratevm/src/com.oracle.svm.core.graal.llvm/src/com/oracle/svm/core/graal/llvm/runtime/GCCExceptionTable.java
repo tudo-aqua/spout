@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,14 +24,14 @@
  */
 package com.oracle.svm.core.graal.llvm.runtime;
 
-import static com.oracle.svm.core.util.VMError.shouldNotReachHere;
+import static com.oracle.svm.core.util.VMError.shouldNotReachHereUnexpectedInput;
 
 import java.util.Arrays;
 
-import org.graalvm.nativeimage.StackValue;
 import org.graalvm.nativeimage.c.type.CIntPointer;
 import org.graalvm.word.Pointer;
 
+import com.oracle.svm.core.graal.stackvalue.UnsafeStackValue;
 import com.oracle.svm.core.log.Log;
 
 class GCCExceptionTable {
@@ -68,7 +68,7 @@ class GCCExceptionTable {
     static Long getHandlerOffset(Pointer buffer, long pcOffset) {
         Log log = Log.noopLog();
 
-        CIntPointer offset = StackValue.get(Integer.BYTES);
+        CIntPointer offset = UnsafeStackValue.get(Integer.BYTES);
         offset.write(0);
 
         int header = Byte.toUnsignedInt(buffer.readByte(offset.read()));
@@ -138,7 +138,7 @@ class GCCExceptionTable {
                 offset.write(offset.read() + Integer.BYTES);
                 return result;
             default:
-                throw shouldNotReachHere();
+                throw shouldNotReachHereUnexpectedInput(encoding); // ExcludeFromJacocoGeneratedReport
         }
     }
 }

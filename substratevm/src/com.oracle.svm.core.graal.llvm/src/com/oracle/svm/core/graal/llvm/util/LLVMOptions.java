@@ -49,8 +49,12 @@ public class LLVMOptions {
     @Option(help = "Enable LLVM bitcode optimizations")//
     public static final HostedOptionKey<Boolean> BitcodeOptimizations = new HostedOptionKey<>(false);
 
-    @Option(help = "Return special registers from functions in LLVM bitcode. This may decrease performance if the target doesn't support returning multiple values from a function.")//
-    public static final HostedOptionKey<Boolean> ReturnSpecialRegs = new HostedOptionKey<>(true);
+    @Option(help = "Use LLVM to emit data section")//
+    public static final HostedOptionKey<Boolean> UseLLVMDataSection = new HostedOptionKey<>(false);
 
-    public static final List<HostedOptionKey<?>> allOptions = Arrays.asList(IncludeLLVMDebugInfo, DumpLLVMStackMap, LLVMMaxFunctionsPerBatch, CustomLD, BitcodeOptimizations, ReturnSpecialRegs);
+    @Option(help = "Factor used to multiply the page size of the machine to obtain the data section batch size.")//
+    public static final HostedOptionKey<Integer> LLVMDataSectionBatchSizeFactor = new HostedOptionKey<>(10);
+
+    public static final List<HostedOptionKey<?>> allOptions = Arrays.asList(IncludeLLVMDebugInfo, DumpLLVMStackMap, LLVMMaxFunctionsPerBatch, CustomLD, BitcodeOptimizations, UseLLVMDataSection,
+                    LLVMDataSectionBatchSizeFactor);
 }

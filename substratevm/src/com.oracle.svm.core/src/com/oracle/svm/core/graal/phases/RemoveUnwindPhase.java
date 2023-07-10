@@ -60,16 +60,16 @@ public class RemoveUnwindPhase extends Phase {
         SharedMethod method = (SharedMethod) graph.method();
         if (method.isDeoptTarget()) {
             /*
-             * Deoptimization targets need need to have an exception entry point for every invoke.
-             * This decouples deoptimization from exception handling: the exception handling
-             * mechanism can just deliver an exception to a deoptimized method without any checks.
+             * Deoptimization targets need to have an exception entry point for every invoke. This
+             * decouples deoptimization from exception handling: the exception handling mechanism
+             * can just deliver an exception to a deoptimized method without any checks.
              */
             return;
         }
 
         List<WithExceptionNode> withExceptionNodes = new ArrayList<>();
         List<BytecodeExceptionNode> bytecodeExceptionNodes = new ArrayList<>();
-        for (UnwindNode node : graph.getNodes().filter(UnwindNode.class)) {
+        for (UnwindNode node : graph.getNodes(UnwindNode.TYPE)) {
             walkBack(node.predecessor(), node, withExceptionNodes, bytecodeExceptionNodes, GraphUtil.unproxify(node.exception()), graph);
         }
 
@@ -140,6 +140,12 @@ public class RemoveUnwindPhase extends Phase {
 
         ThrowBytecodeExceptionNode throwNode = graph.add(new ThrowBytecodeExceptionNode(bytecodeExceptionNode.getExceptionKind(), bytecodeExceptionNode.getArguments()));
         throwNode.setStateBefore(bytecodeExceptionNode.createStateDuring());
+
+        /*
+         * BytecodeExceptionNode instance is replaced with ThrowBytecodeExceptionNode instance, so
+         * we copy its node source position to not lose information.
+         */
+        throwNode.setNodeSourcePosition(bytecodeExceptionNode.getNodeSourcePosition());
 
         FixedWithNextNode predecessor = (FixedWithNextNode) bytecodeExceptionNode.predecessor();
         GraphUtil.killCFG(bytecodeExceptionNode);

@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2018, 2021, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2018, 2022, Oracle and/or its affiliates. All rights reserved.
 # DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 #
 # The Universal Permissive License (UPL), Version 1.0
@@ -40,12 +40,14 @@
 #
 
 from __future__ import print_function
+import os
 
 import mx
 import mx_gate
 import mx_sdk_vm
 import mx_sdk_vm_impl
 import mx_sdk_benchmark # pylint: disable=unused-import
+import mx_sdk_clangformat # pylint: disable=unused-import
 import datetime
 from mx_bisect import define_bisect_default_build_steps
 from mx_bisect_strategy import BuildStepsGraalVMStrategy
@@ -53,6 +55,8 @@ from mx_bisect_strategy import BuildStepsGraalVMStrategy
 from mx_gate import Task
 from mx_unittest import unittest
 
+# re-export custom mx project classes so they can be used from suite.py
+from mx_sdk_toolchain import ToolchainTestProject # pylint: disable=unused-import
 
 _suite = mx.suite('sdk')
 
@@ -61,8 +65,9 @@ define_bisect_default_build_steps(BuildStepsGraalVMStrategy())
 
 
 def _sdk_gate_runner(args, tasks):
-    with Task('SDK UnitTests', tasks, tags=['test']) as t:
-        if t: unittest(['--suite', 'sdk', '--enable-timing', '--verbose', '--fail-fast'])
+    with Task('SDK UnitTests', tasks, tags=['test'], report=True) as t:
+        if t:
+            unittest(['--suite', 'sdk', '--enable-timing', '--verbose', '--max-class-failures=25'], test_report_tags={'task': t.title})
     with Task('Check Copyrights', tasks) as t:
         if t:
             if mx.command_function('checkcopyrights')(['--primary', '--', '--projects', 'src']) != 0:
@@ -94,6 +99,12 @@ def javadoc(args):
     extraArgs = build_oracle_compliant_javadoc_args(_suite, 'GraalVM', 'SDK')
     mx.javadoc(['--unified', '--exclude-packages', 'org.graalvm.polyglot.tck'] + extraArgs + args)
 
+def upx(args):
+    """compress binaries using the upx tool"""
+    upx_directory = mx.library("UPX", True).get_path(True)
+    upx_path = os.path.join(upx_directory, mx.exe_suffix("upx"))
+    upx_cmd = [upx_path] + args
+    mx.run(upx_cmd, mx.TeeOutputCapture(mx.OutputCapture()), mx.TeeOutputCapture(mx.OutputCapture()))
 
 mx_sdk_vm.register_graalvm_component(mx_sdk_vm.GraalVmJreComponent(
     suite=_suite,
@@ -103,8 +114,22 @@ mx_sdk_vm.register_graalvm_component(mx_sdk_vm.GraalVmJreComponent(
     license_files=[],
     third_party_license_files=[],
     dependencies=[],
-    jar_distributions=['sdk:LAUNCHER_COMMON'],
+    jar_distributions=[],
     boot_jars=['sdk:GRAAL_SDK'],
+    stability="supported",
+))
+
+
+mx_sdk_vm.register_graalvm_component(mx_sdk_vm.GraalVmJreComponent(
+    suite=_suite,
+    name='GraalVM Launcher Common',
+    short_name='sdkl',
+    dir_name='graalvm',
+    license_files=[],
+    third_party_license_files=[],
+    dependencies=['Graal SDK'],
+    jar_distributions=['sdk:LAUNCHER_COMMON'],
+    boot_jars=[],
     stability="supported",
 ))
 
@@ -134,6 +159,7 @@ def mx_post_parse_cmd_line(args):
 
 mx.update_commands(_suite, {
     'javadoc': [javadoc, '[SL args|@VM options]'],
+    'upx': [upx, ''],
 })
 
 
@@ -143,6 +169,7 @@ AbstractNativeImageConfig = mx_sdk_vm.AbstractNativeImageConfig
 LauncherConfig = mx_sdk_vm.LauncherConfig
 LanguageLauncherConfig = mx_sdk_vm.LanguageLauncherConfig
 LibraryConfig = mx_sdk_vm.LibraryConfig
+LanguageLibraryConfig = mx_sdk_vm.LanguageLibraryConfig
 GraalVmComponent = mx_sdk_vm.GraalVmComponent
 GraalVmTruffleComponent = mx_sdk_vm.GraalVmTruffleComponent
 GraalVmLanguage = mx_sdk_vm.GraalVmLanguage
@@ -157,8 +184,8 @@ def register_graalvm_component(component):
     return mx_sdk_vm.register_graalvm_component(component)
 
 
-def graalvm_component_by_name(name):
-    return mx_sdk_vm.graalvm_component_by_name(name)
+def graalvm_component_by_name(name, fatalIfMissing=True):
+    return mx_sdk_vm.graalvm_component_by_name(name, fatalIfMissing=fatalIfMissing)
 
 
 def graalvm_components(opt_limit_to_suite=False):

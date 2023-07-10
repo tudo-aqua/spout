@@ -23,10 +23,19 @@
  * questions.
  */
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+
+#ifndef _WIN64
+#include <alloca.h>
+#else
+#include <malloc.h>
+#define alloca _alloca
+#endif
 
 #if defined(__x86_64__) || defined(_WIN64)
-#include<stdint.h>
-#include<string.h>
 #include "amd64cpufeatures.h"
 #include "amd64hotspotcpuinfo.h"
 
@@ -397,9 +406,9 @@ static void set_cpufeatures(CPUFeatures *features, CpuidInfo *_cpuid_info)
   if (_cpuid_info->std_cpuid1_ecx.bits.ssse3 != 0)
     features->fSSSE3 = 1;
   if (_cpuid_info->std_cpuid1_ecx.bits.sse4_1 != 0)
-    features->fSSE41 = 1;
+    features->fSSE4_1 = 1;
   if (_cpuid_info->std_cpuid1_ecx.bits.sse4_2 != 0)
-    features->fSSE42 = 1;
+    features->fSSE4_2 = 1;
   if (_cpuid_info->std_cpuid1_ecx.bits.popcnt != 0)
     features->fPOPCNT = 1;
   if (_cpuid_info->std_cpuid1_ecx.bits.avx != 0 &&
@@ -409,6 +418,8 @@ static void set_cpufeatures(CPUFeatures *features, CpuidInfo *_cpuid_info)
   {
     features->fAVX = 1;
     features->fVZEROUPPER = 1;
+    if (_cpuid_info->std_cpuid1_ecx.bits.f16c != 0)
+      features->fF16C = 1;
     if (_cpuid_info->sef_cpuid7_ebx.bits.avx2 != 0)
       features->fAVX2 = 1;
     if (_cpuid_info->sef_cpuid7_ebx.bits.avx512f != 0 &&
@@ -421,6 +432,8 @@ static void set_cpufeatures(CPUFeatures *features, CpuidInfo *_cpuid_info)
         features->fAVX512CD = 1;
       if (_cpuid_info->sef_cpuid7_ebx.bits.avx512dq != 0)
         features->fAVX512DQ = 1;
+      if (_cpuid_info->sef_cpuid7_ebx.bits.avx512ifma != 0)
+        features->fAVX512_IFMA = 1;
       if (_cpuid_info->sef_cpuid7_ebx.bits.avx512pf != 0)
         features->fAVX512PF = 1;
       if (_cpuid_info->sef_cpuid7_ebx.bits.avx512er != 0)
@@ -430,17 +443,21 @@ static void set_cpufeatures(CPUFeatures *features, CpuidInfo *_cpuid_info)
       if (_cpuid_info->sef_cpuid7_ebx.bits.avx512vl != 0)
         features->fAVX512VL = 1;
       if (_cpuid_info->sef_cpuid7_ecx.bits.avx512_vpopcntdq != 0)
-        features->fAVX512VPOPCNTDQ = 1;
+        features->fAVX512_VPOPCNTDQ = 1;
       if (_cpuid_info->sef_cpuid7_ecx.bits.avx512_vpclmulqdq != 0)
-        features->fAVX512VPCLMULQDQ = 1;
+        features->fAVX512_VPCLMULQDQ = 1;
       if (_cpuid_info->sef_cpuid7_ecx.bits.vaes != 0)
-        features->fAVX512VAES = 1;
+        features->fAVX512_VAES = 1;
+      if (_cpuid_info->sef_cpuid7_ecx.bits.gfni != 0)
+        features->fGFNI = 1;
       if (_cpuid_info->sef_cpuid7_ecx.bits.avx512_vnni != 0)
-        features->fAVX512VNNI = 1;
+        features->fAVX512_VNNI = 1;
+      if (_cpuid_info->sef_cpuid7_ecx.bits.avx512_bitalg != 0)
+        features->fAVX512_BITALG = 1;
       if (_cpuid_info->sef_cpuid7_ecx.bits.avx512_vbmi != 0)
-        features->fAVX512VBMI = 1;
+        features->fAVX512_VBMI = 1;
       if (_cpuid_info->sef_cpuid7_ecx.bits.avx512_vbmi2 != 0)
-        features->fAVX512VBMI2 = 1;
+        features->fAVX512_VBMI2 = 1;
     }
   }
   if (_cpuid_info->std_cpuid1_ecx.bits.hv != 0)
@@ -450,11 +467,13 @@ static void set_cpufeatures(CPUFeatures *features, CpuidInfo *_cpuid_info)
   if (_cpuid_info->std_cpuid1_edx.bits.tsc != 0)
     features->fTSC = 1;
   if (_cpuid_info->ext_cpuid7_edx.bits.tsc_invariance != 0)
-    features->fTSCINVBIT = 1;
+    features->fTSCINV_BIT = 1;
   if (_cpuid_info->std_cpuid1_ecx.bits.aes != 0)
     features->fAES = 1;
   if (_cpuid_info->sef_cpuid7_ebx.bits.erms != 0)
     features->fERMS = 1;
+  if (_cpuid_info->sef_cpuid7_edx.bits.fast_short_rep_mov != 0)
+    features->fFSRM = 1;
   if (_cpuid_info->std_cpuid1_ecx.bits.clmul != 0)
     features->fCLMUL = 1;
   if (_cpuid_info->sef_cpuid7_ebx.bits.rtm != 0)
@@ -469,13 +488,17 @@ static void set_cpufeatures(CPUFeatures *features, CpuidInfo *_cpuid_info)
     features->fFMA = 1;
   if (_cpuid_info->sef_cpuid7_ebx.bits.clflushopt != 0)
     features->fFLUSHOPT = 1;
+  if (_cpuid_info->ext_cpuid1_edx.bits.rdtscp != 0)
+    features->fRDTSCP = 1;
+  if (_cpuid_info->sef_cpuid7_ecx.bits.rdpid != 0)
+    features->fRDPID = 1;
 
   // AMD|Hygon features.
   if (is_amd_family(_cpuid_info))
   {
     if ((_cpuid_info->ext_cpuid1_edx.bits.tdnow != 0) ||
         (_cpuid_info->ext_cpuid1_ecx.bits.prefetchw != 0))
-      features->fAMD3DNOWPREFETCH = 1;
+      features->fAMD_3DNOW_PREFETCH = 1;
     if (_cpuid_info->ext_cpuid1_ecx.bits.lzcnt != 0)
       features->fLZCNT = 1;
     if (_cpuid_info->ext_cpuid1_ecx.bits.sse4a != 0)
@@ -490,11 +513,15 @@ static void set_cpufeatures(CPUFeatures *features, CpuidInfo *_cpuid_info)
     // for Intel, ecx.bits.misalignsse bit (bit 8) indicates support for prefetchw
     if (_cpuid_info->ext_cpuid1_ecx.bits.misalignsse != 0)
     {
-      features->fAMD3DNOWPREFETCH = 1;
+      features->fAMD_3DNOW_PREFETCH = 1;
     }
     if (_cpuid_info->sef_cpuid7_ebx.bits.clwb != 0)
     {
       features->fCLWB = 1;
+    }
+    if (_cpuid_info->sef_cpuid7_edx.bits.serialize != 0)
+    {
+      features->fSERIALIZE = 1;
     }
   }
 
@@ -506,12 +533,28 @@ static void set_cpufeatures(CPUFeatures *features, CpuidInfo *_cpuid_info)
     // for ZX, ecx.bits.misalignsse bit (bit 8) indicates support for prefetchw
     if (_cpuid_info->ext_cpuid1_ecx.bits.misalignsse != 0)
     {
-      features->fAMD3DNOWPREFETCH = 1;
+      features->fAMD_3DNOW_PREFETCH = 1;
     }
   }
 
+  // Protection key features.
+  if (_cpuid_info->sef_cpuid7_ecx.bits.pku != 0) {
+    features->fPKU = 1;
+  }
+  if (_cpuid_info->sef_cpuid7_ecx.bits.ospke != 0) {
+    features->fOSPKE = 1;
+  }
+
+  // Control flow enforcement (CET) features.
+  if (_cpuid_info->sef_cpuid7_ecx.bits.cet_ss != 0) {
+    features->fCET_SS = 1;
+  }
+  if (_cpuid_info->sef_cpuid7_edx.bits.cet_ibt != 0) {
+    features->fCET_IBT = 1;
+  }
+
   // Composite features.
-  if (features->fTSCINVBIT &&
+  if (features->fTSCINV_BIT &&
       ((is_amd_family(_cpuid_info) && !is_amd_Barcelona(_cpuid_info)) ||
       is_intel_tsc_synched_at_init(_cpuid_info)))
   {
@@ -544,23 +587,78 @@ void determineCPUFeatures(CPUFeatures *features)
       features->fVZEROUPPER = 0;
       features->fAVX512BW = 0;
       features->fAVX512VL = 0;
+      features->fAVX512DQ = 0;
+      features->fAVX512_VNNI = 0;
+      features->fAVX512_VAES = 0;
+      features->fAVX512_VPOPCNTDQ = 0;
+      features->fAVX512_VPCLMULQDQ = 0;
+      features->fAVX512_VBMI = 0;
+      features->fAVX512_VBMI2 = 0;
+      features->fCLWB = 0;
+      features->fFLUSHOPT = 0;
+      features->fGFNI = 0;
+      features->fAVX512_BITALG = 0;
+      features->fAVX512_IFMA = 0;
     }
   }
 }
 
 #elif defined(__aarch64__)
 
-#include <sys/auxv.h>
-#include <asm/hwcap.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+/*
+ * The corresponding HotSpot code can be found in vm_version_bsd_aarch64.cpp (218223e4a31d485935655cb3f186a752defd8fa8).
+ */
+#if defined(__APPLE__)
+
+#include <sys/sysctl.h>
 #include "aarch64cpufeatures.h"
+
+static uint32_t cpu_has(const char* optional) {
+  uint32_t val;
+  size_t len = sizeof(val);
+  if (sysctlbyname(optional, &val, &len, NULL, 0)) {
+    return 0;
+  }
+  return val;
+}
+
+void determineCPUFeatures(CPUFeatures* features) {
+  // All Apple devices have FP and ASIMD.
+  features->fFP = 1;
+  features->fASIMD = 1;
+  // All Apple-darwin Arm processors have AES, PMULL, SHA1, and SHA2.
+  // For backward compatibility, do not check these CPU features as the
+  // corresponding string names are not available before xnu-8019.
+  features->fAES = 1;
+  features->fPMULL = 1;
+  features->fSHA1 = 1;
+  features->fSHA2 = 1;
+  // Checked in the Hotspot code.
+  features->fCRC32 =  !!(cpu_has("hw.optional.armv8_crc32"));
+  features->fLSE =    !!(cpu_has("hw.optional.arm.FEAT_LSE"))    | !!(cpu_has("hw.optional.armv8_1_atomics"));
+  features->fSHA512 = !!(cpu_has("hw.optional.arm.FEAT_SHA512")) | !!(cpu_has("hw.optional.armv8_2_sha512"));
+  features->fSHA3 =   !!(cpu_has("hw.optional.arm.FEAT_SHA3"))   | !!(cpu_has("hw.optional.armv8_2_sha3"));
+  // Not (yet) checked in the Hotspot code.
+  features->fDCPOP = 0;
+  features->fSVE = 0;
+  features->fSVEBITPERM = 0;
+  features->fSVE2 = 0;
+  features->fEVTSTRM = 0;
+  features->fSTXR_PREFETCH = 0;
+  features->fA53MAC = 0;
+  features->fDMB_ATOMICS = 0;
+  features->fPACA = 0;
+}
 
 /*
  * The corresponding HotSpot code can be found in vm_version_aarch64 and
  * vm_version_linux_aarch64.
  */
+#elif defined(__linux__)
+
+#include <sys/auxv.h>
+#include <asm/hwcap.h>
+#include "aarch64cpufeatures.h"
 
 #ifndef HWCAP_FP
 #define HWCAP_FP            (1L << 0)
@@ -601,8 +699,14 @@ void determineCPUFeatures(CPUFeatures *features)
 #ifndef HWCAP_SVE
 #define HWCAP_SVE           (1L << 22)
 #endif
+#ifndef HWCAP_PACA
+#define HWCAP_PACA          (1L << 30)
+#endif
 #ifndef HWCAP2_SVE2
 #define HWCAP2_SVE2         (1L << 1)
+#endif
+#ifndef HWCAP2_SVEBITPERM
+#define HWCAP2_SVEBITPERM   (1L << 4)
 #endif
 
 #define CPU_ARM 'A'
@@ -630,9 +734,11 @@ void determineCPUFeatures(CPUFeatures* features) {
   features->fSHA512 = !!(auxv & HWCAP_SHA512);
   features->fSVE = !!(auxv & HWCAP_SVE);
   features->fSVE2 = !!(auxv2 & HWCAP2_SVE2);
-  features->fSTXRPREFETCH = 0;
+  features->fSTXR_PREFETCH = 0;
   features->fA53MAC = 0;
-  features->fDMBATOMICS = 0;
+  features->fDMB_ATOMICS = 0;
+  features->fPACA = !!(auxv & HWCAP_PACA);
+  features->fSVEBITPERM = !!(auxv2 & HWCAP2_SVEBITPERM);
 
   //checking for features signaled in another way
 
@@ -671,16 +777,117 @@ void determineCPUFeatures(CPUFeatures* features) {
   if (_cpu == CPU_ARM && (_model == 0xd03 || _model2 == 0xd03))
     features->fA53MAC = 1;
   if (_cpu == CPU_ARM && (_model == 0xd07 || _model2 == 0xd07))
-    features->fSTXRPREFETCH = 1;
+    features->fSTXR_PREFETCH = 1;
   if (_cpu == CPU_CAVIUM && _model == 0xA1 && _variant == 0)
-    features->fDMBATOMICS = 1;
+    features->fDMB_ATOMICS = 1;
+}
+#endif
+
+#elif defined(__riscv)
+/*
+ * The corresponding HotSpot code can be found in vm_version_riscv and
+ * vm_version_linux_riscv.
+ */
+
+#include <sys/auxv.h>
+#include <asm/hwcap.h>
+#include "riscv64cpufeatures.h"
+
+#ifndef HWCAP_ISA_I
+#define HWCAP_ISA_I  (1 << ('I' - 'A'))
+#endif
+
+#ifndef HWCAP_ISA_M
+#define HWCAP_ISA_M  (1 << ('M' - 'A'))
+#endif
+
+#ifndef HWCAP_ISA_A
+#define HWCAP_ISA_A  (1 << ('A' - 'A'))
+#endif
+
+#ifndef HWCAP_ISA_F
+#define HWCAP_ISA_F  (1 << ('F' - 'A'))
+#endif
+
+#ifndef HWCAP_ISA_D
+#define HWCAP_ISA_D  (1 << ('D' - 'A'))
+#endif
+
+#ifndef HWCAP_ISA_C
+#define HWCAP_ISA_C  (1 << ('C' - 'A'))
+#endif
+
+#ifndef HWCAP_ISA_V
+#define HWCAP_ISA_V  (1 << ('V' - 'A'))
+#endif
+
+/*
+ * Extracts the CPU features by reading the hwcaps
+ */
+void determineCPUFeatures(CPUFeatures* features) {
+
+  unsigned long auxv = getauxval(AT_HWCAP);
+  features->fI = !!(auxv & HWCAP_ISA_I);
+  features->fM = !!(auxv & HWCAP_ISA_M);
+  features->fA = !!(auxv & HWCAP_ISA_A);
+  features->fF = !!(auxv & HWCAP_ISA_F);
+  features->fD = !!(auxv & HWCAP_ISA_D);
+  features->fC = !!(auxv & HWCAP_ISA_C);
+  features->fV = !!(auxv & HWCAP_ISA_V);
 }
 
 #else
 /*
- * Dummy for non AMD64 and non AArch64
+ * Dummy for non AMD64, non AArch64 and non RISCV64
  */
 void determineCPUFeatures(void* features) {
 }
 
 #endif
+
+int checkCPUFeatures(uint8_t *buildtimeFeaturesPtr)
+{
+  // tri-state: -1=unchecked, 0=check ok, 1=check failed
+  static int checked = -1;
+  if (checked != -1)
+    return checked;
+  // Over-allocate to a multiple of 64 bit
+  const size_t structSizeUint64 = (sizeof(CPUFeatures) + sizeof(uint64_t) - 1) / sizeof(uint64_t);
+  const size_t structSizeBytes = structSizeUint64 * sizeof(uint64_t);
+  CPUFeatures *hostFeatures = (CPUFeatures*) alloca(structSizeBytes);
+  memset(hostFeatures, 0, structSizeBytes);
+  determineCPUFeatures(hostFeatures);
+  uint8_t *hostFeaturesPtr = (uint8_t*) hostFeatures;
+  size_t i;
+  for (i = 0; i < structSizeBytes; i += sizeof(uint64_t))
+  {
+    // Handle 64 bits at once. The memmoves might seem like an overkill,
+    // but they are a clear (and defined) way of tell the C compiler our
+    // intention. Even at O0, the memmove calls are inlined and the 64 bits
+    // are loaded in a single instruction. Starting with O1, no copying
+    // whatsoever happens and the | (or) is performed directly using the
+    // source memory, just as if we would have cast the (CPUFeatures*) to
+    // (uint64_t*), which is unfortunately undefined behavior and leads to
+    // undefined (wrong) results in certain compiler/flag combinations
+    // (i.e., gcc -O2).
+    uint64_t mask;
+    uint64_t host;
+    memmove(&mask, buildtimeFeaturesPtr + i, sizeof(uint64_t));
+    memmove(&host, hostFeaturesPtr + i, sizeof(uint64_t));
+    if ((mask | host) != -1)
+    {
+      checked = 1;
+      return checked;
+    }
+  }
+  checked = 0;
+  return checked;
+}
+
+void checkCPUFeaturesOrExit(uint8_t *buildtimeFeaturesPtr, const char *errorMessage)
+{
+    if (checkCPUFeatures(buildtimeFeaturesPtr)) {
+       fputs(errorMessage, stderr);
+       exit(1);
+    }
+}

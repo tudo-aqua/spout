@@ -26,9 +26,10 @@ package com.oracle.svm.core;
 
 import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
+import org.graalvm.word.WordBase;
 import org.graalvm.word.WordFactory;
 
-import com.oracle.svm.core.annotate.Uninterruptible;
+import com.oracle.svm.core.config.ConfigurationValues;
 
 /**
  * The methods in this class are mainly used to fill or copy unmanaged (i.e., <b>non</b>-Java heap)
@@ -148,10 +149,44 @@ public final class UnmanagedMemoryUtil {
             dst.writeLong(24, l24);
             offset = next;
         }
+
         while (offset.belowThan(size)) {
             to.writeLong(offset, from.readLong(offset));
             offset = offset.add(8);
         }
+    }
+
+    @IntrinsicCandidate
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public static void copyWordsForward(Pointer from, Pointer to, UnsignedWord size) {
+        int wordSize = ConfigurationValues.getTarget().wordSize;
+        int stepSize = 4 * wordSize;
+        Pointer src = from;
+        Pointer dst = to;
+        Pointer srcEnd = src.add(size);
+
+        while (src.add(stepSize).belowOrEqual(srcEnd)) {
+            WordBase w0 = src.readWord(0 * wordSize);
+            WordBase w8 = src.readWord(1 * wordSize);
+            WordBase w16 = src.readWord(2 * wordSize);
+            WordBase w24 = src.readWord(3 * wordSize);
+            dst.writeWord(0 * wordSize, w0);
+            dst.writeWord(1 * wordSize, w8);
+            dst.writeWord(2 * wordSize, w16);
+            dst.writeWord(3 * wordSize, w24);
+
+            src = src.add(stepSize);
+            dst = dst.add(stepSize);
+        }
+
+        while (src.belowThan(srcEnd)) {
+            dst.writeWord(WordFactory.zero(), src.readWord(WordFactory.zero()));
+            src = src.add(wordSize);
+            dst = dst.add(wordSize);
+        }
+
+        assert src.equal(srcEnd);
+        assert dst.equal(to.add(size));
     }
 
     /**
@@ -179,6 +214,43 @@ public final class UnmanagedMemoryUtil {
             offset = offset.subtract(8);
             to.writeLong(offset, from.readLong(offset));
         }
+    }
+
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    private static UnsignedWord compareLongs(Pointer x, Pointer y, UnsignedWord size) {
+        assert size.unsignedRemainder(8).equal(0);
+        UnsignedWord offset = WordFactory.zero();
+        while (offset.belowThan(size)) {
+            if (x.readLong(offset) != y.readLong(offset)) {
+                return offset;
+            }
+            offset = offset.add(Long.BYTES);
+        }
+        return offset;
+    }
+
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    private static UnsignedWord compareBytes(Pointer x, Pointer y, UnsignedWord size) {
+        UnsignedWord offset = WordFactory.zero();
+        while (offset.belowThan(size)) {
+            if (x.readByte(offset) != y.readByte(offset)) {
+                return offset;
+            }
+            offset = offset.add(1);
+        }
+        return offset;
+    }
+
+    /**
+     * Compares two memory areas. Returns the number of bytes from the beginning which are
+     * equivalent, which, if a difference is found, is the offset of the first different byte.
+     */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public static UnsignedWord compare(Pointer x, Pointer y, UnsignedWord size) {
+        UnsignedWord alignBits = WordFactory.unsigned(0x7);
+        UnsignedWord alignedSize = size.and(alignBits.not());
+        UnsignedWord offset = compareLongs(x, y, alignedSize);
+        return offset.add(compareBytes(x.add(offset), y.add(offset), size.subtract(offset)));
     }
 
     /**

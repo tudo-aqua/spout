@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2020, 2022, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -117,8 +117,8 @@ public class LLVMMultiContextLauncher extends LLVMLauncher {
                     ret = super.execute(contextBuilder);
                 } else {
                     if (i == 0) {
-                        contextBuilder.option("engine.DebugCachePreinitializeContext", "false").option("engine.DebugCacheCompile", "aot").//
-                                        option("engine.DebugTraceCache", "true").//
+                        contextBuilder.option("engine.DebugCachePreinitializeContext", "false").//
+                                        option("engine.DebugCacheCompile", "aot").//
                                         option("engine.DebugCacheLoad", "true").//
                                         option("engine.DebugCacheStore", "true").//
                                         option("engine.MultiTier", "false").//

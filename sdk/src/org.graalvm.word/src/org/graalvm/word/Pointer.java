@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -61,6 +61,18 @@ public interface Pointer extends UnsignedWord, PointerBase {
      * @since 19.0
      */
     Object toObject();
+
+    /**
+     * Convert pointer to the type specified by the clazz argument.
+     * 
+     * @param clazz the type to which to cast the pointer
+     * @param nonNull true if the value cannot be null
+     *
+     * @return this Pointer cast to type T
+     * 
+     * @since 23.1
+     */
+    <T> T toObject(Class<T> clazz, boolean nonNull);
 
     /**
      * Unsafe conversion of this Pointer to a Java language object. No correctness checks or type
@@ -324,6 +336,18 @@ public interface Pointer extends UnsignedWord, PointerBase {
      * @since 19.0
      */
     Object readObject(int offset, LocationIdentity locationIdentity);
+
+    /**
+     * Reads the memory at address {@code (this + offset)} in accordance with the volatile
+     * semantics. Both the base address and offset are in bytes.
+     *
+     * @param offset the signed offset for the memory access
+     * @param locationIdentity the identity of the read
+     * @return the result of the memory access
+     *
+     * @since 19.0
+     */
+    <T extends WordBase> T readWordVolatile(int offset, LocationIdentity locationIdentity);
 
     /**
      * Writes the memory at address {@code (this + offset)}. Both the base address and offset are in
@@ -1232,6 +1256,17 @@ public interface Pointer extends UnsignedWord, PointerBase {
      * @since 19.0
      */
     void writeObject(int offset, Object val);
+
+    /**
+     * Writes the memory at address {@code (this + offset)} in accordance with the volatile
+     * semantics. Both the base address and offset are in bytes.
+     *
+     * @param offset the signed offset for the memory access
+     * @param val the value to be written to memory
+     *
+     * @since 19.0
+     */
+    void writeWordVolatile(int offset, WordBase val);
 
     /**
      * In a single atomic step, compares the memory at address {@code (this + offset)} to the

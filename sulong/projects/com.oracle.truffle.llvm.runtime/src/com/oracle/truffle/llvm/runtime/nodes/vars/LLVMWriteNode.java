@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2016, 2023, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -34,10 +34,10 @@ import com.oracle.truffle.api.dsl.Fallback;
 import com.oracle.truffle.api.dsl.GenerateAOT;
 import com.oracle.truffle.api.dsl.NodeChild;
 import com.oracle.truffle.api.dsl.Specialization;
-import com.oracle.truffle.api.frame.FrameSlot;
 import com.oracle.truffle.api.frame.FrameSlotKind;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.llvm.runtime.LLVMIVarBit;
+import com.oracle.truffle.llvm.runtime.floating.LLVM128BitFloat;
 import com.oracle.truffle.llvm.runtime.floating.LLVM80BitFloat;
 import com.oracle.truffle.llvm.runtime.nodes.api.LLVMExpressionNode;
 import com.oracle.truffle.llvm.runtime.nodes.api.LLVMStatementNode;
@@ -47,10 +47,10 @@ import com.oracle.truffle.llvm.runtime.vector.LLVMVector;
 @NodeChild(value = "valueNode", type = LLVMExpressionNode.class)
 public abstract class LLVMWriteNode extends LLVMStatementNode {
 
-    protected final FrameSlot slot;
+    protected final int slot;
 
-    protected LLVMWriteNode(FrameSlot slot) {
-        assert slot != null;
+    protected LLVMWriteNode(int slot) {
+        assert slot >= 0;
         this.slot = slot;
     }
 
@@ -62,7 +62,7 @@ public abstract class LLVMWriteNode extends LLVMStatementNode {
     }
 
     public abstract static class LLVMWriteI1Node extends LLVMWriteNode {
-        protected LLVMWriteI1Node(FrameSlot slot) {
+        protected LLVMWriteI1Node(int slot) {
             super(slot);
         }
 
@@ -73,7 +73,7 @@ public abstract class LLVMWriteNode extends LLVMStatementNode {
     }
 
     public abstract static class LLVMWriteI8Node extends LLVMWriteNode {
-        protected LLVMWriteI8Node(FrameSlot slot) {
+        protected LLVMWriteI8Node(int slot) {
             super(slot);
         }
 
@@ -84,7 +84,7 @@ public abstract class LLVMWriteNode extends LLVMStatementNode {
     }
 
     public abstract static class LLVMWriteI16Node extends LLVMWriteNode {
-        protected LLVMWriteI16Node(FrameSlot slot) {
+        protected LLVMWriteI16Node(int slot) {
             super(slot);
         }
 
@@ -95,7 +95,7 @@ public abstract class LLVMWriteNode extends LLVMStatementNode {
     }
 
     public abstract static class LLVMWriteI32Node extends LLVMWriteNode {
-        protected LLVMWriteI32Node(FrameSlot slot) {
+        protected LLVMWriteI32Node(int slot) {
             super(slot);
         }
 
@@ -106,13 +106,13 @@ public abstract class LLVMWriteNode extends LLVMStatementNode {
     }
 
     public abstract static class LLVMWriteI64Node extends LLVMWriteNode {
-        protected LLVMWriteI64Node(FrameSlot slot) {
+        protected LLVMWriteI64Node(int slot) {
             super(slot);
         }
 
         @Specialization
         protected void writeI64(VirtualFrame frame, long value) {
-            if (frame.getFrameDescriptor().getFrameSlotKind(slot) == FrameSlotKind.Long) {
+            if (frame.getFrameDescriptor().getSlotKind(slot) == FrameSlotKind.Long) {
                 frame.setLong(slot, value);
             } else {
                 frame.setObject(slot, value);
@@ -122,16 +122,16 @@ public abstract class LLVMWriteNode extends LLVMStatementNode {
         @Specialization(replaces = "writeI64")
         @GenerateAOT.Exclude
         protected void writePointer(VirtualFrame frame, Object value) {
-            if (frame.getFrameDescriptor().getFrameSlotKind(slot) == FrameSlotKind.Long) {
+            if (frame.getFrameDescriptor().getSlotKind(slot) == FrameSlotKind.Long) {
                 CompilerDirectives.transferToInterpreterAndInvalidate();
-                frame.getFrameDescriptor().setFrameSlotKind(slot, FrameSlotKind.Object);
+                frame.getFrameDescriptor().setSlotKind(slot, FrameSlotKind.Object);
             }
             frame.setObject(slot, value);
         }
     }
 
     public abstract static class LLVMWriteIVarBitNode extends LLVMWriteNode {
-        protected LLVMWriteIVarBitNode(FrameSlot slot) {
+        protected LLVMWriteIVarBitNode(int slot) {
             super(slot);
         }
 
@@ -142,7 +142,7 @@ public abstract class LLVMWriteNode extends LLVMStatementNode {
     }
 
     public abstract static class LLVMWriteFloatNode extends LLVMWriteNode {
-        protected LLVMWriteFloatNode(FrameSlot slot) {
+        protected LLVMWriteFloatNode(int slot) {
             super(slot);
         }
 
@@ -153,7 +153,7 @@ public abstract class LLVMWriteNode extends LLVMStatementNode {
     }
 
     public abstract static class LLVMWriteDoubleNode extends LLVMWriteNode {
-        protected LLVMWriteDoubleNode(FrameSlot slot) {
+        protected LLVMWriteDoubleNode(int slot) {
             super(slot);
         }
 
@@ -164,7 +164,7 @@ public abstract class LLVMWriteNode extends LLVMStatementNode {
     }
 
     public abstract static class LLVMWrite80BitFloatingNode extends LLVMWriteNode {
-        protected LLVMWrite80BitFloatingNode(FrameSlot slot) {
+        protected LLVMWrite80BitFloatingNode(int slot) {
             super(slot);
         }
 
@@ -174,8 +174,19 @@ public abstract class LLVMWriteNode extends LLVMStatementNode {
         }
     }
 
+    public abstract static class LLVMWrite128BitFloatingNode extends LLVMWriteNode {
+        protected LLVMWrite128BitFloatingNode(int slot) {
+            super(slot);
+        }
+
+        @Specialization
+        protected void write128BitFloat(VirtualFrame frame, LLVM128BitFloat value) {
+            frame.setObject(slot, value);
+        }
+    }
+
     public abstract static class LLVMWritePointerNode extends LLVMWriteNode {
-        protected LLVMWritePointerNode(FrameSlot slot) {
+        protected LLVMWritePointerNode(int slot) {
             super(slot);
         }
 
@@ -191,7 +202,7 @@ public abstract class LLVMWriteNode extends LLVMStatementNode {
     }
 
     public abstract static class LLVMWriteVectorNode extends LLVMWriteNode {
-        protected LLVMWriteVectorNode(FrameSlot slot) {
+        protected LLVMWriteVectorNode(int slot) {
             super(slot);
         }
 

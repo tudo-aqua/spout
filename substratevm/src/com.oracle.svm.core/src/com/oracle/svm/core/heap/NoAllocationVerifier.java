@@ -24,8 +24,8 @@
  */
 package com.oracle.svm.core.heap;
 
-import com.oracle.svm.core.annotate.NeverInline;
-import com.oracle.svm.core.annotate.Uninterruptible;
+import com.oracle.svm.core.NeverInline;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.log.Log;
 import com.oracle.svm.core.threadlocal.FastThreadLocalFactory;
 import com.oracle.svm.core.threadlocal.FastThreadLocalObject;
@@ -37,10 +37,6 @@ import com.oracle.svm.core.util.VMError;
  * Design: There shouldn't be tests for a locked heap on the allocation fast-path, so the key is
  * that creating one of these sets top to end in the young space, so allocation attempts fail over
  * to the slow-path, and there can be a test for a locked heap on the slow path.
- *
- * TODO: When SVM becomes multi-threaded, this should only prevent allocation on a particular
- * thread. That could be done by setting the thread's TLAB to null, which should force it on to the
- * slow-path to allocation a new TLAB.
  */
 public class NoAllocationVerifier implements AutoCloseable {
 

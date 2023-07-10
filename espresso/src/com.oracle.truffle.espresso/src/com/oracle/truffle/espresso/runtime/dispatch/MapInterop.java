@@ -25,6 +25,7 @@ package com.oracle.truffle.espresso.runtime.dispatch;
 
 import static com.oracle.truffle.espresso.runtime.StaticObject.EMPTY_ARRAY;
 
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.interop.ArityException;
 import com.oracle.truffle.api.interop.InteropLibrary;
@@ -49,6 +50,7 @@ import com.oracle.truffle.espresso.vm.InterpreterToVM;
  * guest exception (in the case of unmodifiable map, for example).
  */
 @ExportLibrary(value = InteropLibrary.class, receiverType = StaticObject.class)
+@SuppressWarnings("truffle-abstract-export") // TODO GR-44080 Adopt BigInteger Interop
 public class MapInterop extends EspressoInterop {
     // region ### Hashes
 
@@ -80,6 +82,7 @@ public class MapInterop extends EspressoInterop {
         try {
             return (boolean) invokeContains.execute(containsKey, receiver, new Object[]{key});
         } catch (UnsupportedTypeException | ArityException e) {
+            CompilerDirectives.transferToInterpreterAndInvalidate();
             throw EspressoError.shouldNotReachHere(e);
         }
     }
@@ -95,6 +98,7 @@ public class MapInterop extends EspressoInterop {
         try {
             return (int) invoke.execute(size, receiver, EMPTY_ARRAY);
         } catch (UnsupportedTypeException | ArityException e) {
+            CompilerDirectives.transferToInterpreterAndInvalidate();
             throw EspressoError.shouldNotReachHere(e);
         }
     }
@@ -113,6 +117,7 @@ public class MapInterop extends EspressoInterop {
         } catch (UnsupportedTypeException e) {
             throw UnknownKeyException.create(key);
         } catch (ArityException e) {
+            CompilerDirectives.transferToInterpreterAndInvalidate();
             throw EspressoError.shouldNotReachHere(e);
         }
     }
@@ -127,6 +132,7 @@ public class MapInterop extends EspressoInterop {
         } catch (UnsupportedTypeException e) {
             throw UnknownKeyException.create(key);
         } catch (ArityException e) {
+            CompilerDirectives.transferToInterpreterAndInvalidate();
             throw EspressoError.shouldNotReachHere(e);
         }
     }
@@ -145,6 +151,7 @@ public class MapInterop extends EspressoInterop {
         } catch (UnsupportedTypeException e) {
             throw UnknownKeyException.create(key);
         } catch (ArityException e) {
+            CompilerDirectives.transferToInterpreterAndInvalidate();
             throw EspressoError.shouldNotReachHere(e);
         }
     }
@@ -163,6 +170,7 @@ public class MapInterop extends EspressoInterop {
         try {
             set = invoke.execute(entrySet, receiver, EMPTY_ARRAY);
         } catch (ArityException | UnsupportedTypeException e) {
+            CompilerDirectives.transferToInterpreterAndInvalidate();
             throw EspressoError.shouldNotReachHere(e);
         }
         assert set != null;

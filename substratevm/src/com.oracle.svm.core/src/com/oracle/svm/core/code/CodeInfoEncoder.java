@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,14 +24,13 @@
  */
 package com.oracle.svm.core.code;
 
-import static com.oracle.svm.core.util.VMError.shouldNotReachHere;
+import static com.oracle.svm.core.util.VMError.shouldNotReachHereUnexpectedInput;
 
-// Checkstyle: stop
-import java.lang.reflect.Executable;
-// Checkstyle: resume
 import java.util.BitSet;
 import java.util.TreeMap;
 
+import org.graalvm.collections.EconomicSet;
+import org.graalvm.collections.Equivalence;
 import org.graalvm.compiler.code.CompilationResult;
 import org.graalvm.compiler.core.common.NumUtil;
 import org.graalvm.compiler.core.common.util.FrequencyEncoder;
@@ -39,16 +38,13 @@ import org.graalvm.compiler.core.common.util.TypeConversion;
 import org.graalvm.compiler.core.common.util.UnsafeArrayTypeWriter;
 import org.graalvm.compiler.options.Option;
 import org.graalvm.nativeimage.ImageSingletons;
-import org.graalvm.nativeimage.Platform;
-import org.graalvm.nativeimage.Platforms;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.WordFactory;
 
 import com.oracle.svm.core.CalleeSavedRegisters;
 import com.oracle.svm.core.ReservedRegisters;
-import com.oracle.svm.core.SubstrateUtil;
-import com.oracle.svm.core.annotate.Uninterruptible;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.c.NonmovableArray;
 import com.oracle.svm.core.c.NonmovableArrays;
 import com.oracle.svm.core.c.NonmovableObjectArray;
@@ -98,57 +94,48 @@ public class CodeInfoEncoder {
         public final Counter.Group group = new Counter.Group(Options.CodeInfoEncoderCounters, "CodeInfoEncoder");
         final Counter methodCount = new Counter(group, "Number of methods", "Number of methods encoded");
         final Counter codeSize = new Counter(group, "Code size", "Total size of machine code");
+        final Counter referenceMapSize = new Counter(group, "Reference map size", "Total size of encoded reference maps");
         final Counter frameInfoSize = new Counter(group, "Frame info size", "Total size of encoded frame information");
         final Counter frameCount = new Counter(group, "Number of frames", "Number of frames encoded");
         final Counter stackValueCount = new Counter(group, "Number of stack values", "Number of stack values encoded");
         final Counter registerValueCount = new Counter(group, "Number of register values", "Number of register values encoded");
         final Counter constantValueCount = new Counter(group, "Number of constant values", "Number of constant values encoded");
         final Counter virtualObjectsCount = new Counter(group, "Number of virtual objects", "Number of virtual objects encoded");
+
+        public void addToReferenceMapSize(long size) {
+            referenceMapSize.add(size);
+        }
     }
 
     public static final class Encoders {
-        final FrequencyEncoder<JavaConstant> objectConstants;
-        final FrequencyEncoder<Class<?>> sourceClasses;
-        final FrequencyEncoder<String> sourceMethodNames;
+        public final FrequencyEncoder<JavaConstant> objectConstants;
+        public final FrequencyEncoder<Class<?>> sourceClasses;
+        public final FrequencyEncoder<String> sourceMethodNames;
         final FrequencyEncoder<String> names;
 
-        private Encoders() {
+        public Encoders() {
             this.objectConstants = FrequencyEncoder.createEqualityEncoder();
             this.sourceClasses = FrequencyEncoder.createEqualityEncoder();
             this.sourceMethodNames = FrequencyEncoder.createEqualityEncoder();
-            if (FrameInfoDecoder.encodeDebugNames() || FrameInfoDecoder.encodeSourceReferences()) {
-                this.names = FrequencyEncoder.createEqualityEncoder();
-            } else {
-                this.names = null;
-            }
+            this.names = FrequencyEncoder.createEqualityEncoder();
         }
 
         private void encodeAllAndInstall(CodeInfo target, ReferenceAdjuster adjuster) {
             JavaConstant[] encodedJavaConstants = objectConstants.encodeAll(new JavaConstant[objectConstants.getLength()]);
-            Class<?>[] sourceClassesArray = null;
-            String[] sourceMethodNamesArray = null;
-            String[] namesArray = null;
-            final boolean encodeDebugNames = FrameInfoDecoder.encodeDebugNames();
-            if (encodeDebugNames || FrameInfoDecoder.encodeSourceReferences()) {
-                sourceClassesArray = sourceClasses.encodeAll(new Class<?>[sourceClasses.getLength()]);
-                sourceMethodNamesArray = sourceMethodNames.encodeAll(new String[sourceMethodNames.getLength()]);
-            }
-            if (encodeDebugNames) {
-                namesArray = names.encodeAll(new String[names.getLength()]);
-            }
-            install(target, encodedJavaConstants, sourceClassesArray, sourceMethodNamesArray, namesArray, adjuster);
+            Class<?>[] sourceClassesArray = sourceClasses.encodeAll(new Class<?>[sourceClasses.getLength()]);
+            String[] sourceMethodNamesArray = sourceMethodNames.encodeAll(new String[sourceMethodNames.getLength()]);
+            install(target, encodedJavaConstants, sourceClassesArray, sourceMethodNamesArray, adjuster);
         }
 
         @Uninterruptible(reason = "Nonmovable object arrays are not visible to GC until installed in target.")
         private static void install(CodeInfo target, JavaConstant[] objectConstantsArray, Class<?>[] sourceClassesArray,
-                        String[] sourceMethodNamesArray, String[] namesArray, ReferenceAdjuster adjuster) {
+                        String[] sourceMethodNamesArray, ReferenceAdjuster adjuster) {
 
             NonmovableObjectArray<Object> frameInfoObjectConstants = adjuster.copyOfObjectConstantArray(objectConstantsArray);
             NonmovableObjectArray<Class<?>> frameInfoSourceClasses = (sourceClassesArray != null) ? adjuster.copyOfObjectArray(sourceClassesArray) : NonmovableArrays.nullArray();
             NonmovableObjectArray<String> frameInfoSourceMethodNames = (sourceMethodNamesArray != null) ? adjuster.copyOfObjectArray(sourceMethodNamesArray) : NonmovableArrays.nullArray();
-            NonmovableObjectArray<String> frameInfoNames = (namesArray != null) ? adjuster.copyOfObjectArray(namesArray) : NonmovableArrays.nullArray();
 
-            CodeInfoAccess.setEncodings(target, frameInfoObjectConstants, frameInfoSourceClasses, frameInfoSourceMethodNames, frameInfoNames);
+            CodeInfoAccess.setEncodings(target, frameInfoObjectConstants, frameInfoSourceClasses, frameInfoSourceMethodNames);
         }
     }
 
@@ -166,20 +153,18 @@ public class CodeInfoEncoder {
     private final Encoders encoders;
     private final FrameInfoEncoder frameInfoEncoder;
 
-    @Platforms(Platform.HOSTED_ONLY.class)//
-    private MethodMetadataEncoder methodMetadataEncoder;
-
     private NonmovableArray<Byte> codeInfoIndex;
     private NonmovableArray<Byte> codeInfoEncodings;
     private NonmovableArray<Byte> referenceMapEncoding;
 
-    public CodeInfoEncoder(FrameInfoEncoder.Customization frameInfoCustomization) {
+    public CodeInfoEncoder(FrameInfoEncoder.Customization frameInfoCustomization, Encoders encoders) {
         this.entries = new TreeMap<>();
-        this.encoders = new Encoders();
+        this.encoders = encoders;
         this.frameInfoEncoder = new FrameInfoEncoder(frameInfoCustomization, encoders);
-        if (SubstrateUtil.HOSTED) {
-            this.methodMetadataEncoder = new MethodMetadataEncoder(encoders);
-        }
+    }
+
+    public Encoders getEncoders() {
+        return encoders;
     }
 
     public static int getEntryOffset(Infopoint infopoint) {
@@ -194,7 +179,7 @@ public class CodeInfoEncoder {
         return -1;
     }
 
-    public void addMethod(SharedMethod method, CompilationResult compilation, int compilationOffset) {
+    public void addMethod(SharedMethod method, CompilationResult compilation, int compilationOffset, int compilationSize) {
         int totalFrameSize = compilation.getTotalFrameSize();
         boolean isEntryPoint = method.isEntryPoint();
         boolean hasCalleeSavedRegisters = method.hasCalleeSavedRegisters();
@@ -205,22 +190,37 @@ public class CodeInfoEncoder {
 
         /* Register the frame size for all entries that are starting points for the index. */
         long entryIP = CodeInfoDecoder.lookupEntryIP(CodeInfoDecoder.indexGranularity() + compilationOffset);
-        while (entryIP <= CodeInfoDecoder.lookupEntryIP(compilation.getTargetCodeSize() + compilationOffset - 1)) {
+        while (entryIP <= CodeInfoDecoder.lookupEntryIP(compilationSize + compilationOffset - 1)) {
             IPData entry = makeEntry(entryIP);
             entry.frameSizeEncoding = encodeFrameSize(totalFrameSize, false, isEntryPoint, hasCalleeSavedRegisters);
             entryIP += CodeInfoDecoder.indexGranularity();
         }
 
+        EconomicSet<Integer> infopointOffsets = EconomicSet.create(Equivalence.DEFAULT);
+        EconomicSet<Long> deoptEntryBcis = EconomicSet.create(Equivalence.DEFAULT);
         /* Make entries for all calls and deoptimization entry points of the method. */
         for (Infopoint infopoint : compilation.getInfopoints()) {
             final DebugInfo debugInfo = infopoint.debugInfo;
             if (debugInfo != null) {
                 final int offset = getEntryOffset(infopoint);
                 if (offset >= 0) {
+                    boolean added = infopointOffsets.add(offset);
+                    if (!added) {
+                        throw VMError.shouldNotReachHere("Encoding two infopoints at same offset. Conflicting infopoint: " + infopoint);
+                    }
                     IPData entry = makeEntry(offset + compilationOffset);
                     assert entry.referenceMap == null && entry.frameData == null;
                     entry.referenceMap = (ReferenceMapEncoder.Input) debugInfo.getReferenceMap();
-                    entry.frameData = frameInfoEncoder.addDebugInfo(method, infopoint, totalFrameSize);
+                    entry.frameData = frameInfoEncoder.addDebugInfo(method, compilation, infopoint, totalFrameSize);
+                    if (entry.frameData != null && entry.frameData.frame.isDeoptEntry) {
+                        BytecodeFrame frame = debugInfo.frame();
+                        long encodedBci = FrameInfoEncoder.encodeBci(frame.getBCI(), frame.duringCall, frame.rethrowException);
+                        added = deoptEntryBcis.add(encodedBci);
+                        if (!added) {
+                            throw VMError.shouldNotReachHere(String.format("Encoding two deopt entries at same encoded bci: %s (bci %s)%nmethod: %s",
+                                            encodedBci, FrameInfoDecoder.readableBci(encodedBci), method));
+                        }
+                    }
                 }
             }
         }
@@ -233,15 +233,7 @@ public class CodeInfoEncoder {
         }
 
         ImageSingletons.lookup(Counters.class).methodCount.inc();
-        ImageSingletons.lookup(Counters.class).codeSize.add(compilation.getTargetCodeSize());
-    }
-
-    public void prepareMetadataForClass(Class<?> clazz) {
-        methodMetadataEncoder.prepareMetadataForClass(clazz);
-    }
-
-    public void prepareMetadataForMethod(SharedMethod method, Executable reflectMethod) {
-        methodMetadataEncoder.prepareMetadataForMethod(method, reflectMethod);
+        ImageSingletons.lookup(Counters.class).codeSize.add(compilationSize);
     }
 
     private IPData makeEntry(long ip) {
@@ -258,9 +250,6 @@ public class CodeInfoEncoder {
         encoders.encodeAllAndInstall(target, adjuster);
         encodeReferenceMaps();
         frameInfoEncoder.encodeAllAndInstall(target);
-        if (SubstrateUtil.HOSTED) {
-            methodMetadataEncoder.encodeAllAndInstall();
-        }
         encodeIPData();
 
         install(target);
@@ -276,6 +265,7 @@ public class CodeInfoEncoder {
             referenceMapEncoder.add(data.referenceMap);
         }
         referenceMapEncoding = referenceMapEncoder.encodeAll();
+        ImageSingletons.lookup(Counters.class).addToReferenceMapSize(referenceMapEncoder.getEncodingSize());
         for (IPData data : entries.values()) {
             data.referenceMapIndex = referenceMapEncoder.lookupEncoding(data.referenceMap);
         }
@@ -334,7 +324,7 @@ public class CodeInfoEncoder {
             writeSizeEncoding(encodingBuffer, data, entryFlags);
             writeExceptionOffset(encodingBuffer, data, entryFlags);
             writeReferenceMapIndex(encodingBuffer, data, entryFlags);
-            writeDeoptFrameInfo(encodingBuffer, data, entryFlags);
+            writeEncodedFrameInfo(encodingBuffer, data, entryFlags);
         }
 
         codeInfoIndex = NonmovableArrays.createByteArray(TypeConversion.asU4(indexBuffer.getBytesWritten()));
@@ -439,7 +429,7 @@ public class CodeInfoEncoder {
     private static int flagsForDeoptFrameInfo(IPData data) {
         if (data.frameData == null) {
             return CodeInfoDecoder.FI_NO_DEOPT;
-        } else if (TypeConversion.isS4(data.frameData.indexInEncodings)) {
+        } else if (TypeConversion.isS4(data.frameData.encodedFrameInfoIndex)) {
             if (data.frameData.frame.isDeoptEntry) {
                 return CodeInfoDecoder.FI_DEOPT_ENTRY_INDEX_S4;
             } else {
@@ -450,17 +440,17 @@ public class CodeInfoEncoder {
         }
     }
 
-    private static void writeDeoptFrameInfo(UnsafeArrayTypeWriter writeBuffer, IPData data, int entryFlags) {
+    private static void writeEncodedFrameInfo(UnsafeArrayTypeWriter writeBuffer, IPData data, int entryFlags) {
         switch (CodeInfoDecoder.extractFI(entryFlags)) {
             case CodeInfoDecoder.FI_DEOPT_ENTRY_INDEX_S4:
             case CodeInfoDecoder.FI_INFO_ONLY_INDEX_S4:
-                writeBuffer.putS4(data.frameData.indexInEncodings);
+                writeBuffer.putS4(data.frameData.encodedFrameInfoIndex);
                 break;
         }
     }
 
-    public static boolean verifyMethod(SharedMethod method, CompilationResult compilation, int compilationOffset, CodeInfo info) {
-        CodeInfoVerifier.verifyMethod(method, compilation, compilationOffset, info);
+    public static boolean verifyMethod(SharedMethod method, CompilationResult compilation, int compilationOffset, int compilationSize, CodeInfo info) {
+        CodeInfoVerifier.verifyMethod(method, compilation, compilationOffset, compilationSize, info);
         return true;
     }
 
@@ -471,10 +461,10 @@ public class CodeInfoEncoder {
 }
 
 class CodeInfoVerifier {
-    static void verifyMethod(SharedMethod method, CompilationResult compilation, int compilationOffset, CodeInfo info) {
-        for (int relativeIP = 0; relativeIP < compilation.getTargetCodeSize(); relativeIP++) {
+    static void verifyMethod(SharedMethod method, CompilationResult compilation, int compilationOffset, int compilationSize, CodeInfo info) {
+        CodeInfoQueryResult queryResult = new CodeInfoQueryResult();
+        for (int relativeIP = 0; relativeIP < compilationSize; relativeIP++) {
             int totalIP = relativeIP + compilationOffset;
-            CodeInfoQueryResult queryResult = new CodeInfoQueryResult();
             CodeInfoAccess.lookupCodeInfo(info, totalIP, queryResult);
             assert queryResult.isEntryPoint() == method.isEntryPoint();
             assert queryResult.hasCalleeSavedRegisters() == method.hasCalleeSavedRegisters();
@@ -487,12 +477,11 @@ class CodeInfoVerifier {
             if (infopoint.debugInfo != null) {
                 int offset = CodeInfoEncoder.getEntryOffset(infopoint);
                 if (offset >= 0) {
-                    assert offset < compilation.getTargetCodeSize();
-                    CodeInfoQueryResult queryResult = new CodeInfoQueryResult();
+                    assert offset < compilationSize;
                     CodeInfoAccess.lookupCodeInfo(info, offset + compilationOffset, queryResult);
 
                     CollectingObjectReferenceVisitor visitor = new CollectingObjectReferenceVisitor();
-                    CodeReferenceMapDecoder.walkOffsetsFromPointer(WordFactory.zero(), CodeInfoAccess.getStackReferenceMapEncoding(info), queryResult.getReferenceMapIndex(), visitor);
+                    CodeReferenceMapDecoder.walkOffsetsFromPointer(WordFactory.zero(), CodeInfoAccess.getStackReferenceMapEncoding(info), queryResult.getReferenceMapIndex(), visitor, null);
                     ReferenceMapEncoder.Input expected = (ReferenceMapEncoder.Input) infopoint.debugInfo.getReferenceMap();
                     visitor.result.verify();
                     assert expected.equals(visitor.result);
@@ -506,9 +495,8 @@ class CodeInfoVerifier {
 
         for (ExceptionHandler handler : compilation.getExceptionHandlers()) {
             int offset = handler.pcOffset;
-            assert offset >= 0 && offset < compilation.getTargetCodeSize();
+            assert offset >= 0 && offset < compilationSize;
 
-            CodeInfoQueryResult queryResult = new CodeInfoQueryResult();
             CodeInfoAccess.lookupCodeInfo(info, offset + compilationOffset, queryResult);
             long actual = queryResult.getExceptionOffset();
             long expected = handler.handlerPos - handler.pcOffset;
@@ -519,7 +507,7 @@ class CodeInfoVerifier {
 
     private static void verifyFrame(CompilationResult compilation, BytecodeFrame expectedFrame, FrameInfoQueryResult actualFrame, BitSet visitedVirtualObjects) {
         assert (expectedFrame == null) == (actualFrame == null);
-        if (expectedFrame == null || !actualFrame.needLocalValues) {
+        if (expectedFrame == null || !actualFrame.hasLocalValueInfo()) {
             return;
         }
         verifyFrame(compilation, expectedFrame.caller(), actualFrame.getCaller(), visitedVirtualObjects);
@@ -548,7 +536,7 @@ class CodeInfoVerifier {
             assert lock.isEliminated() == actualValue.isEliminatedMonitor();
             expectedValue = lock.getOwner();
         } else {
-            assert actualValue.isEliminatedMonitor() == false;
+            assert !actualValue.isEliminatedMonitor();
         }
 
         if (ValueUtil.isIllegalJavaValue(expectedValue)) {
@@ -588,7 +576,7 @@ class CodeInfoVerifier {
             verifyVirtualObject(compilation, ValueUtil.asVirtualObject(expectedValue), actualFrame.getVirtualObjects()[expectedId], actualFrame, visitedVirtualObjects);
 
         } else {
-            throw shouldNotReachHere();
+            throw shouldNotReachHereUnexpectedInput(expectedValue); // ExcludeFromJacocoGeneratedReport
         }
     }
 
@@ -669,7 +657,7 @@ class CodeInfoVerifier {
     private static ValueInfo findActualField(ValueInfo[] actualObject, UnsignedWord expectedOffset) {
         DynamicHub hub = (DynamicHub) SubstrateObjectConstant.asObject(actualObject[0].getValue());
         ObjectLayout objectLayout = ConfigurationValues.getObjectLayout();
-        assert LayoutEncoding.isInstance(hub.getLayoutEncoding());
+        assert LayoutEncoding.isPureInstance(hub.getLayoutEncoding());
         return findActualValue(actualObject, expectedOffset, objectLayout, WordFactory.unsigned(objectLayout.getFirstFieldOffset()), 1);
     }
 

@@ -73,4 +73,9 @@ public class SubstrateMetaAccessExtensionProvider implements MetaAccessExtension
 
         return true;
     }
+
+    @Override
+    public boolean canVirtualize(ResolvedJavaType instanceType) {
+        return true;
+    }
 }

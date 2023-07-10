@@ -24,11 +24,11 @@
 package com.oracle.truffle.espresso.nodes.interop;
 
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
-import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.espresso.impl.Field;
 import com.oracle.truffle.espresso.impl.Klass;
+import com.oracle.truffle.espresso.nodes.EspressoNode;
 
-public abstract class AbstractLookupFieldNode extends Node {
+public abstract class AbstractLookupFieldNode extends EspressoNode {
 
     public enum FieldLookupKind {
         Instance,
@@ -44,7 +44,8 @@ public abstract class AbstractLookupFieldNode extends Node {
         int len = table.length;
         for (int i = len - 1; i >= 0; i--) {
             Field f = table[i];
-            if ((kind == FieldLookupKind.All) ||
+            if (!f.isRemoved() &&
+                            (kind == FieldLookupKind.All) ||
                             (kind == FieldLookupKind.Static && f.isStatic()) ||
                             (kind == FieldLookupKind.Instance && !f.isStatic())) {
                 if (f.getNameAsString().equals(name) && (f.isPublic() || !publicOnly)) {

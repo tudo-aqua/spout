@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -41,53 +41,63 @@
 
 package org.graalvm.wasm.parser.validation;
 
-import org.graalvm.wasm.constants.Instructions;
+import org.graalvm.wasm.WasmType;
+import org.graalvm.wasm.parser.bytecode.RuntimeBytecodeGen;
 
 /**
  * Represents the scope of a block structure during module validation.
  */
-public class ControlFrame {
-    private final int opcode;
+public abstract class ControlFrame {
     private final byte[] paramTypes;
     private final byte[] resultTypes;
+
     private final int initialStackSize;
     private boolean unreachable;
+    private final int commonResultType;
 
     /**
-     * @param opcode The opcode of the block structure.
      * @param paramTypes The parameter value types of the block structure.
      * @param resultTypes The result value types of the block structure.
      * @param initialStackSize The size of the value stack when entering this block structure.
      * @param unreachable If the block structure should be declared unreachable.
      */
-    ControlFrame(int opcode, byte[] paramTypes, byte[] resultTypes, int initialStackSize, boolean unreachable) {
-        this.opcode = opcode;
+    ControlFrame(byte[] paramTypes, byte[] resultTypes, int initialStackSize, boolean unreachable) {
         this.paramTypes = paramTypes;
         this.resultTypes = resultTypes;
         this.initialStackSize = initialStackSize;
         this.unreachable = unreachable;
+        commonResultType = WasmType.getCommonValueType(resultTypes);
     }
 
-    boolean isLoop() {
-        return opcode == Instructions.LOOP;
+    protected byte[] paramTypes() {
+        return paramTypes;
     }
 
-    boolean isIf() {
-        return opcode == Instructions.IF;
-    }
-
-    public byte[] getResultTypes() {
+    public byte[] resultTypes() {
         return resultTypes;
     }
 
-    public byte[] getLabelTypes() {
-        if (isLoop()) {
-            return paramTypes;
-        }
-        return resultTypes;
+    protected int resultTypeLength() {
+        return resultTypes.length;
     }
 
-    int getInitialStackSize() {
+    /**
+     * @return The union of all result types.
+     */
+    protected int commonResultType() {
+        return commonResultType;
+    }
+
+    /**
+     * @return The types that must be on the value stack when branching to this frame.
+     */
+    abstract byte[] labelTypes();
+
+    protected int labelTypeLength() {
+        return labelTypes().length;
+    }
+
+    int initialStackSize() {
         return initialStackSize;
     }
 
@@ -98,4 +108,49 @@ public class ControlFrame {
     boolean isUnreachable() {
         return unreachable;
     }
+
+    protected void resetUnreachable() {
+        this.unreachable = false;
+    }
+
+    /**
+     * Performs checks and actions when entering an else branch.
+     * 
+     * @param state The current parser state.
+     * @param bytecode The current extra data array.
+     */
+    abstract void enterElse(ParserState state, RuntimeBytecodeGen bytecode);
+
+    /**
+     * Performs checks and actions when exiting a frame.
+     * 
+     * @param bytecode The current extra data array.
+     */
+    abstract void exit(RuntimeBytecodeGen bytecode);
+
+    /**
+     * Adds an unconditional branch targeting this control frame. Automatically patches the branch
+     * target as soon as it is available.
+     * 
+     * @param bytecode The bytecode of the current control frame.
+     */
+    abstract void addBranch(RuntimeBytecodeGen bytecode);
+
+    /**
+     * Adds a conditional branch targeting this control frame. Automatically patches the branch *
+     * target as soon as it is available.
+     * 
+     * @param bytecode The bytecode of the current control frame.
+     */
+
+    abstract void addBranchIf(RuntimeBytecodeGen bytecode);
+
+    /**
+     * Adds a branch table item targeting this control frame. Automatically patches the branch *
+     * target as soon as it is available.
+     * 
+     * @param bytecode The bytecode of the current control frame.
+     */
+
+    abstract void addBranchTableItem(RuntimeBytecodeGen bytecode);
 }

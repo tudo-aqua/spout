@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -65,7 +65,7 @@ public abstract class SLNewObjectBuiltin extends SLBuiltinNode {
     @Specialization
     @SuppressWarnings("unused")
     public Object newObject(SLNull o,
-                    @Cached("lookup()") AllocationReporter reporter) {
+                    @Cached(value = "lookup()", neverDefault = true) AllocationReporter reporter) {
         return SLLanguage.get(this).createObject(reporter);
     }
 

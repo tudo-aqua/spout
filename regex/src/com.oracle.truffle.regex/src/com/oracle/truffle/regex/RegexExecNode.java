@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -40,32 +40,40 @@
  */
 package com.oracle.truffle.regex;
 
+import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.strings.TruffleString;
 import com.oracle.truffle.regex.result.RegexResult;
+import com.oracle.truffle.regex.runtime.nodes.ExpectStringNode;
 import com.oracle.truffle.regex.tregex.nodes.input.InputLengthNode;
 import com.oracle.truffle.regex.tregex.nodes.input.InputReadNode;
+import com.oracle.truffle.regex.tregex.string.Encodings;
 
 public abstract class RegexExecNode extends RegexBodyNode {
 
-    private final boolean mustCheckUnicodeSurrogates;
+    private final boolean mustCheckUTF16Surrogates;
+    private @Child ExpectStringNode expectStringNode = ExpectStringNode.create();
     private @Child InputLengthNode lengthNode;
     private @Child InputReadNode charAtNode;
 
-    public RegexExecNode(RegexLanguage language, RegexSource source, boolean mustCheckUnicodeSurrogates) {
+    public RegexExecNode(RegexLanguage language, RegexSource source, boolean mustCheckUTF16Surrogates) {
         super(language, source);
-        this.mustCheckUnicodeSurrogates = mustCheckUnicodeSurrogates;
+        this.mustCheckUTF16Surrogates = getEncoding() == Encodings.UTF_16 && mustCheckUTF16Surrogates;
     }
 
     @Override
     public final RegexResult execute(VirtualFrame frame) {
         Object[] args = frame.getArguments();
         assert args.length == 2;
-        return executeDirect(args[0], (int) args[1]);
+        TruffleString.Encoding encoding = getEncoding().getTStringEncoding();
+        CompilerAsserts.partialEvaluationConstant(encoding);
+        return adjustIndexAndRun(frame, expectStringNode.execute(args[0], encoding), (int) args[1]);
     }
 
-    private int adjustFromIndex(int fromIndex, Object input) {
-        if (mustCheckUnicodeSurrogates && fromIndex > 0 && fromIndex < inputLength(input)) {
+    private int adjustFromIndex(int fromIndex, TruffleString input) {
+        if (mustCheckUTF16Surrogates && fromIndex > 0 && fromIndex < inputLength(input)) {
+            assert getEncoding() == Encodings.UTF_16;
             if (Character.isLowSurrogate((char) inputRead(input, fromIndex)) && Character.isHighSurrogate((char) inputRead(input, fromIndex - 1))) {
                 return fromIndex - 1;
             }
@@ -73,33 +81,33 @@ public abstract class RegexExecNode extends RegexBodyNode {
         return fromIndex;
     }
 
-    public int inputLength(Object input) {
+    public final int inputLength(TruffleString input) {
         if (lengthNode == null) {
             CompilerDirectives.transferToInterpreterAndInvalidate();
             lengthNode = insert(InputLengthNode.create());
         }
-        return lengthNode.execute(input);
+        return lengthNode.execute(input, getEncoding());
     }
 
-    public int inputRead(Object input, int i) {
+    public final int inputRead(TruffleString input, int i) {
         if (charAtNode == null) {
             CompilerDirectives.transferToInterpreterAndInvalidate();
             charAtNode = insert(InputReadNode.create());
         }
-        return charAtNode.execute(input, i);
+        return charAtNode.execute(input, i, getEncoding());
     }
 
-    public RegexResult executeDirect(Object input, int fromIndex) {
+    private RegexResult adjustIndexAndRun(VirtualFrame frame, TruffleString input, int fromIndex) {
         if (fromIndex < 0 || fromIndex > inputLength(input)) {
             CompilerDirectives.transferToInterpreterAndInvalidate();
             throw new IllegalArgumentException(String.format("got illegal fromIndex value: %d. fromIndex must be >= 0 and <= input length (%d)", fromIndex, inputLength(input)));
         }
-        return execute(input, adjustFromIndex(fromIndex, input));
+        return execute(frame, input, adjustFromIndex(fromIndex, input));
     }
 
     public boolean isBacktracking() {
         return false;
     }
 
-    protected abstract RegexResult execute(Object input, int fromIndex);
+    protected abstract RegexResult execute(VirtualFrame frame, TruffleString input, int fromIndex);
 }

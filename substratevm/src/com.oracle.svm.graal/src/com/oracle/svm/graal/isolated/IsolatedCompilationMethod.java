@@ -24,7 +24,7 @@
  */
 package com.oracle.svm.graal.isolated;
 
-import com.oracle.svm.core.annotate.Uninterruptible;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.graal.meta.SharedRuntimeMethod;
 
 /** Method object in the compiler isolate with an equivalent method object in the client isolate. */
@@ -32,6 +32,6 @@ public interface IsolatedCompilationMethod<T extends SharedRuntimeMethod> extend
 
     /** Handle to the method in the client isolate for installing code. */
     @Override
-    @Uninterruptible(reason = "Called from uninterruptible code.")
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     ClientHandle<T> getMirror();
 }

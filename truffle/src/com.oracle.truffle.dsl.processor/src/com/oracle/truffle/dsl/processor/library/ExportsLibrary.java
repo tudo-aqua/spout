@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -183,11 +183,6 @@ public final class ExportsLibrary extends Template {
         if (getReceiverDynamicDispatchExport() != null) {
             return true;
         }
-        if (ElementUtils.typeEquals(receiverType, types.DynamicObject)) {
-            // GR-24700: DynamicObject may be dispatched via DynamicObjectImpl
-            // which we cannot use as @ExportLibrary receiverType.
-            return true;
-        }
         return false;
     }
 
@@ -224,6 +219,24 @@ public final class ExportsLibrary extends Template {
 
     public LibraryData getLibrary() {
         return library;
+    }
+
+    public boolean isExported(LibraryMessage message) {
+        ExportMessageData exportMessage = getExportedMessages().get(message.getName());
+        if (exportMessage == null) {
+            return false;
+        }
+        if (exportMessage.getResolvedMessage() == message) {
+            // direct match
+            return true;
+        }
+
+        for (LibraryMessage overload : message.getDeprecatedOverloads()) {
+            if (isExported(overload)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public Map<String, ExportMessageData> getExportedMessages() {

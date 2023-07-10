@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -60,6 +60,7 @@ import com.oracle.truffle.api.nodes.Node;
  * the CachedLibrary in the generated "execute" method and write of that field in the generated
  * "executeAndSpecialize" method. Note that the race was reproducible only on JDK8.
  */
+@SuppressWarnings({"truffle-inlining", "truffle-neverdefault", "truffle-sharing"})
 public class CachedDataRaceTest {
     private static final int TEST_REPETITIONS = 1000;
     // Don't go too crazy, if JVM reports lots of available threads

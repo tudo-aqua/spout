@@ -1,10 +1,12 @@
 ---
 layout: docs
-toc_group: native-image
-link_title: Reflection on Native Image
-permalink: /reference-manual/native-image/Reflection/
+toc_group: dynamic-features
+link_title: Reflection
+permalink: /reference-manual/native-image/dynamic-features/Reflection/
+redirect_from: /$version/reference-manual/native-image/Reflection/
 ---
-# Reflection Use in Native Images
+
+# Reflection in Native Image
 
 Java reflection support (the `java.lang.reflect.*` API) enables Java code to examine its own classes, methods, fields and their properties at run time.
 
@@ -13,9 +15,14 @@ Examining and accessing program elements through `java.lang.reflect.*` or loadin
 (Note: loading classes with `Class.forName(String)` are included here since it is closely related to reflection.)
 
 Native Image tries to resolve the target elements through a static analysis that detects calls to the Reflection API.
-Where the analysis fails, the program elements reflectively accessed at run time must be specified using a manual configuration.
+Where the analysis fails, the program elements reflectively accessed at run time must be specified using a manual configuration. See [Reachability Metadata](ReachabilityMetadata.md) and [Collect Metadata with the Tracing Agent](AutomaticMetadataCollection.md) for more information.
 
-See also the [guide on assisted configuration of Java resources and other dynamic features](BuildConfiguration.md#assisted-configuration-of-native-image-builds).
+### Table of Contents
+
+* [Automatic Detection](#automatic-detection)
+* [Manual Configuration](#manual-configuration)
+* [Conditional Configuration](#conditional-configuration)
+* [Configuration with Features](#configuration-with-features)
 
 ## Automatic Detection
 
@@ -78,7 +85,7 @@ For these situations a manual configuration as described below can be provided.
 
 ## Manual Configuration
 
-A configuration that specifies the program elements that will be accessed reflectively can be provided during the native image build as follows:
+A configuration that specifies the program elements that will be accessed reflectively can be provided as follows:
 ```
 -H:ReflectionConfigurationFiles=/path/to/reflectconfig
 ```
@@ -87,10 +94,10 @@ Here, `reflectconfig` is a JSON file in the following format (use `--expert-opti
 [
   {
     "name" : "java.lang.Class",
-    "allDeclaredConstructors" : true,
-    "allPublicConstructors" : true,
-    "allDeclaredMethods" : true,
-    "allPublicMethods" : true,
+    "queryAllDeclaredConstructors" : true,
+    "queryAllPublicConstructors" : true,
+    "queryAllDeclaredMethods" : true,
+    "queryAllPublicMethods" : true,
     "allDeclaredClasses" : true,
     "allPublicClasses" : true
   },
@@ -109,26 +116,33 @@ Here, `reflectconfig` is a JSON file in the following format (use `--expert-opti
   },
   {
     "name" : "java.lang.String$CaseInsensitiveComparator",
-    "methods" : [
+    "queriedMethods" : [
       { "name" : "compare" }
     ]
   }
 ]
 ```
 
+The configuration distinguishes between methods and constructors that can be invoked during execution via `Method.invoke(Object, Object...)` or `Constructor.newInstance(Object...)` and those that can not.
+Including a function in the configuration without invocation capabilities helps the static analysis correctly assess its reachability status and results in smaller binary sizes.
+The function metadata is then accessible at runtime like it would for any other registered reflection method or constructor, but trying to call the function will result in a runtime error.
+The configuration fields prefixed by `query` or `queried` only include the metadata, while the other ones (e.g., `methods`) enable runtime invocation.
+
 The native image builder generates reflection metadata for all classes, methods, and fields referenced in that file.
-The `allPublicConstructors`, `allDeclaredConstructors`, `allPublicMethods`, `allDeclaredMethods`, `allPublicFields`, `allDeclaredFields`, `allPublicClasses`, and `allDeclaredClasses` attributes can be used to automatically include an entire set of members of a class.
+The `queryAllPublicConstructors`, `queryAllDeclaredConstructors`, `queryAllPublicMethods`, `queryAllDeclaredMethods`, `allPublicConstructors`, `allDeclaredConstructors`, `allPublicMethods`, `allDeclaredMethods`, `allPublicFields`, `allDeclaredFields`, `allPublicClasses`, and `allDeclaredClasses` attributes can be used to automatically include an entire set of members of a class.
 
 However, `allPublicClasses` and `allDeclaredClasses` do not automatically register the inner classes for reflective access.
 They just make them available via `Class.getClasses()` and `Class.getDeclaredClasses()` when called on the declaring class.
 Code may also write non-static final fields like `String.value` in this example, but other code might not observe changes of final field values in the same way as for non-final fields because of optimizations. Static final fields may never be written.
 
 More than one configuration can be used by specifying multiple paths for `ReflectionConfigurationFiles` and separating them with `,`.
-Also, `-H:ReflectionConfigurationResources` can be specified to load one or several configuration files from the native image build's class path, such as from a JAR file.
+Also, `-H:ReflectionConfigurationResources` can be specified to load one or several configuration files from the build's class path, such as from a JAR file.
 
-### Conditional Configuration
+## Conditional Configuration
 
-With conditional configuraiton, a class configuration entry is applied only if a provided `condition` is satisfied. The only currently supported condition is `typeReachable`, which enables the configuration entry if the specified type is reachable through other code. For example, to support reflective access to `sun.misc.Unsafe.theUnsafe` only when `io.netty.util.internal.PlatformDependent0` is reachable, the configuration should look like:
+With conditional configuration, a class configuration entry is applied only if a provided `condition` is satisfied.
+The only currently supported condition is `typeReachable`, which enables the configuration entry if the specified type is reachable through other code.
+For example, to support reflective access to `sun.misc.Unsafe.theUnsafe` only when `io.netty.util.internal.PlatformDependent0` is reachable, the configuration should look like:
 
 ```json
 {
@@ -140,15 +154,18 @@ With conditional configuraiton, a class configuration entry is applied only if a
 }
 ```
 
-Conditional configuration is the *preferred* way to specify reflection configuration: if code doing a reflective access is not reachable, it is unnecessary to include its corresponding reflection entry. The consistent usage of `condition` results in *smaller binaries* and *better build times* as the image builder can selectively include reflectively accessed code.
+Conditional configuration is the **preferred** way to specify reflection configuration: if code doing a reflective access is not reachable, it is unnecessary to include its corresponding reflection entry.
+The consistent usage of `condition` results in *smaller binaries* and *better build times* as the image builder can selectively include reflectively accessed code.
 
-If a `condition` is omitted, the element is always included. When the same `condition` is used for two distinct elements in two configuration entries, both elements will be included when the condition is satisfied. When a configuration entry should be enabled if one of several types are reachable, it is necessary to add two configuration entries: one entry for each condition.
+If a `condition` is omitted, the element is always included.
+When the same `condition` is used for two distinct elements in two configuration entries, both elements will be included when the condition is satisfied.
+When a configuration entry should be enabled if one of several types are reachable, it is necessary to add two configuration entries: one entry for each condition.
 
-When used with [assisted configuration](BuildConfiguration.md#assisted-configuration-of-native-image-builds), conditional entries of existing configuration will not be fused with agent-collected entries as agent-collected entries.
+When used with [assisted configuration](AutomaticMetadataCollection.md#conditional-metadata-collection), conditional entries of existing configuration will not be fused with agent-collected entries.
 
-### Configuration with Features
+## Configuration with Features
 
-Alternatively, a custom `Feature` implementation can register program elements before and during the analysis phase of the native image build using the `RuntimeReflection` class. For example:
+Alternatively, a custom `Feature` implementation can register program elements before and during the analysis phase of the build using the `RuntimeReflection` class. For example:
 ```java
 class RuntimeReflectionRegistrationFeature implements Feature {
   public void beforeAnalysis(BeforeAnalysisAccess access) {
@@ -168,9 +185,20 @@ class RuntimeReflectionRegistrationFeature implements Feature {
 To activate the custom feature `--features=<fully qualified name of RuntimeReflectionRegistrationFeature class>` needs to be passed to native-image.
 [Native Image Build Configuration](BuildConfiguration.md) explains how this can be automated with a `native-image.properties` file in `META-INF/native-image`.
 
-### Use of Reflection during Native Image Generation
-Reflection can be used without restrictions during a native image generation, for example, in static initializers.
+### Use of Reflection at Build Time
+
+Reflection can be used without restrictions during the native binary generation, for example, in static initializers.
 At this point, code can collect information about methods and fields and store them in their own data structures, which are then reflection-free at run time.
 
 ### Unsafe Accesses
-The `Unsafe` class, although its use is discouraged, provides direct access to the memory of Java objects. The `Unsafe.objectFieldOffset()` method provides the offset of a field within a Java object. Note that the offsets that are queried during native image generation can be different from the offsets at run time.
+
+The `Unsafe` class, although its use is discouraged, provides direct access to the memory of Java objects.
+The `Unsafe.objectFieldOffset()` method provides the offset of a field within a Java object.
+Note that the offsets that are queried at native binary build time can be different from the offsets at run time.
+
+### Related Documentation
+
+- [Build a Native Executable with Reflection](guides/build-with-reflection.md)
+- [Class Initialization in Native Image](ClassInitialization.md)
+- [Collect Metadata with the Tracing Agent](AutomaticMetadataCollection.md)
+- [Reachability Metadata: Reflection](ReachabilityMetadata.md#reflection)

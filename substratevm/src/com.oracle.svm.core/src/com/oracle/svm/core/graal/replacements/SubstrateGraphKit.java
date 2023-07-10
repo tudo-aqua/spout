@@ -27,6 +27,7 @@ package com.oracle.svm.core.graal.replacements;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.graalvm.compiler.api.replacements.SnippetReflectionProvider;
 import org.graalvm.compiler.core.common.CompilationIdentifier;
 import org.graalvm.compiler.core.common.type.Stamp;
 import org.graalvm.compiler.core.common.type.StampFactory;
@@ -36,6 +37,7 @@ import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.graph.Node;
 import org.graalvm.compiler.java.FrameStateBuilder;
 import org.graalvm.compiler.nodes.AbstractBeginNode;
+import org.graalvm.compiler.nodes.BeginNode;
 import org.graalvm.compiler.nodes.CallTargetNode;
 import org.graalvm.compiler.nodes.CallTargetNode.InvokeKind;
 import org.graalvm.compiler.nodes.ConstantNode;
@@ -74,7 +76,6 @@ import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.graal.code.SubstrateCallingConventionKind;
 import com.oracle.svm.core.graal.meta.SubstrateLoweringProvider;
 import com.oracle.svm.core.graal.nodes.DeoptEntryNode;
-import com.oracle.svm.core.meta.SubstrateObjectConstant;
 import com.oracle.svm.core.nodes.CFunctionEpilogueNode;
 import com.oracle.svm.core.nodes.CFunctionPrologueNode;
 import com.oracle.svm.core.nodes.SubstrateMethodCallTargetNode;
@@ -95,19 +96,26 @@ public class SubstrateGraphKit extends GraphKit {
     private final FrameStateBuilder frameState;
     private int nextBCI;
 
-    public SubstrateGraphKit(DebugContext debug, ResolvedJavaMethod stubMethod, Providers providers, WordTypes wordTypes, GraphBuilderConfiguration.Plugins graphBuilderPlugins,
-                    CompilationIdentifier compilationId) {
-        super(debug, stubMethod, providers, wordTypes, graphBuilderPlugins, compilationId, null, SubstrateOptions.parseOnce());
+    // For GR-45916 this should be unconditionally true when parseOnce is enabled.
+    private static boolean trackNodeSourcePosition(boolean forceTrackNodeSourcePosition) {
+        return forceTrackNodeSourcePosition || (SubstrateOptions.parseOnce() && !SubstrateOptions.ParseOnceJIT.getValue());
+    }
+
+    @SuppressWarnings("this-escape")
+    public SubstrateGraphKit(DebugContext debug, ResolvedJavaMethod stubMethod, Providers providers, WordTypes wordTypes,
+                    GraphBuilderConfiguration.Plugins graphBuilderPlugins, CompilationIdentifier compilationId, boolean forceTrackNodeSourcePosition) {
+        super(debug, stubMethod, providers, wordTypes, graphBuilderPlugins, compilationId, null, trackNodeSourcePosition(forceTrackNodeSourcePosition), false);
         assert wordTypes != null : "Support for Word types is mandatory";
         frameState = new FrameStateBuilder(this, stubMethod, graph);
         frameState.disableKindVerification();
+        frameState.disableStateVerification();
         frameState.initializeForMethodStart(null, true, graphBuilderPlugins);
         graph.start().setStateAfter(frameState.create(bci(), graph.start()));
     }
 
     @Override
     protected MethodCallTargetNode createMethodCallTarget(InvokeKind invokeKind, ResolvedJavaMethod targetMethod, ValueNode[] args, StampPair returnStamp, int bci) {
-        return new SubstrateMethodCallTargetNode(invokeKind, targetMethod, args, returnStamp, null, null);
+        return new SubstrateMethodCallTargetNode(invokeKind, targetMethod, args, returnStamp, null, null, null);
     }
 
     public SubstrateLoweringProvider getLoweringProvider() {
@@ -172,7 +180,7 @@ public class SubstrateGraphKit extends GraphKit {
         return startInvokeWithException(targetMethod, kind, frameState, bci(), arguments);
     }
 
-    public ValueNode createJavaCallWithExceptionAndUnwind(InvokeKind kind, ResolvedJavaMethod targetMethod, ValueNode... arguments) {
+    public InvokeWithExceptionNode createJavaCallWithExceptionAndUnwind(InvokeKind kind, ResolvedJavaMethod targetMethod, ValueNode... arguments) {
         return createInvokeWithExceptionAndUnwind(targetMethod, kind, frameState, bci(), arguments);
     }
 
@@ -184,7 +192,6 @@ public class SubstrateGraphKit extends GraphKit {
         boolean emitTransition = StatusSupport.isValidStatus(newThreadStatus);
         if (emitTransition) {
             append(new CFunctionPrologueNode(newThreadStatus));
-
         }
 
         /*
@@ -207,7 +214,7 @@ public class SubstrateGraphKit extends GraphKit {
             epilogue.setStateAfter(invoke.stateAfter().duplicateWithVirtualState());
         } else if (emitDeoptTarget) {
             /*
-             * Since this deoptimization is occurring in an custom graph, assume there are no
+             * Since this deoptimization is occurring in a custom graph, assume there are no
              * exception handlers and directly unwind.
              */
             int bci = invoke.stateAfter().bci;
@@ -229,7 +236,7 @@ public class SubstrateGraphKit extends GraphKit {
     public InvokeNode createIndirectCall(ValueNode targetAddress, List<ValueNode> arguments, Signature signature, SubstrateCallingConventionKind callKind) {
         assert arguments.size() == signature.getParameterCount(false);
         assert callKind != SubstrateCallingConventionKind.Native : "return kind and stamp would be incorrect";
-        JavaKind returnKind = signature.getReturnKind();
+        JavaKind returnKind = signature.getReturnKind().getStackKind();
         Stamp returnStamp = returnStamp(signature.getReturnType(null), returnKind);
         return createIndirectCall(targetAddress, arguments, signature.toParameterTypes(null), returnStamp, returnKind, callKind);
     }
@@ -268,7 +275,8 @@ public class SubstrateGraphKit extends GraphKit {
     }
 
     public ConstantNode createObject(Object value) {
-        return ConstantNode.forConstant(SubstrateObjectConstant.forObject(value), getMetaAccess(), graph);
+        SnippetReflectionProvider snippetReflection = getProviders().getSnippetReflection();
+        return ConstantNode.forConstant(snippetReflection.forObject(value), getMetaAccess(), graph);
     }
 
     public ValueNode createBoxing(ValueNode value, JavaKind kind, ResolvedJavaType targetType) {
@@ -342,7 +350,7 @@ public class SubstrateGraphKit extends GraphKit {
             stateSplit.setStateAfter(frameState.create(bci, stateSplit));
         }
 
-        AbstractBeginNode noExceptionEdge = add(withExceptionNode.createNextBegin());
+        AbstractBeginNode noExceptionEdge = add(new BeginNode());
         withExceptionNode.setNext(noExceptionEdge);
         ExceptionObjectNode exceptionEdge = createExceptionObjectNode(frameState, bci);
         withExceptionNode.setExceptionEdge(exceptionEdge);

@@ -102,7 +102,7 @@ public final class MachOSymtab extends MachOObjectFile.LinkEditElement implement
 
     private List<Entry> getModifiableEntries() {
         if (isSorted) {
-            throw new RuntimeException("unexpected access to unsorted symtab entries");
+            throw new RuntimeException("Unexpected access to unsorted symtab entries");
         }
         return entries;
     }
@@ -474,8 +474,8 @@ public final class MachOSymtab extends MachOObjectFile.LinkEditElement implement
     }
 
     private Entry addEntry(Entry entry) {
+        entriesByName.compute(entry.getName(), (k, v) -> SymbolTable.tryReplace(v, entry));
         getModifiableEntries().add(entry);
-        entriesByName.put(entry.getName(), entry);
         return entry;
     }
 

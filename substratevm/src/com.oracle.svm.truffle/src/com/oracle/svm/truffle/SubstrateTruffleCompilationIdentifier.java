@@ -25,18 +25,20 @@
 package com.oracle.svm.truffle;
 
 import org.graalvm.compiler.debug.GraalError;
-import org.graalvm.compiler.truffle.common.CompilableTruffleAST;
+import org.graalvm.compiler.truffle.common.TruffleCompilable;
+import org.graalvm.compiler.truffle.common.TruffleCompilationTask;
 import org.graalvm.compiler.truffle.compiler.TruffleCompilationIdentifier;
-import org.graalvm.compiler.truffle.runtime.OptimizedCallTarget;
 
 import com.oracle.svm.core.graal.code.SubstrateCompilationIdentifier;
 
-public class SubstrateTruffleCompilationIdentifier extends SubstrateCompilationIdentifier implements TruffleCompilationIdentifier {
+public final class SubstrateTruffleCompilationIdentifier extends SubstrateCompilationIdentifier implements TruffleCompilationIdentifier {
 
-    private final OptimizedCallTarget optimizedCallTarget;
+    private final TruffleCompilationTask task;
+    private final TruffleCompilable compilable;
 
-    public SubstrateTruffleCompilationIdentifier(OptimizedCallTarget optimizedCallTarget) {
-        this.optimizedCallTarget = optimizedCallTarget;
+    public SubstrateTruffleCompilationIdentifier(TruffleCompilationTask task, TruffleCompilable compilable) {
+        this.task = task;
+        this.compilable = compilable;
     }
 
     @Override
@@ -55,21 +57,24 @@ public class SubstrateTruffleCompilationIdentifier extends SubstrateCompilationI
                 sb.append(']');
                 break;
             default:
-                throw new GraalError("unknown verbosity: " + verbosity);
+                throw new GraalError("Unknown verbosity: " + verbosity);
         }
         return sb;
     }
 
+    @Override
     protected void buildName(StringBuilder sb) {
-        sb.append(optimizedCallTarget.toString());
+        sb.append(compilable.toString());
     }
 
     @Override
-    public CompilableTruffleAST getCompilable() {
-        return optimizedCallTarget;
+    public TruffleCompilationTask getTask() {
+        return task;
     }
 
     @Override
-    public void close() {
+    public TruffleCompilable getCompilable() {
+        return compilable;
     }
+
 }

@@ -28,18 +28,17 @@ import java.io.FileDescriptor;
 
 import org.graalvm.nativeimage.LogHandler;
 import org.graalvm.nativeimage.c.type.CCharPointer;
-import org.graalvm.nativeimage.hosted.Feature;
 import org.graalvm.word.UnsignedWord;
 
-import com.oracle.svm.core.CErrorNumber;
 import com.oracle.svm.core.SubstrateDiagnostics;
-import com.oracle.svm.core.annotate.AutomaticFeature;
+import com.oracle.svm.core.feature.InternalFeature;
+import com.oracle.svm.core.headers.LibC;
 import com.oracle.svm.core.log.Log;
-import com.oracle.svm.core.posix.headers.LibC;
 import com.oracle.svm.core.thread.VMThreads;
+import com.oracle.svm.core.feature.AutomaticallyRegisteredFeature;
 
-@AutomaticFeature
-class PosixLogHandlerFeature implements Feature {
+@AutomaticallyRegisteredFeature
+class PosixLogHandlerFeature implements InternalFeature {
     @Override
     public void beforeAnalysis(BeforeAnalysisAccess access) {
         Log.finalizeDefaultLogHandler(new PosixLogHandler());
@@ -51,7 +50,7 @@ public class PosixLogHandler implements LogHandler {
     @Override
     public void log(CCharPointer bytes, UnsignedWord length) {
         /* Save and restore errno around calls that would otherwise change errno. */
-        final int savedErrno = CErrorNumber.getCErrorNumber();
+        final int savedErrno = LibC.errno();
         try {
             if (!PosixUtils.writeBytes(getOutputFile(), bytes, length)) {
                 /*
@@ -61,19 +60,19 @@ public class PosixLogHandler implements LogHandler {
                 fatalError();
             }
         } finally {
-            CErrorNumber.setCErrorNumber(savedErrno);
+            LibC.setErrno(savedErrno);
         }
     }
 
     @Override
     public void flush() {
         /* Save and restore errno around calls that would otherwise change errno. */
-        final int savedErrno = CErrorNumber.getCErrorNumber();
+        final int savedErrno = LibC.errno();
         try {
             PosixUtils.flush(getOutputFile());
             /* ignore error -- they're benign */
         } finally {
-            CErrorNumber.setCErrorNumber(savedErrno);
+            LibC.setErrno(savedErrno);
         }
     }
 

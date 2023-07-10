@@ -1,131 +1,59 @@
 {
-  "README": "This file contains definitions that are useful for the hocon and jsonnet CI files of multiple repositories.",
+  "README": [
+    "This file contains some data shared between CI files and various other usages, and is copied in many repositories.",
+    "Jsonnet files should not include this file directly but use ci/common.jsonnet instead."
+  ],
 
+  "mx_version": "6.27.6",
+
+  "COMMENT.jdks": "When adding or removing JDKs keep in sync with JDKs in ci/common.jsonnet",
   "jdks": {
-    "openjdk8":           {"name": "openjdk",   "version": "8u302+06-jvmci-21.3-b03", "platformspecific": true },
-    "oraclejdk8":         {"name": "oraclejdk", "version": "8u311+09-jvmci-21.3-b03", "platformspecific": true },
-    "oraclejdk8Debug":    {"name": "oraclejdk", "version": "8u311+09-jvmci-21.3-b03-fastdebug", "platformspecific": true },
+    "oraclejdk11":        {"name": "jpg-jdk",   "version": "11.0.11", "build_id": "9", "release": true, "platformspecific": true, "extrabundles": ["static-libs"] },
 
-    "openjdk11":          {"name": "openjdk",   "version": "11.0.11+9", "platformspecific": true },
-    "oraclejdk11":        {"name": "oraclejdk", "version": "11.0.11+9", "platformspecific": true },
-    "labsjdk-ce-11":      {"name": "labsjdk",   "version": "ce-11.0.12+5-jvmci-21.3-b03", "platformspecific": true },
-    "labsjdk-ee-11":      {"name": "labsjdk",   "version": "ee-11.0.13+9-jvmci-21.3-b03", "platformspecific": true },
+    "oraclejdk17":        {"name": "jpg-jdk",   "version": "17.0.7",  "build_id": "8", "release": true, "platformspecific": true, "extrabundles": ["static-libs"]},
+    "labsjdk-ce-17":      {"name": "labsjdk",   "version": "ce-17.0.7+4-jvmci-23.1-b02", "platformspecific": true },
+    "labsjdk-ce-17Debug": {"name": "labsjdk",   "version": "ce-17.0.7+4-jvmci-23.1-b02-debug", "platformspecific": true },
+    "labsjdk-ce-17-llvm": {"name": "labsjdk",   "version": "ce-17.0.7+4-jvmci-23.1-b02-sulong", "platformspecific": true },
+    "labsjdk-ee-17":      {"name": "labsjdk",   "version": "ee-17.0.8+2-jvmci-23.1-b02", "platformspecific": true },
+    "labsjdk-ee-17Debug": {"name": "labsjdk",   "version": "ee-17.0.8+2-jvmci-23.1-b02-debug", "platformspecific": true },
+    "labsjdk-ee-17-llvm": {"name": "labsjdk",   "version": "ee-17.0.8+2-jvmci-23.1-b02-sulong", "platformspecific": true },
 
-    "oraclejdk17":        {"name": "oraclejdk", "version": "17.0.1+2", "platformspecific": true },
-    "labsjdk-ce-17":      {"name": "labsjdk",   "version": "ce-17+35-jvmci-21.3-b03", "platformspecific": true },
-    "labsjdk-ce-17Debug": {"name": "labsjdk",   "version": "ce-17+35-jvmci-21.3-b03-debug", "platformspecific": true },
-    "labsjdk-ee-17":      {"name": "labsjdk",   "version": "ee-17.0.1+9-jvmci-21.3-b03", "platformspecific": true },
-    "labsjdk-ee-17Debug": {"name": "labsjdk",   "version": "ee-17.0.1+9-jvmci-21.3-b03-debug", "platformspecific": true }
+    "oraclejdk19":        {"name": "jpg-jdk",   "version": "19",      "build_id": "26", "release": true, "platformspecific": true, "extrabundles": ["static-libs"]},
+    "labsjdk-ce-19":      {"name": "labsjdk",   "version": "ce-19.0.1+10-jvmci-23.0-b04", "platformspecific": true },
+    "labsjdk-ce-19Debug": {"name": "labsjdk",   "version": "ce-19.0.1+10-jvmci-23.0-b04-debug", "platformspecific": true },
+    "labsjdk-ce-19-llvm": {"name": "labsjdk",   "version": "ce-19.0.1+10-jvmci-23.0-b04-sulong", "platformspecific": true },
+    "labsjdk-ee-19":      {"name": "labsjdk",   "version": "ee-19.0.2+7-jvmci-23.0-b05", "platformspecific": true },
+    "labsjdk-ee-19Debug": {"name": "labsjdk",   "version": "ee-19.0.2+7-jvmci-23.0-b05-debug", "platformspecific": true },
+    "labsjdk-ee-19-llvm": {"name": "labsjdk",   "version": "ee-19.0.2+7-jvmci-23.0-b05-sulong", "platformspecific": true },
+
+    "oraclejdk20":        {"name": "jpg-jdk",   "version": "20",      "build_id": "34", "release": true, "platformspecific": true, "extrabundles": ["static-libs"]},
+    "labsjdk-ce-20":      {"name": "labsjdk",   "version": "ce-20.0.1+9-jvmci-23.1-b02", "platformspecific": true },
+    "labsjdk-ce-20Debug": {"name": "labsjdk",   "version": "ce-20.0.1+9-jvmci-23.1-b02-debug", "platformspecific": true },
+    "labsjdk-ce-20-llvm": {"name": "labsjdk",   "version": "ce-20.0.1+9-jvmci-23.1-b02-sulong", "platformspecific": true },
+    "labsjdk-ee-20":      {"name": "labsjdk",   "version": "ee-20.0.2+2-jvmci-23.1-b02", "platformspecific": true },
+    "labsjdk-ee-20Debug": {"name": "labsjdk",   "version": "ee-20.0.2+2-jvmci-23.1-b02-debug", "platformspecific": true },
+    "labsjdk-ee-20-llvm": {"name": "labsjdk",   "version": "ee-20.0.2+2-jvmci-23.1-b02-sulong", "platformspecific": true },
+
+    "oraclejdk21":        {"name": "jpg-jdk",   "version": "21",      "build_id": "28", "release": true, "platformspecific": true, "extrabundles": ["static-libs"]},
+    "labsjdk-ce-21":      {"name": "labsjdk",   "version": "ce-21+28-jvmci-23.1-b09", "platformspecific": true },
+    "labsjdk-ce-21Debug": {"name": "labsjdk",   "version": "ce-21+28-jvmci-23.1-b09-debug", "platformspecific": true },
+    "labsjdk-ce-21-llvm": {"name": "labsjdk",   "version": "ce-21+28-jvmci-23.1-b09-sulong", "platformspecific": true },
+    "labsjdk-ee-21":      {"name": "labsjdk",   "version": "ee-21+28-jvmci-23.1-b09", "platformspecific": true },
+    "labsjdk-ee-21Debug": {"name": "labsjdk",   "version": "ee-21+28-jvmci-23.1-b09-debug", "platformspecific": true },
+    "labsjdk-ee-21-llvm": {"name": "labsjdk",   "version": "ee-21+28-jvmci-23.1-b09-sulong", "platformspecific": true },
+
+    "oraclejdk22":        {"name": "jpg-jdk",   "version": "22",      "build_id": "1", "release": true, "platformspecific": true, "extrabundles": ["static-libs"]}
   },
 
-  "COMMENT" : "The devkits versions reflect those used to build the JVMCI JDKs (e.g., see devkit_platform_revisions in <jdk>/make/conf/jib-profiles.js)",
-  "devkits": {
-      "windows-oraclejdk8": { "packages" : { "devkit:VS2017-15.9.16+1" : "==0" }},
-      "windows-openjdk8":   { "packages" : { "devkit:VS2017-15.9.16+1" : "==0" }},
-      "windows-jdk11":      { "packages" : { "devkit:VS2017-15.9.24+1" : "==0" }},
-      "windows-jdk17":      { "packages" : { "devkit:VS2019-16.9.3+1"  : "==0" }}
+  "eclipse": {
+    "version": "4.26.0",
+    "short_version": "4.26",
+    "timestamp": "202211231800"
   },
-  "deps": {
-    "COMMENT.common": [
-      "pip:isort is a dependency of pip:pylint. The explicit dependency on the pip package works around",
-      "https://bugzilla.redhat.com/show_bug.cgi?id=1710221 on older Redhat-based systems, and doesn't",
-      "hurt on others."
-    ],
-    "common": {
-      "timelimit": "30:00",
-      "environment": {
-        "MX_PYTHON": "python3"
-      },
-      "packages": {
-        "pip:isort": "==4.3.19",
-        "pip:logilab-common": "==1.4.4",
-        "pip:pylint": "==1.9.3",
-        "pip:ninja_syntax": "==1.7.2"
-      }
-    },
 
-    "linux": {
-      "packages": {
-        "git": ">=1.8.3",
-        "mercurial": ">=2.2",
-        "apache/ant": ">=1.9.4"
-      }
-    },
-    "COMMENT.darwin": [
-      "Required to keep pylint happy on Darwin",
-      "https://coderwall.com/p/-k_93g/mac-os-x-valueerror-unknown-locale-utf-8-in-python"
-    ],
-    "darwin": {
-      "environment": {
-        "LC_ALL": "en_US.UTF-8"
-      }
-    },
-    "windows": {
-    }
-
-  },
-  "downloads": {
-    "eclipse": {
-      "downloads": {
-        "ECLIPSE": {
-          "name": "eclipse",
-          "version": "4.14.0",
-          "platformspecific": true
-        }
-      },
-      "environment": {
-        "ECLIPSE_EXE": "$ECLIPSE/eclipse"
-      }
-    },
-    "jdt": {
-      "environment": {
-        "JDT": "builtin"
-      }
-    }
-  },
-  "sulong": {
-    "deps": {
-      "common": {},
-      "linux": {
-        "packages": {
-          "cmake": "==3.15.2"
-        }
-      },
-      "darwin": {
-        "packages": {
-          "cmake": "==3.15.2"
-        }
-      },
-      "windows": {
-        "packages": {
-          "msvc": "==10.0",
-          "pip:cmake": "==3.18.4"
-        }
-      }
-    }
-  },
-  "truffleruby": {
-    "deps": {
-      "common": {},
-      "linux": {
-        "packages": {
-          "ruby": "==2.6.3"
-        }
-      },
-      "darwin": {}
-    }
-  },
-  "graalnodejs": {
-    "deps": {
-      "common": {},
-      "linux": {
-        "packages": {
-          "binutils": "==2.23.2",
-          "gcc": "==8.3.0",
-          "cmake": "==3.15.2"
-        }
-      },
-      "darwin": {}
-    }
+  "pip": {
+    "ninja_syntax": "==1.7.2",
+    "lazy-object-proxy": "==1.6.0",
+    "pylint": "==2.4.4"
   }
 }

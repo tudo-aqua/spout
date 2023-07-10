@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2017, 2023, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -28,14 +28,6 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 package com.oracle.truffle.llvm.nativemode.runtime;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.WeakHashMap;
-
-import org.graalvm.collections.EconomicMap;
-import org.graalvm.collections.Equivalence;
 
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerAsserts;
@@ -68,6 +60,13 @@ import com.oracle.truffle.llvm.runtime.types.PrimitiveType.PrimitiveKind;
 import com.oracle.truffle.llvm.runtime.types.Type;
 import com.oracle.truffle.llvm.runtime.types.VoidType;
 import com.oracle.truffle.nfi.api.SignatureLibrary;
+import org.graalvm.collections.EconomicMap;
+import org.graalvm.collections.Equivalence;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.WeakHashMap;
 
 public final class NFIContextExtension extends NativeContextExtension {
 
@@ -77,7 +76,7 @@ public final class NFIContextExtension extends NativeContextExtension {
      * The current well-known functions that are used through this interface are:
      *
      * <pre>
-     * - `__sulong_fp80_*` (5 operations)
+     * - `__sulong_longdouble_*` (5 operations)
      * - `__sulong_posix_syscall`
      * - `identity`
      * </pre>
@@ -202,13 +201,13 @@ public final class NFIContextExtension extends NativeContextExtension {
     private final EconomicMap<Source, Object> signatureCache = EconomicMap.create(Equivalence.IDENTITY);
 
     // This is an array instead of an ArrayList because it's accessed from the fast-path.
-    private Object[] wellKnownFunctionCache;
+    private WellKnownNativeFunctionAndSignature[] wellKnownFunctionCache;
 
     private NFIContextExtension(Env env, SignatureSourceCache signatureSourceCache) {
         assert env.getOptions().get(SulongNativeOption.ENABLE_NFI);
         this.env = env;
         this.signatureSourceCache = signatureSourceCache;
-        this.wellKnownFunctionCache = new Object[WELL_KNOWN_CACHE_INITIAL_SIZE];
+        this.wellKnownFunctionCache = new WellKnownNativeFunctionAndSignature[WELL_KNOWN_CACHE_INITIAL_SIZE];
     }
 
     @Override
@@ -386,11 +385,14 @@ public final class NFIContextExtension extends NativeContextExtension {
     private static String getNativeType(Type type) throws UnsupportedNativeTypeException {
         if (type instanceof FunctionType) {
             return getNativeSignature((FunctionType) type, 0);
-        } else if (type instanceof PointerType && ((PointerType) type).getPointeeType() instanceof FunctionType) {
-            FunctionType functionType = (FunctionType) ((PointerType) type).getPointeeType();
-            return getNativeSignature(functionType, 0);
         } else if (type instanceof PointerType) {
-            return "POINTER";
+            PointerType ptr = (PointerType) type;
+            if (!ptr.isOpaque() && ptr.getPointeeType() instanceof FunctionType) {
+                FunctionType functionType = (FunctionType) ptr.getPointeeType();
+                return getNativeSignature(functionType, 0);
+            } else {
+                return "POINTER";
+            }
         } else if (type instanceof PrimitiveType) {
             PrimitiveType primitiveType = (PrimitiveType) type;
             PrimitiveKind kind = primitiveType.getPrimitiveKind();
@@ -408,6 +410,10 @@ public final class NFIContextExtension extends NativeContextExtension {
                     return "FLOAT";
                 case DOUBLE:
                     return "DOUBLE";
+                case X86_FP80:
+                    return "FP80";
+                case F128:
+                    return "FP128";
                 default:
                     throw new UnsupportedNativeTypeException(primitiveType);
 
@@ -477,13 +483,10 @@ public final class NFIContextExtension extends NativeContextExtension {
         }
     }
 
-    private static Object bindNativeFunction(Object symbol, String signature) {
+    private Object bindNativeFunction(Object symbol, String signature) {
         CompilerAsserts.neverPartOfCompilation();
-        try {
-            return INTEROP.invokeMember(symbol, "bind", signature);
-        } catch (InteropException ex) {
-            throw new IllegalStateException(ex);
-        }
+        Source sigSource = Source.newBuilder("nfi", signature, SIGNATURE_SOURCE_NAME).build();
+        return SignatureLibrary.getUncached().bind(getCachedSignature(sigSource), symbol);
     }
 
     @Override
@@ -503,19 +506,27 @@ public final class NFIContextExtension extends NativeContextExtension {
         return WellKnownNFIFunctionNodeGen.create(fn);
     }
 
-    private Object createWellKnownFunction(WellKnownFunction fn) {
+    @Override
+    @TruffleBoundary
+    public WellKnownNativeFunctionAndSignature getWellKnownNativeFunctionAndSignature(String name, String signature) {
+        WellKnownFunction fn = signatureSourceCache.getWellKnownFunction(name, signature);
+        return getCachedWellKnownFunction(fn);
+    }
+
+    private WellKnownNativeFunctionAndSignature createWellKnownFunction(WellKnownFunction fn) {
         CompilerAsserts.neverPartOfCompilation();
         NativeLookupResult result = getNativeFunctionOrNull(fn.name);
         if (result != null) {
             CallTarget parsedSignature = env.parseInternal(fn.signatureSource);
             Object signature = parsedSignature.call();
-            return SignatureLibrary.getUncached().bind(signature, result.getObject());
+            Object boundSignature = SignatureLibrary.getUncached().bind(signature, result.getObject());
+            return new WellKnownNativeFunctionAndSignature(signature, result.getObject(), boundSignature);
         }
         throw new LLVMLinkerException(String.format("External function %s cannot be found.", fn.name));
     }
 
     @TruffleBoundary
-    private Object getWellKnownFuctionSlowPath(WellKnownFunction fn) {
+    private WellKnownNativeFunctionAndSignature getWellKnownFunctionSlowPath(WellKnownFunction fn) {
         synchronized (this) {
             if (wellKnownFunctionCache.length <= fn.index) {
                 int newLength = wellKnownFunctionCache.length * 2;
@@ -525,7 +536,7 @@ public final class NFIContextExtension extends NativeContextExtension {
                 }
                 wellKnownFunctionCache = Arrays.copyOf(wellKnownFunctionCache, newLength);
             }
-            Object ret = wellKnownFunctionCache[fn.index];
+            WellKnownNativeFunctionAndSignature ret = wellKnownFunctionCache[fn.index];
             if (ret == null) {
                 ret = createWellKnownFunction(fn);
                 wellKnownFunctionCache[fn.index] = ret;
@@ -534,14 +545,14 @@ public final class NFIContextExtension extends NativeContextExtension {
         }
     }
 
-    Object getCachedWellKnownFunction(WellKnownFunction fn) {
+    WellKnownNativeFunctionAndSignature getCachedWellKnownFunction(WellKnownFunction fn) {
         if (fn.index < wellKnownFunctionCache.length) {
-            Object ret = wellKnownFunctionCache[fn.index];
+            WellKnownNativeFunctionAndSignature ret = wellKnownFunctionCache[fn.index];
             if (ret != null) {
                 return ret;
             }
         }
-        return getWellKnownFuctionSlowPath(fn);
+        return getWellKnownFunctionSlowPath(fn);
     }
 
     @Override
@@ -551,6 +562,7 @@ public final class NFIContextExtension extends NativeContextExtension {
     }
 
     @Override
+    @TruffleBoundary
     public Object createSignature(Source signatureSource) {
         synchronized (signatureCache) {
             Object ret = signatureCache.get(signatureSource);
@@ -590,13 +602,18 @@ public final class NFIContextExtension extends NativeContextExtension {
     }
 
     private static String getNativeSignature(FunctionType type, int skipArguments) throws UnsupportedNativeTypeException {
-        // TODO varargs
         CompilerAsserts.neverPartOfCompilation();
         String nativeRet = getNativeType(type.getReturnType());
         String[] argTypes = getNativeArgumentTypes(type, skipArguments);
         StringBuilder sb = new StringBuilder();
+
         sb.append("(");
-        for (String a : argTypes) {
+        for (int pos = 0; pos < argTypes.length; pos++) {
+            String a = argTypes[pos];
+
+            if (pos == type.getFixedArgs()) {
+                sb.append("...");
+            }
             sb.append(a);
             sb.append(",");
         }

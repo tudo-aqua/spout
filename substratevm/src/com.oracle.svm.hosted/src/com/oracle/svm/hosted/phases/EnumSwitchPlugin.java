@@ -42,9 +42,9 @@ import org.graalvm.nativeimage.ImageSingletons;
 import com.oracle.graal.pointsto.BigBang;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
 import com.oracle.svm.core.ParsingReason;
-import com.oracle.svm.core.annotate.AutomaticFeature;
 import com.oracle.svm.core.classinitialization.EnsureClassInitializedNode;
-import com.oracle.svm.core.graal.GraalFeature;
+import com.oracle.svm.core.feature.AutomaticallyRegisteredFeature;
+import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.hosted.FeatureImpl.DuringSetupAccessImpl;
 import com.oracle.svm.hosted.snippets.IntrinsificationPluginRegistry;
 import com.oracle.svm.hosted.snippets.ReflectionPlugins;
@@ -79,7 +79,7 @@ final class EnumSwitchPlugin implements NodePlugin {
             return false;
         }
 
-        if (reason == ParsingReason.PointsToAnalysis) {
+        if (reason.duringAnalysis()) {
             if (!method.getDeclaringClass().isInitialized()) {
                 /*
                  * Declaring class is initialized at run time. Even if the enum itself is
@@ -113,7 +113,7 @@ final class EnumSwitchPlugin implements NodePlugin {
                     ImageSingletons.lookup(ReflectionPlugins.ReflectionPluginRegistry.class).add(b.getMethod(), b.bci(), switchTable);
                 }
             } catch (ReflectiveOperationException ex) {
-                throw GraalError.shouldNotReachHere(ex);
+                throw GraalError.shouldNotReachHere(ex); // ExcludeFromJacocoGeneratedReport
             }
         }
 
@@ -129,8 +129,8 @@ final class EnumSwitchPlugin implements NodePlugin {
 final class EnumSwitchPluginRegistry extends IntrinsificationPluginRegistry {
 }
 
-@AutomaticFeature
-final class EnumSwitchFeature implements GraalFeature {
+@AutomaticallyRegisteredFeature
+final class EnumSwitchFeature implements InternalFeature {
 
     BigBang bb;
 
@@ -141,14 +141,14 @@ final class EnumSwitchFeature implements GraalFeature {
         ImageSingletons.add(EnumSwitchPluginRegistry.class, new EnumSwitchPluginRegistry());
         DuringSetupAccessImpl access = (DuringSetupAccessImpl) a;
         bb = access.getBigBang();
-        access.getHostVM().addMethodAfterParsingHook(this::onMethodParsed);
+        access.getHostVM().addMethodAfterParsingListener(this::onMethodParsed);
     }
 
     private void onMethodParsed(AnalysisMethod method, StructuredGraph graph) {
         boolean methodSafeForExecution = graph.getNodes().filter(node -> node instanceof EnsureClassInitializedNode).isEmpty();
 
         Boolean existingValue = methodsSafeForExecution.put(method, methodSafeForExecution);
-        assert existingValue == null : "Method parsed twice: " + method.format("%H.%n(%p)");
+        assert existingValue == null || method.isDeoptTarget() : "Method parsed twice: " + method.format("%H.%n(%p)");
     }
 
     @Override

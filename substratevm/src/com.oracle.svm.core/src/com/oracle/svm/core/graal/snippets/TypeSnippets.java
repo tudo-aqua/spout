@@ -26,14 +26,15 @@ package com.oracle.svm.core.graal.snippets;
 
 import static com.oracle.svm.core.graal.snippets.SubstrateIntrinsics.loadHub;
 import static com.oracle.svm.core.graal.snippets.SubstrateIntrinsics.loadHubOrNull;
+import static org.graalvm.compiler.nodes.extended.BranchProbabilityNode.LIKELY_PROBABILITY;
+import static org.graalvm.compiler.nodes.extended.BranchProbabilityNode.NOT_FREQUENT_PROBABILITY;
+import static org.graalvm.compiler.nodes.extended.BranchProbabilityNode.probability;
 
 import java.util.Map;
 
 import org.graalvm.compiler.api.replacements.Snippet;
-import org.graalvm.compiler.api.replacements.SnippetReflectionProvider;
 import org.graalvm.compiler.core.common.calc.UnsignedMath;
 import org.graalvm.compiler.core.common.type.TypeReference;
-import org.graalvm.compiler.debug.DebugHandlersFactory;
 import org.graalvm.compiler.graph.Node;
 import org.graalvm.compiler.nodes.NamedLocationIdentity;
 import org.graalvm.compiler.nodes.PiNode;
@@ -50,14 +51,11 @@ import org.graalvm.compiler.replacements.InstanceOfSnippetsTemplates;
 import org.graalvm.compiler.replacements.SnippetTemplate;
 import org.graalvm.compiler.replacements.Snippets;
 
-import com.oracle.svm.core.annotate.DuplicatedInNativeCode;
-import com.oracle.svm.core.config.ConfigurationValues;
-import com.oracle.svm.core.graal.meta.RuntimeConfiguration;
+import com.oracle.svm.core.graal.meta.KnownOffsets;
 import com.oracle.svm.core.graal.word.DynamicHubAccess;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.meta.SharedType;
-
-import jdk.vm.ci.code.TargetDescription;
+import com.oracle.svm.core.util.DuplicatedInNativeCode;
 
 public final class TypeSnippets extends SubstrateTemplates implements Snippets {
 
@@ -69,15 +67,23 @@ public final class TypeSnippets extends SubstrateTemplates implements Snippets {
                     @Snippet.ConstantParameter boolean allowsNull,
                     DynamicHub exactType) {
         if (allowsNull) {
-            if (object == null) {
+            if (probability(NOT_FREQUENT_PROBABILITY, object == null)) {
                 return trueValue;
             }
+            GuardingNode guard = SnippetAnchorNode.anchor();
+            Object nonNullObject = PiNode.piCastNonNull(object, guard);
+            DynamicHub nonNullHub = loadHub(nonNullObject);
+            if (probability(NOT_FREQUENT_PROBABILITY, nonNullHub != exactType)) {
+                return falseValue;
+            }
+            return trueValue;
+        } else {
+            Object hubOrNull = loadHubOrNull(object);
+            if (probability(NOT_FREQUENT_PROBABILITY, hubOrNull != exactType)) {
+                return falseValue;
+            }
+            return trueValue;
         }
-        Object hubOrNull = loadHubOrNull(object);
-        if (hubOrNull != exactType) {
-            return falseValue;
-        }
-        return trueValue;
     }
 
     @Snippet
@@ -88,7 +94,7 @@ public final class TypeSnippets extends SubstrateTemplates implements Snippets {
                     @Snippet.ConstantParameter boolean allowsNull,
                     short start, short range, short slot,
                     @Snippet.ConstantParameter int typeIDSlotOffset) {
-        if (object == null) {
+        if (probability(NOT_FREQUENT_PROBABILITY, object == null)) {
             if (allowsNull) {
                 return trueValue;
             }
@@ -108,7 +114,7 @@ public final class TypeSnippets extends SubstrateTemplates implements Snippets {
                     SubstrateIntrinsics.Any falseValue,
                     @Snippet.ConstantParameter boolean allowsNull,
                     @Snippet.ConstantParameter int typeIDSlotOffset) {
-        if (object == null) {
+        if (probability(NOT_FREQUENT_PROBABILITY, object == null)) {
             if (allowsNull) {
                 return trueValue;
             }
@@ -143,7 +149,7 @@ public final class TypeSnippets extends SubstrateTemplates implements Snippets {
         // No need to guard reading from hub as `checkedHub` is guaranteed to be non-null.
         final GuardingNode guard = null;
         int checkedTypeID = Short.toUnsignedInt(DynamicHubAccess.readShort(checkedHub, typeIDSlotOffset + typeCheckSlot, NamedLocationIdentity.FINAL_LOCATION, guard));
-        if (UnsignedMath.belowThan(checkedTypeID - typeCheckStart, typeCheckRange)) {
+        if (probability(LIKELY_PROBABILITY, UnsignedMath.belowThan(checkedTypeID - typeCheckStart, typeCheckRange))) {
             return trueValue;
         }
 
@@ -151,37 +157,41 @@ public final class TypeSnippets extends SubstrateTemplates implements Snippets {
     }
 
     @SuppressWarnings("unused")
-    public static void registerLowerings(RuntimeConfiguration runtimeConfig, OptionValues options, Iterable<DebugHandlersFactory> factories, Providers providers,
-                    SnippetReflectionProvider snippetReflection,
-                    Map<Class<? extends Node>, NodeLoweringProvider<?>> lowerings) {
-        new TypeSnippets(options, runtimeConfig, factories, providers, snippetReflection, lowerings);
+    public static void registerLowerings(OptionValues options, Providers providers, Map<Class<? extends Node>, NodeLoweringProvider<?>> lowerings) {
+        new TypeSnippets(options, providers, lowerings);
     }
 
-    final RuntimeConfiguration runtimeConfig;
+    final KnownOffsets knownOffsets;
 
-    private TypeSnippets(OptionValues options, RuntimeConfiguration runtimeConfig, Iterable<DebugHandlersFactory> factories, Providers providers, SnippetReflectionProvider snippetReflection,
-                    Map<Class<? extends Node>, NodeLoweringProvider<?>> lowerings) {
-        super(options, factories, providers, snippetReflection);
-        this.runtimeConfig = runtimeConfig;
+    final SnippetTemplate.SnippetInfo instanceOf;
+    final SnippetTemplate.SnippetInfo instanceOfDynamic;
+    final SnippetTemplate.SnippetInfo typeEquality;
+    final SnippetTemplate.SnippetInfo assignableTypeCheck;
 
-        lowerings.put(InstanceOfNode.class, new InstanceOfLowering(options, factories, providers, snippetReflection, ConfigurationValues.getTarget()));
-        lowerings.put(InstanceOfDynamicNode.class, new InstanceOfDynamicLowering(options, factories, providers, snippetReflection, ConfigurationValues.getTarget()));
-        lowerings.put(ClassIsAssignableFromNode.class, new ClassIsAssignableFromLowering(options, factories, providers, snippetReflection, ConfigurationValues.getTarget()));
+    private TypeSnippets(OptionValues options, Providers providers, Map<Class<? extends Node>, NodeLoweringProvider<?>> lowerings) {
+        super(options, providers);
+
+        this.knownOffsets = KnownOffsets.singleton();
+
+        this.instanceOf = snippet(providers, TypeSnippets.class, "instanceOfSnippet");
+        this.instanceOfDynamic = snippet(providers, TypeSnippets.class, "instanceOfDynamicSnippet");
+        this.typeEquality = snippet(providers, TypeSnippets.class, "typeEqualitySnippet");
+        this.assignableTypeCheck = snippet(providers, TypeSnippets.class, "classIsAssignableFromSnippet");
+
+        lowerings.put(InstanceOfNode.class, new InstanceOfLowering(options, providers));
+        lowerings.put(InstanceOfDynamicNode.class, new InstanceOfDynamicLowering(options, providers));
+        lowerings.put(ClassIsAssignableFromNode.class, new ClassIsAssignableFromLowering(options, providers));
     }
-
-    final SnippetTemplate.SnippetInfo typeEquality = snippet(TypeSnippets.class, "typeEqualitySnippet");
 
     protected class InstanceOfLowering extends InstanceOfSnippetsTemplates implements NodeLoweringProvider<FloatingNode> {
 
-        private final SnippetTemplate.SnippetInfo instanceOf = snippet(TypeSnippets.class, "instanceOfSnippet");
-
-        public InstanceOfLowering(OptionValues options, Iterable<DebugHandlersFactory> factories, Providers providers, SnippetReflectionProvider snippetReflection, TargetDescription target) {
-            super(options, factories, providers, snippetReflection, target);
+        public InstanceOfLowering(OptionValues options, Providers providers) {
+            super(options, providers);
         }
 
         @Override
         public void lower(FloatingNode node, LoweringTool tool) {
-            if (tool.getLoweringStage() == LoweringTool.StandardLoweringStage.HIGH_TIER) {
+            if (tool.getLoweringStage() != LoweringTool.StandardLoweringStage.MID_TIER) {
                 return;
             }
             super.lower(node, tool);
@@ -213,7 +223,7 @@ public final class TypeSnippets extends SubstrateTemplates implements Snippets {
                 args.add("start", hub.getTypeCheckStart());
                 args.add("range", hub.getTypeCheckRange());
                 args.add("slot", hub.getTypeCheckSlot());
-                args.addConst("typeIDSlotOffset", runtimeConfig.getTypeIDSlotsOffset());
+                args.addConst("typeIDSlotOffset", knownOffsets.getTypeIDSlotsOffset());
                 return args;
             }
         }
@@ -221,16 +231,13 @@ public final class TypeSnippets extends SubstrateTemplates implements Snippets {
 
     protected class InstanceOfDynamicLowering extends InstanceOfSnippetsTemplates implements NodeLoweringProvider<FloatingNode> {
 
-        private final SnippetTemplate.SnippetInfo instanceOfDynamic = snippet(TypeSnippets.class, "instanceOfDynamicSnippet");
-
-        public InstanceOfDynamicLowering(OptionValues options, Iterable<DebugHandlersFactory> factories, Providers providers, SnippetReflectionProvider snippetReflection,
-                        TargetDescription target) {
-            super(options, factories, providers, snippetReflection, target);
+        public InstanceOfDynamicLowering(OptionValues options, Providers providers) {
+            super(options, providers);
         }
 
         @Override
         public void lower(FloatingNode node, LoweringTool tool) {
-            if (tool.getLoweringStage() == LoweringTool.StandardLoweringStage.HIGH_TIER) {
+            if (tool.getLoweringStage() != LoweringTool.StandardLoweringStage.MID_TIER) {
                 return;
             }
             super.lower(node, tool);
@@ -256,23 +263,21 @@ public final class TypeSnippets extends SubstrateTemplates implements Snippets {
                 args.add("trueValue", replacer.trueValue);
                 args.add("falseValue", replacer.falseValue);
                 args.addConst("allowsNull", node.allowsNull());
-                args.addConst("typeIDSlotOffset", runtimeConfig.getTypeIDSlotsOffset());
+                args.addConst("typeIDSlotOffset", knownOffsets.getTypeIDSlotsOffset());
                 return args;
             }
         }
     }
 
     protected class ClassIsAssignableFromLowering extends InstanceOfSnippetsTemplates implements NodeLoweringProvider<FloatingNode> {
-        private final SnippetTemplate.SnippetInfo assignableTypeCheck = snippet(TypeSnippets.class, "classIsAssignableFromSnippet");
 
-        public ClassIsAssignableFromLowering(OptionValues options, Iterable<DebugHandlersFactory> factories, Providers providers, SnippetReflectionProvider snippetReflection,
-                        TargetDescription target) {
-            super(options, factories, providers, snippetReflection, target);
+        public ClassIsAssignableFromLowering(OptionValues options, Providers providers) {
+            super(options, providers);
         }
 
         @Override
         public void lower(FloatingNode node, LoweringTool tool) {
-            if (tool.getLoweringStage() == LoweringTool.StandardLoweringStage.HIGH_TIER) {
+            if (tool.getLoweringStage() != LoweringTool.StandardLoweringStage.MID_TIER) {
                 return;
             }
             super.lower(node, tool);
@@ -287,7 +292,7 @@ public final class TypeSnippets extends SubstrateTemplates implements Snippets {
             args.add("checkedHub", node.getOtherClass());
             args.add("trueValue", replacer.trueValue);
             args.add("falseValue", replacer.falseValue);
-            args.addConst("typeIDSlotOffset", runtimeConfig.getTypeIDSlotsOffset());
+            args.addConst("typeIDSlotOffset", knownOffsets.getTypeIDSlotsOffset());
             return args;
         }
     }

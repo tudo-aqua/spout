@@ -27,16 +27,16 @@ package com.oracle.svm.core.locks;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
-import org.graalvm.nativeimage.hosted.Feature;
 
 import com.oracle.svm.core.SubstrateOptions;
-import com.oracle.svm.core.annotate.AutomaticFeature;
-import com.oracle.svm.core.annotate.Uninterruptible;
+import com.oracle.svm.core.Uninterruptible;
+import com.oracle.svm.core.feature.AutomaticallyRegisteredFeature;
+import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.util.VMError;
 
 /**
- * Support of {@link VMMutex} and {@link VMCondition} in single-threaded environments. No real
- * locking is necessary.
+ * Support of {@link VMMutex}, {@link VMCondition} and {@link VMSemaphore} in single-threaded
+ * environments. No real locking is necessary.
  */
 final class SingleThreadedVMLockSupport extends VMLockSupport {
     @Override
@@ -48,22 +48,34 @@ final class SingleThreadedVMLockSupport extends VMLockSupport {
     public VMCondition[] getConditions() {
         return null;
     }
+
+    @Override
+    public VMSemaphore[] getSemaphores() {
+        return null;
+    }
 }
 
-@AutomaticFeature
-final class SingleThreadedVMLockFeature implements Feature {
+@AutomaticallyRegisteredFeature
+final class SingleThreadedVMLockFeature implements InternalFeature {
 
-    private final ClassInstanceReplacer<VMMutex, VMMutex> mutexReplacer = new ClassInstanceReplacer<VMMutex, VMMutex>(VMMutex.class) {
+    private final ClassInstanceReplacer<VMMutex, VMMutex> mutexReplacer = new ClassInstanceReplacer<>(VMMutex.class) {
         @Override
         protected VMMutex createReplacement(VMMutex source) {
             return new SingleThreadedVMMutex(source.getName());
         }
     };
 
-    private final ClassInstanceReplacer<VMCondition, VMCondition> conditionReplacer = new ClassInstanceReplacer<VMCondition, VMCondition>(VMCondition.class) {
+    private final ClassInstanceReplacer<VMCondition, VMCondition> conditionReplacer = new ClassInstanceReplacer<>(VMCondition.class) {
         @Override
         protected VMCondition createReplacement(VMCondition source) {
             return new SingleThreadedVMCondition((SingleThreadedVMMutex) mutexReplacer.apply(source.getMutex()));
+        }
+    };
+
+    private final ClassInstanceReplacer<VMSemaphore, VMSemaphore> semaphoreReplacer = new ClassInstanceReplacer<>(VMSemaphore.class) {
+        @Override
+        protected VMSemaphore createReplacement(VMSemaphore source) {
+            return new SingleThreadedVMSemaphore();
         }
     };
 
@@ -77,6 +89,7 @@ final class SingleThreadedVMLockFeature implements Feature {
         ImageSingletons.add(VMLockSupport.class, new SingleThreadedVMLockSupport());
         access.registerObjectReplacer(mutexReplacer);
         access.registerObjectReplacer(conditionReplacer);
+        access.registerObjectReplacer(semaphoreReplacer);
     }
 
     @Override
@@ -84,31 +97,32 @@ final class SingleThreadedVMLockFeature implements Feature {
         /* Seal the lists. */
         mutexReplacer.getReplacements();
         conditionReplacer.getReplacements();
+        semaphoreReplacer.getReplacements();
     }
 }
 
 final class SingleThreadedVMMutex extends VMMutex {
     @Platforms(Platform.HOSTED_ONLY.class)
-    protected SingleThreadedVMMutex(String name) {
+    SingleThreadedVMMutex(String name) {
         super(name);
     }
 
     @Override
     public VMMutex lock() {
-        assertNotOwner("Recursive locking is not supported");
+        assert !isOwner() : "Recursive locking is not supported";
         setOwnerToCurrentThread();
         return this;
     }
 
     @Override
-    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true, callerMustBe = true)
+    @Uninterruptible(reason = "Whole critical section needs to be uninterruptible.", callerMustBe = true)
     public void lockNoTransition() {
-        assertNotOwner("Recursive locking is not supported");
+        assert !isOwner() : "Recursive locking is not supported";
         setOwnerToCurrentThread();
     }
 
     @Override
-    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true, callerMustBe = true)
+    @Uninterruptible(reason = "Whole critical section needs to be uninterruptible.", callerMustBe = true)
     public void lockNoTransitionUnspecifiedOwner() {
         setOwnerToUnspecified();
     }
@@ -120,14 +134,9 @@ final class SingleThreadedVMMutex extends VMMutex {
     }
 
     @Override
-    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    @Uninterruptible(reason = "Whole critical section needs to be uninterruptible.")
     public void unlockNoTransitionUnspecifiedOwner() {
         clearUnspecifiedOwner();
-    }
-
-    @Override
-    public void unlockWithoutChecks() {
-        clearCurrentThreadOwner();
     }
 }
 
@@ -142,13 +151,13 @@ final class SingleThreadedVMCondition extends VMCondition {
         VMError.shouldNotReachHere("Cannot block in a single-threaded environment, because there is no other thread that could signal");
     }
 
-    @Uninterruptible(reason = "Called from uninterruptible code.", callerMustBe = true)
+    @Uninterruptible(reason = "Should only be called if the thread did an explicit transition to native earlier.", callerMustBe = true)
     @Override
     public void blockNoTransition() {
         VMError.shouldNotReachHere("Cannot block in a single-threaded environment, because there is no other thread that could signal");
     }
 
-    @Uninterruptible(reason = "Called from uninterruptible code.", callerMustBe = true)
+    @Uninterruptible(reason = "Should only be called if the thread did an explicit transition to native earlier.", callerMustBe = true)
     @Override
     public void blockNoTransitionUnspecifiedOwner() {
         VMError.shouldNotReachHere("Cannot block in a single-threaded environment, because there is no other thread that could signal");
@@ -160,7 +169,7 @@ final class SingleThreadedVMCondition extends VMCondition {
         return 0;
     }
 
-    @Uninterruptible(reason = "Called from uninterruptible code.", callerMustBe = true)
+    @Uninterruptible(reason = "Should only be called if the thread did an explicit transition to native earlier.", callerMustBe = true)
     @Override
     public long blockNoTransition(long nanos) {
         VMError.shouldNotReachHere("Cannot block in a single-threaded environment, because there is no other thread that could signal");
@@ -168,12 +177,41 @@ final class SingleThreadedVMCondition extends VMCondition {
     }
 
     @Override
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public void signal() {
         /* Nothing to do. */
     }
 
     @Override
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public void broadcast() {
         /* Nothing to do. */
+    }
+}
+
+final class SingleThreadedVMSemaphore extends VMSemaphore {
+
+    @Override
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    protected int init() {
+        /* Nothing to do here. */
+        return 0;
+    }
+
+    @Override
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    protected void destroy() {
+        /* Nothing to do here. */
+    }
+
+    @Override
+    public void await() {
+        VMError.shouldNotReachHere("Cannot wait in a single-threaded environment, because there is no other thread that could signal.");
+    }
+
+    @Override
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public void signal() {
+        /* Nothing to do here. */
     }
 }

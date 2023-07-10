@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -1627,7 +1627,7 @@ public final class TruffleFile {
      * @deprecated use {@link #detectMimeType()}
      */
     @TruffleBoundary
-    @Deprecated
+    @Deprecated(since = "20.2")
     public String getMimeType() throws IOException {
         return detectMimeType(null);
     }
@@ -2181,11 +2181,11 @@ public final class TruffleFile {
     }
 
     private <T extends Throwable> RuntimeException wrapHostException(T t) {
-        throw wrapHostException(t, fileSystemContext.fileSystem);
+        throw wrapHostException(t, fileSystemContext);
     }
 
-    static <T extends Throwable> RuntimeException wrapHostException(T t, FileSystem fs) {
-        if (LanguageAccessor.engineAccess().isInternal(fs)) {
+    static <T extends Throwable> RuntimeException wrapHostException(T t, FileSystemContext fsContext) {
+        if (LanguageAccessor.engineAccess().isInternal(fsContext.engineObject, fsContext.fileSystem)) {
             throw Env.engineToLanguageException(t);
         }
         throw LanguageAccessor.engineAccess().wrapHostException(null, LanguageAccessor.engineAccess().getCurrentHostContext(), t);

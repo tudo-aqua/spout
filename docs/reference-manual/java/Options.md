@@ -7,32 +7,32 @@ permalink: /reference-manual/java/options/
 
 # Compiler Configuration on JVM
 
-The options for configuring the GraalVM compiler on the JVM are in 3 categories.
+The options for configuring the Graal compiler on the JVM are in 3 categories.
 
 ### General Options
 
 These are general options for setting/getting configuration details.
 
-* `-XX:-UseJVMCICompiler`: This disables use of the GraalVM compiler as the top tier JIT.
-This is useful when wanting to compare performance of the GraalVM compiler against the native JIT compilers.
-* `-Dgraal.CompilerConfiguration=<name>`: Selects the GraalVM compiler configuration to use. If omitted, the compiler
+* `-XX:-UseJVMCICompiler`: This disables use of the Graal compiler as the top tier JIT.
+This is useful when wanting to compare performance of the Graal compiler against the native JIT compilers.
+* `-Dgraal.CompilerConfiguration=<name>`: Selects the Graal compiler configuration to use. If omitted, the compiler
 configuration with the highest auto-selection priority is used. To see the set
 of available configurations, supply the value help to this option.
 
     The current configurations and their semantics are:
-    * `enterprise`: To produce highly optimized code with a possible trade-off to compilation time. <a href="https://www.oracle.com/downloads/graalvm-downloads.html" class="enterprise">[GraalVM Enterprise]</a>
+    * `enterprise`: To produce highly optimized code with a possible trade-off to compilation time. <a href="https://www.oracle.com/downloads/graalvm-downloads.html" class="enterprise">[Oracle GraalVM]</a>
     * `community`: To produce reasonably optimized code with a faster compilation time.
     * `economy`: To compile as fast as possible with less optimal throughput of the generated code.
 
-* `-Dgraal.ShowConfiguration=none`: Prints information about the GraalVM compiler configuration selected.
-    This option only produces output when the compiler is initialized. By default, the GraalVM compiler is
+* `-Dgraal.ShowConfiguration=none`: Prints information about the Graal compiler configuration selected.
+    This option only produces output when the compiler is initialized. By default, the Graal compiler is
     initialized on the first top-tier compilation. For this reason, the way to use this option
     is as follows: `java -XX:+EagerJVMCI -Dgraal.ShowConfiguration=info -version`.
 
     The accepted values for this option are:
     * `none`: To show no information.
-    * `info`: To print one line of output showing the name of the compiler configuration in use
-       and the location it is loaded from.
+    * `info`: To print one line of output describing the compiler configuration in use
+       and whether it is loaded from a Native Image ("libgraal") or from class files ("jargraal").
     * `verbose`: To print detailed compiler configuration information.
 
 * `-Dgraal.MitigateSpeculativeExecutionAttacks=None`: Selects a strategy to mitigate speculative
@@ -50,17 +50,17 @@ of available configurations, supply the value help to this option.
 ### Performance Tuning Options
 
 * `-Dgraal.UsePriorityInlining=true`: This can be used to disable use of the advanced inlining
-algorithm that favours throughput over compilation speed. <a href="https://www.oracle.com/downloads/graalvm-downloads.html" class="enterprise">[GraalVM Enterprise]</a>
+algorithm that favours throughput over compilation speed. <a href="https://www.oracle.com/downloads/graalvm-downloads.html" class="enterprise">[Oracle GraalVM]</a>
 * `-Dgraal.Vectorization=true`: This can be used to disable the auto vectorization optimization.
-<a href="https://www.oracle.com/downloads/graalvm-downloads.html" class="enterprise">[GraalVM Enterprise]</a>
-* `-Dgraal.OptDuplication=true`: This can be used to disable the [path duplication optimization](http://ssw.jku.at/General/Staff/Leopoldseder/DBDS_CGO18_Preprint.pdf). <a href="https://www.oracle.com/downloads/graalvm-downloads.html" class="enterprise">[GraalVM Enterprise]</a>
+<a href="https://www.oracle.com/downloads/graalvm-downloads.html" class="enterprise">[Oracle GraalVM]</a>
+* `-Dgraal.OptDuplication=true`: This can be used to disable the [path duplication optimization](http://ssw.jku.at/General/Staff/Leopoldseder/DBDS_CGO18_Preprint.pdf). <a href="https://www.oracle.com/downloads/graalvm-downloads.html" class="enterprise">[Oracle GraalVM]</a>
 * `-Dgraal.TuneInlinerExploration=0`: This can be used to try tune for better peak performance or faster warmup.
 It automatically adjusts values governing the effort spent during inlining. The value of the option is
 a float clamped between `-1` and `1` inclusive. Anything below
 `0` reduces inlining effort and anything above `0` increases
 inlining effort. In general, peak performance is improved with more inlining effort
 while less inlining effort improves warmup (albeit to a lower peak). Note that this
-option is only a heuristic and the optimal value can differ from application to application. <a href="https://www.oracle.com/downloads/graalvm-downloads.html" class="enterprise">[GraalVM Enterprise]</a>
+option is only a heuristic and the optimal value can differ from application to application. <a href="https://www.oracle.com/downloads/graalvm-downloads.html" class="enterprise">[Oracle GraalVM]</a>
 * `-Dgraal.TraceInlining=false`: Enables tracing of inlining decisions. This can be used
     for advanced tuning where it may be possible to change the source code of the program.
     The output format is shown below:
@@ -121,7 +121,7 @@ HotSpotCompilation-136 Lsun/nio/cs/UTF_8$Encoder;                    encode     
 
 ## Setting Compiler Options with Language Launchers
 
-The GraalVM compiler properties above are usable with some other GraalVM launchers such as
+The Graal compiler properties above are usable with some other GraalVM launchers such as
 `node`, `js` and `lli`. The prefix for specifying the properties is slightly different.
 For example:
 ```shell
@@ -133,4 +133,9 @@ Becomes:
 js --jvm --vm.Dgraal.ShowConfiguration=info -version
 ```
 
-Note the `-D` prefix is replaced by `--vm.D`.
+> Note the `-D` prefix is replaced by `--vm.D`.
+
+### Related Documentation
+
+- [Graal Compiler](compiler.md)
+- [JVM Operations Manual](Operations.md)

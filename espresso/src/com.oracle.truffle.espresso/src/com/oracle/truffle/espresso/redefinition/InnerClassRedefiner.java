@@ -24,7 +24,6 @@ package com.oracle.truffle.espresso.redefinition;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.lang.instrument.IllegalClassFormatException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -45,7 +44,6 @@ import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.impl.ObjectKlass;
 import com.oracle.truffle.espresso.jdwp.api.ErrorCodes;
 import com.oracle.truffle.espresso.jdwp.api.RedefineInfo;
-import com.oracle.truffle.espresso.jdwp.impl.JDWP;
 import com.oracle.truffle.espresso.runtime.EspressoContext;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 
@@ -89,7 +87,7 @@ public final class InnerClassRedefiner {
             Iterator<RedefineInfo> it = unhandled.iterator();
             while (it.hasNext()) {
                 RedefineInfo redefineInfo = it.next();
-                Symbol<Symbol.Name> klassName = ClassfileParser.getClassName(redefineInfo.getClassBytes(), context);
+                Symbol<Symbol.Name> klassName = ClassfileParser.getClassName(context.getClassLoadingEnv(), redefineInfo.getClassBytes());
                 Matcher matcher = ANON_INNER_CLASS_PATTERN.matcher(klassName.toString());
                 if (matcher.matches()) {
                     // don't assume that associated old klass instance represents this redefineInfo
@@ -99,17 +97,19 @@ public final class InnerClassRedefiner {
                     // get the outer classinfo if present
                     HotSwapClassInfo info = handled.get(getOuterClassName(klassName));
                     if (info != null) {
-                        HotSwapClassInfo classInfo = ClassInfo.create(klassName, redefineInfo.getClassBytes(), info.getClassLoader(), context);
+                        HotSwapClassInfo classInfo = ClassInfo.create(klassName, redefineInfo.getClassBytes(), info.getClassLoader(), context, redefineInfo.isInnerTestKlass());
                         info.addInnerClass(classInfo);
                         handled.put(klassName, classInfo);
                         it.remove();
                     }
                 } else {
                     // pure named class
-                    HotSwapClassInfo classInfo = ClassInfo.create(redefineInfo, context);
                     it.remove();
-                    handled.put(klassName, classInfo);
-                    hotswapState.put(klassName, classInfo);
+                    if (redefineInfo.getKlass() != null) {
+                        HotSwapClassInfo classInfo = ClassInfo.create(redefineInfo, context, redefineInfo.isInnerTestKlass());
+                        handled.put(klassName, classInfo);
+                        hotswapState.put(klassName, classInfo);
+                    }
                 }
             }
             previousHandledSize = handledSize;
@@ -134,7 +134,7 @@ public final class InnerClassRedefiner {
                 if (rules != null && !rules.isEmpty()) {
                     try {
                         classInfo.patchBytes(ConstantPoolPatcher.patchConstantPool(classInfo.getBytes(), rules, context));
-                    } catch (IllegalClassFormatException ex) {
+                    } catch (ClassFormatError ex) {
                         throw new RedefintionNotSupportedException(ErrorCodes.INVALID_CLASS_FORMAT);
                     }
                 }
@@ -158,7 +158,7 @@ public final class InnerClassRedefiner {
         ArrayList<Symbol<Symbol.Name>> innerNames = new ArrayList<>(1);
         try {
             searchConstantPoolForInnerClassNames(hotswapInfo, innerNames);
-        } catch (IllegalClassFormatException ex) {
+        } catch (ClassFormatError ex) {
             throw new RedefintionNotSupportedException(ErrorCodes.INVALID_CLASS_FORMAT);
         }
 
@@ -167,6 +167,7 @@ public final class InnerClassRedefiner {
             if (!hotswapInfo.knowsInnerClass(innerName)) {
                 byte[] classBytes = null;
                 StaticObject resourceGuestString = context.getMeta().toGuestString(innerName + ".class");
+                assert context.getCurrentThread() != null;
                 StaticObject inputStream = (StaticObject) context.getMeta().java_lang_ClassLoader_getResourceAsStream.invokeDirect(definingLoader, resourceGuestString);
                 if (StaticObject.notNull(inputStream)) {
                     classBytes = readAllBytes(inputStream);
@@ -181,7 +182,7 @@ public final class InnerClassRedefiner {
                     // NoSuchMethod errors because they're marked as removed
                 }
                 if (classBytes != null) {
-                    hotswapInfo.addInnerClass(ClassInfo.create(innerName, classBytes, definingLoader, context));
+                    hotswapInfo.addInnerClass(ClassInfo.create(innerName, classBytes, definingLoader, context, false));
                 }
             }
         }
@@ -194,7 +195,7 @@ public final class InnerClassRedefiner {
 
         try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
             while ((readLen = (int) context.getMeta().java_io_InputStream_read.invokeDirect(inputStream, guestBuf, 0, buf.length)) != -1) {
-                byte[] bytes = guestBuf.unwrap();
+                byte[] bytes = guestBuf.unwrap(context.getLanguage());
                 outputStream.write(bytes, 0, readLen);
             }
             return outputStream.toByteArray();
@@ -205,7 +206,7 @@ public final class InnerClassRedefiner {
         }
     }
 
-    private void searchConstantPoolForInnerClassNames(ClassInfo classInfo, ArrayList<Symbol<Symbol.Name>> innerNames) throws IllegalClassFormatException {
+    private void searchConstantPoolForInnerClassNames(ClassInfo classInfo, ArrayList<Symbol<Symbol.Name>> innerNames) throws ClassFormatError {
         byte[] bytes = classInfo.getBytes();
         assert bytes != null;
 
@@ -291,7 +292,7 @@ public final class InnerClassRedefiner {
             classLoaderRules = new HashMap<>(4);
             renamingRules.put(classLoader, classLoaderRules);
         }
-        JDWP.LOGGER.fine(() -> "Renaming inner class: " + originalName + " to: " + newName);
+        context.getClassRedefinition().getController().fine(() -> "Renaming inner class: " + originalName + " to: " + newName);
         // add simple class names
         classLoaderRules.put(originalName, newName);
         // add type names

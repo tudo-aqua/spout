@@ -35,19 +35,22 @@ import org.graalvm.collections.EconomicMap;
 import org.graalvm.compiler.options.Option;
 import org.graalvm.compiler.options.OptionKey;
 import org.graalvm.nativeimage.ImageSingletons;
-import org.graalvm.nativeimage.PinnedObject;
+import org.graalvm.nativeimage.Platforms;
+import org.graalvm.nativeimage.UnmanagedMemory;
 import org.graalvm.nativeimage.c.type.CCharPointer;
 import org.graalvm.nativeimage.c.type.CTypeConversion;
-import org.graalvm.nativeimage.hosted.Feature;
+import org.graalvm.nativeimage.impl.InternalPlatform;
 import org.graalvm.word.WordFactory;
 
 import com.oracle.svm.core.LibCHelper;
 import com.oracle.svm.core.OS;
 import com.oracle.svm.core.annotate.Alias;
-import com.oracle.svm.core.annotate.AutomaticFeature;
 import com.oracle.svm.core.annotate.RecomputeFieldValue;
 import com.oracle.svm.core.annotate.Substitute;
 import com.oracle.svm.core.annotate.TargetClass;
+import com.oracle.svm.core.feature.AutomaticallyRegisteredFeature;
+import com.oracle.svm.core.feature.InternalFeature;
+import com.oracle.svm.core.handles.PrimitiveArrayView;
 import com.oracle.svm.core.option.HostedOptionKey;
 import com.oracle.svm.core.util.VMError;
 
@@ -76,6 +79,7 @@ import com.oracle.svm.core.util.VMError;
  * from a buffer as opposed to a file.
  */
 @TargetClass(java.util.TimeZone.class)
+@Platforms(InternalPlatform.NATIVE_ONLY.class)
 @SuppressWarnings("unused")
 final class Target_java_util_TimeZone {
 
@@ -85,19 +89,22 @@ final class Target_java_util_TimeZone {
     private static String getSystemTimeZoneID(String javaHome) {
         CCharPointer tzMappingsPtr = WordFactory.nullPointer();
         int contentLen = 0;
-        PinnedObject pinnedContent = null;
+        PrimitiveArrayView refContent = null;
         try {
             if (ImageSingletons.contains(TimeZoneSupport.class)) {
                 byte[] content = ImageSingletons.lookup(TimeZoneSupport.class).getTzMappingsContent();
                 contentLen = content.length;
-                pinnedContent = PinnedObject.create(content);
-                tzMappingsPtr = pinnedContent.addressOfArrayElement(0);
+                refContent = PrimitiveArrayView.createForReading(content);
+                tzMappingsPtr = refContent.addressOfArrayElement(0);
             }
             CCharPointer tzId = LibCHelper.SVM_FindJavaTZmd(tzMappingsPtr, contentLen);
-            return CTypeConversion.toJavaString(tzId);
+            String result = CTypeConversion.toJavaString(tzId);
+            // SVM_FindJavaTZmd returns a newly allocated string
+            UnmanagedMemory.free(tzId);
+            return result;
         } finally {
-            if (pinnedContent != null) {
-                pinnedContent.close();
+            if (refContent != null) {
+                refContent.close();
             }
         }
     }
@@ -121,11 +128,11 @@ final class TimeZoneSupport {
 /**
  * Reads time zone mappings data and stores in the image heap, if necessary.
  */
-@AutomaticFeature
-final class TimeZoneFeature implements Feature {
+@AutomaticallyRegisteredFeature
+final class TimeZoneFeature implements InternalFeature {
     static class Options {
         @Option(help = "When true, all time zones will be pre-initialized in the image.")//
-        public static final HostedOptionKey<Boolean> IncludeAllTimeZones = new HostedOptionKey<Boolean>(false) {
+        public static final HostedOptionKey<Boolean> IncludeAllTimeZones = new HostedOptionKey<>(false) {
             @Override
             protected void onValueUpdate(EconomicMap<OptionKey<?>, Object> values, Boolean oldValue, Boolean newValue) {
                 super.onValueUpdate(values, oldValue, newValue);
@@ -134,7 +141,7 @@ final class TimeZoneFeature implements Feature {
         };
 
         @Option(help = "The time zones, in addition to the default zone of the host, that will be pre-initialized in the image.")//
-        public static final HostedOptionKey<String> IncludeTimeZones = new HostedOptionKey<String>("") {
+        public static final HostedOptionKey<String> IncludeTimeZones = new HostedOptionKey<>("") {
             @Override
             protected void onValueUpdate(EconomicMap<OptionKey<?>, Object> values, String oldValue, String newValue) {
                 super.onValueUpdate(values, oldValue, newValue);
@@ -143,10 +150,8 @@ final class TimeZoneFeature implements Feature {
         };
 
         private static void printWarning() {
-            // Checkstyle: stop
             System.err.println("-H:IncludeAllTimeZones and -H:IncludeTimeZones are now deprecated. Native-image includes all timezones" +
                             " by default.");
-            // Checkstyle: resume
         }
     }
 

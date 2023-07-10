@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2016, 2023, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -29,11 +29,18 @@
  */
 package com.oracle.truffle.llvm.runtime.nodes.api;
 
-import com.oracle.truffle.api.Assumption;
+import java.lang.reflect.Field;
+import java.util.Arrays;
+import java.util.WeakHashMap;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiConsumer;
+
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.dsl.GenerateAOT;
+import com.oracle.truffle.api.dsl.ImportStatic;
+import com.oracle.truffle.api.dsl.NonIdempotent;
 import com.oracle.truffle.api.dsl.TypeSystemReference;
 import com.oracle.truffle.api.instrumentation.InstrumentableNode.WrapperNode;
 import com.oracle.truffle.api.instrumentation.StandardTags.StatementTag;
@@ -47,14 +54,9 @@ import com.oracle.truffle.llvm.runtime.debug.scope.LLVMSourceLocation;
 import com.oracle.truffle.llvm.runtime.memory.LLVMHandleMemoryBase;
 import com.oracle.truffle.llvm.runtime.pointer.LLVMNativePointer;
 
-import java.io.PrintStream;
-import java.lang.reflect.Field;
-import java.util.Arrays;
-import java.util.WeakHashMap;
-import java.util.concurrent.atomic.AtomicLong;
-
 @TypeSystemReference(LLVMTypes.class)
 @GenerateAOT
+@ImportStatic(LLVMLanguage.class)
 public abstract class LLVMNode extends Node {
     public static final int DOUBLE_SIZE_IN_BYTES = 8;
     public static final int FLOAT_SIZE_IN_BYTES = 4;
@@ -78,14 +80,9 @@ public abstract class LLVMNode extends Node {
 
     public static final int ADDRESS_SIZE_IN_BYTES = 8;
 
-    protected final PrintStream nativeCallStatisticsStream() {
+    protected static final boolean nativeCallStatisticsEnabled() {
         CompilerAsserts.neverPartOfCompilation();
-        return getContext().nativeCallStatsStream();
-    }
-
-    protected final boolean nativeCallStatisticsEnabled() {
-        CompilerAsserts.neverPartOfCompilation();
-        return nativeCallStatisticsStream() != null;
+        return LLVMContext.logNativeCallStatsEnabled();
     }
 
     protected static boolean isFunctionDescriptor(Object object) {
@@ -164,7 +161,7 @@ public abstract class LLVMNode extends Node {
                     Object value = declaredField.get(node);
                     str.append(" ").append(field).append("=").append(formatFieldValue(value));
                     break;
-                } catch (NoSuchFieldException | SecurityException | IllegalArgumentException | IllegalAccessException e) {
+                } catch (NoSuchFieldException | IllegalAccessException | RuntimeException e) {
                     // skip
                 }
                 c = c.getSuperclass();
@@ -182,16 +179,36 @@ public abstract class LLVMNode extends Node {
     private static Object formatFieldValue(Object value) {
         if (value != null) {
             if (value.getClass().isArray()) {
-                return Arrays.asList((Object[]) value).toString();
+                if (value instanceof int[]) {
+                    return Arrays.toString((int[]) value);
+                } else if (value instanceof long[]) {
+                    return Arrays.toString((long[]) value);
+                } else if (value instanceof byte[]) {
+                    return Arrays.toString((byte[]) value);
+                } else if (value instanceof boolean[]) {
+                    return Arrays.toString((boolean[]) value);
+                } else if (value instanceof short[]) {
+                    return Arrays.toString((short[]) value);
+                } else if (value instanceof char[]) {
+                    return Arrays.toString((char[]) value);
+                } else if (value instanceof float[]) {
+                    return Arrays.toString((float[]) value);
+                } else if (value instanceof double[]) {
+                    return Arrays.toString((double[]) value);
+                } else {
+                    return Arrays.asList((Object[]) value).toString();
+                }
             }
         }
         return String.valueOf(value);
     }
 
+    @NonIdempotent
     public final boolean isAutoDerefHandle(LLVMNativePointer addr) {
         return isAutoDerefHandle(addr.asNative());
     }
 
+    @NonIdempotent
     public final boolean isAutoDerefHandle(long addr) {
         // checking the bit is cheaper than getting the assumption in interpreted mode
         if (CompilerDirectives.inCompiledCode() && getLanguage().getNoDerefHandleAssumption().isValid()) {
@@ -228,10 +245,6 @@ public abstract class LLVMNode extends Node {
 
     public final LLVMLanguage getLanguage() {
         return LLVMLanguage.get(this);
-    }
-
-    public static Assumption singleContextAssumption() {
-        return LLVMLanguage.get(null).singleContextAssumption;
     }
 
     /**
@@ -272,8 +285,15 @@ public abstract class LLVMNode extends Node {
 
         private final GenerateAOT.Provider delegate;
 
-        public AOTInitHelper(GenerateAOT.Provider delegate) {
-            this.delegate = delegate;
+        public AOTInitHelper(BiConsumer<TruffleLanguage<?>, RootNode> delegate) {
+            this.delegate = new GenerateAOT.Provider() {
+
+                @Override
+                public void prepareForAOT(TruffleLanguage<?> language, RootNode root) {
+                    delegate.accept(language, root);
+                }
+
+            };
         }
 
         @Override

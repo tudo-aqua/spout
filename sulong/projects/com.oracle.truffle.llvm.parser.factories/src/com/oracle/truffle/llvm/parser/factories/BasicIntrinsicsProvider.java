@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2017, 2023, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -29,6 +29,15 @@
  */
 package com.oracle.truffle.llvm.parser.factories;
 
+import static com.oracle.truffle.llvm.runtime.interop.convert.ForeignToLLVM.ForeignToLLVMType.POINTER;
+
+import java.util.AbstractList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.UnaryOperator;
+
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.RootCallTarget;
@@ -40,6 +49,8 @@ import com.oracle.truffle.llvm.runtime.NodeFactory;
 import com.oracle.truffle.llvm.runtime.nodes.api.LLVMExpressionNode;
 import com.oracle.truffle.llvm.runtime.nodes.func.LLVMArgNodeGen;
 import com.oracle.truffle.llvm.runtime.nodes.func.LLVMRaiseExceptionNodeGen;
+import com.oracle.truffle.llvm.runtime.nodes.func.LLVMRaiseExceptionWindowsNodeGen;
+import com.oracle.truffle.llvm.runtime.nodes.func.LLVMWindowsInitThreadIntrinsicsFactory;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.c.LLVMAbortNodeGen;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.c.LLVMCMathsIntrinsicsFactory;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.c.LLVMCMathsIntrinsicsFactory.LLVMACosNodeGen;
@@ -95,13 +106,17 @@ import com.oracle.truffle.llvm.runtime.nodes.intrinsics.handles.LLVMTruffleCanno
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotAsPrimitive;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotAsString;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotBoxedPredicateNodeGen;
+import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotBufferInfo;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotEval;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotExportNodeGen;
+import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotFromBufferNode;
+import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotFromPrimitive;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotFromString;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotGetArraySizeNodeGen;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotGetStringSizeNodeGen;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotHasMemberNodeGen;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotImportNodeGen;
+import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotInstantFromTimeNode;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotInvokeNodeGen;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotIsValueNodeGen;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotJavaTypeNodeGen;
@@ -110,8 +125,10 @@ import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotRead
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotReadFactory.LLVMPolyglotGetMemberNodeGen;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotRemoveFactory.LLVMPolyglotRemoveArrayElementNodeGen;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotRemoveFactory.LLVMPolyglotRemoveMemberNodeGen;
-import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotWriteFactory.LLVMPolyglotPutMemberNodeGen;
-import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotWriteFactory.LLVMPolyglotSetArrayElementNodeGen;
+import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotTimeZoneFromIdNode;
+import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotTimeZoneGetIdNode;
+import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotWrite.LLVMPolyglotPutMember;
+import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMPolyglotWrite.LLVMPolyglotSetArrayElement;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMTruffleDecorateFunctionNodeGen;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMTruffleManagedMallocNodeGen;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.LLVMTruffleWriteManagedToSymbolNodeGen;
@@ -121,10 +138,11 @@ import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.typed.LLVMPolygl
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.typed.LLVMPolyglotFromTyped;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.interop.typed.LLVMTypeIDNode;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.llvm.LLVMIntrinsicRootNodeFactory.LLVMIntrinsicExpressionNodeGen;
+import com.oracle.truffle.llvm.runtime.nodes.intrinsics.llvm.LLVMMemoryIntrinsic.LLVMPosixMemalign;
+import com.oracle.truffle.llvm.runtime.nodes.intrinsics.llvm.LLVMMemoryIntrinsicFactory.LLVMAlignedAllocNodeGen;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.llvm.LLVMMemoryIntrinsicFactory.LLVMCallocNodeGen;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.llvm.LLVMMemoryIntrinsicFactory.LLVMFreeNodeGen;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.llvm.LLVMMemoryIntrinsicFactory.LLVMMallocNodeGen;
-import com.oracle.truffle.llvm.runtime.nodes.intrinsics.llvm.LLVMMemoryIntrinsicFactory.LLVMPosixMemalignNodeGen;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.llvm.LLVMMemoryIntrinsicFactory.LLVMReallocNodeGen;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.llvm.arith.LLVMComplex80BitFloatDivNodeGen;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.llvm.arith.LLVMComplex80BitFloatMulNodeGen;
@@ -132,23 +150,15 @@ import com.oracle.truffle.llvm.runtime.nodes.intrinsics.llvm.arith.LLVMComplexDo
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.llvm.arith.LLVMComplexDoubleMulNodeGen;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.llvm.arith.LLVMComplexFloatDivNodeGen;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.llvm.arith.LLVMComplexFloatMulNodeGen;
-import com.oracle.truffle.llvm.runtime.nodes.intrinsics.multithreading.LLVMPThreadKeyIntrinsicsFactory;
-import com.oracle.truffle.llvm.runtime.nodes.intrinsics.multithreading.LLVMPThreadThreadIntrinsicsFactory;
+import com.oracle.truffle.llvm.runtime.nodes.intrinsics.llvm.va.GraalVMVAArgNodeGen;
+import com.oracle.truffle.llvm.runtime.nodes.intrinsics.multithreading.LLVMThreadIntrinsicsFactory;
+import com.oracle.truffle.llvm.runtime.nodes.intrinsics.multithreading.LLVMThreadKeyIntrinsicsFactory;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.rust.LLVMPanicNodeGen;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.sulong.LLVMPrintStackTraceNodeGen;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.sulong.LLVMRunDestructorFunctionsNodeGen;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.sulong.LLVMShouldPrintStackTraceOnAbortNodeGen;
 import com.oracle.truffle.llvm.runtime.nodes.intrinsics.sulong.LLVMToolchainNodeFactory;
 import com.oracle.truffle.llvm.runtime.types.Type;
-
-import java.util.AbstractList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.UnaryOperator;
-
-import static com.oracle.truffle.llvm.runtime.interop.convert.ForeignToLLVM.ForeignToLLVMType.POINTER;
 
 /**
  * If an intrinsic is defined for a function, then the intrinsic is used instead of doing a call to
@@ -351,8 +361,10 @@ public class BasicIntrinsicsProvider implements LLVMIntrinsicProvider {
         registerComplexNumberIntrinsics();
         registerCTypeIntrinsics();
         registerManagedAllocationIntrinsics();
-        registerPThreadIntrinsics();
+        registerThreadIntrinsics();
         registerDynamicLibraryIntrinsics();
+
+        registerWindowsIntrinsics();
     }
 
     protected static LLVMExpressionNode[] argumentsArray(List<LLVMExpressionNode> arguments, int startIndex, int arity) {
@@ -363,17 +375,20 @@ public class BasicIntrinsicsProvider implements LLVMIntrinsicProvider {
         return args;
     }
 
-    private static void registerPThreadIntrinsics() {
-        add("__sulong_thread_create", (args, nodeFactory) -> LLVMPThreadThreadIntrinsicsFactory.LLVMPThreadCreateNodeGen.create(args.get(1), args.get(2), args.get(3)));
-        add("pthread_exit", (args, nodeFactory) -> LLVMPThreadThreadIntrinsicsFactory.LLVMPThreadExitNodeGen.create(args.get(1)));
-        add("__sulong_thread_setname_np", (args, nodeFactory) -> LLVMPThreadThreadIntrinsicsFactory.LLVMPThreadSetNameNodeGen.create(args.get(1), args.get(2)));
-        add("__sulong_thread_getname_np", (args, nodeFactory) -> LLVMPThreadThreadIntrinsicsFactory.LLVMPThreadGetNameNodeGen.create(args.get(1), args.get(2), args.get(3)));
-        add("__sulong_thread_join", (args, nodeFactory) -> LLVMPThreadThreadIntrinsicsFactory.LLVMPThreadJoinNodeGen.create(args.get(1)));
-        add("__sulong_thread_self", (args, nodeFactory) -> LLVMPThreadThreadIntrinsicsFactory.LLVMPThreadSelfNodeGen.create());
-        add("__sulong_thread_key_create", (args, nodeFactory) -> LLVMPThreadKeyIntrinsicsFactory.LLVMPThreadKeyCreateNodeGen.create(args.get(1)));
-        add("__sulong_thread_key_delete", (args, nodeFactory) -> LLVMPThreadKeyIntrinsicsFactory.LLVMPThreadKeyDeleteNodeGen.create(args.get(1)));
-        add("__sulong_thread_getspecific", (args, nodeFactory) -> LLVMPThreadKeyIntrinsicsFactory.LLVMPThreadGetSpecificNodeGen.create(args.get(1)));
-        add("__sulong_thread_setspecific", (args, nodeFactory) -> LLVMPThreadKeyIntrinsicsFactory.LLVMPThreadSetSpecificNodeGen.create(args.get(1), args.get(2)));
+    private static void registerThreadIntrinsics() {
+        add("__sulong_thread_create", (args, nodeFactory) -> LLVMThreadIntrinsicsFactory.LLVMThreadCreateNodeGen.create(args.get(1), args.get(2), args.get(3)));
+        add("pthread_exit", (args, nodeFactory) -> LLVMThreadIntrinsicsFactory.LLVMThreadExitNodeGen.create(args.get(1)));
+        add("thrd_exit", (args, nodeFactory) -> LLVMThreadIntrinsicsFactory.LLVMThreadExitNodeGen.create(args.get(1)));
+        add("__sulong_thread_setname_np", (args, nodeFactory) -> LLVMThreadIntrinsicsFactory.LLVMThreadSetNameNodeGen.create(args.get(1), args.get(2)));
+        add("__sulong_thread_getname_np", (args, nodeFactory) -> LLVMThreadIntrinsicsFactory.LLVMThreadGetNameNodeGen.create(args.get(1), args.get(2), args.get(3)));
+        add("__sulong_thread_join", (args, nodeFactory) -> LLVMThreadIntrinsicsFactory.LLVMThreadJoinNodeGen.create(args.get(1)));
+        add("__sulong_thread_self", (args, nodeFactory) -> LLVMThreadIntrinsicsFactory.LLVMThreadSelfNodeGen.create());
+        add("__sulong_thread_key_create", (args, nodeFactory) -> LLVMThreadKeyIntrinsicsFactory.LLVMThreadKeyCreateNodeGen.create(args.get(1)));
+        add("__sulong_thread_key_delete", (args, nodeFactory) -> LLVMThreadKeyIntrinsicsFactory.LLVMThreadKeyDeleteNodeGen.create(args.get(1)));
+        add("__sulong_thread_getspecific", (args, nodeFactory) -> LLVMThreadKeyIntrinsicsFactory.LLVMThreadGetSpecificNodeGen.create(args.get(1)));
+        add("__sulong_thread_setspecific", (args, nodeFactory) -> LLVMThreadKeyIntrinsicsFactory.LLVMThreadSetSpecificNodeGen.create(args.get(1), args.get(2)));
+        add("__sulong_thread_yield", (args, nodeFactory) -> LLVMThreadIntrinsicsFactory.LLVMThreadYieldNodeGen.create());
+        add("__sulong_thread_sleep", (args, nodeFactory) -> LLVMThreadIntrinsicsFactory.LLVMThreadSleepNodeGen.create(args.get(1), args.get(2)));
     }
 
     private static void registerSulongIntrinsics() {
@@ -399,6 +414,10 @@ public class BasicIntrinsicsProvider implements LLVMIntrinsicProvider {
         add("polyglot_is_number", (args, nodeFactory) -> LLVMPolyglotBoxedPredicateNodeGen.create(InteropLibrary::isNumber, args.get(1)));
         add("polyglot_is_boolean", (args, nodeFactory) -> LLVMPolyglotBoxedPredicateNodeGen.create(InteropLibrary::isBoolean, args.get(1)));
         add("polyglot_is_string", (args, nodeFactory) -> LLVMPolyglotBoxedPredicateNodeGen.create(InteropLibrary::isString, args.get(1)));
+        add("polyglot_is_date", (args, nodeFactory) -> LLVMPolyglotBoxedPredicateNodeGen.create(InteropLibrary::isDate, args.get(1)));
+        add("polyglot_is_time", (args, nodeFactory) -> LLVMPolyglotBoxedPredicateNodeGen.create(InteropLibrary::isTime, args.get(1)));
+        add("polyglot_is_timezone", (args, nodeFactory) -> LLVMPolyglotBoxedPredicateNodeGen.create(InteropLibrary::isTimeZone, args.get(1)));
+        add("polyglot_is_instant", (args, nodeFactory) -> LLVMPolyglotBoxedPredicateNodeGen.create(InteropLibrary::isInstant, args.get(1)));
         add("polyglot_fits_in_i8", (args, nodeFactory) -> LLVMPolyglotBoxedPredicateNodeGen.create(InteropLibrary::fitsInByte, args.get(1)));
         add("polyglot_fits_in_i16", (args, nodeFactory) -> LLVMPolyglotBoxedPredicateNodeGen.create(InteropLibrary::fitsInShort, args.get(1)));
         add("polyglot_fits_in_i32", (args, nodeFactory) -> LLVMPolyglotBoxedPredicateNodeGen.create(InteropLibrary::fitsInInt, args.get(1)));
@@ -406,9 +425,9 @@ public class BasicIntrinsicsProvider implements LLVMIntrinsicProvider {
         add("polyglot_fits_in_float", (args, nodeFactory) -> LLVMPolyglotBoxedPredicateNodeGen.create(InteropLibrary::fitsInFloat, args.get(1)));
         add("polyglot_fits_in_double", (args, nodeFactory) -> LLVMPolyglotBoxedPredicateNodeGen.create(InteropLibrary::fitsInDouble, args.get(1)));
 
-        add("polyglot_put_member", (args, nodeFactory, language, types) -> LLVMPolyglotPutMemberNodeGen.create(types, args.get(1), args.get(2), args.get(3)));
+        add("polyglot_put_member", (args, nodeFactory, language, types) -> LLVMPolyglotPutMember.create(types, args.get(1), args.get(2), args.get(3)));
 
-        add("polyglot_set_array_element", (args, nodeFactory, language, types) -> LLVMPolyglotSetArrayElementNodeGen.create(types, args.get(1), args.get(2), args.get(3)));
+        add("polyglot_set_array_element", (args, nodeFactory, language, types) -> LLVMPolyglotSetArrayElement.create(types, args.get(1), args.get(2), args.get(3)));
 
         add("polyglot_get_member", (args, nodeFactory) -> LLVMPolyglotGetMemberNodeGen.create(CommonNodeFactory.createForeignToLLVM(POINTER), args.get(1), args.get(2)));
 
@@ -426,6 +445,24 @@ public class BasicIntrinsicsProvider implements LLVMIntrinsicProvider {
         add("polyglot_as_float", (args, nodeFactory) -> LLVMPolyglotAsPrimitive.AsFloat.create(args.get(1)));
         add("polyglot_as_double", (args, nodeFactory) -> LLVMPolyglotAsPrimitive.AsDouble.create(args.get(1)));
         add("polyglot_as_boolean", (args, nodeFactory) -> LLVMPolyglotAsPrimitive.AsBoolean.create(args.get(1)));
+
+        add("polyglot_from_const_buffer", (args, nodeFactory) -> LLVMPolyglotFromBufferNode.create(false, args.get(1), args.get(2)));
+        add("polyglot_from_buffer", (args, nodeFactory) -> LLVMPolyglotFromBufferNode.create(true, args.get(1), args.get(2)));
+        add("polyglot_has_buffer_elements", (args, nodeFactory) -> LLVMPolyglotBufferInfo.HasBufferElements.create(args.get(1)));
+        add("polyglot_get_buffer_size", (args, nodeFactory) -> LLVMPolyglotBufferInfo.GetBufferSize.create(args.get(1)));
+        add("polyglot_is_buffer_writable", (args, nodeFactory) -> LLVMPolyglotBufferInfo.IsBufferWritable.create(args.get(1)));
+
+        add("polyglot_instant_from_time", (args, nodeFactory) -> LLVMPolyglotInstantFromTimeNode.create(args.get(1)));
+        add("polyglot_timezone_from_id", (args, nodeFactory) -> LLVMPolyglotTimeZoneFromIdNode.create(args.get(1)));
+        add("polyglot_timezone_get_id", (args, nodeFactory) -> LLVMPolyglotTimeZoneGetIdNode.create(args.get(1)));
+
+        add("polyglot_from_boolean", (args, nodeFactory) -> LLVMPolyglotFromPrimitive.FromBoolean.create(args.get(1)));
+        add("polyglot_from_i8", (args, nodeFactory) -> LLVMPolyglotFromPrimitive.FromI8.create(args.get(1)));
+        add("polyglot_from_i16", (args, nodeFactory) -> LLVMPolyglotFromPrimitive.FromI16.create(args.get(1)));
+        add("polyglot_from_i32", (args, nodeFactory) -> LLVMPolyglotFromPrimitive.FromI32.create(args.get(1)));
+        add("polyglot_from_i64", (args, nodeFactory) -> LLVMPolyglotFromPrimitive.FromI64.create(args.get(1)));
+        add("polyglot_from_float", (args, nodeFactory) -> LLVMPolyglotFromPrimitive.FromFloat.create(args.get(1)));
+        add("polyglot_from_double", (args, nodeFactory) -> LLVMPolyglotFromPrimitive.FromDouble.create(args.get(1)));
 
         add("polyglot_new_instance",
                         (args, nodeFactory, language, types) -> LLVMPolyglotNewInstanceNodeGen.create(argumentsArray(args, 2, args.size() - 2),
@@ -466,6 +503,7 @@ public class BasicIntrinsicsProvider implements LLVMIntrinsicProvider {
         add("_graalvm_llvm_is_handle", "truffle_is_handle_to_managed", (args, nodeFactory) -> GraalVMIsHandleNodeGen.create(args.get(1)));
         add("_graalvm_llvm_points_to_handle_space", (args, nodeFactory) -> GraalVMPointsToHandleSpaceNodeGen.create(args.get(1)));
         add("_graalvm_llvm_resolve_function", (args, nodeFactory) -> GraalVMResolveFunctionNodeGen.create(args.get(1)));
+        add("_graalvm_llvm_va_arg", (args, nodeFactory) -> GraalVMVAArgNodeGen.create(args.get(1), args.get(2)));
 
         // deprecated
         add("truffle_cannot_be_handle", (args, nodeFactory) -> LLVMTruffleCannotBeHandle.create(args.get(1)));
@@ -486,10 +524,16 @@ public class BasicIntrinsicsProvider implements LLVMIntrinsicProvider {
         add("core::panicking::panic", (args, nodeFactory) -> LLVMPanicNodeGen.create(args.get(1)));
     }
 
+    private static void registerWindowsIntrinsics() {
+        add("ExitProcess", (args, nodeFactory) -> LLVMExitNodeGen.create(args.get(1)));
+        add("_Init_thread_lock", (args, nodeFactory) -> LLVMWindowsInitThreadIntrinsicsFactory.InitThreadLockNodeGen.create());
+        add("_Init_thread_wait", (args, nodeFactory) -> LLVMWindowsInitThreadIntrinsicsFactory.InitThreadWaitNodeGen.create(args.get(1)));
+        add("_Init_thread_unlock", (args, nodeFactory) -> LLVMWindowsInitThreadIntrinsicsFactory.InitThreadUnlockNodeGen.create());
+        add("_Init_thread_notify", (args, nodeFactory) -> LLVMWindowsInitThreadIntrinsicsFactory.InitThreadNotifyNodeGen.create());
+    }
+
     private static void registerMathFunctionIntrinsics() {
-        // TODO (chaeubl): There is no doubt that not all of these intrinsics are valid as they use
-        // double arithmetics to simulate floating arithmetics, which can change the precision.
-        // Furthermore, it is possible that there are mismatches between Java and C semantics.
+        // TODO (chaeubl): It is possible that there are mismatches between Java and C semantics.
         addFloatingPointMathFunction("sqrt", (args, nodeFactory) -> LLVMSqrtNodeGen.create(args.get(1)));
         addFloatingPointMathFunction("log", (args, nodeFactory) -> LLVMLogNodeGen.create(args.get(1)));
         addFloatingPointMathFunction("log2", (args, nodeFactory) -> LLVMLog2NodeGen.create(args.get(1)));
@@ -541,7 +585,8 @@ public class BasicIntrinsicsProvider implements LLVMIntrinsicProvider {
         add("malloc", (args, nodeFactory) -> LLVMMallocNodeGen.create(args.get(1)));
         add("calloc", (args, nodeFactory) -> LLVMCallocNodeGen.create(nodeFactory.createMemSet(), args.get(1), args.get(2)));
         add("realloc", (args, nodeFactory) -> LLVMReallocNodeGen.create(args.get(1), args.get(2)));
-        add("posix_memalign", (args, nodeFactory) -> LLVMPosixMemalignNodeGen.create(args.get(1), args.get(2), args.get(3)));
+        add("posix_memalign", (args, nodeFactory) -> LLVMPosixMemalign.create(args.get(1), args.get(2), args.get(3)));
+        add("aligned_alloc", (args, nodeFactory) -> LLVMAlignedAllocNodeGen.create(args.get(1), args.get(2)));
         add("free", (args, nodeFactory) -> LLVMFreeNodeGen.create(args.get(1)));
         add("memset", "__memset_chk", (args, nodeFactory) -> LLVMLibcMemsetNodeGen.create(nodeFactory.createMemSet(), args.get(1), args.get(2), args.get(3)));
 
@@ -551,6 +596,7 @@ public class BasicIntrinsicsProvider implements LLVMIntrinsicProvider {
     }
 
     private static void registerExceptionIntrinsics() {
+        add("_CxxThrowException", (args, nodeFactory) -> LLVMRaiseExceptionWindowsNodeGen.create(args.get(1), args.get(2)));
         add("_Unwind_RaiseException", (args, nodeFactory) -> LLVMRaiseExceptionNodeGen.create(args.get(1)));
         add("__cxa_call_unexpected", (args, nodeFactory) -> LLVMAbortNodeGen.create());
     }
@@ -590,7 +636,6 @@ public class BasicIntrinsicsProvider implements LLVMIntrinsicProvider {
     private static void addFloatingPointMathFunction(String functionName, LLVMIntrinsicFactory factory) {
         add(functionName, factory, FACTORIES);
         add(functionName + "f", factory, FACTORIES);
-        add(functionName + "l", factory, FACTORIES);
     }
 
     private static void addIntegerMathFunction(String functionName, LLVMIntrinsicFactory factory) {

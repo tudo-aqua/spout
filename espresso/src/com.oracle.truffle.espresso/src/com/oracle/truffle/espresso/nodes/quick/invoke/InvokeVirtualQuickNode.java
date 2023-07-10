@@ -23,52 +23,25 @@
 package com.oracle.truffle.espresso.nodes.quick.invoke;
 
 import com.oracle.truffle.api.frame.VirtualFrame;
-import com.oracle.truffle.espresso.descriptors.Signatures;
-import com.oracle.truffle.espresso.descriptors.Types;
 import com.oracle.truffle.espresso.impl.Method;
-import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.nodes.bytecodes.InvokeVirtual;
 import com.oracle.truffle.espresso.nodes.bytecodes.InvokeVirtualNodeGen;
-import com.oracle.truffle.espresso.nodes.quick.QuickNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 
-public final class InvokeVirtualQuickNode extends QuickNode {
+public final class InvokeVirtualQuickNode extends InvokeQuickNode {
 
-    final Method resolutionSeed;
-    final int resultAt;
-    final boolean returnsPrimitiveType;
     @Child InvokeVirtual.WithoutNullCheck invokeVirtual;
 
-    public InvokeVirtualQuickNode(Method resolutionSeed, int top, int curBCI) {
-        super(top, curBCI);
-        assert !resolutionSeed.isStatic();
-        this.resolutionSeed = resolutionSeed;
-        this.resultAt = top - Signatures.slotsForParameters(resolutionSeed.getParsedSignature()) - 1; // -receiver
-        this.returnsPrimitiveType = Types.isPrimitive(Signatures.returnType(resolutionSeed.getParsedSignature()));
-        this.invokeVirtual = InvokeVirtualNodeGen.WithoutNullCheckNodeGen.create(resolutionSeed);
+    public InvokeVirtualQuickNode(Method method, int top, int curBCI) {
+        super(method, top, curBCI);
+        assert !method.isStatic();
+        this.invokeVirtual = insert(InvokeVirtualNodeGen.WithoutNullCheckNodeGen.create(method));
     }
 
     @Override
-    public int execute(VirtualFrame frame, long[] primitives, Object[] refs) {
-        /*
-         * Method signature does not change across methods. Can safely use the constant signature
-         * from `resolutionSeed` instead of the non-constant signature from the resolved method.
-         */
-        Object[] args = BytecodeNode.popArguments(primitives, refs, top, true, resolutionSeed.getParsedSignature());
+    public int execute(VirtualFrame frame) {
+        Object[] args = getArguments(frame);
         nullCheck((StaticObject) args[0]);
-        Object result = invokeVirtual.execute(args);
-        if (!returnsPrimitiveType) {
-            getBytecodeNode().checkNoForeignObjectAssumption((StaticObject) result);
-        }
-        return (getResultAt() - top) + BytecodeNode.putKind(primitives, refs, getResultAt(), result, resolutionSeed.getReturnKind());
-    }
-
-    @Override
-    public boolean removedByRedefintion() {
-        return resolutionSeed.isRemovedByRedefition();
-    }
-
-    private int getResultAt() {
-        return resultAt;
+        return pushResult(frame, invokeVirtual.execute(args));
     }
 }

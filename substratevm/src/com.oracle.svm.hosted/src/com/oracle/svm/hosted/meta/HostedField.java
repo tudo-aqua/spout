@@ -24,25 +24,21 @@
  */
 package com.oracle.svm.hosted.meta;
 
-import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 
 import com.oracle.graal.pointsto.infrastructure.OriginalFieldProvider;
+import com.oracle.graal.pointsto.infrastructure.WrappedJavaField;
 import com.oracle.graal.pointsto.meta.AnalysisField;
 import com.oracle.svm.core.meta.SharedField;
-import com.oracle.svm.core.meta.SubstrateObjectConstant;
 
-import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.JavaTypeProfile;
 
 /**
  * Store the compile-time information for a field in the Substrate VM, such as the field offset.
  */
-public class HostedField implements OriginalFieldProvider, SharedField, Comparable<HostedField> {
+public class HostedField extends HostedElement implements OriginalFieldProvider, SharedField, WrappedJavaField {
 
-    private final HostedUniverse universe;
-    private final HostedMetaAccess metaAccess;
     public final AnalysisField wrapped;
 
     private final HostedType holder;
@@ -54,14 +50,17 @@ public class HostedField implements OriginalFieldProvider, SharedField, Comparab
 
     static final int LOC_UNMATERIALIZED_STATIC_CONSTANT = -10;
 
-    public HostedField(HostedUniverse universe, HostedMetaAccess metaAccess, AnalysisField wrapped, HostedType holder, HostedType type, JavaTypeProfile typeProfile) {
-        this.universe = universe;
-        this.metaAccess = metaAccess;
+    public HostedField(AnalysisField wrapped, HostedType holder, HostedType type, JavaTypeProfile typeProfile) {
         this.wrapped = wrapped;
         this.holder = holder;
         this.type = type;
         this.typeProfile = typeProfile;
         this.location = LOC_UNINITIALIZED;
+    }
+
+    @Override
+    public AnalysisField getWrapped() {
+        return wrapped;
     }
 
     public JavaTypeProfile getFieldTypeProfile() {
@@ -104,6 +103,11 @@ public class HostedField implements OriginalFieldProvider, SharedField, Comparab
         return wrapped.isAccessed();
     }
 
+    @Override
+    public boolean isReachable() {
+        return wrapped.isReachable();
+    }
+
     public boolean isRead() {
         return wrapped.isRead();
     }
@@ -111,6 +115,11 @@ public class HostedField implements OriginalFieldProvider, SharedField, Comparab
     @Override
     public boolean isWritten() {
         return wrapped.isWritten();
+    }
+
+    @Override
+    public boolean isValueAvailable() {
+        return wrapped.isValueAvailable();
     }
 
     @Override
@@ -138,23 +147,6 @@ public class HostedField implements OriginalFieldProvider, SharedField, Comparab
         return wrapped.hashCode();
     }
 
-    public JavaConstant readValue(JavaConstant receiver) {
-        JavaConstant wrappedReceiver;
-        if (receiver != null && SubstrateObjectConstant.asObject(receiver) instanceof Class) {
-            /* Manual object replacement from java.lang.Class to DynamicHub. */
-            wrappedReceiver = SubstrateObjectConstant.forObject(metaAccess.lookupJavaType((Class<?>) SubstrateObjectConstant.asObject(receiver)).getHub());
-        } else {
-            wrappedReceiver = receiver;
-        }
-        return universe.lookup(universe.getConstantReflectionProvider().readValue(metaAccess, wrapped, wrappedReceiver));
-    }
-
-    public JavaConstant readStorageValue(JavaConstant receiver) {
-        JavaConstant result = readValue(receiver);
-        assert result.getJavaKind() == getType().getStorageKind() : this;
-        return result;
-    }
-
     @Override
     public HostedType getDeclaringClass() {
         return holder;
@@ -171,23 +163,8 @@ public class HostedField implements OriginalFieldProvider, SharedField, Comparab
     }
 
     @Override
-    public Annotation[] getAnnotations() {
-        return wrapped.getAnnotations();
-    }
-
-    @Override
-    public Annotation[] getDeclaredAnnotations() {
-        return wrapped.getDeclaredAnnotations();
-    }
-
-    @Override
-    public <T extends Annotation> T getAnnotation(Class<T> annotationClass) {
-        return wrapped.getAnnotation(annotationClass);
-    }
-
-    @Override
     public String toString() {
-        return "HostedField<" + format("%h.%n") + " location: " + location + "   " + wrapped.toString() + ">";
+        return "HostedField<" + format("%h.%n") + " -> " + wrapped.toString() + ", location: " + location + ">";
     }
 
     @Override
@@ -196,21 +173,7 @@ public class HostedField implements OriginalFieldProvider, SharedField, Comparab
     }
 
     @Override
-    public int compareTo(HostedField other) {
-        /*
-         * Order by JavaKind. This is required, since we want instance fields of the same size and
-         * kind consecutive.
-         */
-        int result = other.getJavaKind().ordinal() - this.getJavaKind().ordinal();
-        /*
-         * If the kind is the same, i.e., result == 0, we return 0 so that the sorting keeps the
-         * order unchanged and therefore keeps the field order we get from the hosting VM.
-         */
-        return result;
-    }
-
-    @Override
     public Field getJavaField() {
-        return OriginalFieldProvider.getJavaField(getDeclaringClass().universe.getSnippetReflection(), wrapped);
+        return wrapped.getJavaField();
     }
 }

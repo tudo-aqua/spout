@@ -24,6 +24,8 @@ package com.oracle.truffle.espresso.classfile.constantpool;
 
 import java.nio.ByteBuffer;
 
+import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.classfile.ConstantPool;
 import com.oracle.truffle.espresso.classfile.ConstantPool.Tag;
 import com.oracle.truffle.espresso.classfile.RuntimeConstantPool;
@@ -36,6 +38,7 @@ import com.oracle.truffle.espresso.impl.ObjectKlass;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
+import com.oracle.truffle.espresso.nodes.EspressoFrame;
 import com.oracle.truffle.espresso.nodes.methodhandle.MHLinkToNode;
 import com.oracle.truffle.espresso.runtime.EspressoException;
 import com.oracle.truffle.espresso.runtime.StaticObject;
@@ -126,21 +129,31 @@ public interface DynamicConstant extends PoolConstant {
                                 accessingKlass.getDefiningClassLoader(),
                                 accessingKlass.protectionDomain());
 
-                Object result = meta.java_lang_invoke_MethodHandleNatives_linkDynamicConstant.invokeDirect(
-                                null,
-                                accessingKlass.mirror(),
-                                thisIndex,
-                                bootstrapmethodMethodHandle,
-                                fieldName, fieldType.mirror(),
-                                StaticObject.wrap(args, meta));
+                Object result = null;
+                if (!meta.getJavaVersion().java19OrLater()) {
+                    result = meta.java_lang_invoke_MethodHandleNatives_linkDynamicConstant.invokeDirect(
+                                    null,
+                                    accessingKlass.mirror(),
+                                    thisIndex,
+                                    bootstrapmethodMethodHandle,
+                                    fieldName, fieldType.mirror(),
+                                    StaticObject.wrap(args, meta));
+                } else {
+                    result = meta.java_lang_invoke_MethodHandleNatives_linkDynamicConstant.invokeDirect(
+                                    null,
+                                    accessingKlass.mirror(),
+                                    bootstrapmethodMethodHandle,
+                                    fieldName, fieldType.mirror(),
+                                    StaticObject.wrap(args, meta));
+                }
                 try {
                     return makeResolved(fieldType, (StaticObject) result);
                 } catch (ClassCastException | NullPointerException e) {
                     throw meta.throwException(meta.java_lang_BootstrapMethodError);
                 } catch (EspressoException e) {
-                    if (meta.java_lang_NullPointerException.isAssignableFrom(e.getExceptionObject().getKlass()) ||
-                                    meta.java_lang_ClassCastException.isAssignableFrom(e.getExceptionObject().getKlass())) {
-                        throw meta.throwExceptionWithCause(meta.java_lang_BootstrapMethodError, e.getExceptionObject());
+                    if (meta.java_lang_NullPointerException.isAssignableFrom(e.getGuestException().getKlass()) ||
+                                    meta.java_lang_ClassCastException.isAssignableFrom(e.getGuestException().getKlass())) {
+                        throw meta.throwExceptionWithCause(meta.java_lang_BootstrapMethodError, e.getGuestException());
                     }
                     throw e;
                 }
@@ -151,7 +164,7 @@ public interface DynamicConstant extends PoolConstant {
     }
 
     interface Resolved extends DynamicConstant, Resolvable.ResolvedConstant {
-        void putResolved(long[] primitives, Object[] refs, int top, BytecodeNode node);
+        void putResolved(VirtualFrame frame, int top, BytecodeNode node);
 
         @Override
         default Symbol<Type> getTypeSymbol(ConstantPool pool) {
@@ -178,8 +191,8 @@ public interface DynamicConstant extends PoolConstant {
         }
 
         @Override
-        public void putResolved(long[] primitives, Object[] refs, int top, BytecodeNode node) {
-            BytecodeNode.putObject(refs, top, resolved);
+        public void putResolved(VirtualFrame frame, int top, BytecodeNode node) {
+            EspressoFrame.putObject(frame, top, resolved);
         }
 
         @Override
@@ -201,8 +214,8 @@ public interface DynamicConstant extends PoolConstant {
         }
 
         @Override
-        public void putResolved(long[] primitives, Object[] refs, int top, BytecodeNode node) {
-            BytecodeNode.putInt(primitives, top, resolved);
+        public void putResolved(VirtualFrame frame, int top, BytecodeNode node) {
+            EspressoFrame.putInt(frame, top, resolved);
         }
 
         @Override
@@ -224,8 +237,8 @@ public interface DynamicConstant extends PoolConstant {
         }
 
         @Override
-        public void putResolved(long[] primitives, Object[] refs, int top, BytecodeNode node) {
-            BytecodeNode.putLong(primitives, top, resolved);
+        public void putResolved(VirtualFrame frame, int top, BytecodeNode node) {
+            EspressoFrame.putLong(frame, top, resolved);
         }
 
         @Override
@@ -247,8 +260,8 @@ public interface DynamicConstant extends PoolConstant {
         }
 
         @Override
-        public void putResolved(long[] primitives, Object[] refs, int top, BytecodeNode node) {
-            BytecodeNode.putDouble(primitives, top, resolved);
+        public void putResolved(VirtualFrame frame, int top, BytecodeNode node) {
+            EspressoFrame.putDouble(frame, top, resolved);
         }
 
         @Override
@@ -270,8 +283,8 @@ public interface DynamicConstant extends PoolConstant {
         }
 
         @Override
-        public void putResolved(long[] primitives, Object[] refs, int top, BytecodeNode node) {
-            BytecodeNode.putFloat(primitives, top, resolved);
+        public void putResolved(VirtualFrame frame, int top, BytecodeNode node) {
+            EspressoFrame.putFloat(frame, top, resolved);
         }
 
         @Override
@@ -298,12 +311,14 @@ public interface DynamicConstant extends PoolConstant {
         }
 
         @Override
-        public void putResolved(long[] primitives, Object[] refs, int top, BytecodeNode node) {
+        public void putResolved(VirtualFrame frame, int top, BytecodeNode node) {
+            CompilerDirectives.transferToInterpreterAndInvalidate();
             throw EspressoError.shouldNotReachHere("Failure should have arose earlier.");
         }
 
         @Override
         public Object value() {
+            CompilerDirectives.transferToInterpreterAndInvalidate();
             throw EspressoError.shouldNotReachHere("Failure should have arose earlier.");
         }
 

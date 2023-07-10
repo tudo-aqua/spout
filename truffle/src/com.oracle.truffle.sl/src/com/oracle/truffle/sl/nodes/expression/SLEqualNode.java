@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -43,13 +43,16 @@ package com.oracle.truffle.sl.nodes.expression;
 import static com.oracle.truffle.api.CompilerDirectives.shouldNotReachHere;
 
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.library.CachedLibrary;
 import com.oracle.truffle.api.nodes.NodeInfo;
+import com.oracle.truffle.api.strings.TruffleString;
+import com.oracle.truffle.sl.SLLanguage;
 import com.oracle.truffle.sl.nodes.SLBinaryNode;
-import com.oracle.truffle.sl.runtime.SLBigNumber;
+import com.oracle.truffle.sl.runtime.SLBigInteger;
 import com.oracle.truffle.sl.runtime.SLFunction;
 import com.oracle.truffle.sl.runtime.SLNull;
 
@@ -71,7 +74,7 @@ public abstract class SLEqualNode extends SLBinaryNode {
 
     @Specialization
     @TruffleBoundary
-    protected boolean doBigNumber(SLBigNumber left, SLBigNumber right) {
+    protected boolean doBigNumber(SLBigInteger left, SLBigInteger right) {
         return left.equals(right);
     }
 
@@ -83,6 +86,12 @@ public abstract class SLEqualNode extends SLBinaryNode {
     @Specialization
     protected boolean doString(String left, String right) {
         return left.equals(right);
+    }
+
+    @Specialization
+    protected boolean doTruffleString(TruffleString left, TruffleString right,
+                    @Cached TruffleString.EqualNode equalNode) {
+        return equalNode.execute(left, right, SLLanguage.STRING_ENCODING);
     }
 
     @Specialization
@@ -135,8 +144,8 @@ public abstract class SLEqualNode extends SLBinaryNode {
                 return true;
             } else if (leftInterop.fitsInLong(left) && rightInterop.fitsInLong(right)) {
                 return doLong(leftInterop.asLong(left), (rightInterop.asLong(right)));
-            } else if (left instanceof SLBigNumber && right instanceof SLBigNumber) {
-                return doBigNumber((SLBigNumber) left, (SLBigNumber) right);
+            } else if (left instanceof SLBigInteger && right instanceof SLBigInteger) {
+                return doBigNumber((SLBigInteger) left, (SLBigInteger) right);
             } else if (leftInterop.hasIdentity(left) && rightInterop.hasIdentity(right)) {
                 return leftInterop.isIdentical(left, right, rightInterop);
             } else {

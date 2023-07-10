@@ -24,7 +24,6 @@
  */
 package com.oracle.svm.core.threadlocal;
 
-import java.util.Arrays;
 import java.util.Collection;
 
 import org.graalvm.compiler.word.ObjectAccess;
@@ -33,31 +32,31 @@ import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
-import org.graalvm.nativeimage.hosted.Feature;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.WordBase;
 import org.graalvm.word.WordFactory;
 
+import com.oracle.svm.core.BuildPhaseProvider.ReadyForCompilation;
 import com.oracle.svm.core.SubstrateOptions;
-import com.oracle.svm.core.annotate.AutomaticFeature;
-import com.oracle.svm.core.annotate.Uninterruptible;
+import com.oracle.svm.core.Uninterruptible;
+import com.oracle.svm.core.feature.AutomaticallyRegisteredImageSingleton;
 import com.oracle.svm.core.heap.ReferenceAccess;
+import com.oracle.svm.core.heap.UnknownObjectField;
 import com.oracle.svm.core.log.Log;
 
+@AutomaticallyRegisteredImageSingleton
 public class VMThreadLocalInfos {
-
+    /**
+     * The {@link VMThreadLocalInfo} objects are scanned during analysis as soon as they are
+     * discovered. After analysis, they are sorted and stored in the infos field.
+     */
+    @UnknownObjectField(availability = ReadyForCompilation.class)//
     private VMThreadLocalInfo[] infos;
 
     @Platforms(Platform.HOSTED_ONLY.class)
-    public static boolean setInfos(Collection<VMThreadLocalInfo> infos) {
+    public static void setInfos(Collection<VMThreadLocalInfo> infos) {
         VMThreadLocalInfos singleton = ImageSingletons.lookup(VMThreadLocalInfos.class);
-        VMThreadLocalInfo[] array = infos.toArray(new VMThreadLocalInfo[infos.size()]);
-        if (!Arrays.equals(singleton.infos, array)) {
-            singleton.infos = array;
-            return true;
-        } else {
-            return false;
-        }
+        singleton.infos = infos.toArray(new VMThreadLocalInfo[0]);
     }
 
     public static void dumpToLog(Log log, IsolateThread thread, boolean isJavaHeapAccessAllowed) {
@@ -71,7 +70,7 @@ public class VMThreadLocalInfos {
                 log.string("(long) ").signed(value).string(" (").zhex(value).string(")");
             } else if (info.threadLocalClass == FastThreadLocalWord.class) {
                 WordBase value = primitiveData(thread).readWord(WordFactory.signed(info.offset));
-                log.string("(Word) ").signed(value).string(" (").zhex(value.rawValue()).string(")");
+                log.string("(Word) ").signed(value).string(" (").zhex(value).string(")");
             } else if (info.threadLocalClass == FastThreadLocalObject.class) {
                 if (isJavaHeapAccessAllowed) {
                     Object value = ObjectAccess.readObject(objectData(thread), WordFactory.signed(info.offset));
@@ -79,7 +78,7 @@ public class VMThreadLocalInfos {
                     if (value == null) {
                         log.string("null");
                     } else {
-                        log.string(value.getClass().getName()).string(" (").zhex(Word.objectToUntrackedPointer(value).rawValue()).string(")");
+                        log.string(value.getClass().getName()).string(" (").zhex(Word.objectToUntrackedPointer(value)).string(")");
                     }
                 } else {
                     Word value = ReferenceAccess.singleton().readObjectAsUntrackedPointer(Word.objectToUntrackedPointer(objectData(thread)).add(info.offset), true);
@@ -96,7 +95,7 @@ public class VMThreadLocalInfos {
         }
     }
 
-    @Uninterruptible(reason = "called from uninterruptible code", mayBeInlined = true)
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     private static Pointer primitiveData(IsolateThread thread) {
         if (SubstrateOptions.MultiThreaded.getValue()) {
             return (Pointer) thread;
@@ -105,7 +104,7 @@ public class VMThreadLocalInfos {
         }
     }
 
-    @Uninterruptible(reason = "called from uninterruptible code", mayBeInlined = true)
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     private static Object objectData(IsolateThread thread) {
         if (SubstrateOptions.MultiThreaded.getValue()) {
             return ((Pointer) thread).toObjectNonNull();
@@ -122,13 +121,5 @@ public class VMThreadLocalInfos {
             }
         }
         return -1;
-    }
-}
-
-@AutomaticFeature
-class VMThreadLocalInfosFeature implements Feature {
-    @Override
-    public void afterRegistration(AfterRegistrationAccess access) {
-        ImageSingletons.add(VMThreadLocalInfos.class, new VMThreadLocalInfos());
     }
 }

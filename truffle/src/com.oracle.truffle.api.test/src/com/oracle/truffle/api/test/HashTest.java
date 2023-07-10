@@ -40,26 +40,10 @@
  */
 package com.oracle.truffle.api.test;
 
-import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
-import com.oracle.truffle.api.interop.InteropException;
-import com.oracle.truffle.api.interop.InteropLibrary;
-import com.oracle.truffle.api.interop.StopIterationException;
-import com.oracle.truffle.api.interop.TruffleObject;
-import com.oracle.truffle.api.interop.UnknownKeyException;
-import com.oracle.truffle.api.interop.UnsupportedMessageException;
-import com.oracle.truffle.api.library.ExportLibrary;
-import com.oracle.truffle.api.library.ExportMessage;
-import com.oracle.truffle.api.test.polyglot.AbstractPolyglotTest;
-import com.oracle.truffle.api.utilities.TriState;
-import com.oracle.truffle.tck.tests.ValueAssert;
-import org.graalvm.polyglot.Context;
-import org.graalvm.polyglot.TypeLiteral;
-import org.graalvm.polyglot.Value;
-import org.graalvm.polyglot.proxy.ProxyArray;
-import org.graalvm.polyglot.proxy.ProxyHashMap;
-import org.graalvm.polyglot.proxy.ProxyIterator;
-import org.graalvm.polyglot.proxy.ProxyObject;
-import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -73,12 +57,36 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.TypeLiteral;
+import org.graalvm.polyglot.Value;
+import org.graalvm.polyglot.proxy.ProxyArray;
+import org.graalvm.polyglot.proxy.ProxyHashMap;
+import org.graalvm.polyglot.proxy.ProxyIterator;
+import org.graalvm.polyglot.proxy.ProxyObject;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.interop.InteropException;
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.interop.StopIterationException;
+import com.oracle.truffle.api.interop.TruffleObject;
+import com.oracle.truffle.api.interop.UnknownKeyException;
+import com.oracle.truffle.api.interop.UnsupportedMessageException;
+import com.oracle.truffle.api.library.ExportLibrary;
+import com.oracle.truffle.api.library.ExportMessage;
+import com.oracle.truffle.api.test.polyglot.AbstractPolyglotTest;
+import com.oracle.truffle.api.utilities.TriState;
+import com.oracle.truffle.tck.tests.ValueAssert;
+import com.oracle.truffle.tck.tests.TruffleTestAssumptions;
 
 public class HashTest extends AbstractPolyglotTest {
+
+    @BeforeClass
+    public static void runWithWeakEncapsulationOnly() {
+        TruffleTestAssumptions.assumeWeakEncapsulation();
+    }
 
     @Test
     public void testTruffleObjectInteropMessages() throws InteropException {
@@ -377,13 +385,13 @@ public class HashTest extends AbstractPolyglotTest {
                 throw new UnsupportedOperationException();
             }
         };
-        TypeLiteral<Map<Integer, Value>> type1 = new TypeLiteral<Map<Integer, Value>>() {
+        TypeLiteral<Map<Integer, Value>> type1 = new TypeLiteral<>() {
         };
         testPolyglotMapWithTypeLiteralImlp(expected, type1, Function.identity(), valueMapper, true);
         expected = new HashMap<>();
         expected.put("key", "value1");
         expected.put(2, "value2");
-        TypeLiteral<Map<Value, String>> type2 = new TypeLiteral<Map<Value, String>>() {
+        TypeLiteral<Map<Value, String>> type2 = new TypeLiteral<>() {
         };
         testPolyglotMapWithTypeLiteralImlp(expected, type2, valueMapper, Function.identity(), false);
     }
@@ -417,6 +425,18 @@ public class HashTest extends AbstractPolyglotTest {
         ValueAssert.assertValue(context.asValue(hash), ValueAssert.Trait.HASH);
         ValueAssert.assertValue(context.asValue(new ProxyHashObject(Collections.singletonMap(1, -1), Collections.singletonMap("fld", "fldValue"))),
                         ValueAssert.Trait.HASH, ValueAssert.Trait.MEMBERS, ValueAssert.Trait.PROXY_OBJECT);
+    }
+
+    @Test
+    public void testReadOnlyHashMap() {
+        setupEnv();
+        Value value = context.asValue(new ReadOnlyProxyHashMap(Map.of("key", "value")));
+        ValueAssert.assertValue(value, ValueAssert.Trait.HASH, ValueAssert.Trait.PROXY_OBJECT);
+        assertEquals(1, value.getHashSize());
+        AbstractPolyglotTest.assertFails(() -> value.putHashEntry("otherKey", "otherValue"), UnsupportedOperationException.class);
+        AbstractPolyglotTest.assertFails(() -> value.removeHashEntry("key"), UnsupportedOperationException.class);
+        assertEquals(1, value.getHashSize());
+        assertEquals("value", value.getHashValue("key").asString());
     }
 
     @ExportLibrary(InteropLibrary.class)
@@ -723,6 +743,40 @@ public class HashTest extends AbstractPolyglotTest {
         }
     }
 
+    private static final class ReadOnlyProxyHashMap implements ProxyHashMap {
+
+        private Map<Object, Object> delegate;
+
+        ReadOnlyProxyHashMap(Map<Object, Object> delegate) {
+            this.delegate = Objects.requireNonNull(delegate, "Delegate must be non null");
+        }
+
+        @Override
+        public long getHashSize() {
+            return delegate.size();
+        }
+
+        @Override
+        public boolean hasHashEntry(Value key) {
+            return delegate.containsKey(key.as(Object.class));
+        }
+
+        @Override
+        public Object getHashValue(Value key) {
+            return delegate.get(key.as(Object.class));
+        }
+
+        @Override
+        public void putHashEntry(Value key, Value value) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Object getHashEntriesIterator() {
+            return ProxyIterator.from(delegate.entrySet().iterator());
+        }
+    }
+
     @ExportLibrary(InteropLibrary.class)
     static final class Accessor implements TruffleObject {
 
@@ -786,7 +840,7 @@ public class HashTest extends AbstractPolyglotTest {
 
     interface KeyFactory<K> {
 
-        KeyFactory<Integer> INT_KEY = new KeyFactory<Integer>() {
+        KeyFactory<Integer> INT_KEY = new KeyFactory<>() {
             @Override
             public Integer create(int value) {
                 return value;
@@ -803,7 +857,7 @@ public class HashTest extends AbstractPolyglotTest {
             }
         };
 
-        KeyFactory<String> STRING_KEY = new KeyFactory<String>() {
+        KeyFactory<String> STRING_KEY = new KeyFactory<>() {
             @Override
             public String create(int value) {
                 return String.valueOf(value);
@@ -820,7 +874,7 @@ public class HashTest extends AbstractPolyglotTest {
             }
         };
 
-        KeyFactory<TruffleObject> TRUFFLE_OBJECT_KEY = new KeyFactory<TruffleObject>() {
+        KeyFactory<TruffleObject> TRUFFLE_OBJECT_KEY = new KeyFactory<>() {
             @Override
             public TruffleObject create(int value) {
                 return new Key(value);

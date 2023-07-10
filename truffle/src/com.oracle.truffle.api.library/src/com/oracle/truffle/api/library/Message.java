@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -74,6 +74,7 @@ public abstract class Message {
     private final String qualifiedName;
     private final int id;
     private final int hash;
+    private final boolean deprecated;
     private final Class<?> returnType;
     private final Class<? extends Library> libraryClass;
     private final List<Class<?>> parameterTypes;
@@ -82,25 +83,23 @@ public abstract class Message {
     @CompilationFinal LibraryFactory<Library> library;
 
     /**
-     * @since 19.0
-     * @deprecated Use {@link #Message(Class, String, int, Class, Class[])}.
-     */
-    @Deprecated
-    protected Message(Class<? extends Library> libraryClass, String messageName, Class<?> returnType, Class<?>... parameterTypes) {
-        this(libraryClass, -1, messageName, returnType, parameterTypes);
-    }
-
-    /**
      * @since 22.0
      */
     protected Message(Class<? extends Library> libraryClass, String messageName, int id, Class<?> returnType, Class<?>... parameterTypes) {
-        this(libraryClass, id, messageName, returnType, parameterTypes);
+        this(libraryClass, messageName, id, false, returnType, parameterTypes);
+    }
+
+    /**
+     * @since 23.0
+     */
+    protected Message(Class<? extends Library> libraryClass, String messageName, int id, boolean deprecated, Class<?> returnType, Class<?>... parameterTypes) {
+        this(libraryClass, id, messageName, deprecated, returnType, parameterTypes);
         if (id < 0) {
             throw new IllegalArgumentException("Id must be non-negative.");
         }
     }
 
-    private Message(Class<? extends Library> libraryClass, int id, String messageName, Class<?> returnType, Class<?>... parameterTypes) {
+    private Message(Class<? extends Library> libraryClass, int id, String messageName, boolean deprecated, Class<?> returnType, Class<?>... parameterTypes) {
         Objects.requireNonNull(libraryClass);
         Objects.requireNonNull(messageName);
         Objects.requireNonNull(returnType);
@@ -109,10 +108,25 @@ public abstract class Message {
         this.returnType = returnType;
         this.parameterTypesArray = parameterTypes;
         this.parameterTypes = Collections.unmodifiableList(Arrays.asList(parameterTypes));
-        this.qualifiedName = (getLibraryName() + "." + simpleName).intern();
+        this.qualifiedName = (getLibraryName() + "." + simpleName + parameters(parameterTypes)).intern();
+        this.deprecated = deprecated;
         this.id = id;
         this.parameterCount = parameterTypes.length;
         this.hash = qualifiedName.hashCode();
+    }
+
+    private static String parameters(Class<?>... parameterTypes) {
+        if (parameterTypes.length == 0) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder("(");
+        for (Class<?> c : parameterTypes) {
+            sb.append(c.getSimpleName());
+            sb.append(',');
+        }
+        sb.deleteCharAt(sb.length() - 1);
+        sb.append(')');
+        return sb.toString();
     }
 
     /**
@@ -214,6 +228,15 @@ public abstract class Message {
      */
     public final int getParameterCount() {
         return parameterCount;
+    }
+
+    /**
+     * Returns true if this message is deprecated.
+     *
+     * @since 23.0
+     */
+    public final boolean isDeprecated() {
+        return deprecated;
     }
 
     /**

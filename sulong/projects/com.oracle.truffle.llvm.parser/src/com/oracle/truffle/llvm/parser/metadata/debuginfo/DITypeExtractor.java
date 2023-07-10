@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2017, 2022, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -216,20 +216,21 @@ final class DITypeExtractor implements MetadataVisitor {
                     for (MDBaseNode elemNode : elemListNode) {
                         if (elemNode instanceof MDSubprogram) {
                             MDSubprogram mdSubprogram = (MDSubprogram) elemNode;
-                            try {
-                                final String methodName = ((MDString) mdSubprogram.getName()).getString();
+                            final String methodName = ((MDString) mdSubprogram.getName()).getString();
+                            if (mdSubprogram.getLinkageName() instanceof MDString) {
                                 final String methodLinkageName = ((MDString) mdSubprogram.getLinkageName()).getString();
                                 final LLVMSourceFunctionType llvmSourceFunctionType = (LLVMSourceFunctionType) parsedTypes.get(mdSubprogram);
                                 final long virtualIndex = mdSubprogram.getVirtuality() > 0 ? mdSubprogram.getVirtualIndex() : -1L;
                                 if (llvmSourceFunctionType != null) {
                                     type.addMethod(methodName, methodLinkageName, llvmSourceFunctionType, virtualIndex);
                                 }
-                            } catch (ClassCastException cce) {
+                            } else {
                                 /*
                                  * mdSubprogram does not have an MDString as (linkage)name, or
                                  * function could not be found. In this case, just do not add the
                                  * given mdSubprogram as a class method.
                                  */
+
                             }
                         }
                     }
@@ -378,11 +379,15 @@ final class DITypeExtractor implements MetadataVisitor {
                 break;
             }
 
+            case DW_TAG_ATOMIC_TYPE:
             case DW_TAG_TYPEDEF:
             case DW_TAG_VOLATILE_TYPE:
             case DW_TAG_CONST_TYPE: {
                 final Function<String, String> decorator;
                 switch (mdType.getTag()) {
+                    case DW_TAG_ATOMIC_TYPE:
+                        decorator = s -> String.format("atomic %s", s);
+                        break;
                     case DW_TAG_VOLATILE_TYPE:
                         decorator = s -> String.format("volatile %s", s);
                         break;

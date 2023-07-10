@@ -24,10 +24,11 @@
  */
 package com.oracle.svm.core.graal.aarch64;
 
-import static com.oracle.svm.core.util.VMError.shouldNotReachHere;
+import static com.oracle.svm.core.util.VMError.shouldNotReachHereUnexpectedInput;
 import static jdk.vm.ci.aarch64.AArch64.allRegisters;
 import static jdk.vm.ci.aarch64.AArch64.r0;
 import static jdk.vm.ci.aarch64.AArch64.r1;
+import static jdk.vm.ci.aarch64.AArch64.r18;
 import static jdk.vm.ci.aarch64.AArch64.r19;
 import static jdk.vm.ci.aarch64.AArch64.r2;
 import static jdk.vm.ci.aarch64.AArch64.r20;
@@ -68,6 +69,9 @@ import static jdk.vm.ci.aarch64.AArch64.zr;
 
 import java.util.ArrayList;
 
+import org.graalvm.compiler.core.common.NumUtil;
+import org.graalvm.nativeimage.Platform;
+
 import com.oracle.svm.core.ReservedRegisters;
 import com.oracle.svm.core.config.ObjectLayout;
 import com.oracle.svm.core.graal.code.SubstrateCallingConvention;
@@ -99,7 +103,7 @@ public class SubstrateAArch64RegisterConfig implements SubstrateRegisterConfig {
     private final TargetDescription target;
     private final int nativeParamsStackOffset;
     private final RegisterArray generalParameterRegs;
-    private final RegisterArray simdParameterRegs;
+    private final RegisterArray fpParameterRegs;
     private final RegisterArray allocatableRegs;
     private final RegisterArray calleeSaveRegisters;
     private final RegisterAttributes[] attributesMap;
@@ -107,14 +111,22 @@ public class SubstrateAArch64RegisterConfig implements SubstrateRegisterConfig {
     private final boolean preserveFramePointer;
     public static final Register fp = r29;
 
+    @SuppressWarnings("this-escape")
     public SubstrateAArch64RegisterConfig(ConfigKind config, MetaAccessProvider metaAccess, TargetDescription target, boolean preserveFramePointer) {
         this.target = target;
         this.metaAccess = metaAccess;
         this.preserveFramePointer = preserveFramePointer;
 
-        // This is the Linux 64-bit ABI for parameters.
+        /*
+         * This is the Linux 64-bit ABI for parameters.
+         *
+         * Note the Darwin and Windows ABI are the same with the following exception:
+         *
+         * On Windows, when calling a method with variadic args, all fp parameters must be passed on
+         * the stack. Currently, this is unsupported. Adding support is tracked by GR-34188.
+         */
         generalParameterRegs = new RegisterArray(r0, r1, r2, r3, r4, r5, r6, r7);
-        simdParameterRegs = new RegisterArray(v0, v1, v2, v3, v4, v5, v6, v7);
+        fpParameterRegs = new RegisterArray(v0, v1, v2, v3, v4, v5, v6, v7);
 
         nativeParamsStackOffset = 0;
 
@@ -138,6 +150,20 @@ public class SubstrateAArch64RegisterConfig implements SubstrateRegisterConfig {
          */
         regs.remove(ReservedRegisters.singleton().getHeapBaseRegister());
         regs.remove(ReservedRegisters.singleton().getThreadRegister());
+        /*
+         * Darwin and Windows specify that r18 is a platform-reserved register:
+         *
+         * https://developer.apple.com/documentation/xcode/writing-arm64-code-for-apple-platforms
+         *
+         * https://docs.microsoft.com/en-us/cpp/build/arm64-windows-abi-conventions
+         *
+         * Android uses r18 for maintaining a shadow call stack:
+         *
+         * https://developer.android.com/ndk/guides/abis#arm64-v8a
+         */
+        if (Platform.includedIn(Platform.DARWIN.class) || Platform.includedIn(Platform.WINDOWS.class) || Platform.includedIn(Platform.ANDROID.class)) {
+            regs.remove(r18);
+        }
         allocatableRegs = new RegisterArray(regs);
 
         switch (config) {
@@ -151,7 +177,7 @@ public class SubstrateAArch64RegisterConfig implements SubstrateRegisterConfig {
                 break;
 
             default:
-                throw shouldNotReachHere();
+                throw shouldNotReachHereUnexpectedInput(config); // ExcludeFromJacocoGeneratedReport
 
         }
         attributesMap = RegisterAttributes.createMap(this, AArch64.allRegisters);
@@ -174,7 +200,7 @@ public class SubstrateAArch64RegisterConfig implements SubstrateRegisterConfig {
             case Void:
                 return null;
             default:
-                throw shouldNotReachHere();
+                throw shouldNotReachHereUnexpectedInput(kind); // ExcludeFromJacocoGeneratedReport
         }
     }
 
@@ -205,11 +231,47 @@ public class SubstrateAArch64RegisterConfig implements SubstrateRegisterConfig {
 
     @Override
     public RegisterArray getCallingConventionRegisters(Type t, JavaKind kind) {
-        throw VMError.unimplemented();
+        throw VMError.intentionallyUnimplemented(); // ExcludeFromJacocoGeneratedReport
     }
 
     public boolean shouldPreserveFramePointer() {
         return preserveFramePointer;
+    }
+
+    private int javaStackParameterAssignment(ValueKindFactory<?> valueKindFactory, AllocatableValue[] locations, int index, JavaKind kind, int currentStackOffset, boolean isOutgoing) {
+        /* All parameters within Java are assigned slots of at least 8 bytes */
+        ValueKind<?> valueKind = valueKindFactory.getValueKind(kind.getStackKind());
+        int alignment = Math.max(valueKind.getPlatformKind().getSizeInBytes(), target.wordSize);
+        locations[index] = StackSlot.get(valueKind, currentStackOffset, !isOutgoing);
+        return currentStackOffset + alignment;
+    }
+
+    /**
+     * The Linux calling convention expects stack arguments to be aligned to at least 8 bytes, but
+     * any unused padding bits have unspecified values.
+     *
+     * For more details, see <a
+     * href=https://github.com/ARM-software/abi-aa/blob/d6e9abbc5e9cdcaa0467d8187eec0049b44044c4/aapcs64/aapcs64.rst#parameter-passing-rules>the
+     * AArch64 procedure call standard</a>.
+     */
+    private int linuxNativeStackParameterAssignment(ValueKindFactory<?> valueKindFactory, AllocatableValue[] locations, int index, JavaKind kind, int currentStackOffset, boolean isOutgoing) {
+        ValueKind<?> valueKind = valueKindFactory.getValueKind(isOutgoing ? kind.getStackKind() : kind);
+        int alignment = Math.max(kind.getByteCount(), target.wordSize);
+        locations[index] = StackSlot.get(valueKind, currentStackOffset, !isOutgoing);
+        return currentStackOffset + alignment;
+    }
+
+    /**
+     * The Darwin calling convention expects stack arguments to be aligned to the argument kind.
+     *
+     * For more details, see <a
+     * href=https://developer.apple.com/documentation/xcode/writing-arm64-code-for-apple-platforms>https://developer.apple.com/documentation/xcode/writing-arm64-code-for-apple-platforms</a>.
+     */
+    private static int darwinNativeStackParameterAssignment(ValueKindFactory<?> valueKindFactory, AllocatableValue[] locations, int index, JavaKind kind, int currentStackOffset, boolean isOutgoing) {
+        int paramByteSize = kind.getByteCount();
+        int alignedStackOffset = NumUtil.roundUp(currentStackOffset, paramByteSize);
+        locations[index] = StackSlot.get(valueKindFactory.getValueKind(kind), alignedStackOffset, !isOutgoing);
+        return alignedStackOffset + paramByteSize;
     }
 
     @Override
@@ -220,7 +282,7 @@ public class SubstrateAArch64RegisterConfig implements SubstrateRegisterConfig {
         AllocatableValue[] locations = new AllocatableValue[parameterTypes.length];
 
         int currentGeneral = 0;
-        int currentSIMD = 0;
+        int currentFP = 0;
 
         /*
          * We have to reserve a slot between return address and outgoing parameters for the deopt
@@ -252,21 +314,41 @@ public class SubstrateAArch64RegisterConfig implements SubstrateRegisterConfig {
                         break;
                     case Float:
                     case Double:
-                        if (currentSIMD < simdParameterRegs.size()) {
-                            register = simdParameterRegs.get(currentSIMD++);
+                        if (currentFP < fpParameterRegs.size()) {
+                            register = fpParameterRegs.get(currentFP++);
                         }
                         break;
                     default:
-                        throw shouldNotReachHere();
+                        throw shouldNotReachHereUnexpectedInput(kind); // ExcludeFromJacocoGeneratedReport
                 }
 
             }
             if (register != null) {
-                locations[i] = register.asValue(valueKindFactory.getValueKind(kind.getStackKind()));
+                /*
+                 * The AArch64 procedure call standard does not require subword (i.e., boolean,
+                 * byte, char, short) values to be extended to 32 bits. Hence, for incoming native
+                 * calls, we can only assume the bits sizes as specified in the standard.
+                 *
+                 * Since within the graal compiler subwords are already extended to 32 bits, we save
+                 * extended values in outgoing calls.
+                 *
+                 * Darwin deviates from the call standard and requires the caller to extend subword
+                 * values.
+                 */
+                boolean useJavaKind = isEntryPoint && (Platform.includedIn(Platform.LINUX.class) || Platform.includedIn(Platform.WINDOWS.class));
+                locations[i] = register.asValue(valueKindFactory.getValueKind(useJavaKind ? kind : kind.getStackKind()));
             } else {
-                ValueKind<?> valueKind = valueKindFactory.getValueKind(kind.getStackKind());
-                locations[i] = StackSlot.get(valueKind, currentStackOffset, !type.outgoing);
-                currentStackOffset += Math.max(valueKind.getPlatformKind().getSizeInBytes(), target.wordSize);
+                if (type.nativeABI()) {
+                    if (Platform.includedIn(Platform.LINUX.class)) {
+                        currentStackOffset = linuxNativeStackParameterAssignment(valueKindFactory, locations, i, kind, currentStackOffset, type.outgoing);
+                    } else if (Platform.includedIn(Platform.DARWIN.class)) {
+                        currentStackOffset = darwinNativeStackParameterAssignment(valueKindFactory, locations, i, kind, currentStackOffset, type.outgoing);
+                    } else {
+                        throw VMError.unsupportedPlatform(); // ExcludeFromJacocoGeneratedReport
+                    }
+                } else {
+                    currentStackOffset = javaStackParameterAssignment(valueKindFactory, locations, i, kind, currentStackOffset, type.outgoing);
+                }
             }
         }
 
@@ -287,4 +369,7 @@ public class SubstrateAArch64RegisterConfig implements SubstrateRegisterConfig {
         return new RegisterArray(list);
     }
 
+    public RegisterArray getJavaGeneralParameterRegs() {
+        return generalParameterRegs;
+    }
 }

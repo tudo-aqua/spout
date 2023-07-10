@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -57,6 +57,8 @@ import com.oracle.truffle.llvm.runtime.types.visitors.TypeVisitor;
 
 public final class Types implements ParserListener, Iterable<Type> {
 
+    // llvm/include/llvm/Bitcode/LLVMBitCodes.h
+    // enum TypeCodes
     private static final int TYPE_NUMBER_OF_ENTRIES = 1;
     private static final int TYPE_VOID = 2;
     private static final int TYPE_FLOAT = 3;
@@ -79,6 +81,9 @@ public final class Types implements ParserListener, Iterable<Type> {
     private static final int TYPE_STRUCT_NAMED = 20;
     private static final int TYPE_FUNCTION = 21;
     private static final int TYPE_TOKEN = 22;
+    // private static final int TYPE_BFLOAT = 23;
+    // private static final int TYPE_X86_AMX = 24;
+    private static final int TYPE_OPAQUE_POINTER = 25;
 
     private final ModelModule module;
 
@@ -143,12 +148,17 @@ public final class Types implements ParserListener, Iterable<Type> {
                 type = pointerType;
                 break;
             }
+
+            case TYPE_OPAQUE_POINTER:
+                type = PointerType.PTR;
+                break;
+
             case TYPE_FUNCTION_OLD: {
                 boolean isVarargs = buffer.readBoolean();
                 buffer.skip();
                 int index = buffer.readInt();
                 int numArguments = buffer.remaining();
-                final FunctionType functionType = new FunctionType(null, numArguments, isVarargs);
+                final FunctionType functionType = new FunctionType(null, numArguments, isVarargs ? numArguments : FunctionType.NOT_VARARGS);
                 setTypes(buffer, numArguments, functionType::setArgumentType);
                 setType(index, functionType::setReturnType);
                 type = functionType;
@@ -217,7 +227,7 @@ public final class Types implements ParserListener, Iterable<Type> {
                 boolean isVarargs = buffer.readBoolean();
                 int index = buffer.readInt();
                 int numArguments = buffer.remaining();
-                FunctionType functionType = new FunctionType(null, numArguments, isVarargs);
+                FunctionType functionType = new FunctionType(null, numArguments, isVarargs ? numArguments : FunctionType.NOT_VARARGS);
                 setTypes(buffer, numArguments, functionType::setArgumentType);
                 setType(index, functionType::setReturnType);
                 type = functionType;

@@ -1,6 +1,6 @@
 ---
 layout: docs
-toc_group: reference-manual
+toc_group: embedding
 link_title: Embedding Reference
 permalink: /reference-manual/embed-languages/
 ---
@@ -14,28 +14,28 @@ permalink: /reference-manual/embed-languages/
 * [Lookup Java Types from Guest Languages](#lookup-java-types-from-guest-languages)
 * [Computed Arrays Using Polyglot Proxies](#computed-arrays-using-polyglot-proxies)
 * [Host Access](#host-access)
-* [Build Native Images from Polyglot Applications](#build-native-images-from-polyglot-applications)
+* [Build Native Executables from Polyglot Applications](#build-native-executables-from-polyglot-applications)
 * [Code Caching Across Multiple Contexts](#code-caching-across-multiple-contexts)
-* [Embed languages in Guest Languages](#embed-languages-in-guest-languages)
+* [Embed Guest Languages in Java](#embed-guest-languages-in-java)
 * [Build a Shell for Many Languages](#build-a-shell-for-many-languages)
 * [Step Through with Execution Listeners](#step-through-with-execution-listeners)
-* [Configure Sandbox Resource Limits](#configure-sandbox-resource-limits)
+* [Setting the Heap Size](#setting-the-heap-size)
+* [Dependency Setup](#dependency-setup)
+* [Compatibility with JSR-223 ScriptEngine](#compatibility-with-jsr-223-scriptengine)
 
 The GraalVM Polyglot API lets you embed and run code from guest languages in JVM-based host applications.
 
-Throughout this section, you will learn how to create a host application in Java that
-runs on GraalVM and directly calls a guest language. You can use the tabs
-beneath each code example to choose between JavaScript, R, Ruby, and Python.
+Throughout this section, you will learn how to create a host application in Java that runs on GraalVM and directly calls a guest language.
+You can use the tabs beneath each code example to choose between JavaScript, R, Ruby, and Python.
 
 Ensure you set up GraalVM before you begin.
 
 ## Compile and Run a Polyglot Application
+
 GraalVM can run polyglot applications written in any language implemented with the [Truffle language implementation framework](../../../truffle/docs/README.md).
 These languages are henceforth referenced as **guest languages**.
 
-Complete the steps in this section to create a sample polyglot
-application that runs on GraalVM and demonstrates programming language
-interoperability.
+Complete the steps in this section to create a sample polyglot application that runs on GraalVM and demonstrates programming language interoperability.
 
 1&#46; Create a `hello-polyglot` project directory.
 
@@ -66,10 +66,8 @@ GraalVM.
 
 4&#46; Run `java HelloPolyglot` to run the application on GraalVM.
 
-You now have a polyglot application that consists of a Java host application
-and guest language code that run on GraalVM. You can use this application with
-other code examples to demonstrate more advanced capabilities of the
-Polyglot API.
+You now have a polyglot application that consists of a Java host application and guest language code that run on GraalVM.
+You can use this application with other code examples to demonstrate more advanced capabilities of the Polyglot API.
 
 To use other code examples in this section, you simply need to do the following:
 
@@ -79,12 +77,9 @@ To use other code examples in this section, you simply need to do the following:
 
 ## Define Guest Language Functions as Java Values
 
-Polyglot applications let you take values from one programming language and
-use them with other languages.
+Polyglot applications let you take values from one programming language and use them with other languages.
 
-Use the code example in this section with your polyglot application to show
-how the Polyglot API can return JavaScript, R, Ruby, or Python functions as
-Java values.
+Use the code example in this section with your polyglot application to show how the Polyglot API can return JavaScript, R, Ruby, or Python functions as Java values.
 
 {%
 include snippet-tabs
@@ -97,20 +92,17 @@ tab4type="java" tab4id="Function_Python" tab4name="Python" tab4path="embed/funct
 &nbsp;In this code:
 - `Value function` is a Java value that refers to a function.
 - The `eval` call parses the script and returns the guest language function.
-- The first assertion checks that the value returned by the code snippet can be
-executed.
+- The first assertion checks that the value returned by the code snippet can be executed.
 - The `execute` call executes the function with the argument `41`.
 - The `asInt` call converts the result to a Java `int`.
 - The second assertion verifies that the result was incremented by one as expected.
 
 ## Access Guest Languages Directly from Java
 
-Polyglot applications can readily access most language types and are not
-limited to functions. Host languages, such as Java, can directly access guest
-language values embedded in the polyglot application.
+Polyglot applications can readily access most language types and are not limited to functions.
+Host languages, such as Java, can directly access guest language values embedded in the polyglot application.
 
-Use the code example in this section with your polyglot application to show
-how the Polyglot API can access objects, numbers, strings, and arrays.
+Use the code example in this section with your polyglot application to show how the Polyglot API can access objects, numbers, strings, and arrays.
 
 {%
 include snippet-tabs
@@ -130,7 +122,7 @@ the resulting object. The result is then converted to a Java `int`
 using `asInt()`.
 - The next assert verifies that result has a value of `42`.
 - The `text` variable is initialized using the value of the member `text`,
- which is also converted to a Java `String` using `asString()`.
+which is also converted to a Java `String` using `asString()`.
 - The following assertion verifies the result value is equal to the
 Java `String` `"42"`.
 - Next the `arr` member that holds an array is read.
@@ -144,17 +136,14 @@ R where indices start with one.
 
 ## Access Java from Guest Languages
 
-Polyglot applications offer bi-directional access between guest languages and
-host languages. As a result, you can pass Java objects to guest languages.
+Polyglot applications offer bi-directional access between guest languages and host languages.
+As a result, you can pass Java objects to guest languages.
 
-Use the code example in this section with your polyglot application to show how
-guest languages can access primitive Java values, objects, arrays, and
-functional interfaces.
+Since the Polyglot API is secure by default, access is limited in the default configuration.
+To permit guest languages to access any public method or field of a Java object, you have to explicitly specify `allowAllAccess(true)` when the context is built.
+In this mode, the guest language code can access any resource that is accessible to host Java code.
 
-To permit guest languages to access any public method or field of a Java
-object, set `allowAllAccess(true)` when the context is built. In this mode, the guest
-language code must be fully trusted, as it can access other not explicitly exported Java methods
-using reflection.
+Use the code example in this section with your polyglot application to show how guest languages can access primitive Java values, objects, arrays, and functional interfaces.
 
 {%
 include snippet-tabs
@@ -192,11 +181,9 @@ that the script returns a `boolean` value of `true` as a result.
 
 ## Lookup Java Types from Guest Languages
 
-In addition to passing Java objects to the guest language, it is possible
-to allow the lookup of Java types in the guest language.
+In addition to passing Java objects to the guest language, it is possible to allow the lookup of Java types in the guest language.
 
-Use the code example in this section with your polyglot application to show how
-guest languages lookup Java types and instantiate them.
+Use the code example in this section with your polyglot application to show how guest languages lookup Java types and instantiate them.
 
 {%
 include snippet-tabs
@@ -220,14 +207,11 @@ JavaScript using the `new` keyword.
 
 ## Computed Arrays Using Polyglot Proxies
 
-The Polyglot API includes polyglot proxy interfaces that let you
-customize Java interoperability by mimicking guest language types, such as
-objects, arrays, native objects, or primitives.
+The Polyglot API includes polyglot proxy interfaces that let you customize Java interoperability by mimicking guest language types, such as objects, arrays, native objects, or primitives.
 
-Use the code example in this section with your polyglot application to see how
-you can implement arrays that compute their values lazily.
+Use the code example in this section with your polyglot application to see how you can implement arrays that compute their values lazily.
 
-Note: The Polyglot API supports polyglot proxies either on the JVM or in Native Image.
+> Note: The Polyglot API supports polyglot proxies either on the JVM or in Native Image.
 
 {%
 include snippet-tabs
@@ -254,24 +238,20 @@ then returned. Note that array indices from 1-based languages such as R are
 converted to 0-based indices for proxy arrays.
 - The result of the language script is returned as a long value and verified.
 
-For more information about the polyglot proxy interfaces, see the
-[Polyglot API JavaDoc](http://www.graalvm.org/truffle/javadoc/org/graalvm/polyglot/package-summary.html).
+For more information about the polyglot proxy interfaces, see the [Polyglot API JavaDoc](http://www.graalvm.org/truffle/javadoc/org/graalvm/polyglot/package-summary.html).
 
 ## Host Access
 
 The Polyglot API by default restricts access to certain critical functionality, such as file I/O.
 These restrictions can be lifted entirely by setting `allowAllAccess` to `true`.
 
-Note: The access restrictions are currently only supported with JavaScript.
+> Note: The access restrictions are currently only supported with JavaScript.
 
 ### Controlling Access to Host Functions
 
 It might be desireable to limit the access of guest applications to the host.
-For example, if a Java method is exposed that calls `System.exit` then the guest
-application will be able to exit the host process.
-In order to avoid accidentally exposed methods, no host access is allowed by
-default and every public method or field needs to be annotated with
-`@HostAccess.Export` explicitly.
+For example, if a Java method is exposed that calls `System.exit` then the guest application will be able to exit the host process.
+In order to avoid accidentally exposed methods, no host access is allowed by default and every public method or field needs to be annotated with `@HostAccess.Export` explicitly.
 
 {%
 include snippet-tabs
@@ -294,7 +274,7 @@ Host access is fully customizable by creating a custom [`HostAccess`](https://ww
 By default, a `Value` lives as long as the corresponding `Context`.
 However, it may be desireable to change this default behavior and bind a value to a scope, such that when execution leaves the scope, the value is invalidated.
 An example for such a scope are guest-to-host callbacks, where a `Value` may be passed as a callback parameter.
-We have already seen above how this works with the default `HostAccess.EXPLICIT`:
+We have already seen above how passing callback parameters works with the default `HostAccess.EXPLICIT`:
 
 ```java
 public class Services {
@@ -320,7 +300,7 @@ public static void main(String[] args) {
 }
 ```
 
-In this example, `lastResult` maintains a reference to the value from the guest is stored on the host and remains accessible until after the scope of `callback()` has ended.
+In this example, `lastResult` maintains a reference to the value from the guest that is stored on the host and remains accessible also after the scope of `callback()` has ended.
 
 However, this is not always desireable, as keeping the value alive may block resources unnecessarily or not reflect the behavior of ephemeral values correctly.
 For these cases, `HostAccess.SCOPED` can be used, which changes the default behavior for all callbacks, such that values that are passed as callback parameters are only valid for the duration of the callback.
@@ -393,36 +373,61 @@ The following access parameters may be configured:
 * Allow access to native APIs using [`allowNativeAccess`](https://www.graalvm.org/truffle/javadoc/org/graalvm/polyglot/Context.Builder.html#allowNativeAccess-boolean-).
 * Allow access to IO using [`allowIO`](https://www.graalvm.org/truffle/javadoc/org/graalvm/polyglot/Context.Builder.html#allowIO-boolean-) and proxy file accesses using [`fileSystem`](https://www.graalvm.org/truffle/javadoc/org/graalvm/polyglot/Context.Builder.html#fileSystem-org.graalvm.polyglot.io.FileSystem-).
 
-Note: Granting access to class loading, native APIs, or host I/O effectively grants all access, as these privileges can be used to bypass other access restrictions.
+> Note: Granting access to class loading, native APIs, or host I/O effectively grants all access, as these privileges can be used to bypass other access restrictions.
 
-## Build Native Images from Polyglot Applications
+## Build Native Executables from Polyglot Applications
 
 Polyglot embeddings can also be compiled ahead-of-time using [Native Image](../native-image/README.md).
 By default, no language is included if the Polyglot API is used.
 To enable guest languages, the `--language:<languageId>` (e.g., `--language:js`) option needs to be specified.
-Currently, it is required to set the `--initialize-at-build-time` option when building a polyglot native image.
 All examples on this page can be converted to native executables with the `native-image` builder.
 
-The following example shows how a simple HelloWorld JavaScript application can be built using `native-image`:
+The following example shows how a simple HelloPolyglot JavaScript application can be built using `native-image`.
 
 ```shell
 javac HelloPolyglot.java
-native-image --language:js --initialize-at-build-time -cp . HelloPolyglot
-./HelloPolyglot
+native-image --language:js -cp . HelloPolyglot
+./hellopolyglot
 ```
 
-It should be mentioned that you can also include a guest language into the native image, but exclude the JIT compiler by passing the `-Dtruffle.TruffleRuntime=com.oracle.truffle.api.impl.DefaultTruffleRuntime` option to the builder.
+Please note that some languages (e.g. Python, Ruby) need their language home directories to work without limitations.
+If the polyglot application runs on a JVM (e.g. [here](#compile-and-run-a-polyglot-application)), the language homes are discovered automatically.
+However, for native images, paths to language homes have to be stored in the image or specified at runtime.
+
+By default, the `native-image` builder copies the necessary language homes to the `resources` directory located in the same directory as the produced image.
+The paths to the copied homes are written to the image's build artifacts file and also stored in the image itself so that the homes are automatically discovered as long as their relative paths with respect to the image file stay the same.
+That means that the `resources` directory should be always distributed together with the image file.     
+
+```shell
+native-image --language:python -cp . HelloPolyglot
+./hellopolyglot
+```
+
+In case an installed GraalVM is available, it is possible to use language homes from the GraalVM home directory. A GraalVM home can be specified at runtime using the option `-Dorg.graalvm.home=$GRAALVM_HOME`, assuming the environment variable `GRAALVM_HOME` is populated with an absolute path to the GraalVM home directory.
+Language homes are automatically discovered in the specified directory. For example:
+
+```shell
+./hellopolyglot -Dorg.graalvm.home=$GRAALVM_HOME
+```
+
+> Note: The `-Dorg.graalvm.home` option has precedence over any relative language home paths stored in the image.
+
+> Note: The version of GraalVM the home of which is specified at runtime must match the version of GraalVM used to build the native executable/library. 
+
+### Excluding the JIT compiler 
+
+It is possible to include a guest language in the native executable, but exclude the JIT compiler by passing the `-Dtruffle.TruffleRuntime=com.oracle.truffle.api.impl.DefaultTruffleRuntime` option to the builder.
 Be aware, the flag `-Dtruffle.TruffleRuntime=com.oracle.truffle.api.impl.DefaultTruffleRuntime` has to placed *after* all the Truffle language/tool options, so that it will override the default settings.
 
-You can build the above example again but this time the created image will only contain the Truffle language interpreter (the GraalVM compiler will not be included in the image) by running:
+The following example shows a native image build command that creates an image that will only contain the Truffle language interpreter (the Graal compiler will not be included in the image).
 ```shell
-native-image --language:js -Dtruffle.TruffleRuntime=com.oracle.truffle.api.impl.DefaultTruffleRuntime --initialize-at-build-time -cp . HelloPolyglotInterpreter
+native-image --language:js -Dtruffle.TruffleRuntime=com.oracle.truffle.api.impl.DefaultTruffleRuntime -cp . HelloPolyglotInterpreter
 ```
 
 ### Configuring Native Host Reflection
 
 Accessing host Java code from the guest application requires Java reflection in order to work.
-When reflection is used within a native image, the [reflection configuration file](../native-image/Reflection.md) is required.
+When reflection is used within a native executable, the [reflection configuration file](../native-image/Reflection.md) is required.
 
 For this example we use JavaScript to show host access with native executables.
 Copy the following code in a new file named `AccessJavaFromJS.java`.
@@ -468,7 +473,7 @@ Now you can create a native executable that supports host access:
 
 ```shell
 javac AccessJavaFromJS.java
-native-image --language:js --initialize-at-build-time -H:ReflectionConfigurationFiles=reflect.json -cp . AccessJavaFromJS
+native-image --language:js -H:ReflectionConfigurationFiles=reflect.json -cp . AccessJavaFromJS
 ./accessjavafromjs
 ```
 
@@ -514,7 +519,7 @@ public class Main {
 }
 ```
 
-In this code: 
+In this code:
 - `import org.graalvm.polyglot.*` imports the base API for the Polyglot API.
 - `Engine.create()` creates a new engine instance with the default configuration.
 - `Source.create()` creates a source object for the expression “21 + 21”
@@ -523,7 +528,7 @@ with "js" language, which is the language identifier for JavaScript.
 an explicit engine assigned to it. All contexts associated with an engine share the code.
 - `context.eval(source).asInt()` evaluates the source and returns the result as `Value` instance.
 
-## Embed Guest languages in Guest Languages
+## Embed Guest Languages in Java
 
 The GraalVM Polyglot API can be used from within a guest language using Java interoperability.
 This can be useful if a script needs to run isolated from the parent context.
@@ -554,7 +559,7 @@ public class Main {
 }
 ```
 
-In this code: 
+In this code:
 - `Context.newBuilder().allowAllAccess(true).build()` builds a new outer context with all privileges.
 - `outer.eval` evaluates a JavaScript snippet in the outer context.
 - `inner = Java.type('org.graalvm.polyglot.Context').create()` the first JS script line looks up the Java host type Context and creates a new inner context instance with no privileges (default).
@@ -565,8 +570,7 @@ In this code: 
 
 ## Build a Shell for Many Languages
 
-With just a few lines of code, the GraalVM Polyglot API lets you build
-applications that integrate with any guest language supported by GraalVM.
+With just a few lines of code, the GraalVM Polyglot API lets you build applications that integrate with any guest language supported by GraalVM.
 
 This shell implementation is agnostic to any particular guest language.
 
@@ -601,8 +605,9 @@ for (;;) {
 
 ## Step Through with Execution Listeners
 
-The GraalVM Polyglot API allows users to instrument the execution of guest languages through [ExecutionListener class](http://www.graalvm.org/sdk/javadoc/org/graalvm/polyglot/management/ExecutionListener.html). For example, it lets you attach an execution listener that is invoked for every statement of the guest language program. Execution listeners
-are designed as simple API for polyglot embedders and may become handy in, e.g., single-stepping through the program.
+The GraalVM Polyglot API allows users to instrument the execution of guest languages through [ExecutionListener class](http://www.graalvm.org/sdk/javadoc/org/graalvm/polyglot/management/ExecutionListener.html).
+For example, it lets you attach an execution listener that is invoked for every statement of the guest language program.
+Execution listeners are designed as simple API for polyglot embedders and may become handy in, e.g., single-stepping through the program.
 
 ```java
 import org.graalvm.polyglot.*;
@@ -632,5 +637,724 @@ In this code:
 - The `context.eval()` call evaluates a specified snippet of guest language code.
 - The `listener.close()` closes a listener earlier, however execution listeners are automatically closed with the engine.
 
-<!-- Configure Sandbox Resource Limits -->
-{% include_relative sandbox-options.md %}
+## Polyglot Isolates
+
+On Oracle GraalVM, a Polyglot engine can be configured to run in a dedicated `native-image` isolate.
+This experimental feature is enabled with the `--engine.SpawnIsolate` option.
+An engine running in this mode executes within a VM-level fault domain with its own garbage collector and JIT compiler.
+The fact that an engine runs within an isolate is completely transparent with respect to the Polyglot API and interoperability:
+
+```java
+import org.graalvm.polyglot.*;
+
+public class PolyglotIsolate {
+  public static void main(String[] args) {
+    Context context = Context.newBuilder("js")
+      .allowHostAccess(HostAccess.SCOPED)
+      .allowExperimentalOptions(true)
+      .option("engine.SpawnIsolate", "true").build();
+    Value function = context.eval("js", "x => x+1")
+    assert function.canExecute();
+    int x = function.execute(41).asInt();
+    assert x == 42;
+  }
+}
+```
+
+Since the host's GC and the isolate's GC are not aware of one another, cyclic references between objects on both heaps may occur.
+We thus strongly recommend to use [scoped parameters for host callbacks](#controlling-host-callback-parameter-scoping) to avoid cyclic references.
+
+Multiple contexts can be spawned in the same isolated engine by [sharing engines](#code-caching-across-multiple-contexts):
+
+```java
+public class PolyglotIsolateMultipleContexts {
+    public static void main(String[] args) {
+        try (Engine engine = Engine.newBuilder()
+                .allowExperimentalOptions(true)
+                .option("engine.SpawnIsolate", "js").build()) {
+            Source source = Source.create("js", "21 + 21");
+            try (Context context = Context.newBuilder()
+                .engine(engine)
+                .build()) {
+                    int v = context.eval(source).asInt();
+                    assert v == 42;
+            }
+            try (Context context = Context.newBuilder()
+                .engine(engine)
+                .build()) {
+                    int v = context.eval(source).asInt();
+                    assert v == 42;
+            }
+        }
+    }
+}
+```
+
+Note how we need to specify the language for the isolated engine as a parameter to `--engine.SpawnIsolate` in this case.
+The reason is that an isolated engine needs to know which set of languages should be available.
+Behind the scenes, GraalVM will then locate the corresponding Native Image language library.
+If only a single language is selected, then the library for the language will be loaded.
+If multiple languages are selected, then `libpolyglot`, the library containing all Truffle languages shipped with GraalVM, will be loaded.
+If a matching library is not available, creation of the engine will fail.
+
+Only one language library can be loaded during GraalVM's lifetime.
+This means that the first isolated engine that is created sets the default for the remainder of the execution: if an isolated engine with solely JavaScript was created first, only JavaScript will be available in isolated engines.
+
+### Setting the Heap Size
+
+### Passing Native Image Runtime Options
+
+Engines running in an isolate can make use of [Native Image runtime options](../native-image/HostedvsRuntimeOptions.md) by passing `--engine.IsolateOption.<option>` to the engine builder.
+For example, this can be used to limit the maximum heap memory used by an engine by setting the maximum heap size for the isolate via `--engine.IsolateOption.MaxHeapSize=128m`:
+
+```java
+import org.graalvm.polyglot.*;
+
+public class PolyglotIsolateMaxHeap {
+  public static void main(String[] args) {
+    try {
+      Context context = Context.newBuilder("js")
+        .allowHostAccess(HostAccess.SCOPED)
+        .allowExperimentalOptions(true)
+        .option("engine.SpawnIsolate", "true")
+        .option("engine.IsolateOption.MaxHeapSize", "64m").build()
+      context.eval("js", "var a = [];while (true) {a.push('foobar');}");
+    } catch (PolyglotException ex) {
+      if (ex.isResourceExhausted()) {
+        System.out.println("Resource exhausted");
+      }
+    }
+  }
+}
+```
+Exceeding the maximum heap size will automatically close the context and raise a `PolyglotException`.
+
+### Ensuring Host Callback Stack Headroom
+
+With Polyglot Isolates, the experimental `--engine.HostCallStackHeadRoom` option can require a minimum stack size that is guaranteed when performing a host callback.
+If the available stack size drops below the specified threshold, the host callback fails.
+
+### Memory Protection
+
+In Linux environments that support Memory Protection Keys, the experimental `--engine.MemoryProtection=true` option can be used to isolate the heaps of Polyglot Isolates at the hardware level.
+If an engine is created with this option, a dedicated protection key will be allocated for the isolated engine's heap.
+GraalVM will only enable access to the engine's heap when executing code of the Polyglot Isolate.
+
+## Dependency Setup
+
+To best make use of the embedding API of GraalVM (i.e. `org.graalvm.polyglot.*`) your project should use a GraalVM as `JAVA_HOME`.
+In addition to that, you should specify the `graal-sdk.jar` (which is included in GraalVM) as a provided dependency to your projects.
+This is mainly to provide IDEs and other tools with the information that the project uses this API.
+An example of this for Maven means adding the following to the `pom.xml` file.
+
+```xml
+<dependency>
+    <groupId>org.graalvm.sdk</groupId>
+    <artifactId>graal-sdk</artifactId>
+    <version>${graalvm.version}</version>
+    <scope>provided</scope>
+</dependency>
+```
+
+Additionally, when using Java modules, your `module-info.java` file should require `org.graalvm.sdk`.
+
+```java
+module com.mycompany.app {
+  requires org.graalvm.sdk;
+
+}
+```
+
+## Compatibility with JSR-223 ScriptEngine
+
+<!--
+
+IMPORTANT!!
+
+Whenever you change ANYTHING here, check if you need to reflect the changes
+back into our integration tests at tests/python/PythonEngineFactory.java!
+
+-->
+
+The Truffle language implementation framework does not provide a JSR-223 ScriptEngine implementation.
+The Polyglot API provides more fine-grained control over Truffle features and we strongly encourage users to use the `org.graalvm.polyglot.Context` interface in order to control many of the settings directly and benefit from finer-grained security settings in GraalVM.
+
+However, to easily evaluate a Truffle language as a replacement for other scripting languages that are integrated using the ScriptEngine API, we provide a single file script engine below.
+This file can be dropped into a source tree and used directly to evaluate a Truffle language via the ScriptEngine APIs.
+There are only two lines to adapt to your project:
+
+```java
+public final class CHANGE_NAME_EngineFactory implements ScriptEngineFactory {
+    private static final String LANGUAGE_ID = "<<INSERT LANGUAGE ID HERE>>";
+```
+
+Rename the class as desired and change the `LANGUAGE_ID` to the desired Truffle language (e.g. "python" for GraalPy or "ruby" for TruffleRuby). 
+To use it, include a `META-INF/services/javax.script.ScriptEngineFactory` file in your resources with the chosen class name.
+This will allow the default `javax.script.ScriptEngineManager` to discover the language automatically.
+Alternatively, the factory can be registerd via `javax.script.ScriptEngineManager#registerEngineName` or instantiated and used directly.
+
+Note that [Graal.js](../js/) provides [a ScriptEngine implementation](../js/ScriptEngine/) for users migrating from the Nashorn JavaScript engine that was deprecated in JDK 11, so this method here is not needed.
+
+<details>
+<summary>A ScriptEngineFactory for Truffle languages in a single file</summary>
+
+```java
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Reader;
+import java.io.Writer;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
+
+import javax.script.Bindings;
+import javax.script.Compilable;
+import javax.script.CompiledScript;
+import javax.script.ScriptContext;
+import javax.script.ScriptEngine;
+import javax.script.ScriptEngineFactory;
+import javax.script.ScriptException;
+
+import org.graalvm.home.Version;
+import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.Engine;
+import org.graalvm.polyglot.Language;
+import org.graalvm.polyglot.PolyglotException;
+import org.graalvm.polyglot.Source;
+import org.graalvm.polyglot.Value;
+
+public final class CHANGE_NAME_EngineFactory implements ScriptEngineFactory {
+    private static final String LANGUAGE_ID = "<<INSERT LANGUAGE ID HERE>>";
+
+    /***********************************************************/
+    /* Everything below is generic and does not need to change */
+    /***********************************************************/
+
+    private final Engine polyglotEngine = Engine.newBuilder().build();
+    private final Language language = polyglotEngine.getLanguages().get(LANGUAGE_ID);
+
+    @Override
+    public String getEngineName() {
+        return language.getImplementationName();
+    }
+
+    @Override
+    public String getEngineVersion() {
+        return Version.getCurrent().toString();
+    }
+
+    @Override
+    public List<String> getExtensions() {
+        return List.of(LANGUAGE_ID);
+    }
+
+    @Override
+    public List<String> getMimeTypes() {
+        return List.copyOf(language.getMimeTypes());
+    }
+
+    @Override
+    public List<String> getNames() {
+        return List.of(language.getName(), LANGUAGE_ID, language.getImplementationName());
+    }
+
+    @Override
+    public String getLanguageName() {
+        return language.getName();
+    }
+
+    @Override
+    public String getLanguageVersion() {
+        return language.getVersion();
+    }
+
+    @Override
+    public Object getParameter(final String key) {
+        switch (key) {
+            case ScriptEngine.ENGINE:
+                return getEngineName();
+            case ScriptEngine.ENGINE_VERSION:
+                return getEngineVersion();
+            case ScriptEngine.LANGUAGE:
+                return getLanguageName();
+            case ScriptEngine.LANGUAGE_VERSION:
+                return getLanguageVersion();
+            case ScriptEngine.NAME:
+                return LANGUAGE_ID;
+        }
+        return null;
+    }
+
+    @Override
+    public String getMethodCallSyntax(final String obj, final String m, final String... args) {
+        throw new UnsupportedOperationException("Unimplemented method 'getMethodCallSyntax'");
+    }
+
+    @Override
+    public String getOutputStatement(final String toDisplay) {
+        throw new UnsupportedOperationException("Unimplemented method 'getOutputStatement'");
+    }
+
+    @Override
+    public String getProgram(final String... statements) {
+        throw new UnsupportedOperationException("Unimplemented method 'getProgram'");
+    }
+
+    @Override
+    public ScriptEngine getScriptEngine() {
+        return new PolyglotEngine(this);
+    }
+
+    private static final class PolyglotEngine implements ScriptEngine, Compilable {
+        private final ScriptEngineFactory factory;
+        private PolyglotContext defaultContext;
+
+        PolyglotEngine(ScriptEngineFactory factory) {
+            this.factory = factory;
+            this.defaultContext = new PolyglotContext(factory);
+        }
+
+        @Override
+        public CompiledScript compile(String script) throws ScriptException {
+            Source src = Source.create(LANGUAGE_ID, script);
+            try {
+                defaultContext.getContext().parse(src); // only for the side-effect of validating the source
+            } catch (PolyglotException e) {
+                throw new ScriptException(e);
+            }
+            return new PolyglotCompiledScript(src, this);
+        }
+
+        @Override
+        public CompiledScript compile(Reader script) throws ScriptException {
+            Source src;
+            try {
+                src = Source.newBuilder(LANGUAGE_ID, script, "sourcefromreader").build();
+                defaultContext.getContext().parse(src); // only for the side-effect of validating the source
+            } catch (PolyglotException | IOException e) {
+                throw new ScriptException(e);
+            }
+            return new PolyglotCompiledScript(src, this);
+        }
+
+        @Override
+        public Object eval(String script, ScriptContext context) throws ScriptException {
+            if (context instanceof PolyglotContext) {
+                PolyglotContext c = (PolyglotContext) context;
+                try {
+                    return c.getContext().eval(LANGUAGE_ID, script).as(Object.class);
+                } catch (PolyglotException e) {
+                    throw new ScriptException(e);
+                }
+            } else {
+                throw new ClassCastException("invalid context");
+            }
+        }
+
+        @Override
+        public Object eval(Reader reader, ScriptContext context) throws ScriptException {
+            Source src;
+            try {
+                src = Source.newBuilder(LANGUAGE_ID, reader, "sourcefromreader").build();
+            } catch (IOException e) {
+                throw new ScriptException(e);
+            }
+            if (context instanceof PolyglotContext) {
+                PolyglotContext c = (PolyglotContext) context;
+                try {
+                    return c.getContext().eval(src);
+                } catch (PolyglotException e) {
+                    throw new ScriptException(e);
+                }
+            } else {
+                throw new ScriptException("invalid context");
+            }
+        }
+
+        @Override
+        public Object eval(String script) throws ScriptException {
+            return eval(script, defaultContext);
+        }
+
+        @Override
+        public Object eval(Reader reader) throws ScriptException {
+            return eval(reader, defaultContext);
+        }
+
+        @Override
+        public Object eval(String script, Bindings n) throws ScriptException {
+            throw new UnsupportedOperationException("Bindings for Polyglot language cannot be created explicitly");
+        }
+
+        @Override
+        public Object eval(Reader reader, Bindings n) throws ScriptException {
+            throw new UnsupportedOperationException("Bindings for Polyglot language cannot be created explicitly");
+        }
+
+        @Override
+        public void put(String key, Object value) {
+            defaultContext.getBindings(ScriptContext.ENGINE_SCOPE).put(key, value);
+        }
+
+        @Override
+        public Object get(String key) {
+            return defaultContext.getBindings(ScriptContext.ENGINE_SCOPE).get(key);
+        }
+
+        @Override
+        public Bindings getBindings(int scope) {
+            return defaultContext.getBindings(scope);
+        }
+
+        @Override
+        public void setBindings(Bindings bindings, int scope) {
+            defaultContext.setBindings(bindings, scope);
+        }
+
+        @Override
+        public Bindings createBindings() {
+            throw new UnsupportedOperationException("Bindings for Polyglot language cannot be created explicitly");
+        }
+
+        @Override
+        public ScriptContext getContext() {
+            return defaultContext;
+        }
+
+        @Override
+        public void setContext(ScriptContext context) {
+            throw new UnsupportedOperationException("The context of a Polyglot ScriptEngine cannot be modified.");
+        }
+
+        @Override
+        public ScriptEngineFactory getFactory() {
+            return factory;
+        }
+    }
+
+    private static final class PolyglotContext implements ScriptContext {
+        private Context context;
+        private final ScriptEngineFactory factory;
+        private final PolyglotReader in;
+        private final PolyglotWriter out;
+        private final PolyglotWriter err;
+        private Bindings globalBindings;
+
+        PolyglotContext(ScriptEngineFactory factory) {
+            this.factory = factory;
+            this.in = new PolyglotReader(new InputStreamReader(System.in));
+            this.out = new PolyglotWriter(new OutputStreamWriter(System.out));
+            this.err = new PolyglotWriter(new OutputStreamWriter(System.err));
+        }
+
+        Context getContext() {
+            if (context == null) {
+                Context.Builder builder = Context.newBuilder(LANGUAGE_ID)
+                    .in(this.in)
+                    .out(this.out)
+                    .err(this.err)
+                    .allowAllAccess(true);
+                for (Entry<String, Object> entry : getBindings(ScriptContext.GLOBAL_SCOPE).entrySet()) {
+                    Object value = entry.getValue();
+                    if (value instanceof String) {
+                        builder.option(entry.getKey(), (String) value);
+                    }
+                }
+                context = builder.build();
+            }
+            return context;
+        }
+
+        @Override
+        public void setBindings(Bindings bindings, int scope) {
+            if (scope == ScriptContext.GLOBAL_SCOPE) {
+                if (context == null) {
+                    globalBindings = bindings;
+                } else {
+                    throw new UnsupportedOperationException("Global bindings for Polyglot language can only be set before the context is initialized.");
+                }
+            } else {
+                throw new UnsupportedOperationException("Bindings objects for Polyglot language is final.");
+            }
+        }
+
+        @Override
+        public Bindings getBindings(int scope) {
+            if (scope == ScriptContext.ENGINE_SCOPE) {
+                return new PolyglotBindings(getContext().getBindings(LANGUAGE_ID));
+            } else if (scope == ScriptContext.GLOBAL_SCOPE) {
+                return globalBindings;
+            } else {
+                return null;
+            }
+        }
+
+        @Override
+        public void setAttribute(String name, Object value, int scope) {
+            if (scope == ScriptContext.ENGINE_SCOPE) {
+                getBindings(scope).put(name, value);
+            } else if (scope == ScriptContext.GLOBAL_SCOPE) {
+                if (context == null) {
+                    globalBindings.put(name, value);
+                } else {
+                    throw new IllegalStateException("Cannot modify global bindings after context creation.");
+                }
+            }
+        }
+
+        @Override
+        public Object getAttribute(String name, int scope) {
+            if (scope == ScriptContext.ENGINE_SCOPE) {
+                return getBindings(scope).get(name);
+            } else if (scope == ScriptContext.GLOBAL_SCOPE) {
+                return globalBindings.get(name);
+            }
+            return null;
+        }
+
+        @Override
+        public Object removeAttribute(String name, int scope) {
+            Object prev = getAttribute(name, scope);
+            if (prev != null) {
+                if (scope == ScriptContext.ENGINE_SCOPE) {
+                    getBindings(scope).remove(name);
+                } else if (scope == ScriptContext.GLOBAL_SCOPE) {
+                    if (context == null) {
+                        globalBindings.remove(name);
+                    } else {
+                        throw new IllegalStateException("Cannot modify global bindings after context creation.");
+                    }
+                }
+            }
+            return prev;
+        }
+
+        @Override
+        public Object getAttribute(String name) {
+            return getAttribute(name, ScriptContext.ENGINE_SCOPE);
+        }
+
+        @Override
+        public int getAttributesScope(String name) {
+            if (getAttribute(name, ScriptContext.ENGINE_SCOPE) != null) {
+                return ScriptContext.ENGINE_SCOPE;
+            } else if (getAttribute(name, ScriptContext.GLOBAL_SCOPE) != null) {
+                return ScriptContext.GLOBAL_SCOPE;
+            }
+            return -1;
+        }
+
+        @Override
+        public Writer getWriter() {
+            return this.out.writer;
+        }
+
+        @Override
+        public Writer getErrorWriter() {
+            return this.err.writer;
+        }
+
+        @Override
+        public void setWriter(Writer writer) {
+            this.out.writer = writer;
+        }
+
+        @Override
+        public void setErrorWriter(Writer writer) {
+            this.err.writer = writer;
+        }
+
+        @Override
+        public Reader getReader() {
+            return this.in.reader;
+        }
+
+        @Override
+        public void setReader(Reader reader) {
+            this.in.reader = reader;
+        }
+
+        @Override
+        public List<Integer> getScopes() {
+            return List.of(ScriptContext.ENGINE_SCOPE, ScriptContext.GLOBAL_SCOPE);
+        }
+
+        private static final class PolyglotReader extends InputStream {
+            private volatile Reader reader;
+
+            public PolyglotReader(InputStreamReader inputStreamReader) {
+                this.reader = inputStreamReader;
+            }
+
+            @Override
+            public int read() throws IOException {
+                return reader.read();
+            }
+        }
+
+        private static final class PolyglotWriter extends OutputStream {
+            private volatile Writer writer;
+
+            public PolyglotWriter(OutputStreamWriter outputStreamWriter) {
+                this.writer = outputStreamWriter;
+            }
+
+            @Override
+            public void write(int b) throws IOException {
+                writer.write(b);
+            }
+        }
+    }
+
+    private static final class PolyglotCompiledScript extends CompiledScript {
+        private final Source source;
+        private final ScriptEngine engine;
+
+        public PolyglotCompiledScript(Source src, ScriptEngine engine) {
+            this.source = src;
+            this.engine = engine;
+        }
+
+        @Override
+        public Object eval(ScriptContext context) throws ScriptException {
+            if (context instanceof PolyglotContext) {
+                return ((PolyglotContext) context).getContext().eval(source);
+            }
+            throw new UnsupportedOperationException("Polyglot CompiledScript instances can only be evaluated in Polyglot.");
+        }
+
+        @Override
+        public ScriptEngine getEngine() {
+            return engine;
+        }
+    }
+
+    private static final class PolyglotBindings implements Bindings {
+        private Value languageBindings;
+
+        PolyglotBindings(Value languageBindings) {
+            this.languageBindings = languageBindings;
+        }
+
+        @Override
+        public int size() {
+            return keySet().size();
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return size() == 0;
+        }
+
+        @Override
+        public boolean containsValue(Object value) {
+            for (String s : keySet()) {
+                if (get(s) == value) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        @Override
+        public void clear() {
+            for (String s : keySet()) {
+                remove(s);
+            }
+        }
+
+        @Override
+        public Set<String> keySet() {
+            return languageBindings.getMemberKeys();
+        }
+
+        @Override
+        public Collection<Object> values() {
+            List<Object> values = new ArrayList<>();
+            for (String s : keySet()) {
+                values.add(get(s));
+            }
+            return values;
+        }
+
+        @Override
+        public Set<Entry<String, Object>> entrySet() {
+            Set<Entry<String, Object>> values = new HashSet<>();
+            for (String s : keySet()) {
+                values.add(new Entry<String, Object>() {
+                    @Override
+                    public String getKey() {
+                        return s;
+                    }
+
+                    @Override
+                    public Object getValue() {
+                        return get(s);
+                    }
+
+                    @Override
+                    public Object setValue(Object value) {
+                        return put(s, value);
+                    }
+                });
+            }
+            return values;
+        }
+
+        @Override
+        public Object put(String name, Object value) {
+            Object previous = get(name);
+            languageBindings.putMember(name, value);
+            return previous;
+        }
+
+        @Override
+        public void putAll(Map<? extends String, ? extends Object> toMerge) {
+            for (Entry<? extends String, ? extends Object> e : toMerge.entrySet()) {
+                put(e.getKey(), e.getValue());
+            }
+        }
+
+        @Override
+        public boolean containsKey(Object key) {
+            if (key instanceof String) {
+                return languageBindings.hasMember((String) key);
+            } else {
+                return false;
+            }
+        }
+
+        @Override
+        public Object get(Object key) {
+            if (key instanceof String) {
+                Value value = languageBindings.getMember((String) key);
+                if (value != null) {
+                    return value.as(Object.class);
+                }
+            }
+            return null;
+        }
+
+        @Override
+        public Object remove(Object key) {
+            Object prev = get(key);
+            if (prev != null) {
+                languageBindings.removeMember((String) key);
+                return prev;
+            } else {
+                return null;
+            }
+        }
+    }
+}
+```
+
+</details>

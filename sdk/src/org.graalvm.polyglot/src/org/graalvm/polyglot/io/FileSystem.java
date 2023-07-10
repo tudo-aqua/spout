@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -61,10 +61,13 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.FileAttributeView;
+import java.nio.file.spi.FileSystemProvider;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.io.IOAccess.Builder;
 
 /**
  * Service-provider for {@code Truffle} files.
@@ -79,6 +82,8 @@ public interface FileSystem {
      * @param uri the {@link URI} to be converted to {@link Path}
      * @return the {@link Path} representing given {@link URI}
      * @throws UnsupportedOperationException when {@link URI} scheme is not supported
+     * @throws IllegalArgumentException if preconditions on the {@code uri} do not hold. The format
+     *             of the URI is {@link FileSystem} specific.
      * @since 19.0
      */
     Path parsePath(URI uri);
@@ -90,6 +95,8 @@ public interface FileSystem {
      * @param path the string path to be converted to {@link Path}
      * @return the {@link Path}
      * @throws UnsupportedOperationException when the {@link FileSystem} supports only {@link URI}
+     * @throws IllegalArgumentException if the {@code path} string cannot be converted to a
+     *             {@link Path}
      * @since 19.0
      */
     Path parsePath(String path);
@@ -429,19 +436,23 @@ public interface FileSystem {
      * Creates a {@link FileSystem} implementation based on the host Java NIO. The returned instance
      * can be used as a delegate by a decorating {@link FileSystem}.
      * <p>
-     * The following example shows a {@link FileSystem} restricting an IO access only to a given
-     * folder.
+     * For an untrusted code execution, access to the host filesystem should be prevented either by
+     * using {@link IOAccess#NONE} or an {@link #newFileSystem(java.nio.file.FileSystem)} in-memory
+     * filesystem}. For more details on executing untrusted code, see the
+     * <a href="https://www.graalvm.org/dev/security-guide/polyglot-sandbox/">Polyglot Sandboxing
+     * Security Guide</a>.
+     * <p>
+     * The following example shows a {@link FileSystem} logging filesystem operations.
      *
      * <pre>
-     * class RestrictedFileSystem implements FileSystem {
+     * class TracingFileSystem implements FileSystem {
+     *
+     *     private static final Logger LOGGER = Logger.getLogger(TracingFileSystem.class.getName());
      *
      *     private final FileSystem delegate;
-     *     private final Path allowedFolder;
      *
-     *     RestrictedFileSystem(String allowedFolder) throws IOException {
+     *     TracingFileSystem() {
      *         this.delegate = FileSystem.newDefaultFileSystem();
-     *         this.allowedFolder = delegate.toRealPath(
-     *                         delegate.parsePath(allowedFolder));
      *     }
      *
      *     &#64;Override
@@ -456,33 +467,91 @@ public interface FileSystem {
      *
      *     &#64;Override
      *     public SeekableByteChannel newByteChannel(Path path,
-     *                     Set&lt;? extends OpenOption&gt; options,
-     *                     FileAttribute&lt;?&gt;... attrs) throws IOException {
-     *         verifyAccess(path);
-     *         return delegate.newByteChannel(path, options, attrs);
+     *                                               Set&lt;? extends OpenOption&gt; options,
+     *                                               FileAttribute&lt;?&gt;... attrs) throws IOException {
+     *         boolean success = false;
+     *         try {
+     *             SeekableByteChannel result =  delegate.newByteChannel(path, options, attrs);
+     *             success = true;
+     *             return result;
+     *         } finally {
+     *             trace("newByteChannel", path, success);
+     *         }
      *     }
      *
-     *     private void verifyAccess(Path path) {
-     *         Path realPath = null;
-     *         for (Path c = path; c != null; c = c.getParent()) {
-     *             try {
-     *                 realPath = delegate.toRealPath(c);
-     *                 break;
-     *             } catch (IOException ioe) {
-     *             }
-     *         }
-     *         if (realPath == null || !realPath.startsWith(allowedFolder)) {
-     *             throw new SecurityException("Access to " + path + " is denied.");
-     *         }
+     *     ...
+     *
+     *     private void trace(String operation, Path path, boolean success) {
+     *         LOGGER.log(Level.FINE, "The {0} request for the path {1} {2}.",new Object[] {
+     *                         operation, path, success ? "was successful" : "failed"
+     *                 });
      *     }
      * }
      * </pre>
      *
-     * @see org.graalvm.polyglot.Context.Builder#fileSystem(org.graalvm.polyglot.io.FileSystem)
+     * @see Builder#fileSystem(FileSystem)
+     * @see org.graalvm.polyglot.Context.Builder#allowIO(IOAccess)
      *
      * @since 20.2.0
      */
     static FileSystem newDefaultFileSystem() {
-        return IOHelper.IMPL.newDefaultFileSystem();
+        return IOHelper.IMPL.newDefaultFileSystem(System.getProperty("java.io.tmpdir"));
+    }
+
+    /**
+     * Decorates the given {@code fileSystem} by an implementation that forwards access to files in
+     * the language home to the default file system. The method is intended to be used by custom
+     * filesystem implementations with non default storage to allow guest languages to access files
+     * in the languages homes. As the returned filesystem uses a default file system to access files
+     * in the language home, the {@code fileSystem} has to use the same {@link Path} type,
+     * {@link #getSeparator() separator} and {@link #getPathSeparator() path separator} as the
+     * {@link #newDefaultFileSystem() default filesystem}.
+     *
+     * @throws IllegalArgumentException when the {@code fileSystem} does not use the same
+     *             {@link Path} type or has a different {@link #getSeparator() separator} or
+     *             {@link #getPathSeparator() path separator} as the {@link #newDefaultFileSystem()
+     *             default file system}.
+     * @since 22.2
+     */
+    static FileSystem allowLanguageHomeAccess(FileSystem fileSystem) {
+        return IOHelper.IMPL.allowLanguageHomeAccess(fileSystem);
+    }
+
+    /**
+     * Decorates the given {@code fileSystem} by an implementation that makes the passed
+     * {@code fileSystem} read-only by forbidding all write operations. This method can be used to
+     * make an existing file system, such as the {@link #newDefaultFileSystem() default filesystem},
+     * read-only.
+     *
+     * @since 22.2
+     */
+    static FileSystem newReadOnlyFileSystem(FileSystem fileSystem) {
+        return IOHelper.IMPL.newReadOnlyFileSystem(fileSystem);
+    }
+
+    /**
+     * Creates a {@link FileSystem} implementation based on the given Java NIO filesystem. The
+     * returned {@link FileSystem} delegates all operations to {@code fileSystem}'s
+     * {@link FileSystemProvider provider}.
+     *
+     * <p>
+     * The following example shows how to configure {@link Context} so that languages read files
+     * from a prepared zip file.
+     *
+     * <pre>
+     * Path zipFile = Paths.get("filesystem.zip");
+     * try (java.nio.file.FileSystem nioFs = FileSystems.newFileSystem(zipFile)) {
+     *     IOAccess ioAccess = IOAccess.newBuilder().fileSystem(FileSystem.newFileSystem(nioFs)).build();
+     *     try (Context ctx = Context.newBuilder().allowIO(ioAccess).build()) {
+     *         Value result = ctx.eval("js", "load('scripts/app.sh'); execute()");
+     *     }
+     * }
+     * </pre>
+     *
+     * @see IOAccess
+     * @since 23.0
+     */
+    static FileSystem newFileSystem(java.nio.file.FileSystem fileSystem) {
+        return IOHelper.IMPL.newNIOFileSystem(fileSystem);
     }
 }

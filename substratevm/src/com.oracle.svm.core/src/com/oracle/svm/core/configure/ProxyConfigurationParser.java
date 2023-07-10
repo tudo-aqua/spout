@@ -24,21 +24,17 @@
  */
 package com.oracle.svm.core.configure;
 
-import java.io.IOException;
-import java.io.Reader;
+import java.net.URI;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import org.graalvm.collections.EconomicMap;
 import org.graalvm.nativeimage.impl.ConfigurationCondition;
+import org.graalvm.util.json.JSONParserException;
 
 import com.oracle.svm.core.jdk.proxy.DynamicProxyRegistry;
-import com.oracle.svm.core.util.json.JSONParser;
-import com.oracle.svm.core.util.json.JSONParserException;
-
-// Checkstyle: allow reflection
 
 /**
  * Parses JSON describing lists of interfaces and register them in the {@link DynamicProxyRegistry}.
@@ -52,10 +48,8 @@ public final class ProxyConfigurationParser extends ConfigurationParser {
     }
 
     @Override
-    public void parseAndRegister(Reader reader) throws IOException {
-        JSONParser parser = new JSONParser(reader);
-        Object json = parser.parse();
-        parseTopLevelArray(asList(json, "first level of document must be an array of interface lists"));
+    public void parseAndRegister(Object json, URI origin) {
+        parseTopLevelArray(asList(json, "First-level of document must be an array of interface lists"));
     }
 
     private void parseTopLevelArray(List<Object> proxyConfiguration) {
@@ -65,14 +59,14 @@ public final class ProxyConfigurationParser extends ConfigurationParser {
             if (proxyConfigurationObject instanceof List) {
                 foundInterfaceLists = true;
                 parseInterfaceList(ConfigurationCondition.alwaysTrue(), asList(proxyConfigurationObject, "<shouldn't reach here>"));
-            } else if (proxyConfigurationObject instanceof Map) {
+            } else if (proxyConfigurationObject instanceof EconomicMap) {
                 foundProxyConfigurationObjects = true;
                 parseWithConditionalConfig(asMap(proxyConfigurationObject, "<shouldn't reach here>"));
             } else {
-                throw new JSONParserException("second level must be composed of either interface lists or proxy configuration objects");
+                throw new JSONParserException("Second-level must be composed of either interface lists or proxy configuration objects");
             }
             if (foundInterfaceLists && foundProxyConfigurationObjects) {
-                throw new JSONParserException("second level can only be populated of either interface lists or proxy configuration objects, but these cannot be mixed");
+                throw new JSONParserException("Second-level can only be populated of either interface lists or proxy configuration objects, but these cannot be mixed");
             }
         }
     }
@@ -87,10 +81,9 @@ public final class ProxyConfigurationParser extends ConfigurationParser {
         }
     }
 
-    private void parseWithConditionalConfig(Map<String, Object> proxyConfigObject) {
+    private void parseWithConditionalConfig(EconomicMap<String, Object> proxyConfigObject) {
         checkAttributes(proxyConfigObject, "proxy descriptor object", Collections.singleton("interfaces"), Collections.singletonList(CONDITIONAL_KEY));
         ConfigurationCondition condition = parseCondition(proxyConfigObject);
-        parseInterfaceList(condition, asList(proxyConfigObject.get("interfaces"), "\"interfaces\" must be an array of fully qualified interface names"));
+        parseInterfaceList(condition, asList(proxyConfigObject.get("interfaces"), "The interfaces property must be an array of fully qualified interface names"));
     }
-
 }

@@ -44,6 +44,7 @@ public class FrozenFieldFilterTypeFlow extends TypeFlow<AnalysisField> {
 
     private final UnsafeWriteSinkTypeFlow unsafeSink;
 
+    @SuppressWarnings("this-escape")
     public FrozenFieldFilterTypeFlow(PointsToAnalysis bb, AnalysisField field, UnsafeWriteSinkTypeFlow unsafeSink) {
         super(field, field.getType());
         this.unsafeSink = unsafeSink;
@@ -57,11 +58,7 @@ public class FrozenFieldFilterTypeFlow extends TypeFlow<AnalysisField> {
          * through normal writes and non frozen unsafe writes, if any.
          */
         TypeState fieldState = this.source.getInstanceFieldFlow().getState();
-        /*
-         * Strip the context, if any, of the field state.
-         */
-        TypeState filter = TypeState.forContextInsensitiveTypeState(bb, fieldState);
-        return TypeState.forIntersection(bb, update, filter);
+        return TypeState.forIntersection(bb, update, fieldState);
     }
 
     @Override

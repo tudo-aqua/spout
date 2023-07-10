@@ -24,16 +24,19 @@
  */
 package com.oracle.svm.truffle.api;
 
+import org.graalvm.compiler.truffle.common.TruffleCompiler;
 import org.graalvm.compiler.truffle.compiler.PartialEvaluator;
-import org.graalvm.compiler.truffle.compiler.TruffleCompilerBase;
+import org.graalvm.compiler.truffle.compiler.phases.TruffleTier;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
-public interface SubstrateTruffleCompiler extends TruffleCompilerBase {
+public interface SubstrateTruffleCompiler extends TruffleCompiler {
 
-    @Override
     @Platforms(Platform.HOSTED_ONLY.class)
     PartialEvaluator getPartialEvaluator();
+
+    @Platforms(Platform.HOSTED_ONLY.class)
+    TruffleTier getTruffleTier();
 
     /**
      * Called on tear-down of the current isolate.

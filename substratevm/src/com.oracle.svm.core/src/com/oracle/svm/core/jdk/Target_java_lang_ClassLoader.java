@@ -25,13 +25,13 @@
 package com.oracle.svm.core.jdk;
 
 import java.io.File;
-import java.io.InputStream;
 import java.net.URL;
 import java.security.ProtectionDomain;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
 
 import com.oracle.svm.core.SubstrateUtil;
 import com.oracle.svm.core.annotate.Alias;
@@ -40,25 +40,14 @@ import com.oracle.svm.core.annotate.RecomputeFieldValue;
 import com.oracle.svm.core.annotate.RecomputeFieldValue.Kind;
 import com.oracle.svm.core.annotate.Substitute;
 import com.oracle.svm.core.annotate.TargetClass;
-import com.oracle.svm.core.annotate.TargetElement;
+import com.oracle.svm.core.fieldvaluetransformer.FieldValueTransformerWithAvailability;
 import com.oracle.svm.core.hub.ClassForNameSupport;
 import com.oracle.svm.core.hub.PredefinedClassesSupport;
+import com.oracle.svm.core.util.LazyFinalReference;
 import com.oracle.svm.core.util.VMError;
 
-import jdk.vm.ci.meta.MetaAccessProvider;
-import jdk.vm.ci.meta.ResolvedJavaField;
-
-@TargetClass(className = "jdk.internal.loader.Resource", onlyWith = JDK11OrLater.class)
-@SuppressWarnings("unused")
-final class Target_jdk_internal_loader_Resource_JDK11OrLater {
-
-}
-
-@TargetClass(className = "sun.misc.Resource", onlyWith = JDK8OrEarlier.class)
-@SuppressWarnings("unused")
-final class Target_sun_misc_Resource_JDK8OrEarlier {
-
-}
+import jdk.internal.loader.ClassLoaderValue;
+import jdk.internal.loader.NativeLibrary;
 
 @TargetClass(ClassLoader.class)
 @SuppressWarnings("static-method")
@@ -76,7 +65,7 @@ public final class Target_java_lang_ClassLoader {
     @Alias @RecomputeFieldValue(kind = Kind.Reset)//
     private Vector<Class<?>> classes;
 
-    @Alias @RecomputeFieldValue(kind = Kind.Reset)//
+    @Alias @RecomputeFieldValue(kind = Kind.NewInstanceWhenNotNull, declClass = ConcurrentHashMap.class)//
     private ConcurrentHashMap<String, Object> parallelLockMap;
 
     /**
@@ -84,11 +73,7 @@ public final class Target_java_lang_ClassLoader {
      * information must be reset.
      */
     @Alias @RecomputeFieldValue(kind = Kind.Custom, declClass = PackageFieldTransformer.class)//
-    @TargetElement(name = "packages", onlyWith = JDK8OrEarlier.class)//
-    private HashMap<String, Package> packagesJDK8;
-    @Alias @RecomputeFieldValue(kind = Kind.Custom, declClass = PackageFieldTransformer.class)//
-    @TargetElement(name = "packages", onlyWith = JDK11OrLater.class)//
-    private ConcurrentHashMap<String, Package> packagesJDK11;
+    private ConcurrentHashMap<String, Package> packages;
 
     @Alias //
     private static ClassLoader scl;
@@ -102,36 +87,30 @@ public final class Target_java_lang_ClassLoader {
     @Delete
     private static native void initSystemClassLoader();
 
-    @Substitute
-    private URL getResource(String name) {
-        return ResourcesHelper.nameToResourceURL(name);
-    }
+    @Alias
+    public native Enumeration<URL> findResources(String name);
 
     @Substitute
     private Enumeration<URL> getResources(String name) {
-        return ResourcesHelper.nameToResourceEnumerationURLs(name);
-    }
-
-    @Substitute
-    public InputStream getResourceAsStream(String name) {
-        return Resources.createInputStream(name);
-    }
-
-    @Substitute
-    public static InputStream getSystemResourceAsStream(String name) {
-        return Resources.createInputStream(name);
+        /* Every class loader sees every resource, so we still need this substitution (GR-19998). */
+        Enumeration<URL> urls = ResourcesHelper.nameToResourceEnumerationURLs(name);
+        return urls.hasMoreElements() ? urls : findResources(name);
     }
 
     @Substitute
     @SuppressWarnings("unused")
-    @TargetElement(onlyWith = JDK14OrEarlier.class) //
-    /* Substitution for JDK 15 and later is in Target_java_lang_ClassLoader_JDK15OrLater. */
-    static void loadLibrary(Class<?> fromClass, String name, boolean isAbsolute) {
-        if (isAbsolute) {
-            NativeLibrarySupport.singleton().loadLibraryAbsolute(new File(name));
-        } else {
-            NativeLibrarySupport.singleton().loadLibraryRelative(name);
-        }
+    static NativeLibrary loadLibrary(Class<?> fromClass, String name) {
+        NativeLibrarySupport.singleton().loadLibraryRelative(name);
+        // We don't use the JDK's NativeLibraries or NativeLibrary implementations
+        return null;
+    }
+
+    @Substitute
+    @SuppressWarnings("unused")
+    static NativeLibrary loadLibrary(Class<?> fromClass, File file) {
+        NativeLibrarySupport.singleton().loadLibraryAbsolute(file);
+        // We don't use the JDK's NativeLibraries or NativeLibrary implementations
+        return null;
     }
 
     @Substitute
@@ -168,14 +147,9 @@ public final class Target_java_lang_ClassLoader {
         return findClass(name);
     }
 
-    @Delete
-    @TargetElement(onlyWith = JDK16OrEarlier.class)
-    native Class<?> findBootstrapClassOrNull(String name);
-
     // JDK-8265605
     @Delete
-    @TargetElement(onlyWith = JDK17OrLater.class, name = "findBootstrapClassOrNull")
-    static native Class<?> findBootstrapClassOrNullJDK17OrLater(String name);
+    static native Class<?> findBootstrapClassOrNull(String name);
 
     @Substitute
     @SuppressWarnings("unused")
@@ -183,9 +157,8 @@ public final class Target_java_lang_ClassLoader {
     }
 
     @Substitute //
-    @TargetElement(onlyWith = JDK11OrLater.class) //
     @SuppressWarnings("unused")
-    Class<?> loadClass(Target_java_lang_Module module, String name) {
+    Class<?> loadClass(Module module, String name) {
         /* The module system is not supported for now, therefore the module parameter is ignored. */
         try {
             return loadClass(name, false);
@@ -195,20 +168,44 @@ public final class Target_java_lang_ClassLoader {
     }
 
     @Substitute //
-    @SuppressWarnings({"unused"})
-    Object getClassLoadingLock(String className) {
-        throw VMError.unsupportedFeature("Target_java_lang_ClassLoader.getClassLoadingLock(String)");
-    }
-
-    @Substitute //
     @SuppressWarnings({"unused"}) //
     private Class<?> findLoadedClass0(String name) {
-        if (name == null) {
-            return null;
-        }
         return ClassForNameSupport.forNameOrNull(name, SubstrateUtil.cast(this, ClassLoader.class));
     }
 
+    /**
+     * Most {@link ClassLoaderValue}s are reset. For the list of preserved transformers see
+     * {@link ClassLoaderValueMapFieldValueTransformer}.
+     */
+    @Alias @RecomputeFieldValue(kind = RecomputeFieldValue.Kind.Custom, declClass = ClassLoaderValueMapFieldValueTransformer.class)//
+    volatile ConcurrentHashMap<?, ?> classLoaderValueMap;
+
+    /**
+     * This substitution is a temporary workaround for GR-33896 until GR-36494 is merged.
+     */
+    @Substitute //
+    @SuppressWarnings({"unused"}) //
+    ConcurrentHashMap<?, ?> createOrGetClassLoaderValueMap() {
+        ConcurrentHashMap<?, ?> result = classLoaderValueMap;
+        if (result == null) {
+            synchronized (this) {
+                result = classLoaderValueMap;
+                if (result == null) {
+                    classLoaderValueMap = result = new ConcurrentHashMap<>();
+                }
+            }
+        }
+        return result;
+    }
+
+    @Alias
+    native Stream<Package> packages();
+
+    @SuppressWarnings("static-method")
+    @Substitute
+    public Target_java_lang_Module getUnnamedModule() {
+        return ClassLoaderUtil.unnamedModuleReference.get();
+    }
     /*
      * The assertion status of classes is fixed at image build time because it is baked into the AOT
      * compiled code. All methods that modify the assertion status are substituted to throw an
@@ -242,6 +239,9 @@ public final class Target_java_lang_ClassLoader {
         throw VMError.unsupportedFeature("The assertion status of classes is fixed at image build time.");
     }
 
+    @Delete
+    private native void initializeJavaAssertionMaps();
+
     /*
      * We are defensive and also handle private native methods by marking them as deleted. If they
      * are reachable, the user is certainly doing something wrong. But we do not want to fail with a
@@ -250,6 +250,9 @@ public final class Target_java_lang_ClassLoader {
 
     @Delete
     private static native void registerNatives();
+
+    @Delete
+    private static native long findNative(ClassLoader loader, String entryName);
 
     @Substitute
     @SuppressWarnings({"unused", "static-method"})
@@ -294,92 +297,45 @@ public final class Target_java_lang_ClassLoader {
         // All classes are already linked at runtime.
     }
 
-    @Delete
-    @TargetElement(onlyWith = JDK8OrEarlier.class)
-    private native Class<?> defineClass0(String name, byte[] b, int off, int len, ProtectionDomain pd);
+    /**
+     * TODO: This substitution should be reverted to a @Delete annotation once GR-38801 is fixed.
+     */
+    @Substitute
+    @SuppressWarnings("unused")
+    private static Class<?> defineClass1(ClassLoader loader, String name, byte[] b, int off, int len, ProtectionDomain pd, String source) {
+        throw VMError.unsupportedFeature("Defining classes at runtime is not supported.");
+    }
 
     @Delete
-    @TargetElement(onlyWith = JDK8OrEarlier.class)
-    private native Class<?> defineClass1(String name, byte[] b, int off, int len, ProtectionDomain pd, String source);
-
-    @Delete
-    @TargetElement(onlyWith = JDK8OrEarlier.class)
-    private native Class<?> defineClass2(String name, java.nio.ByteBuffer b, int off, int len, ProtectionDomain pd, String source);
-
-    @Delete
-    @TargetElement(onlyWith = JDK8OrEarlier.class)
-    private native void resolveClass0(Class<?> c);
-
-    @Delete
-    @TargetElement(onlyWith = JDK11OrLater.class)
-    private static native Class<?> defineClass1(ClassLoader loader, String name, byte[] b, int off, int len, ProtectionDomain pd, String source);
-
-    @Delete
-    @TargetElement(onlyWith = JDK11OrLater.class)
     private static native Class<?> defineClass2(ClassLoader loader, String name, java.nio.ByteBuffer b, int off, int len, ProtectionDomain pd, String source);
 
-    @Delete
-    @TargetElement(onlyWith = JDK16OrEarlier.class)
-    private native Class<?> findBootstrapClass(String name);
+    @Substitute
+    @SuppressWarnings("unused")
+    private static Class<?> defineClass0(ClassLoader loader, Class<?> lookup, String name, byte[] b, int off, int len, ProtectionDomain pd, boolean initialize, int flags, Object classData) {
+        throw VMError.unsupportedFeature("Defining hidden classes at runtime is not supported.");
+    }
 
     // JDK-8265605
     @Delete
-    @TargetElement(onlyWith = JDK17OrLater.class, name = "findBootstrapClass")
-    private static native Class<?> findBootstrapClassJDK17OrLater(String name);
-
-    @Delete
-    @TargetElement(onlyWith = JDK14OrEarlier.class)
-    private static native String findBuiltinLib(String name);
+    private static native Class<?> findBootstrapClass(String name);
 
     @Delete
     private static native Target_java_lang_AssertionStatusDirectives retrieveDirectives();
-}
-
-@TargetClass(value = ClassLoader.class, innerClass = "NativeLibrary", onlyWith = JDK14OrEarlier.class)
-final class Target_java_lang_ClassLoader_NativeLibrary {
-
-    /*
-     * We are defensive and also handle private native methods by marking them as deleted. If they
-     * are reachable, the user is certainly doing something wrong. But we do not want to fail with a
-     * linking error.
-     */
-
-    @Delete
-    @TargetElement(onlyWith = JDK8OrEarlier.class)
-    private native void load(String name, boolean isBuiltin);
-
-    @Delete
-    @TargetElement(onlyWith = JDK8OrEarlier.class)
-    private native long find(String name);
-
-    @Delete
-    @TargetElement(onlyWith = JDK8OrEarlier.class)
-    private native void unload(String name, boolean isBuiltin);
-
-    @Delete
-    @TargetElement(onlyWith = JDK11OrLater.class)
-    private native boolean load0(String name, boolean isBuiltin);
-
-    @Delete
-    @TargetElement(onlyWith = JDK11OrLater.class)
-    private native long findEntry(String name);
-
-    @Delete
-    @TargetElement(onlyWith = JDK11OrLater.class)
-    private static native void unload(String name, boolean isBuiltin, long handle);
 }
 
 @TargetClass(className = "java.lang.AssertionStatusDirectives") //
 final class Target_java_lang_AssertionStatusDirectives {
 }
 
-@TargetClass(className = "java.lang.NamedPackage", onlyWith = JDK11OrLater.class) //
-final class Target_java_lang_NamedPackage {
-}
+class PackageFieldTransformer implements FieldValueTransformerWithAvailability {
 
-class PackageFieldTransformer implements RecomputeFieldValue.CustomFieldValueTransformer {
     @Override
-    public Object transform(MetaAccessProvider metaAccess, ResolvedJavaField original, ResolvedJavaField annotated, Object receiver, Object originalValue) {
+    public ValueAvailability valueAvailability() {
+        return ValueAvailability.AfterAnalysis;
+    }
+
+    @Override
+    public Object transform(Object receiver, Object originalValue) {
         assert receiver instanceof ClassLoader;
 
         /* JDK9+ stores packages in a ConcurrentHashMap, while 8 and before use a HashMap. */
@@ -394,4 +350,9 @@ class PackageFieldTransformer implements RecomputeFieldValue.CustomFieldValueTra
             return useConcurrentHashMap ? packages : new HashMap<>(packages);
         }
     }
+}
+
+final class ClassLoaderUtil {
+
+    public static final LazyFinalReference<Target_java_lang_Module> unnamedModuleReference = new LazyFinalReference<>(Target_java_lang_Module::new);
 }

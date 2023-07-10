@@ -44,12 +44,12 @@ package org.graalvm.wasm.parser.validation;
 /**
  * Represents a stack of control frames that are used for validation of modules.
  */
-class ControlStack {
+public class ControlStack {
     private ControlFrame[] stack;
 
     private int size;
 
-    ControlStack() {
+    public ControlStack() {
         stack = new ControlFrame[4];
         size = 0;
     }
@@ -67,7 +67,7 @@ class ControlStack {
      * 
      * @param frame A control frame.
      */
-    void push(ControlFrame frame) {
+    public void push(ControlFrame frame) {
         ensureSize();
         stack[size] = frame;
         size++;
@@ -76,7 +76,7 @@ class ControlStack {
     /**
      * Pops the topmost control frame from the stack.
      */
-    void pop() {
+    public void pop() {
         assert size > 0 : "cannot pop from empty stack";
         size--;
     }
@@ -86,7 +86,7 @@ class ControlStack {
      * 
      * @return The topmost control frame.
      */
-    ControlFrame peek() {
+    public ControlFrame peek() {
         assert size > 0 : "cannot peek empty stack";
         return stack[size - 1];
     }
@@ -95,7 +95,7 @@ class ControlStack {
      * @param index Index from top of the stack
      * @return The value at (size - index - 1)
      */
-    ControlFrame get(int index) {
+    public ControlFrame get(int index) {
         assert (size - index - 1) >= 0 && (size - index - 1) < size : "invalid element index";
         return stack[size - index - 1];
     }
@@ -103,15 +103,15 @@ class ControlStack {
     /**
      * @return The control frame on the bottom of the stack.
      */
-    ControlFrame getFirst() {
+    public ControlFrame getFirst() {
         return stack[0];
     }
 
-    boolean isEmpty() {
+    public boolean isEmpty() {
         return size == 0;
     }
 
-    int size() {
+    public int size() {
         return size;
     }
 }

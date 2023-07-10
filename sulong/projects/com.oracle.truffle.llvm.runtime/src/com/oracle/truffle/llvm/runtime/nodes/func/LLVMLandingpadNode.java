@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -32,7 +32,6 @@ package com.oracle.truffle.llvm.runtime.nodes.func;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.dsl.NodeChild;
 import com.oracle.truffle.api.dsl.Specialization;
-import com.oracle.truffle.api.frame.FrameSlot;
 import com.oracle.truffle.api.frame.FrameSlotTypeException;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.instrumentation.GenerateWrapper;
@@ -60,10 +59,10 @@ public abstract class LLVMLandingpadNode extends LLVMExpressionNode {
     @Child private LLVMI32OffsetStoreNode writeI32 = LLVMI32OffsetStoreNode.create();
     @Children private final LandingpadEntryNode[] entries;
 
-    private final FrameSlot exceptionSlot;
+    private final int exceptionSlot;
     private final boolean cleanup;
 
-    public LLVMLandingpadNode(LLVMExpressionNode getStack, LLVMExpressionNode allocateLandingPadValue, FrameSlot exceptionSlot, boolean cleanup,
+    public LLVMLandingpadNode(LLVMExpressionNode getStack, LLVMExpressionNode allocateLandingPadValue, int exceptionSlot, boolean cleanup,
                     LandingpadEntryNode[] entries) {
         this.getStack = getStack;
         this.allocateLandingPadValue = allocateLandingPadValue;
@@ -149,7 +148,9 @@ public abstract class LLVMLandingpadNode extends LLVMExpressionNode {
                 return 1;
             }
             if (getCanCatch().canCatch(stack, unwindHeader, catchType) != 0) {
-                return (int) toComparableValue.executeWithTarget(catchType);
+                // The type id is equivalent to the catch selector, which must always be positive.
+                // See https://llvm.org/docs/ExceptionHandling.html#try-catch.
+                return Math.abs((int) toComparableValue.executeWithTarget(catchType));
             }
             return 0;
         }

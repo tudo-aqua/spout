@@ -36,9 +36,9 @@ import static com.oracle.objectfile.debuginfo.DebugInfoProvider.DebugPrimitiveTy
 import static com.oracle.objectfile.debuginfo.DebugInfoProvider.DebugPrimitiveTypeInfo.FLAG_SIGNED;
 
 public class PrimitiveTypeEntry extends TypeEntry {
-    char typeChar;
-    int flags;
-    int bitCount;
+    private char typeChar;
+    private int flags;
+    private int bitCount;
 
     public PrimitiveTypeEntry(String typeName, int size) {
         super(typeName, size);
@@ -54,11 +54,12 @@ public class PrimitiveTypeEntry extends TypeEntry {
 
     @Override
     public void addDebugInfo(DebugInfoBase debugInfoBase, DebugTypeInfo debugTypeInfo, DebugContext debugContext) {
+        super.addDebugInfo(debugInfoBase, debugTypeInfo, debugContext);
         DebugPrimitiveTypeInfo debugPrimitiveTypeInfo = (DebugPrimitiveTypeInfo) debugTypeInfo;
         flags = debugPrimitiveTypeInfo.flags();
         typeChar = debugPrimitiveTypeInfo.typeChar();
         bitCount = debugPrimitiveTypeInfo.bitCount();
-        debugContext.log("typename %s %s (%d bits)\n", typeName, decodeFlags(), bitCount);
+        debugContext.log("typename %s %s (%d bits)%n", typeName, decodeFlags(), bitCount);
     }
 
     private String decodeFlags() {

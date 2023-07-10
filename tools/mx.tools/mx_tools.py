@@ -39,7 +39,6 @@ import mx
 
 from mx_sigtest import sigtest
 from mx_unittest import unittest
-from mx_jackpot import jackpot
 from mx_gate import Task
 import mx_gate
 import mx_unittest
@@ -190,25 +189,19 @@ def dap_types_gen(args):
 
 def _unittest_config_participant(config):
     vmArgs, mainClass, mainClassArgs = config
-    if mx.get_jdk(tag='default').javaCompliance > '1.8':
-        # This is required to access jdk.internal.module.Modules which
-        # in turn allows us to dynamically open fields/methods to reflection.
-        vmArgs = vmArgs + ['--add-exports=java.base/jdk.internal.module=ALL-UNNAMED']
-
-        # This is required for the call to setAccessible in
-        # TruffleTCK.testValueWithSource to work.
-        vmArgs = vmArgs + ['--add-opens=org.graalvm.truffle/com.oracle.truffle.api.vm=ALL-UNNAMED', '--add-modules=ALL-MODULE-PATH']
+    # This is required to access jdk.internal.module.Modules which
+    # in turn allows us to dynamically open fields/methods to reflection.
+    vmArgs = vmArgs + ['--add-exports=java.base/jdk.internal.module=ALL-UNNAMED']
+    vmArgs = vmArgs + ['--add-modules=ALL-MODULE-PATH']
     return (vmArgs, mainClass, mainClassArgs)
 
 mx_unittest.add_config_participant(_unittest_config_participant)
 
 def _tools_gate_runner(args, tasks):
-    with Task('Jackpot check', tasks) as t:
-        if t: jackpot(['--fail-on-warnings'], suite=None, nonZeroIsFatal=True)
     with Task('Tools Signature Tests', tasks) as t:
         if t: sigtest(['--check', 'binary'])
     with Task('Tools UnitTests', tasks) as t:
-        if t: unittest(['--suite', 'tools', '--enable-timing', '--verbose', '--fail-fast'])
+        if t: unittest(['--suite', 'tools', '--enable-timing', '--verbose', '--max-class-failures=25'])
 
 mx_gate.add_gate_runner(_suite, _tools_gate_runner)
 
@@ -303,25 +296,6 @@ mx_sdk_vm.register_graalvm_component(mx_sdk_vm.GraalVmTool(
     support_distributions=['tools:TRUFFLE_COVERAGE_GRAALVM_SUPPORT'],
     include_by_default=True,
 ))
-
-mx_sdk_vm.register_graalvm_component(mx_sdk_vm.GraalVmJdkComponent(
-    suite=_suite,
-    name='VisualVM',
-    short_name='vvm',
-    dir_name='visualvm',
-    license_files=[],
-    third_party_license_files=[],
-    dependencies=[],
-    support_distributions=['tools:VISUALVM_GRAALVM_SUPPORT'],
-    provided_executables=[('tools:VISUALVM_PLATFORM_SPECIFIC', './bin/<exe:jvisualvm>')]
-))
-
-for mode in ['jvm', 'native']:
-    mx_sdk_vm.add_graalvm_hostvm_config(mode + '-cpusampler-exclude-inlined-roots', launcher_args=['--' + mode, '--cpusampler', '--cpusampler.Mode=exclude_inlined_roots'])
-    mx_sdk_vm.add_graalvm_hostvm_config(mode + '-cpusampler-roots', launcher_args=['--' + mode, '--cpusampler', '--cpusampler.Mode=roots'])
-    mx_sdk_vm.add_graalvm_hostvm_config(mode + '-cpusampler-statements', launcher_args=['--' + mode, '--cpusampler', '--cpusampler.Mode=statements'])
-    mx_sdk_vm.add_graalvm_hostvm_config(mode + '-cputracer-roots', launcher_args=['--' + mode, '--cputracer', '--cputracer.TraceRoots=true'])
-    mx_sdk_vm.add_graalvm_hostvm_config(mode + '-cputracer-statements', launcher_args=['--' + mode, '--cputracer', '--cputracer.TraceStatements=true'])
 
 mx.update_commands(_suite, {
     'javadoc' : [javadoc, ''],

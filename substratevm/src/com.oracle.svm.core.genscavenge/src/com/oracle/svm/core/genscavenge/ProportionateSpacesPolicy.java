@@ -29,7 +29,7 @@ import static com.oracle.svm.core.genscavenge.CollectionPolicy.shouldCollectYoun
 import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.WordFactory;
 
-import com.oracle.svm.core.annotate.Uninterruptible;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.heap.GCCause;
 import com.oracle.svm.core.util.UnsignedUtils;
 
@@ -55,7 +55,7 @@ final class ProportionateSpacesPolicy extends AbstractCollectionPolicy {
     private int shrinkFactor;
 
     ProportionateSpacesPolicy() {
-        super(MAX_TENURING_THRESHOLD);
+        super(NEW_RATIO, MAX_TENURING_THRESHOLD);
     }
 
     @Override
@@ -121,7 +121,7 @@ final class ProportionateSpacesPolicy extends AbstractCollectionPolicy {
         tenuringThreshold = Math.min(i + 1, MAX_TENURING_THRESHOLD);
     }
 
-    private void computeNewOldGenSize(boolean resizeOnlyForPromotions) { // CardGeneration::compute_new_size
+    private void computeNewOldGenSize(boolean resizeOnlyForPromotions) { // TenuredGeneration::compute_new_size_inner
         UnsignedWord capacityAtPrologue = oldSize;
         UnsignedWord usedAfterGc = GCImpl.getGCImpl().getAccounting().getOldGenerationAfterChunkBytes();
         if (oldSize.belowThan(usedAfterGc)) {

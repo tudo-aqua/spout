@@ -24,10 +24,32 @@
  */
 package com.oracle.svm.core;
 
+import java.util.EnumSet;
+
+import org.graalvm.compiler.api.replacements.Fold;
+import org.graalvm.nativeimage.ImageSingletons;
+
 import jdk.vm.ci.code.Architecture;
 
 public interface CPUFeatureAccess {
-    void verifyHostSupportsArchitecture(Architecture imageArchitecture);
+    @Fold
+    static CPUFeatureAccess singleton() {
+        return ImageSingletons.lookup(CPUFeatureAccess.class);
+    }
+
+    int verifyHostSupportsArchitectureEarly();
+
+    void verifyHostSupportsArchitectureEarlyOrExit();
 
     void enableFeatures(Architecture architecture);
+
+    /**
+     * Compute the CPU features enabled at image run time.
+     */
+    EnumSet<?> determineHostCPUFeatures();
+
+    /**
+     * CPU features enabled at image generation time.
+     */
+    EnumSet<?> buildtimeCPUFeatures();
 }

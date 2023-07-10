@@ -25,39 +25,37 @@
 package com.oracle.svm.hosted;
 
 import com.oracle.svm.core.TypeResult;
-import com.oracle.svm.core.util.json.JSONParserException;
+import com.oracle.svm.util.LogUtils;
 
 import jdk.vm.ci.meta.MetaUtil;
 
 public final class ConfigurationTypeResolver {
     private final String configurationType;
     private final ImageClassLoader classLoader;
-    private final boolean allowIncompleteClasspath;
 
-    public ConfigurationTypeResolver(String configurationType, ImageClassLoader classLoader, boolean allowIncompleteClasspath) {
+    public ConfigurationTypeResolver(String configurationType, ImageClassLoader classLoader) {
         this.configurationType = configurationType;
         this.classLoader = classLoader;
-        this.allowIncompleteClasspath = allowIncompleteClasspath;
+    }
+
+    public Class<?> resolveConditionType(String typeName) {
+        return resolveType(typeName, false);
     }
 
     public Class<?> resolveType(String typeName) {
+        return resolveType(typeName, true);
+    }
+
+    private Class<?> resolveType(String typeName, boolean warn) {
         String name = typeName;
         if (name.indexOf('[') != -1) {
             /* accept "int[][]", "java.lang.String[]" */
             name = MetaUtil.internalNameToJava(MetaUtil.toInternalName(name), true, true);
         }
         TypeResult<Class<?>> typeResult = classLoader.findClass(name);
-        if (!typeResult.isPresent()) {
-            handleError("Could not resolve " + name + " for " + configurationType + ".");
+        if (warn && !typeResult.isPresent()) {
+            LogUtils.warning("Could not resolve %s for %s.", name, configurationType);
         }
         return typeResult.get();
-    }
-
-    private void handleError(String message) {
-        if (allowIncompleteClasspath) {
-            System.err.println("Warning: " + message);
-        } else {
-            throw new JSONParserException(message + " To allow unresolvable " + configurationType + ", use option --allow-incomplete-classpath");
-        }
     }
 }

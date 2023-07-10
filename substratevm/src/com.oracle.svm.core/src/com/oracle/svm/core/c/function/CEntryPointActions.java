@@ -28,11 +28,10 @@ import org.graalvm.nativeimage.Isolate;
 import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.c.function.CEntryPoint;
 import org.graalvm.nativeimage.c.type.CCharPointer;
-import org.graalvm.word.WordBase;
 import org.graalvm.word.WordFactory;
 
-import com.oracle.svm.core.annotate.Uninterruptible;
-import com.oracle.svm.core.thread.JavaThreads;
+import com.oracle.svm.core.Uninterruptible;
+import com.oracle.svm.core.thread.PlatformThreads;
 
 /**
  * Advanced entry and leave actions for entry point methods annotated with {@link CEntryPoint}.
@@ -54,7 +53,7 @@ public final class CEntryPointActions {
      * context before returning.
      *
      * @param params initialization parameters.
-     * @return 0 on success, otherwise non-zero.
+     * @return 0 on success, otherwise non-zero (see {@link CEntryPointErrors})
      */
     public static native int enterCreateIsolate(CEntryPointCreateIsolateParameters params);
 
@@ -63,13 +62,18 @@ public final class CEntryPointActions {
      * context. If the thread has already been attached, this does not cause the operation to fail.
      *
      * @param isolate an existing isolate.
-     * @param ensureJavaThread when set to true, the method ensures that the
-     *            {@link java.lang.Thread} object for the newly attached thread is created. If the
-     *            parameter is set to false, a later call to one of the
-     *            {@link JavaThreads#ensureJavaThread} methods early after the prologue must be used
-     *            to do the initialization manually.
-     * @return 0 on success, otherwise non-zero.
+     * @param startedByIsolate Whether the current thread has been launched directly by the isolate
+     *            (as opposed to being an externally started thread), which makes the isolate
+     *            responsible for cleanups when the thread detaches.
+     * @param ensureJavaThread when set to true, the method ensures that the {@link Thread} object
+     *            for the newly attached thread is created. If the parameter is set to false, a
+     *            later call to one of the {@link PlatformThreads#ensureCurrentAssigned} methods
+     *            early after the prologue must be used to do the initialization manually.
+     * @return 0 on success, otherwise non-zero (see {@link CEntryPointErrors})
      */
+    public static native int enterAttachThread(Isolate isolate, boolean startedByIsolate, boolean ensureJavaThread);
+
+    /** @see #enterAttachThread(Isolate, boolean, boolean) */
     public static native int enterAttachThread(Isolate isolate, boolean ensureJavaThread);
 
     /**
@@ -77,7 +81,7 @@ public final class CEntryPointActions {
      * {@link #enterAttachThread}).
      *
      * @param thread existing context for the current thread.
-     * @return 0 on success, otherwise non-zero.
+     * @return 0 on success, otherwise non-zero (see {@link CEntryPointErrors})
      */
     public static native int enter(IsolateThread thread);
 
@@ -86,9 +90,9 @@ public final class CEntryPointActions {
      * isolate.
      *
      * @param isolate isolate in which a context for the current thread exists.
-     * @return 0 on success, otherwise non-zero.
+     * @return 0 on success, otherwise non-zero (see {@link CEntryPointErrors})
      */
-    public static native int enterIsolate(Isolate isolate);
+    public static native int enterByIsolate(Isolate isolate);
 
     /**
      * May only be used during the prologue of a segfault handler. If the thread is already
@@ -97,54 +101,21 @@ public final class CEntryPointActions {
      * segfault handler, execution must not resume normally.
      *
      * @param isolate isolate in which a context for the current thread exists.
-     * @return 0 on success, otherwise non-zero.
+     * @return 0 on success, otherwise non-zero (see {@link CEntryPointErrors})
      */
     public static native int enterAttachThreadFromCrashHandler(Isolate isolate);
 
     /**
-     * In the prologue, stop execution and return to the entry point method's caller with the given
-     * return value. The passed word is cast to the entry point method's return type, which must be
-     * a {@link WordBase} type.
-     */
-    public static native void bailoutInPrologue(WordBase value);
-
-    /**
-     * In the prologue, stop execution and return to the entry point method's caller with the given
-     * return value. The passed integer is narrowed to the entry point method's return type, which
-     * must be one of {@code long}, {@code int}, {@code short}, {@code char}, or {@code byte}.
-     */
-    public static native void bailoutInPrologue(long value);
-
-    /**
-     * In the prologue, stop execution and return to the entry point method's caller with the given
-     * return value. The entry point method's return type must be {@code double}, or can also be
-     * {@code float}, in which case a cast is applied.
-     */
-    public static native void bailoutInPrologue(double value);
-
-    /**
-     * In the prologue, stop execution and return to the entry point method's caller with the given
-     * return value. The entry point method's return type must be {@code boolean}.
-     */
-    public static native void bailoutInPrologue(boolean value);
-
-    /**
-     * In the prologue, stop execution and return to the entry point method's caller. The entry
-     * point method's return type must be {@code void}.
-     */
-    public static native void bailoutInPrologue();
-
-    /**
      * Leaves the current thread's current context.
      *
-     * @return 0 on success, otherwise non-zero.
+     * @return 0 on success, otherwise non-zero (see {@link CEntryPointErrors})
      */
     public static native int leave();
 
     /**
      * Leaves the current thread's current context, then discards that context.
      *
-     * @return 0 on success, otherwise non-zero.
+     * @return 0 on success, otherwise non-zero (see {@link CEntryPointErrors})
      */
     public static native int leaveDetachThread();
 
@@ -152,7 +123,7 @@ public final class CEntryPointActions {
      * Leaves the current thread's current context, then waits for all attached threads in the
      * context's isolate to detach and discards that isolate entirely.
      *
-     * @return 0 on success, otherwise non-zero.
+     * @return 0 on success, otherwise non-zero (see {@link CEntryPointErrors})
      */
     public static native int leaveTearDownIsolate();
 

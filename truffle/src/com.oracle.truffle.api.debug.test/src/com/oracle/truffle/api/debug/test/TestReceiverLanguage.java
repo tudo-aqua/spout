@@ -83,11 +83,6 @@ public final class TestReceiverLanguage extends ProxyLanguage {
         return new TestReceiverRootNode(languageInstance, source).getCallTarget();
     }
 
-    @Override
-    protected Object findMetaObject(LanguageContext context, Object value) {
-        return "String";
-    }
-
     private static class TestReceiverRootNode extends RootNode {
 
         @Node.Child private TestReceiverStatementNode statement;
@@ -145,8 +140,12 @@ public final class TestReceiverLanguage extends ProxyLanguage {
         }
 
         @ExportMessage
-        @TruffleBoundary
         final Object getScope(@SuppressWarnings("unused") Frame frame, @SuppressWarnings("unused") boolean nodeEnter) {
+            return getScopeSlowPath();
+        }
+
+        @TruffleBoundary
+        private Object getScopeSlowPath() {
             String members = sourceSection.getCharacters().toString();
             int end = members.indexOf('\n');
             return new TestReceiverScope(members.substring(end + 1).trim(), 0);
@@ -158,8 +157,12 @@ public final class TestReceiverLanguage extends ProxyLanguage {
         }
 
         @ExportMessage
-        @TruffleBoundary
         final Object getReceiverMember(@SuppressWarnings("unused") Frame frame) {
+            return getReceiverMemberSlowPath();
+        }
+
+        @TruffleBoundary
+        private Object getReceiverMemberSlowPath() {
             String receivers = sourceSection.getCharacters().toString();
             int end = receivers.indexOf('\n');
             return receivers.substring(0, end);

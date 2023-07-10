@@ -31,8 +31,8 @@ import java.util.EnumSet;
 import com.oracle.objectfile.BasicProgbitsSectionImpl;
 import com.oracle.objectfile.ObjectFile;
 import com.oracle.objectfile.ObjectFile.ProgbitsSectionImpl;
-import com.oracle.objectfile.pecoff.PECoffObjectFile.PECoffSectionFlag;
 import com.oracle.objectfile.io.InputDisassembler;
+import com.oracle.objectfile.pecoff.PECoffObjectFile.PECoffSectionFlag;
 
 public class PECoffProgbitsSection extends PECoffUserDefinedSection implements ProgbitsSectionImpl {
 
@@ -40,6 +40,7 @@ public class PECoffProgbitsSection extends PECoffUserDefinedSection implements P
      * See the comment in ObjectFile.Element about the divide between Elements and their -Impls.
      */
 
+    @SuppressWarnings("this-escape")
     public PECoffProgbitsSection(PECoffObjectFile owner, String name, int alignment, ProgbitsSectionImpl impl, EnumSet<PECoffSectionFlag> flags) {
         super(owner, name, alignment, impl != null ? impl : new BasicProgbitsSectionImpl(new byte[0]), flags);
         // this *is* necessary because the newProgbitsSection helper doesn't see the impl
@@ -48,6 +49,7 @@ public class PECoffProgbitsSection extends PECoffUserDefinedSection implements P
         }
     }
 
+    @SuppressWarnings("this-escape")
     public PECoffProgbitsSection(PECoffObjectFile owner, String name, int alignment, EnumSet<PECoffSectionFlag> flags, int shtIndex, InputDisassembler in, int size) {
         super(owner, name, alignment, new BasicProgbitsSectionImpl(in.readBlob(size)), flags, shtIndex);
         // this *is* necessary because the newProgbitsSection helper doesn't see the impl
@@ -69,7 +71,7 @@ public class PECoffProgbitsSection extends PECoffUserDefinedSection implements P
     }
 
     @Override
-    public void markRelocationSite(int offset, ObjectFile.RelocationKind k, String symbolName, boolean useImplicitAddend, Long explicitAddend) {
-        markRelocationSite(offset, ByteBuffer.wrap(getContent()).order(getOwner().getByteOrder()), k, symbolName, useImplicitAddend, explicitAddend);
+    public void markRelocationSite(int offset, ObjectFile.RelocationKind k, String symbolName, long addend) {
+        markRelocationSite(offset, ByteBuffer.wrap(getContent()).order(getOwner().getByteOrder()), k, symbolName, addend);
     }
 }

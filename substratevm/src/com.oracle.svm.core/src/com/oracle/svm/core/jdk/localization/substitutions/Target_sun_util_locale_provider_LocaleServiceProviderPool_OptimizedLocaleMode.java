@@ -24,24 +24,19 @@
  */
 package com.oracle.svm.core.jdk.localization.substitutions;
 
+import java.util.Locale;
+import java.util.spi.LocaleServiceProvider;
+
+import org.graalvm.nativeimage.ImageSingletons;
+
 import com.oracle.svm.core.annotate.KeepOriginal;
 import com.oracle.svm.core.annotate.Substitute;
 import com.oracle.svm.core.annotate.TargetClass;
-import com.oracle.svm.core.annotate.TargetElement;
-import com.oracle.svm.core.jdk.JDK11OrLater;
-import com.oracle.svm.core.jdk.JDK11To14;
-import com.oracle.svm.core.jdk.JDK8OrEarlier;
 import com.oracle.svm.core.jdk.localization.LocalizationSupport;
 import com.oracle.svm.core.jdk.localization.substitutions.modes.OptimizedLocaleMode;
 import com.oracle.svm.core.util.VMError;
-import org.graalvm.nativeimage.ImageSingletons;
 
-// Checkstyle: stop
 import sun.util.locale.provider.LocaleServiceProviderPool;
-// Checkstyle: resume
-
-import java.util.Locale;
-import java.util.spi.LocaleServiceProvider;
 
 @Substitute
 @TargetClass(value = sun.util.locale.provider.LocaleServiceProviderPool.class, onlyWith = OptimizedLocaleMode.class)
@@ -63,12 +58,6 @@ public final class Target_sun_util_locale_provider_LocaleServiceProviderPool_Opt
         return result;
     }
 
-    @Substitute
-    @TargetElement(onlyWith = JDK8OrEarlier.class)
-    private boolean hasProviders() {
-        return false;
-    }
-
     @KeepOriginal
     private native <P extends LocaleServiceProvider, S> S getLocalizedObject(LocaleServiceProviderPool.LocalizedObjectGetter<P, S> getter, Locale locale, Object... params);
 
@@ -86,16 +75,11 @@ public final class Target_sun_util_locale_provider_LocaleServiceProviderPool_Opt
     }
 
     @KeepOriginal //
-    @TargetElement(onlyWith = JDK11OrLater.class) //
     public native <P extends LocaleServiceProvider, S> S getLocalizedObject(LocaleServiceProviderPool.LocalizedObjectGetter<P, S> getter,
                     Locale locale,
                     Boolean isObjectProvider,
                     String key,
                     Object... params);
-
-    @KeepOriginal //
-    @TargetElement(onlyWith = JDK11To14.class) //
-    static native void config(Class<? extends Object> caller, String message);
 
     @Substitute
     private static Locale[] getAllAvailableLocales() {

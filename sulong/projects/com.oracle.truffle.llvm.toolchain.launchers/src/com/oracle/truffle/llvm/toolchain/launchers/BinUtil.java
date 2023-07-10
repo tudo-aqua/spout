@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2020, Oracle and/or its affiliates.
+ * Copyright (c) 2019, 2023, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -52,8 +52,7 @@ public final class BinUtil {
             processName = "llvm-" + processName;
         }
 
-        final Driver driver = new Driver();
-        final String targetName = driver.getLLVMBinDir().resolve(processName).toString();
+        final String targetName = Driver.getLLVMBinDir().resolve(processName).toString();
 
         ArrayList<String> utilArgs = new ArrayList<>(args.length + 1);
         utilArgs.add(targetName);
@@ -68,7 +67,7 @@ public final class BinUtil {
             System.exit(p.exitValue());
         } catch (IOException e) {
             System.err.println("Error: " + e.getMessage());
-            driver.printMissingToolMessage();
+            Driver.printMissingToolMessage();
             System.exit(1);
         } catch (InterruptedException e) {
             if (p != null) {
@@ -79,17 +78,28 @@ public final class BinUtil {
         }
     }
 
+    private static boolean isWindows() {
+        return System.getProperty("os.name").startsWith("Windows");
+    }
+
     private static String getProcessName() {
         String binPathName = System.getProperty("org.graalvm.launcher.executablename");
 
         if (binPathName == null) {
-            if (ProcessProperties.getArgumentVectorBlockSize() <= 0) {
-                return null;
-            }
-            binPathName = ProcessProperties.getArgumentVectorProgramName();
+            if (isWindows()) {
+                binPathName = System.getenv("GRAALVM_ARGUMENT_VECTOR_PROGRAM_NAME");
+                if (binPathName == null) {
+                    return null;
+                }
+            } else {
+                if (ProcessProperties.getArgumentVectorBlockSize() <= 0) {
+                    return null;
+                }
+                binPathName = ProcessProperties.getArgumentVectorProgramName();
 
-            if (binPathName == null) {
-                return null;
+                if (binPathName == null) {
+                    return null;
+                }
             }
         }
 
@@ -100,6 +110,12 @@ public final class BinUtil {
             return null;
         }
 
-        return f.toString();
+        String result = f.toString();
+
+        if (isWindows()) {
+            result = result.replace(".cmd", ".exe");
+        }
+
+        return result;
     }
 }

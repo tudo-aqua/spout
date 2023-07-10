@@ -53,7 +53,9 @@
     <module name="WhitespaceAround">
       <property name="tokens" value="ASSIGN,BAND,BAND_ASSIGN,BOR,BOR_ASSIGN,BSR,BSR_ASSIGN,BXOR,BXOR_ASSIGN,COLON,DIV,DIV_ASSIGN,EQUAL,GE,GT,LAND,LE,LITERAL_ASSERT,LITERAL_CATCH,LITERAL_DO,LITERAL_ELSE,LITERAL_FINALLY,LITERAL_FOR,LITERAL_IF,LITERAL_RETURN,LITERAL_SYNCHRONIZED,LITERAL_TRY,LITERAL_WHILE,LOR,LT,MINUS,MINUS_ASSIGN,MOD,MOD_ASSIGN,NOT_EQUAL,PLUS,PLUS_ASSIGN,QUESTION,SL,SLIST,SL_ASSIGN,SR,SR_ASSIGN,STAR,STAR_ASSIGN,LITERAL_ASSERT,TYPE_EXTENSION_AND"/>
     </module>
-    <module name="RedundantModifier"/>
+    <module name="RedundantModifier">
+		<property name="tokens" value="METHOD_DEF,VARIABLE_DEF,ANNOTATION_FIELD_DEF,CTOR_DEF,CLASS_DEF,ENUM_DEF,RESOURCE"/>
+    </module>
     <module name="AvoidNestedBlocks">
       <property name="allowInSwitchCase" value="true"/>
     </module>
@@ -134,9 +136,13 @@
       <property name="format" value="[^\x00-\x7F]"/>
       <property name="message" value="Only use ASCII characters."/>
     </module>
-     <module name="RegexpSinglelineJava">
+    <module name="RegexpSinglelineJava">
       <property name="format" value="new (Hashtable|Vector|Stack|StringBuffer)[^\w]"/>
       <property name="message" value="Don't use old synchronized collection classes"/>
+    </module>
+    <module name="RegexpSinglelineJava">
+      <property name="format" value="@Deprecated\(.*forRemoval = true.*\)"/>
+      <property name="message" value="Don't use @Deprecated with forRemoval=true (GR-37433)"/>
     </module>
     <module name="SuppressionCommentFilter">
       <property name="offCommentFormat" value="Checkstyle: stop constant name check"/>
@@ -217,6 +223,11 @@
   <module name="RegexpSingleline">
     <property name="format" value="System\.(out|err)\.print"/>
     <property name="fileExtensions" value="java"/>
+  </module>
+  <module name="RegexpSingleline">
+    <property name="format" value="TODO (?!GR-)"/>
+    <property name="fileExtensions" value="java"/>
+    <property name="message" value="TODO should be followed by an issue - e.g. TODO GR-12345."/>
   </module>
   <module name="SuppressWithPlainTextCommentFilter">
     <property name="offCommentFormat" value="Checkstyle: stop"/>

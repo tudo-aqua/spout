@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -108,8 +108,7 @@ public final class InstrumentableProcessor extends AbstractProcessor {
         if (roundEnv.processingOver()) {
             return false;
         }
-        ProcessorContext context = ProcessorContext.enter(processingEnv);
-        try {
+        try (ProcessorContext context = ProcessorContext.enter(processingEnv)) {
             TruffleTypes types = context.getTypes();
             DeclaredType instrumentableNode = types.InstrumentableNode;
             ExecutableElement createWrapper = ElementUtils.findExecutableElement(instrumentableNode, CREATE_WRAPPER_NAME);
@@ -184,7 +183,7 @@ public final class InstrumentableProcessor extends AbstractProcessor {
                     }
                     DeclaredType overrideType = (DeclaredType) context.getType(Override.class);
                     unit.accept(new GenerateOverrideVisitor(overrideType), null);
-                    unit.accept(new FixWarningsVisitor(element, overrideType), null);
+                    unit.accept(new FixWarningsVisitor(overrideType), null);
                     unit.accept(new CodeWriter(context.getEnvironment(), element), null);
                 } catch (Throwable e) {
                     // never throw annotation processor exceptions to the compiler
@@ -194,8 +193,6 @@ public final class InstrumentableProcessor extends AbstractProcessor {
             }
 
             return true;
-        } finally {
-            ProcessorContext.leave();
         }
     }
 
@@ -373,8 +370,7 @@ public final class InstrumentableProcessor extends AbstractProcessor {
                 wrappedExecuteMethods.add(method);
             } else {
                 String methodName = method.getSimpleName().toString();
-                if (method.getModifiers().contains(Modifier.ABSTRACT) && !methodName.equals("getSourceSection") //
-                                && !methodName.equals(METHOD_GET_NODE_COST) && !hasUnexpectedResult(context, method)) {
+                if (method.getModifiers().contains(Modifier.ABSTRACT) && !methodName.equals(METHOD_GET_NODE_COST) && !hasUnexpectedResult(context, method)) {
                     wrappedMethods.add(method);
                 }
             }
@@ -700,19 +696,19 @@ public final class InstrumentableProcessor extends AbstractProcessor {
         return var;
     }
 
-    void assertNoErrorExpected(Element e) {
-        ExpectError.assertNoErrorExpected(processingEnv, e);
+    static void assertNoErrorExpected(Element e) {
+        ExpectError.assertNoErrorExpected(e);
     }
 
     void emitError(Element e, String msg) {
-        if (ExpectError.isExpectedError(processingEnv, e, msg)) {
+        if (ExpectError.isExpectedError(e, msg)) {
             return;
         }
         processingEnv.getMessager().printMessage(Kind.ERROR, msg, e);
     }
 
     void emitError(Element e, AnnotationMirror annotation, String msg) {
-        if (ExpectError.isExpectedError(processingEnv, e, msg)) {
+        if (ExpectError.isExpectedError(e, msg)) {
             return;
         }
         processingEnv.getMessager().printMessage(Kind.ERROR, msg, e, annotation);

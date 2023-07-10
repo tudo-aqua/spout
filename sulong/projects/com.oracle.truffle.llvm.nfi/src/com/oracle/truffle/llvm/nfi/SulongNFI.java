@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2019, 2022, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -29,8 +29,6 @@
  */
 package com.oracle.truffle.llvm.nfi;
 
-import java.io.IOException;
-
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
@@ -41,26 +39,22 @@ import com.oracle.truffle.api.TruffleLanguage.Env;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
-import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.source.Source;
 import com.oracle.truffle.nfi.backend.spi.NFIBackend;
 import com.oracle.truffle.nfi.backend.spi.NFIBackendFactory;
 import com.oracle.truffle.nfi.backend.spi.NFIBackendLibrary;
-import com.oracle.truffle.nfi.backend.spi.NFIBackendTools;
 import com.oracle.truffle.nfi.backend.spi.types.NativeLibraryDescriptor;
 import com.oracle.truffle.nfi.backend.spi.types.NativeSimpleType;
 
-@TruffleLanguage.Registration(id = "internal/nfi-llvm", name = "nfi-llvm", version = "6.0.0", internal = true, interactive = false, //
-                services = NFIBackendFactory.class, contextPolicy = ContextPolicy.SHARED)
+import java.io.IOException;
+
+@TruffleLanguage.Registration(id = "internal/nfi-llvm", name = "nfi-llvm", version = "12.0.0", internal = true, interactive = false, //
+                services = NFIBackendFactory.class, contextPolicy = ContextPolicy.SHARED, dependentLanguages = "llvm")
 public final class SulongNFI extends TruffleLanguage<Env> {
 
     @CompilationFinal private SulongNFIBackend backend;
-
-    NFIBackendTools getTools() {
-        return backend.tools;
-    }
 
     @Override
     protected Env createContext(Env env) {
@@ -72,9 +66,9 @@ public final class SulongNFI extends TruffleLanguage<Env> {
             }
 
             @Override
-            public NFIBackend createBackend(NFIBackendTools tools) {
+            public NFIBackend createBackend() {
                 if (backend == null) {
-                    backend = new SulongNFIBackend(tools);
+                    backend = new SulongNFIBackend();
                 }
                 return backend;
             }
@@ -85,57 +79,53 @@ public final class SulongNFI extends TruffleLanguage<Env> {
     @ExportLibrary(NFIBackendLibrary.class)
     final class SulongNFIBackend implements NFIBackend {
 
-        private final NFIBackendTools tools;
-
-        SulongNFIBackend(NFIBackendTools tools) {
-            this.tools = tools;
+        SulongNFIBackend() {
         }
 
         @Override
         public CallTarget parse(NativeLibraryDescriptor descriptor) {
             Env env = getContext(null);
-            TruffleFile file = env.getInternalTruffleFile(descriptor.getFilename());
-            try {
-                Source source = Source.newBuilder("llvm", file).build();
-                CallTarget target = env.parsePublic(source);
-                return wrap(SulongNFI.this, target);
-            } catch (IOException ex) {
-                throw new SulongNFIException(ex.getMessage());
+            if (descriptor.isDefaultLibrary()) {
+                throw new SulongNFIException("default lib not implemented yet");
+            } else {
+                TruffleFile file = env.getInternalTruffleFile(descriptor.getFilename());
+                try {
+                    Source source = Source.newBuilder("llvm", file).build();
+                    return SulongNFIRootNodeGen.create(SulongNFI.this, source).getCallTarget();
+                } catch (IOException ex) {
+                    throw new SulongNFIException(ex.getMessage());
+                }
             }
         }
 
         @ExportMessage
         Object getSimpleType(NativeSimpleType type) {
-            return type; // Sulong does not need extra information here
+            switch (type) {
+                case STRING:
+                    // not implemented
+                    return null;
+                default:
+                    // Sulong does not need extra information here
+                    return type;
+            }
         }
 
         @ExportMessage
         Object getArrayType(@SuppressWarnings("unused") NativeSimpleType type) {
-            throw CompilerDirectives.shouldNotReachHere("array types not yet implemented");
+            // not implemented
+            return null;
         }
 
         @ExportMessage
         Object getEnvType() {
-            throw CompilerDirectives.shouldNotReachHere("env type not yet implemented");
+            // not implemented
+            return null;
         }
 
         @ExportMessage
         Object createSignatureBuilder() {
             return SulongNFISignature.BUILDER;
         }
-    }
-
-    private static CallTarget wrap(SulongNFI nfi, CallTarget target) {
-        return new RootNode(nfi) {
-
-            @Child DirectCallNode call = DirectCallNode.create(target);
-
-            @Override
-            public Object execute(VirtualFrame frame) {
-                Object ret = call.call();
-                return new SulongNFILibrary(ret);
-            }
-        }.getCallTarget();
     }
 
     @Override

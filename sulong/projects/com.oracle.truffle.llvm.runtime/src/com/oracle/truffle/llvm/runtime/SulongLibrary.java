@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2019, 2023, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -42,7 +42,6 @@ import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Cached.Shared;
 import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.Specialization;
-import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.interop.ArityException;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.TruffleObject;
@@ -106,7 +105,7 @@ public final class SulongLibrary implements TruffleObject {
             LLVMLanguage language = LLVMLanguage.get(null);
             RootCallTarget startCallTarget = language.getStartFunctionCode().getLLVMIRFunctionSlowPath();
             Path applicationPath = Paths.get(mainFunction.getStringPath());
-            RootNode rootNode = new LLVMGlobalRootNode(language, new FrameDescriptor(), mainFunction, startCallTarget, Objects.toString(applicationPath, ""));
+            RootNode rootNode = new LLVMGlobalRootNode(language, mainFunction, startCallTarget, Objects.toString(applicationPath, ""));
             return rootNode.getCallTarget();
         }
     }
@@ -152,7 +151,7 @@ public final class SulongLibrary implements TruffleObject {
          * @param name
          * @see #execute(SulongLibrary, String)
          */
-        @Specialization(guards = {"library == cachedLibrary", "name.equals(cachedName)"}, assumptions = "singleContextAssumption()")
+        @Specialization(guards = {"library == cachedLibrary", "name.equals(cachedName)", "isSingleContext($node)"})
         LLVMFunctionDescriptor doCached(SulongLibrary library, String name,
                         @Cached("library") @SuppressWarnings("unused") SulongLibrary cachedLibrary,
                         @Cached("name") @SuppressWarnings("unused") String cachedName,
@@ -243,7 +242,7 @@ public final class SulongLibrary implements TruffleObject {
             return call.call(library.main.getMainCallTarget(), args);
         }
 
-        @Specialization(replaces = "doGeneric")
+        @Specialization(guards = "library.main == null")
         static Object doUnsupported(@SuppressWarnings("unused") SulongLibrary library, @SuppressWarnings("unused") Object[] args) throws UnsupportedMessageException {
             throw UnsupportedMessageException.create();
         }

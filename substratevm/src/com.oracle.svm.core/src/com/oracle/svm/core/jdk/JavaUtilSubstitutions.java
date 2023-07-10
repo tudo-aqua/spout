@@ -24,15 +24,15 @@
  */
 package com.oracle.svm.core.jdk;
 
+import java.lang.reflect.Method;
 import java.util.Collection;
 import java.util.Currency;
 import java.util.NavigableMap;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.logging.LogManager;
+import java.util.function.BooleanSupplier;
 
 import com.oracle.svm.core.SubstrateUtil;
 import com.oracle.svm.core.annotate.Alias;
@@ -41,8 +41,8 @@ import com.oracle.svm.core.annotate.RecomputeFieldValue;
 import com.oracle.svm.core.annotate.RecomputeFieldValue.Kind;
 import com.oracle.svm.core.annotate.Substitute;
 import com.oracle.svm.core.annotate.TargetClass;
-import com.oracle.svm.core.annotate.TargetElement;
 import com.oracle.svm.core.util.VMError;
+import com.oracle.svm.util.ReflectionUtil;
 
 /*
  * Lazily initialized cache fields of collection classes need to be reset. They are not needed in
@@ -96,13 +96,6 @@ final class Target_java_util_IdentityHashMap {
     Set<?> entrySet;
 }
 
-@TargetClass(className = "sun.misc.SoftCache", onlyWith = JDK8OrEarlier.class)
-final class Target_sun_misc_SoftCache {
-
-    @Alias @RecomputeFieldValue(kind = RecomputeFieldValue.Kind.Reset)//
-    Set<?> entrySet;
-}
-
 @TargetClass(java.util.WeakHashMap.class)
 final class Target_java_util_WeakHashMap {
 
@@ -145,17 +138,6 @@ final class Target_java_util_HashMap {
     @Alias @RecomputeFieldValue(kind = RecomputeFieldValue.Kind.Reset)//
     Set<?> entrySet;
 
-    @Substitute
-    private static Class<?> comparableClassFor(Object x) {
-        if (x instanceof Comparable) {
-            /*
-             * We cannot do all the generic interface checks that the original implementation is
-             * doing, because we do not have the necessary metadata at run time.
-             */
-            return x.getClass();
-        }
-        return null;
-    }
 }
 
 @TargetClass(java.util.concurrent.ConcurrentHashMap.class)
@@ -168,17 +150,6 @@ final class Target_java_util_concurrent_ConcurrentHashMap {
     @Alias @RecomputeFieldValue(kind = RecomputeFieldValue.Kind.Reset)//
     Target_java_util_concurrent_ConcurrentHashMap_EntrySetView entrySet;
 
-    @Substitute
-    private static Class<?> comparableClassFor(Object x) {
-        if (x instanceof Comparable) {
-            /*
-             * We cannot do all the generic interface checks that the original implementation is
-             * doing, because we do not have the necessary metadata at run time.
-             */
-            return x.getClass();
-        }
-        return null;
-    }
 }
 
 @TargetClass(value = java.util.concurrent.ConcurrentHashMap.class, innerClass = "KeySetView")
@@ -204,14 +175,8 @@ final class Target_java_util_concurrent_ConcurrentSkipListMap {
     Target_java_util_concurrent_ConcurrentSkipListMap_Values values;
 
     @Alias //
-    @TargetElement(name = "descendingMap", onlyWith = JDK8OrEarlier.class) //
     @RecomputeFieldValue(kind = RecomputeFieldValue.Kind.Reset)//
-    ConcurrentNavigableMap<?, ?> descendingMapJDK8OrEarlier;
-
-    @Alias //
-    @TargetElement(name = "descendingMap", onlyWith = JDK11OrLater.class) //
-    @RecomputeFieldValue(kind = RecomputeFieldValue.Kind.Reset)//
-    Target_java_util_concurrent_ConcurrentSkipListMap_SubMap descendingMapJDK11OrLater;
+    Target_java_util_concurrent_ConcurrentSkipListMap_SubMap descendingMap;
 }
 
 @TargetClass(value = java.util.concurrent.ConcurrentSkipListMap.class, innerClass = "KeySet")
@@ -222,7 +187,7 @@ final class Target_java_util_concurrent_ConcurrentSkipListMap_KeySet {
 final class Target_java_util_concurrent_ConcurrentSkipListMap_EntrySet {
 }
 
-@TargetClass(value = java.util.concurrent.ConcurrentSkipListMap.class, innerClass = "SubMap", onlyWith = JDK11OrLater.class)
+@TargetClass(value = java.util.concurrent.ConcurrentSkipListMap.class, innerClass = "SubMap")
 final class Target_java_util_concurrent_ConcurrentSkipListMap_SubMap {
 }
 
@@ -245,30 +210,29 @@ final class Target_java_util_Currency {
  * so that during runtime the first time the log handler is accessed the equivalent shutdown hook is
  * added.
  */
-@TargetClass(value = LogManager.class)
+@TargetClass(className = "java.util.logging.LogManager", onlyWith = JavaLoggingModule.IsPresent.class)
 final class Target_java_util_logging_LogManager {
 
     @Inject @RecomputeFieldValue(kind = Kind.NewInstance, declClass = AtomicBoolean.class) private AtomicBoolean addedShutdownHook = new AtomicBoolean();
 
-    @Alias static LogManager manager;
+    @Alias static Target_java_util_logging_LogManager manager;
 
     @Alias
     native void ensureLogManagerInitialized();
 
     @Substitute
-    public static LogManager getLogManager() {
+    public static Target_java_util_logging_LogManager getLogManager() {
         /* First performing logic originally in getLogManager. */
         if (manager == null) {
             return manager;
         }
-        Target_java_util_logging_LogManager managerAlias = SubstrateUtil.cast(manager, Target_java_util_logging_LogManager.class);
-        managerAlias.ensureLogManagerInitialized();
+        manager.ensureLogManagerInitialized();
 
         /* Logic for adding shutdown hook. */
-        if (!managerAlias.addedShutdownHook.getAndSet(true)) {
+        if (!manager.addedShutdownHook.getAndSet(true)) {
             /* Add a shutdown hook to close the global handlers. */
             try {
-                Runtime.getRuntime().addShutdownHook(SubstrateUtil.cast(new Target_java_util_logging_LogManager_Cleaner(managerAlias), Thread.class));
+                Runtime.getRuntime().addShutdownHook(SubstrateUtil.cast(new Target_java_util_logging_LogManager_Cleaner(manager), Thread.class));
             } catch (IllegalStateException e) {
                 /* If the VM is already shutting down, we do not need to register shutdownHook. */
             }
@@ -278,13 +242,55 @@ final class Target_java_util_logging_LogManager {
     }
 }
 
-@TargetClass(value = LogManager.class, innerClass = "Cleaner")
+@TargetClass(className = "java.util.logging.LogManager", innerClass = "Cleaner", onlyWith = JavaLoggingModule.IsPresent.class)
 final class Target_java_util_logging_LogManager_Cleaner {
 
     @Alias
     @SuppressWarnings("unused")
     Target_java_util_logging_LogManager_Cleaner(Target_java_util_logging_LogManager outer) {
         throw VMError.shouldNotReachHere("This is an alias to the original constructor in the target class, so this code is unreachable");
+    }
+}
+
+class JavaLoggingModule {
+
+    private static final Object logManager;
+    private static final Method logManagerGetProperty;
+
+    static {
+        var javaLoggingModule = ModuleLayer.boot().findModule("java.logging");
+        if (javaLoggingModule.isPresent() && JavaLoggingModule.class.getModule().canRead(javaLoggingModule.get())) {
+            var logManagerClass = ReflectionUtil.lookupClass(false, "java.util.logging.LogManager");
+            var logManagerGetLogManagerMethod = ReflectionUtil.lookupMethod(logManagerClass, "getLogManager");
+            logManagerGetProperty = ReflectionUtil.lookupMethod(logManagerClass, "getProperty", String.class);
+            try {
+                logManager = logManagerGetLogManagerMethod.invoke(null);
+            } catch (ReflectiveOperationException e) {
+                throw VMError.shouldNotReachHere("Unable to reflectively invoke java.util.logging.LogManager.getLogManager()", e);
+            }
+        } else {
+            logManager = null;
+            logManagerGetProperty = null;
+        }
+    }
+
+    static String logManagerGetProperty(String name) {
+        try {
+            return (String) logManagerGetProperty.invoke(logManager, name);
+        } catch (ReflectiveOperationException e) {
+            throw VMError.shouldNotReachHere("Unable to reflectively invoke java.util.logging.LogManager.getProperty(String)", e);
+        }
+    }
+
+    private static boolean isPresent() {
+        return logManager != null;
+    }
+
+    static class IsPresent implements BooleanSupplier {
+        @Override
+        public boolean getAsBoolean() {
+            return isPresent();
+        }
     }
 }
 

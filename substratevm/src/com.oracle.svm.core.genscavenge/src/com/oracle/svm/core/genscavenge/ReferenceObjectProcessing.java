@@ -35,9 +35,11 @@ import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.WordFactory;
 
-import com.oracle.svm.core.annotate.AlwaysInline;
+import com.oracle.svm.core.AlwaysInline;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.genscavenge.remset.RememberedSet;
 import com.oracle.svm.core.heap.Heap;
+import com.oracle.svm.core.heap.ObjectHeader;
 import com.oracle.svm.core.heap.ObjectReferenceVisitor;
 import com.oracle.svm.core.heap.ReferenceInternals;
 import com.oracle.svm.core.hub.DynamicHub;
@@ -78,6 +80,7 @@ final class ReferenceObjectProcessing {
     }
 
     @AlwaysInline("GC performance")
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static void discoverIfReference(Object object, ObjectReferenceVisitor refVisitor) {
         assert object != null;
         DynamicHub hub = KnownIntrinsics.readHub(object);
@@ -86,6 +89,8 @@ final class ReferenceObjectProcessing {
         }
     }
 
+    @AlwaysInline("GC performance")
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     private static void discover(Object obj, ObjectReferenceVisitor refVisitor) {
         Reference<?> dr = (Reference<?>) obj;
         // The discovered field might contain an object with a forwarding header
@@ -182,7 +187,7 @@ final class ReferenceObjectProcessing {
     static void afterCollection(UnsignedWord freeBytes) {
         assert rememberedRefsList == null;
         UnsignedWord unused = freeBytes.unsignedDivide(1024 * 1024 /* MB */);
-        maxSoftRefAccessIntervalMs = unused.multiply(HeapOptions.SoftRefLRUPolicyMSPerMB.getValue());
+        maxSoftRefAccessIntervalMs = unused.multiply(SerialGCOptions.SoftRefLRUPolicyMSPerMB.getValue());
         ReferenceInternals.updateSoftReferenceClock();
         if (initialSoftRefClock == 0) {
             initialSoftRefClock = ReferenceInternals.getSoftReferenceClock();
@@ -217,16 +222,19 @@ final class ReferenceObjectProcessing {
         return false;
     }
 
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     private static boolean maybeUpdateForwardedReference(Reference<?> dr, Pointer referentAddr) {
-        UnsignedWord header = ObjectHeaderImpl.readHeaderFromPointer(referentAddr);
+        ObjectHeaderImpl ohi = ObjectHeaderImpl.getObjectHeaderImpl();
+        UnsignedWord header = ObjectHeader.readHeaderFromPointer(referentAddr);
         if (ObjectHeaderImpl.isForwardedHeader(header)) {
-            Object forwardedObj = ObjectHeaderImpl.getForwardedObject(referentAddr);
+            Object forwardedObj = ohi.getForwardedObject(referentAddr);
             ReferenceInternals.setReferent(dr, forwardedObj);
             return true;
         }
         return false;
     }
 
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     private static boolean willSurviveThisCollection(Object obj) {
         HeapChunk.Header<?> chunk = HeapChunk.getEnclosingHeapChunk(obj);
         Space space = HeapChunk.getSpace(chunk);

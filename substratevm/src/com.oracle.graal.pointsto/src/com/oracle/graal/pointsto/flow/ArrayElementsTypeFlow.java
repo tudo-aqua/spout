@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -37,15 +37,11 @@ import com.oracle.graal.pointsto.typestate.TypeState;
 public class ArrayElementsTypeFlow extends TypeFlow<AnalysisType> {
 
     /** The array object. */
-    private AnalysisObject object;
+    private final AnalysisObject object;
 
     public ArrayElementsTypeFlow(AnalysisObject sourceObject) {
         super(sourceObject.type(), sourceObject.type().getComponentType());
         this.object = sourceObject;
-    }
-
-    public AnalysisObject getSourceObject() {
-        return object;
     }
 
     @Override

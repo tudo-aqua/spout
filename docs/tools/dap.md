@@ -7,7 +7,7 @@ permalink: /tools/dap/
 
 # Debug Adapter Protocol
 
-GraalVM supports debugging of guest language applications, written in any of the supported languages, i.e., JavaScript/TypeScript, Python R, Ruby, and provides a built-in implementation of the [Debug Adapter Protocol (DAP)](https://microsoft.github.io/debug-adapter-protocol/).
+GraalVM supports debugging of guest language applications, written in any of the supported languages, i.e., JavaScript/TypeScript, Python, R, Ruby, and provides a built-in implementation of the [Debug Adapter Protocol (DAP)](https://microsoft.github.io/debug-adapter-protocol/).
 By definition, Debug Adapter Protocol is to standardize the "communication" between the debugging component and a concrete debugger or runtime.
 This allows you to attach compatible debuggers such as Visual Studio Code (VS Code) to GraalVM.
 
@@ -41,12 +41,12 @@ app.listen(port, () => console.log(`Example app listening on port ${port}!`))
 
 2&#46; Install the `express` module dependency in the directory where you saved the file:
 ```shell
-npm install express
+$JAVA_HOME/bin/npm install express
 ```
 
 3&#46; Run the application with DAP enabled:
 ```shell
-node --dap App.js
+$JAVA_HOME/bin/node --dap App.js
 [Graal DAP] Starting server and listening on localhost/127.0.0.1:4711
 ```
 
@@ -57,7 +57,7 @@ code .
 5&#46; Open the App.js source in VS Code, and put a breakpoint, for example, at line 6 (`res.send('Hello World!')`).
 
 6&#46; Navigate to View > Run to create a launch configuration (Ctrl+Shift+D):
-![](img/create_launch_json.png)
+![Create a Launch Configuration](img/create_launch_json.png)
 
 7&#46; Then create the _launch.json_ file with the following content:
 ```json

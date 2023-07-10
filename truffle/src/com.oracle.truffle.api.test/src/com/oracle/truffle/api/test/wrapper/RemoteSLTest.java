@@ -55,9 +55,11 @@ import org.graalvm.polyglot.Value;
 import org.graalvm.polyglot.impl.AbstractPolyglotImpl;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.oracle.truffle.api.test.ReflectionUtils;
+import com.oracle.truffle.tck.tests.TruffleTestAssumptions;
 
 /**
  * This test shows how the polyglot API can be intercepted such that its implementation can be
@@ -70,6 +72,11 @@ import com.oracle.truffle.api.test.ReflectionUtils;
  */
 public class RemoteSLTest {
 
+    @BeforeClass
+    public static void runWithWeakEncapsulationOnly() {
+        TruffleTestAssumptions.assumeWeakEncapsulation();
+    }
+
     private AbstractPolyglotImpl previousPolyglot;
 
     @Before
@@ -81,6 +88,7 @@ public class RemoteSLTest {
         HostPolyglotDispatch dispatch = new HostPolyglotDispatch();
         dispatch.setConstructors(previousPolyglot.getAPIAccess());
         dispatch.setNext(previousPolyglot);
+        dispatch.setIO(previousPolyglot.getIO());
         setPolyglotImpl(dispatch);
     }
 

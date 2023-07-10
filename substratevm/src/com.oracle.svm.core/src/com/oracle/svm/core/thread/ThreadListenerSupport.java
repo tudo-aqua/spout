@@ -32,8 +32,10 @@ import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
-import com.oracle.svm.core.annotate.Uninterruptible;
+import com.oracle.svm.core.Uninterruptible;
+import com.oracle.svm.core.feature.AutomaticallyRegisteredImageSingleton;
 
+@AutomaticallyRegisteredImageSingleton
 public class ThreadListenerSupport {
     private ThreadListener[] listeners;
 
@@ -42,7 +44,6 @@ public class ThreadListenerSupport {
         listeners = new ThreadListener[0];
     }
 
-    // Checkstyle: allow synchronization.
     @Platforms(Platform.HOSTED_ONLY.class)
     public synchronized void register(ThreadListener listener) {
         assert listener != null;
@@ -51,7 +52,6 @@ public class ThreadListenerSupport {
         listeners = Arrays.copyOf(listeners, oldLength + 1);
         listeners[oldLength] = listener;
     }
-    // Checkstyle: disallow synchronization.
 
     @Fold
     public static ThreadListenerSupport get() {
@@ -61,13 +61,25 @@ public class ThreadListenerSupport {
     @Uninterruptible(reason = "Force that all listeners are uninterruptible.")
     public void beforeThreadStart(IsolateThread isolateThread, Thread javaThread) {
         for (int i = 0; i < listeners.length; i++) {
-            listeners[i].beforeThreadRun(isolateThread, javaThread);
+            listeners[i].beforeThreadStart(isolateThread, javaThread);
+        }
+    }
+
+    public void beforeThreadRun() {
+        for (int i = 0; i < listeners.length; i++) {
+            listeners[i].beforeThreadRun();
+        }
+    }
+
+    public void afterThreadRun() {
+        for (int i = 0; i < listeners.length; i++) {
+            listeners[i].afterThreadRun();
         }
     }
 
     @Uninterruptible(reason = "Force that all listeners are uninterruptible.")
     public void afterThreadExit(IsolateThread isolateThread, Thread javaThread) {
-        for (int i = 0; i < listeners.length; i++) {
+        for (int i = listeners.length - 1; i >= 0; i--) {
             listeners[i].afterThreadExit(isolateThread, javaThread);
         }
     }

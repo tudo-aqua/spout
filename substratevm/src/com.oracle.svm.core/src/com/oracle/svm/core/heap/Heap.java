@@ -25,11 +25,11 @@
 package com.oracle.svm.core.heap;
 
 import java.lang.ref.Reference;
+import java.lang.ref.ReferenceQueue;
 import java.util.ArrayList;
 import java.util.List;
 
 import org.graalvm.compiler.api.replacements.Fold;
-import org.graalvm.compiler.nodes.gc.BarrierSet;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.Platform;
@@ -37,14 +37,15 @@ import org.graalvm.nativeimage.Platforms;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
 
-import com.oracle.svm.core.annotate.Uninterruptible;
+import com.oracle.svm.core.SubstrateOptions;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.hub.PredefinedClassesSupport;
+import com.oracle.svm.core.identityhashcode.IdentityHashCodeSupport;
 import com.oracle.svm.core.log.Log;
+import com.oracle.svm.core.option.RuntimeOptionKey;
 import com.oracle.svm.core.os.CommittedMemoryProvider;
 import com.oracle.svm.core.os.ImageHeapProvider;
-
-import jdk.vm.ci.meta.MetaAccessProvider;
 
 public abstract class Heap {
     @Fold
@@ -58,8 +59,7 @@ public abstract class Heap {
 
     /**
      * Notifies the heap that a new thread was attached to the VM. This allows to initialize
-     * heap-specific datastructures, e.g., the TLAB. This method is called for every thread except
-     * the main thread (i.e., the one that maps the image heap).
+     * heap-specific datastructures, e.g., the TLAB.
      */
     @Uninterruptible(reason = "Called during startup.")
     public abstract void attachThread(IsolateThread isolateThread);
@@ -69,6 +69,7 @@ public abstract class Heap {
      * heap-specific resources, e.g., the TLAB. This method is called for every thread except the
      * main thread (i.e., the one that maps the image heap).
      */
+    @Uninterruptible(reason = "Thread is detaching and holds the THREAD_MUTEX.")
     public abstract void detachThread(IsolateThread isolateThread);
 
     public abstract void suspendAllocation();
@@ -144,11 +145,6 @@ public abstract class Heap {
     public abstract void endSafepoint();
 
     /**
-     * Returns a suitable {@link BarrierSet} for the garbage collector that is used for this heap.
-     */
-    public abstract BarrierSet createBarrierSet(MetaAccessProvider metaAccess);
-
-    /**
      * Returns a multiple to which the heap address space should be aligned to at runtime.
      *
      * @see CommittedMemoryProvider#guaranteesHeapPreferredAddressSpaceAlignment()
@@ -173,6 +169,14 @@ public abstract class Heap {
     public abstract int getImageHeapNullRegionSize();
 
     /**
+     * Returns whether the runtime page size doesn't have to match the page size set at image
+     * creation ({@link SubstrateOptions#getPageSize()}). If there is a mismatch, then the page size
+     * set at image creation must be a multiple of the runtime page size.
+     */
+    @Fold
+    public abstract boolean allowPageSizeMismatch();
+
+    /**
      * Returns true if the given object is located in the image heap.
      */
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
@@ -195,8 +199,24 @@ public abstract class Heap {
     public abstract boolean isInPrimaryImageHeap(Pointer objectPtr);
 
     /**
+     * If the automatic reference handling is disabled (see
+     * {@link com.oracle.svm.core.SubstrateOptions.ConcealedOptions#AutomaticReferenceHandling}),
+     * then this method can be called to do the reference handling manually. On execution, the
+     * current thread will enqueue pending {@link Reference}s into their corresponding
+     * {@link ReferenceQueue}s and it will execute pending cleaners.
+     *
+     * This method must not be called from within a VM operation as this could result in deadlocks.
+     * Furthermore, it is up to the caller to ensure that this method is only called in places where
+     * neither the reference handling nor the cleaner execution can cause any unexpected side
+     * effects on the application behavior.
+     *
+     * If the automatic reference handling is enabled, then this method is a no-op.
+     */
+    public abstract void doReferenceHandling();
+
+    /**
      * Determines if the heap currently has {@link Reference} objects that are pending to be
-     * {@linkplain java.lang.ref.ReferenceQueue enqueued}.
+     * {@linkplain ReferenceQueue enqueued}.
      */
     public abstract boolean hasReferencePendingList();
 
@@ -219,8 +239,35 @@ public abstract class Heap {
     public abstract boolean printLocationInfo(Log log, UnsignedWord value, boolean allowJavaHeapAccess, boolean allowUnsafeOperations);
 
     /**
-     * (Re)computes minimum/maximum/initial sizes of space based on the available
-     * {@linkplain PhysicalMemory physical memory} and current runtime option values.
+     * Notify the GC that the value of a GC-relevant option changed.
      */
-    public abstract void updateSizeParameters();
+    public abstract void optionValueChanged(RuntimeOptionKey<?> key);
+
+    /**
+     * Returns the number of bytes that were allocated by the given thread. The caller of this
+     * method must ensure that the given {@link IsolateThread} remains alive during the execution of
+     * this method.
+     */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public abstract long getThreadAllocatedMemory(IsolateThread thread);
+
+    /** Consider all references in the given object as needing remembered set entries. */
+    @Uninterruptible(reason = "Ensure that no GC can occur between modification of the object and this call.", callerMustBe = true)
+    public abstract void dirtyAllReferencesOf(Object obj);
+
+    /**
+     * Returns the longest time (in ms) that has elapsed since the last time that the whole heap has
+     * been examined by a garbage collection.
+     */
+    public abstract long getMillisSinceLastWholeHeapExamined();
+
+    /**
+     * Retrieves a salt value for computing the {@linkplain System#identityHashCode identity hash
+     * code} of the passed object (and potentially other objects) from its address. The same salt
+     * value will be returned for this object at least until the next garbage collection.
+     *
+     * Implementations must use {@link IdentityHashCodeSupport#IDENTITY_HASHCODE_SALT_LOCATION}.
+     */
+    @Uninterruptible(reason = "Ensure that no GC can occur between this call and usage of the salt.", callerMustBe = true)
+    public abstract long getIdentityHashSalt(Object obj);
 }

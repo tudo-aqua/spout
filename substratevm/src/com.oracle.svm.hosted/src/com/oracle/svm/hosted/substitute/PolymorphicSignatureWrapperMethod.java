@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,9 +25,11 @@
 package com.oracle.svm.hosted.substitute;
 
 import static com.oracle.svm.core.util.VMError.shouldNotReachHere;
+import static com.oracle.svm.core.util.VMError.shouldNotReachHereUnexpectedInput;
 
 import java.lang.annotation.Annotation;
 import java.lang.invoke.MethodHandle;
+import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Type;
 import java.util.List;
 
@@ -46,6 +48,7 @@ import com.oracle.graal.pointsto.meta.HostedProviders;
 import com.oracle.svm.core.invoke.MethodHandleUtils;
 import com.oracle.svm.core.invoke.Target_java_lang_invoke_MemberName;
 import com.oracle.svm.core.util.VMError;
+import com.oracle.svm.hosted.annotation.AnnotationWrapper;
 import com.oracle.svm.hosted.phases.HostedGraphKit;
 
 import jdk.vm.ci.meta.Constant;
@@ -65,7 +68,7 @@ import jdk.vm.ci.meta.SpeculationLog;
  * assembles the arguments into an array, performing necessary boxing operations. The wrapper then
  * transfers execution to the underlying varargs method.
  */
-public class PolymorphicSignatureWrapperMethod implements ResolvedJavaMethod, GraphProvider {
+public class PolymorphicSignatureWrapperMethod implements ResolvedJavaMethod, GraphProvider, AnnotationWrapper {
 
     private final SubstitutionMethod substitutionBaseMethod;
     private final ResolvedJavaMethod originalMethod;
@@ -77,13 +80,13 @@ public class PolymorphicSignatureWrapperMethod implements ResolvedJavaMethod, Gr
     PolymorphicSignatureWrapperMethod(SubstitutionMethod substitutionBaseMethod, ResolvedJavaMethod originalMethod) {
         this.substitutionBaseMethod = substitutionBaseMethod;
         this.originalMethod = originalMethod;
-        this.constantPool = substitutionBaseMethod.getDeclaringClass().getDeclaredConstructors()[0].getConstantPool();
+        this.constantPool = substitutionBaseMethod.getDeclaringClass().getDeclaredConstructors(false)[0].getConstantPool();
     }
 
     @Override
     public StructuredGraph buildGraph(DebugContext debug, ResolvedJavaMethod method, HostedProviders providers, Purpose purpose) {
         UniverseMetaAccess metaAccess = (UniverseMetaAccess) providers.getMetaAccess();
-        HostedGraphKit kit = new HostedGraphKit(debug, providers, method);
+        HostedGraphKit kit = new HostedGraphKit(debug, providers, method, purpose);
 
         List<ValueNode> args = kit.loadArguments(method.toParameterTypes());
         ValueNode receiver = null;
@@ -91,7 +94,8 @@ public class PolymorphicSignatureWrapperMethod implements ResolvedJavaMethod, Gr
             receiver = args.remove(0);
         }
 
-        ValueNode parameterArray = kit.append(new NewArrayNode(metaAccess.lookupJavaType(Object.class), kit.createInt(args.size()), false));
+        ValueNode parameterArray = kit.append(new NewArrayNode(metaAccess.lookupJavaType(Object.class), kit.createInt(args.size()), true));
+
         for (int i = 0; i < args.size(); ++i) {
             ValueNode arg = args.get(i);
             if (arg.getStackKind().isPrimitive()) {
@@ -165,10 +169,10 @@ public class PolymorphicSignatureWrapperMethod implements ResolvedJavaMethod, Gr
                                                 MethodHandleUtils.class.getMethod(unboxMethodName, Object.class, Target_java_lang_invoke_MemberName.class));
                                 break;
                             default:
-                                throw shouldNotReachHere();
+                                throw shouldNotReachHereUnexpectedInput(substitutionBaseMethod.getName()); // ExcludeFromJacocoGeneratedReport
                         }
                     } catch (NoSuchMethodException e) {
-                        throw shouldNotReachHere();
+                        throw shouldNotReachHere(e);
                     }
                     retVal = kit.createInvokeWithExceptionAndUnwind(unboxMethod, CallTargetNode.InvokeKind.Static, kit.getFrameState(), kit.bci(), retVal, methodHandleOrMemberName);
                     break;
@@ -271,12 +275,12 @@ public class PolymorphicSignatureWrapperMethod implements ResolvedJavaMethod, Gr
 
     @Override
     public ProfilingInfo getProfilingInfo(boolean includeNormal, boolean includeOSR) {
-        throw VMError.unimplemented();
+        throw VMError.intentionallyUnimplemented(); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
     public void reprofile() {
-        throw VMError.unimplemented();
+        throw VMError.intentionallyUnimplemented(); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
@@ -286,12 +290,12 @@ public class PolymorphicSignatureWrapperMethod implements ResolvedJavaMethod, Gr
 
     @Override
     public Annotation[][] getParameterAnnotations() {
-        throw VMError.unimplemented();
+        throw VMError.intentionallyUnimplemented(); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
     public Type[] getGenericParameterTypes() {
-        throw VMError.unimplemented();
+        throw VMError.intentionallyUnimplemented(); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
@@ -321,32 +325,22 @@ public class PolymorphicSignatureWrapperMethod implements ResolvedJavaMethod, Gr
 
     @Override
     public Constant getEncoding() {
-        throw VMError.unimplemented();
+        throw VMError.intentionallyUnimplemented(); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
     public boolean isInVirtualMethodTable(ResolvedJavaType resolved) {
-        throw VMError.unimplemented();
+        throw VMError.intentionallyUnimplemented(); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
     public SpeculationLog getSpeculationLog() {
-        throw VMError.unimplemented();
+        throw VMError.intentionallyUnimplemented(); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
-    public <T extends Annotation> T getAnnotation(Class<T> annotationClass) {
-        return substitutionBaseMethod.getAnnotation(annotationClass);
-    }
-
-    @Override
-    public Annotation[] getAnnotations() {
-        return substitutionBaseMethod.getAnnotations();
-    }
-
-    @Override
-    public Annotation[] getDeclaredAnnotations() {
-        return substitutionBaseMethod.getDeclaredAnnotations();
+    public AnnotatedElement getAnnotationRoot() {
+        return substitutionBaseMethod;
     }
 
     @Override

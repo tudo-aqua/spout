@@ -31,7 +31,7 @@ import org.graalvm.nativeimage.c.struct.RawStructure;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.PointerBase;
 
-import com.oracle.svm.core.annotate.Uninterruptible;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.c.struct.PinnedObjectField;
 import com.oracle.svm.core.meta.SharedMethod;
 
@@ -79,7 +79,7 @@ public interface InstalledCodeObserver {
         default void attachToCurrentIsolate(InstalledCodeObserverHandle handle) {
         }
 
-        @Uninterruptible(reason = "Called from uninterruptible code", mayBeInlined = true)
+        @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
         default void releaseOnTearDown(InstalledCodeObserverHandle handle) {
         }
     }

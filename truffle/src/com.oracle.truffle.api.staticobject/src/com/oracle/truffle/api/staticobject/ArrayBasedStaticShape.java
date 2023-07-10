@@ -40,12 +40,11 @@
  */
 package com.oracle.truffle.api.staticobject;
 
-import static com.oracle.truffle.api.staticobject.StaticPropertyKind.N_PRIMITIVES;
-
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
@@ -53,6 +52,21 @@ import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import sun.misc.Unsafe;
 
 final class ArrayBasedStaticShape<T> extends StaticShape<T> {
+    @SuppressWarnings("rawtypes") //
+    private static final Class[] PRIMITIVE_TYPES = new Class[]{long.class, double.class, int.class, float.class, short.class, char.class, byte.class, boolean.class};
+    private static final int N_PRIMITIVES = PRIMITIVE_TYPES.length;
+
+    // Initialized by TruffleBaseFeature$StaticObjectArrayBasedSupport and used to patch the offsets
+    // and the indexes used to store primitive values. The keys are factory instances (they store
+    // the length of the primitive byte[]) and the primitive byte[] (they need to be resized).
+    // Initially, values are the same as the corresponding keys. Once a replacement is computed, it
+    // is stored as value. We can use an equality-based map because generated factory instances to
+    // not override `equals()` and `hashCode()`.
+    //
+    // Cleared and set to null by TruffleBaseFeature to avoid leaking objects and calls to
+    // `ImageInfo.inImageBuildtimeCode()` in code that might be PE'd.
+    static ConcurrentHashMap<Object, Object> replacements;
+
     @CompilationFinal(dimensions = 1) //
     private final StaticShape<T>[] superShapes;
     private final ArrayBasedPropertyLayout propertyLayout;
@@ -78,7 +92,15 @@ final class ArrayBasedStaticShape<T> extends StaticShape<T> {
             ArrayBasedPropertyLayout propertyLayout = new ArrayBasedPropertyLayout(generator, parentPropertyLayout, staticProperties);
             ArrayBasedStaticShape<T> shape = new ArrayBasedStaticShape<>(parentShape, generatedStorageClass, propertyLayout, checkShapes);
             T factory = generatedFactoryClass.cast(
-                            generatedFactoryClass.getConstructor(Object.class, int.class, int.class).newInstance(shape, propertyLayout.getPrimitiveArraySize(), propertyLayout.getObjectArraySize()));
+                            generatedFactoryClass.getConstructor(
+                                            ArrayBasedStaticShape.class,
+                                            int.class,
+                                            int.class,
+                                            boolean.class).newInstance(
+                                                            shape,
+                                                            propertyLayout.getPrimitiveArraySize(),
+                                                            propertyLayout.getObjectArraySize(),
+                                                            replacements != null));
             shape.setFactory(factory);
             return shape;
         } catch (NoSuchMethodException | InstantiationException | IllegalAccessException | InvocationTargetException e) {
@@ -138,6 +160,23 @@ final class ArrayBasedStaticShape<T> extends StaticShape<T> {
 
     private ArrayBasedPropertyLayout getPropertyLayout() {
         return propertyLayout;
+    }
+
+    private static int typeToInt(Class<?> type) {
+        if (!type.isPrimitive()) {
+            return PRIMITIVE_TYPES.length;
+        } else {
+            for (int i = 0; i < PRIMITIVE_TYPES.length; i++) {
+                if (type == PRIMITIVE_TYPES[i]) {
+                    return i;
+                }
+            }
+            throw new IllegalArgumentException("Invalid StaticProperty type: " + type.getName());
+        }
+    }
+
+    private static Class<?> intToType(int i) {
+        return i == PRIMITIVE_TYPES.length ? Object.class : PRIMITIVE_TYPES[i];
     }
 
     /**
@@ -244,24 +283,24 @@ final class ArrayBasedStaticShape<T> extends StaticShape<T> {
 
             int[] primitiveFields = new int[N_PRIMITIVES];
             for (StaticProperty staticProperty : staticProperties) {
-                byte propertyKind = staticProperty.getInternalKind();
-                if (propertyKind != StaticPropertyKind.Object.toByte()) {
-                    primitiveFields[propertyKind]++;
+                int propertyIndex = typeToInt(staticProperty.getPropertyType());
+                if (staticProperty.getPropertyType().isPrimitive()) {
+                    primitiveFields[propertyIndex]++;
                 }
             }
 
             PrimitiveFieldIndexes primitiveFieldIndexes = new PrimitiveFieldIndexes(primitiveFields, superTotalByteCount, parentLeftoverHoles);
             for (StaticProperty staticProperty : staticProperties) {
-                byte propertyKind = staticProperty.getInternalKind();
-                int index;
-                if (propertyKind == StaticPropertyKind.Object.toByte()) {
+                int offset;
+                if (staticProperty.getPropertyType().isPrimitive()) {
+                    int propertyIndex = typeToInt(staticProperty.getPropertyType());
+                    offset = primitiveFieldIndexes.getIndex(propertyIndex);
+                } else {
                     // These offsets are re-computed for SVM:
                     // TruffleBaseFeature.Target_com_oracle_truffle_api_staticobject_StaticProperty
-                    index = Unsafe.ARRAY_OBJECT_BASE_OFFSET + Unsafe.ARRAY_OBJECT_INDEX_SCALE * objArraySize++;
-                } else {
-                    index = primitiveFieldIndexes.getIndex(propertyKind);
+                    offset = Unsafe.ARRAY_OBJECT_BASE_OFFSET + Unsafe.ARRAY_OBJECT_INDEX_SCALE * objArraySize++;
                 }
-                staticProperty.initOffset(index);
+                staticProperty.initOffset(offset);
             }
             lastOffset = primitiveFieldIndexes.offsets[N_PRIMITIVES - 1];
             primitiveArraySize = getSizeToAlloc(parentLayout == null ? 0 : parentLayout.primitiveArraySize, primitiveFieldIndexes);
@@ -309,6 +348,41 @@ final class ArrayBasedStaticShape<T> extends StaticShape<T> {
             return objectArraySize;
         }
 
+        /**
+         * Number of bytes that are necessary to represent a value of this kind.
+         *
+         * @return the number of bytes
+         */
+        static int getByteCount(int b) {
+            Class<?> type = intToType(b);
+            if (type == boolean.class) {
+                return 1;
+            } else {
+                return getBitCount(type) >> 3;
+            }
+        }
+
+        /**
+         * Number of bits that are necessary to represent a value of this kind.
+         *
+         * @return the number of bits
+         */
+        private static int getBitCount(Class<?> type) {
+            if (type == boolean.class) {
+                return 1;
+            } else if (type == byte.class) {
+                return 8;
+            } else if (type == char.class || type == short.class) {
+                return 16;
+            } else if (type == float.class || type == int.class) {
+                return 32;
+            } else if (type == double.class || type == long.class) {
+                return 64;
+            } else {
+                throw new IllegalArgumentException("Invalid StaticProperty type: " + type.getName());
+            }
+        }
+
         private static final class PrimitiveFieldIndexes {
             final int[] offsets;
             final FillingSchedule schedule;
@@ -322,17 +396,17 @@ final class ArrayBasedStaticShape<T> extends StaticShape<T> {
                 // FillingSchedule.create() modifies primitiveFields.
                 // Only offsets[0] must be initialized before creating the filling schedule.
                 for (int i = 1; i < N_PRIMITIVES; i++) {
-                    offsets[i] = offsets[i - 1] + primitiveFields[i - 1] * StaticPropertyKind.getByteCount(i - 1);
+                    offsets[i] = offsets[i - 1] + primitiveFields[i - 1] * getByteCount(i - 1);
                 }
             }
 
-            int getIndex(byte propertyKind) {
-                ScheduleEntry entry = schedule.query(propertyKind);
+            int getIndex(int propertyIndex) {
+                ScheduleEntry entry = schedule.query(propertyIndex);
                 if (entry != null) {
                     return entry.offset;
                 } else {
-                    int prevOffset = offsets[propertyKind];
-                    offsets[propertyKind] += StaticPropertyKind.getByteCount(propertyKind);
+                    int prevOffset = offsets[propertyIndex];
+                    offsets[propertyIndex] += getByteCount(propertyIndex);
                     return prevOffset;
                 }
             }
@@ -346,11 +420,11 @@ final class ArrayBasedStaticShape<T> extends StaticShape<T> {
                 if (i == N_PRIMITIVES) {
                     return superTotalByteCount;
                 }
-                int r = superTotalByteCount % StaticPropertyKind.getByteCount(i);
+                int r = superTotalByteCount % getByteCount(i);
                 if (r == 0) {
                     return superTotalByteCount;
                 }
-                return superTotalByteCount + StaticPropertyKind.getByteCount(i) - r;
+                return superTotalByteCount + getByteCount(i) - r;
             }
         }
 
@@ -397,7 +471,7 @@ final class ArrayBasedStaticShape<T> extends StaticShape<T> {
                 byte i = 0;
 
                 mainloop: while (holeSize > 0 && i < N_PRIMITIVES) {
-                    int byteCount = StaticPropertyKind.getByteCount(i);
+                    int byteCount = getByteCount(i);
                     while (counts[i] > 0 && byteCount <= holeSize) {
                         int newEnd = end - byteCount;
                         if (newEnd % byteCount != 0) {
@@ -433,7 +507,7 @@ final class ArrayBasedStaticShape<T> extends StaticShape<T> {
                 byte i = 0;
 
                 while (holeSize > 0 && i < N_PRIMITIVES) {
-                    int primitiveByteCount = StaticPropertyKind.getByteCount(i);
+                    int primitiveByteCount = getByteCount(i);
                     while (counts[i] > 0 && primitiveByteCount <= holeSize) {
                         counts[i]--;
                         end -= primitiveByteCount;
@@ -456,9 +530,9 @@ final class ArrayBasedStaticShape<T> extends StaticShape<T> {
                 this.isEmpty = schedule != null && schedule.isEmpty();
             }
 
-            ScheduleEntry query(byte propertyKind) {
+            ScheduleEntry query(int propertyIndex) {
                 for (ScheduleEntry e : schedule) {
-                    if (e.propertyKind == propertyKind) {
+                    if (e.propertyIndex == propertyIndex) {
                         schedule.remove(e);
                         return e;
                     }
@@ -468,11 +542,11 @@ final class ArrayBasedStaticShape<T> extends StaticShape<T> {
         }
 
         private static class ScheduleEntry {
-            final byte propertyKind;
+            final int propertyIndex;
             final int offset;
 
-            ScheduleEntry(byte propertyKind, int offset) {
-                this.propertyKind = propertyKind;
+            ScheduleEntry(int propertyIndex, int offset) {
+                this.propertyIndex = propertyIndex;
                 this.offset = offset;
             }
         }

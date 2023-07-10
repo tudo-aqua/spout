@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,35 +24,49 @@
  */
 package com.oracle.svm.core.jdk.management;
 
-//Checkstyle: stop
-
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadInfo;
+import java.util.Arrays;
+import java.util.Objects;
 
 import javax.management.ObjectName;
 
+import com.oracle.svm.core.thread.ThreadCpuTimeSupport;
+import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
-import com.oracle.svm.core.annotate.Uninterruptible;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.jdk.UninterruptibleUtils.AtomicInteger;
 import com.oracle.svm.core.jdk.UninterruptibleUtils.AtomicLong;
-import com.oracle.svm.core.util.VMError;
+import com.oracle.svm.core.thread.PlatformThreads;
 
 import sun.management.Util;
-//Checkstyle: resume
 
-final class SubstrateThreadMXBean implements com.sun.management.ThreadMXBean {
-
-    private static final String MSG = "ThreadMXBean methods";
-
+/**
+ * This class provides a partial implementation of {@link com.sun.management.ThreadMXBean} for SVM.
+ * <p>
+ * Some methods are not actually implemented but return <code>null</code>, <code>false</code>, or
+ * empty arrays (instead of throwing errors) only to improve compatibility with tools that interact
+ * with JMX. These still need to be implemented (GR-44559).
+ */
+public final class SubstrateThreadMXBean implements com.sun.management.ThreadMXBean {
     private final AtomicLong totalStartedThreadCount = new AtomicLong(0);
     private final AtomicInteger peakThreadCount = new AtomicInteger(0);
     private final AtomicInteger threadCount = new AtomicInteger(0);
     private final AtomicInteger daemonThreadCount = new AtomicInteger(0);
 
+    private boolean allocatedMemoryEnabled;
+    private boolean cpuTimeEnabled;
+
     @Platforms(Platform.HOSTED_ONLY.class)
     SubstrateThreadMXBean() {
+        /*
+         * We always track the amount of memory that is allocated by each thread, so this MX bean
+         * feature can be on by default.
+         */
+        this.allocatedMemoryEnabled = true;
+        this.cpuTimeEnabled = true;
     }
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
@@ -89,25 +103,26 @@ final class SubstrateThreadMXBean implements com.sun.management.ThreadMXBean {
 
     @Override
     public boolean isThreadAllocatedMemoryEnabled() {
-        return false;
+        return allocatedMemoryEnabled;
     }
 
     @Override
     public boolean isThreadAllocatedMemorySupported() {
-        return false;
+        return true;
     }
 
     @Override
     public boolean isThreadCpuTimeSupported() {
-        return false;
+        return ImageSingletons.contains(ThreadCpuTimeSupport.class);
     }
 
     @Override
     public boolean isCurrentThreadCpuTimeSupported() {
-        return false;
+        return ImageSingletons.contains(ThreadCpuTimeSupport.class);
     }
 
     @Override
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public int getThreadCount() {
         return threadCount.get();
     }
@@ -136,27 +151,27 @@ final class SubstrateThreadMXBean implements com.sun.management.ThreadMXBean {
 
     @Override
     public long[] getAllThreadIds() {
-        throw VMError.unsupportedFeature(MSG);
+        return new long[0];
     }
 
     @Override
     public ThreadInfo getThreadInfo(long id) {
-        throw VMError.unsupportedFeature(MSG);
+        return null;
     }
 
     @Override
     public ThreadInfo[] getThreadInfo(long[] ids) {
-        throw VMError.unsupportedFeature(MSG);
+        return new ThreadInfo[0];
     }
 
     @Override
     public ThreadInfo getThreadInfo(long id, int maxDepth) {
-        throw VMError.unsupportedFeature(MSG);
+        return null;
     }
 
     @Override
     public ThreadInfo[] getThreadInfo(long[] ids, int maxDepth) {
-        throw VMError.unsupportedFeature(MSG);
+        return new ThreadInfo[0];
     }
 
     @Override
@@ -175,86 +190,174 @@ final class SubstrateThreadMXBean implements com.sun.management.ThreadMXBean {
 
     @Override
     public long getCurrentThreadCpuTime() {
-        throw VMError.unsupportedFeature(MSG);
+        if (verifyCurrentThreadCpuTime()) {
+            return ThreadCpuTimeSupport.getInstance().getCurrentThreadCpuTime(true);
+        }
+        return -1;
     }
 
     @Override
     public long getCurrentThreadUserTime() {
-        throw VMError.unsupportedFeature(MSG);
+        if (verifyCurrentThreadCpuTime()) {
+            return ThreadCpuTimeSupport.getInstance().getCurrentThreadCpuTime(false);
+        }
+        return -1;
+    }
+
+    private boolean verifyCurrentThreadCpuTime() {
+        if (!isCurrentThreadCpuTimeSupported()) {
+            throw new UnsupportedOperationException("Current thread CPU time measurement is not supported.");
+        }
+        return isThreadCpuTimeEnabled();
     }
 
     @Override
     public long getThreadCpuTime(long id) {
-        throw VMError.unsupportedFeature(MSG);
+        if (verifyThreadCpuTime(id)) {
+            return PlatformThreads.getThreadCpuTime(id, true);
+        }
+        return -1;
     }
 
     @Override
     public long getThreadUserTime(long id) {
-        throw VMError.unsupportedFeature(MSG);
+        if (verifyThreadCpuTime(id)) {
+            return PlatformThreads.getThreadCpuTime(id, false);
+        }
+        return -1;
+    }
+
+    private boolean verifyThreadCpuTime(long id) {
+        verifyThreadId(id);
+        if (!isThreadCpuTimeSupported()) {
+            throw new UnsupportedOperationException("Thread CPU time measurement is not supported.");
+        }
+        return isThreadCpuTimeEnabled();
     }
 
     @Override
     public boolean isThreadCpuTimeEnabled() {
-        throw VMError.unsupportedFeature(MSG);
+        if (!isThreadCpuTimeSupported() && !isCurrentThreadCpuTimeSupported()) {
+            throw new UnsupportedOperationException("Thread CPU time measurement is not supported");
+        }
+        return cpuTimeEnabled;
     }
 
     @Override
     public void setThreadCpuTimeEnabled(boolean enable) {
-        throw VMError.unsupportedFeature(MSG);
+        if (!isThreadCpuTimeSupported() && !isCurrentThreadCpuTimeSupported()) {
+            throw new UnsupportedOperationException("Thread CPU time measurement is not supported");
+        }
+        cpuTimeEnabled = enable;
     }
 
     @Override
     public long[] findMonitorDeadlockedThreads() {
-        throw VMError.unsupportedFeature(MSG);
+        return new long[0];
     }
 
     @Override
     public long[] findDeadlockedThreads() {
-        throw VMError.unsupportedFeature(MSG);
+        return new long[0];
     }
 
     @Override
     public boolean isObjectMonitorUsageSupported() {
-        throw VMError.unsupportedFeature(MSG);
+        return false;
     }
 
     @Override
     public boolean isSynchronizerUsageSupported() {
-        throw VMError.unsupportedFeature(MSG);
+        return false;
     }
 
     @Override
     public ThreadInfo[] getThreadInfo(long[] ids, boolean lockedMonitors, boolean lockedSynchronizers) {
-        throw VMError.unsupportedFeature(MSG);
+        return new ThreadInfo[0];
     }
 
     @Override
     public ThreadInfo[] dumpAllThreads(boolean lockedMonitors, boolean lockedSynchronizers) {
-        throw VMError.unsupportedFeature(MSG);
+        return new ThreadInfo[0];
     }
 
     @Override
-    public long getThreadAllocatedBytes(long arg0) {
-        throw VMError.unsupportedFeature(MSG);
+    public long getThreadAllocatedBytes(long id) {
+        boolean valid = verifyThreadAllocatedMemory(id);
+        if (!valid) {
+            return -1;
+        }
+
+        return PlatformThreads.getThreadAllocatedBytes(id);
     }
 
     @Override
-    public long[] getThreadAllocatedBytes(long[] arg0) {
-        throw VMError.unsupportedFeature(MSG);
+    public long[] getThreadAllocatedBytes(long[] ids) {
+        Objects.requireNonNull(ids);
+        boolean valid = verifyThreadAllocatedMemory(ids);
+
+        long[] sizes = new long[ids.length];
+        Arrays.fill(sizes, -1);
+        if (valid) {
+            PlatformThreads.getThreadAllocatedBytes(ids, sizes);
+        }
+        return sizes;
+    }
+
+    private boolean verifyThreadAllocatedMemory(long id) {
+        verifyThreadId(id);
+        return isThreadAllocatedMemoryEnabled();
+    }
+
+    private boolean verifyThreadAllocatedMemory(long[] ids) {
+        verifyThreadIds(ids);
+        return isThreadAllocatedMemoryEnabled();
+    }
+
+    private static void verifyThreadId(long id) {
+        if (id <= 0) {
+            throw new IllegalArgumentException("Invalid thread ID parameter: " + id);
+        }
+    }
+
+    private static void verifyThreadIds(long[] ids) {
+        for (int i = 0; i < ids.length; i++) {
+            verifyThreadId(ids[i]);
+        }
     }
 
     @Override
-    public long[] getThreadCpuTime(long[] arg0) {
-        throw VMError.unsupportedFeature(MSG);
+    public long[] getThreadCpuTime(long[] ids) {
+        return getThreadCpuTimeImpl(ids, true);
     }
 
     @Override
-    public long[] getThreadUserTime(long[] arg0) {
-        throw VMError.unsupportedFeature(MSG);
+    public long[] getThreadUserTime(long[] ids) {
+        return getThreadCpuTimeImpl(ids, false);
+    }
+
+    private long[] getThreadCpuTimeImpl(long[] ids, boolean includeSystemTime) {
+        boolean verified = verifyThreadCpuTime(ids);
+        long[] times = new long[ids.length];
+        Arrays.fill(times, -1);
+        if (verified) {
+            for (int i = 0; i < ids.length; i++) {
+                times[i] = PlatformThreads.getThreadCpuTime(ids[i], includeSystemTime);
+            }
+        }
+        return times;
+    }
+
+    private boolean verifyThreadCpuTime(long[] ids) {
+        verifyThreadIds(ids);
+        if (!isThreadCpuTimeSupported()) {
+            throw new UnsupportedOperationException("Thread CPU time measurement is not supported.");
+        }
+        return isThreadCpuTimeEnabled();
     }
 
     @Override
-    public void setThreadAllocatedMemoryEnabled(boolean arg0) {
-        throw VMError.unsupportedFeature(MSG);
+    public void setThreadAllocatedMemoryEnabled(boolean value) {
+        allocatedMemoryEnabled = value;
     }
 }

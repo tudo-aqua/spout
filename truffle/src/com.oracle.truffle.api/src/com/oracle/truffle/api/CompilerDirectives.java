@@ -74,9 +74,11 @@ public final class CompilerDirectives {
      * @since 0.8 or earlier
      */
     public static void transferToInterpreter() {
-        if (inInterpreter()) {
-            Truffle.getRuntime().notifyTransferToInterpreter();
-        }
+        /*
+         * We unconditionally call into the runtime as the runtime needs to know where these
+         * transferToInterpreter calls happen e.g. for analysis during host compilation.
+         */
+        Truffle.getRuntime().notifyTransferToInterpreter();
     }
 
     /**
@@ -86,9 +88,11 @@ public final class CompilerDirectives {
      * @since 0.8 or earlier
      */
     public static void transferToInterpreterAndInvalidate() {
-        if (inInterpreter()) {
-            Truffle.getRuntime().notifyTransferToInterpreter();
-        }
+        /*
+         * We unconditionally call into the runtime as the runtime needs to know where these
+         * transferToInterpreter calls happen e.g. for analysis during host compilation.
+         */
+        Truffle.getRuntime().notifyTransferToInterpreter();
     }
 
     /**
@@ -98,6 +102,19 @@ public final class CompilerDirectives {
      * @since 0.8 or earlier
      */
     public static boolean inInterpreter() {
+        return true;
+    }
+
+    /**
+     * Returns a boolean value indicating whether the method is executed in a compilation tier which
+     * can be replaced with a higher tier (e.g. interpretation tier can be replaced by a first tier,
+     * a first tier by a second tier compilation).
+     *
+     * @return {@code true} when executed in the first tier Truffle compilation, {@code false}
+     *         otherwise.
+     * @since 22.0.0
+     */
+    public static boolean hasNextTier() {
         return true;
     }
 

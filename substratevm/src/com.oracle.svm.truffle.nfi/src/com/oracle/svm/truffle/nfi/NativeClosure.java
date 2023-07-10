@@ -32,9 +32,8 @@ import java.lang.ref.WeakReference;
 
 import org.graalvm.nativeimage.CurrentIsolate;
 import org.graalvm.nativeimage.ImageSingletons;
-import org.graalvm.nativeimage.PinnedObject;
-import org.graalvm.nativeimage.StackValue;
 import org.graalvm.nativeimage.c.function.CEntryPoint;
+import org.graalvm.nativeimage.c.function.CEntryPoint.Publish;
 import org.graalvm.nativeimage.c.function.CEntryPointLiteral;
 import org.graalvm.nativeimage.c.struct.SizeOf;
 import org.graalvm.nativeimage.c.type.CCharPointer;
@@ -45,13 +44,14 @@ import org.graalvm.word.PointerBase;
 import org.graalvm.word.WordBase;
 import org.graalvm.word.WordFactory;
 
-import com.oracle.svm.core.CErrorNumber;
-import com.oracle.svm.core.annotate.Uninterruptible;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.c.function.CEntryPointActions;
 import com.oracle.svm.core.c.function.CEntryPointOptions;
 import com.oracle.svm.core.c.function.CEntryPointOptions.NoEpilogue;
 import com.oracle.svm.core.c.function.CEntryPointOptions.NoPrologue;
-import com.oracle.svm.core.c.function.CEntryPointOptions.Publish;
+import com.oracle.svm.core.graal.stackvalue.UnsafeStackValue;
+import com.oracle.svm.core.handles.PrimitiveArrayView;
+import com.oracle.svm.core.headers.LibC;
 import com.oracle.svm.core.threadlocal.FastThreadLocalFactory;
 import com.oracle.svm.core.threadlocal.FastThreadLocalObject;
 import com.oracle.svm.truffle.nfi.LibFFI.ClosureData;
@@ -63,46 +63,78 @@ import com.oracle.svm.truffle.nfi.libffi.LibFFI.ffi_closure_callback;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerDirectives;
 
+/**
+ * Contains the managed memory parts of `struct closure_data`.
+ *
+ * See truffle/src/com.oracle.truffle.nfi.native/src/closure.c.
+ *
+ * It is very important that this object contains no strong references to anything that might
+ * indirectly reference a Truffle context or engine. See the comment in ClosureNativePointer.
+ */
 final class NativeClosure {
 
+    /**
+     * Replacement for `enum closure_arg_type`.
+     */
+    private enum ClosureArgType {
+        ARG_BUFFER,
+        ARG_STRING,
+        ARG_OBJECT,
+        ARG_SKIP;
+    }
+
     /*
-     * Weak to break reference cycles via the global ObjectHandles table in TruffleNFISupport. Will
-     * never actually die as long as this object is alive. See comment in ClosureNativePointer.
+     * The references to the CallTarget and the receiver are weak because they might contain cyclic
+     * references to the Truffle context. They can never actually die as long as this object is
+     * alive, because there are corresponding strong references in ClosureNativePointer.
      */
     private final WeakReference<CallTarget> callTarget;
     private final WeakReference<Object> receiver;
 
-    private final Target_com_oracle_truffle_nfi_backend_libffi_LibFFISignature signature;
+    private final ClosureArgType[] argTypes;
 
-    private NativeClosure(CallTarget callTarget, Object receiver, Target_com_oracle_truffle_nfi_backend_libffi_LibFFISignature signature) {
+    private NativeClosure(CallTarget callTarget, Object receiver, ClosureArgType[] argTypes) {
         this.callTarget = new WeakReference<>(callTarget);
         if (receiver != null) {
             this.receiver = new WeakReference<>(receiver);
         } else {
             this.receiver = null;
         }
-        this.signature = signature;
+        this.argTypes = argTypes;
     }
 
+    /**
+     * Implementation of the native `prepare_closure` function.
+     */
     static Target_com_oracle_truffle_nfi_backend_libffi_ClosureNativePointer prepareClosure(Target_com_oracle_truffle_nfi_backend_libffi_LibFFIContext ctx,
                     Target_com_oracle_truffle_nfi_backend_libffi_LibFFISignature signature, CallTarget callTarget, Object receiver, ffi_closure_callback callback) {
-        NativeClosure closure = new NativeClosure(callTarget, receiver, signature);
+        int envArgIdx = -1;
+        Target_com_oracle_truffle_nfi_backend_libffi_LibFFIType_CachedTypeInfo[] argTypeInfo = signature.signatureInfo.getArgTypes();
+        ClosureArgType[] argTypes = new ClosureArgType[argTypeInfo.length];
+
+        for (int i = 0; i < argTypeInfo.length; i++) {
+            Target_com_oracle_truffle_nfi_backend_libffi_LibFFIType_CachedTypeInfo type = argTypeInfo[i];
+            if (Target_com_oracle_truffle_nfi_backend_libffi_LibFFIType_StringType.class.isInstance(type)) {
+                argTypes[i] = ClosureArgType.ARG_STRING;
+            } else if (Target_com_oracle_truffle_nfi_backend_libffi_LibFFIType_ObjectType.class.isInstance(type)) {
+                argTypes[i] = ClosureArgType.ARG_OBJECT;
+            } else if (Target_com_oracle_truffle_nfi_backend_libffi_LibFFIType_NullableType.class.isInstance(type)) {
+                argTypes[i] = ClosureArgType.ARG_OBJECT;
+            } else if (Target_com_oracle_truffle_nfi_backend_libffi_LibFFIType_EnvType.class.isInstance(type)) {
+                argTypes[i] = ClosureArgType.ARG_SKIP;
+                envArgIdx = i;
+            } else {
+                argTypes[i] = ClosureArgType.ARG_BUFFER;
+            }
+        }
+
+        NativeClosure closure = new NativeClosure(callTarget, receiver, argTypes);
         NativeClosureHandle handle = ImageSingletons.lookup(TruffleNFISupport.class).createClosureHandle(closure);
 
-        WordPointer codePtr = StackValue.get(WordPointer.class);
+        WordPointer codePtr = UnsafeStackValue.get(WordPointer.class);
         ClosureData data = ffi_closure_alloc(SizeOf.unsigned(ClosureData.class), codePtr);
         data.setNativeClosureHandle(handle);
         data.setIsolate(CurrentIsolate.getIsolate());
-
-        int envArgIdx = -1;
-        Target_com_oracle_truffle_nfi_backend_libffi_LibFFIType_CachedTypeInfo[] argTypes = signature.signatureInfo.getArgTypes();
-        for (int i = 0; i < argTypes.length; i++) {
-            Target_com_oracle_truffle_nfi_backend_libffi_LibFFIType_CachedTypeInfo type = argTypes[i];
-            if (Target_com_oracle_truffle_nfi_backend_libffi_LibFFIType_EnvType.class.isInstance(type)) {
-                envArgIdx = i;
-                break;
-            }
-        }
 
         data.setEnvArgIdx(envArgIdx);
 
@@ -113,7 +145,6 @@ final class NativeClosure {
     }
 
     private Object call(WordPointer argPointers, Target_com_oracle_truffle_nfi_backend_libffi_NativeArgumentBuffer_Pointer retBuffer) {
-        Target_com_oracle_truffle_nfi_backend_libffi_LibFFIType_CachedTypeInfo[] argTypes = signature.signatureInfo.getArgTypes();
         int length = argTypes.length;
         if (receiver != null) {
             length++;
@@ -125,21 +156,21 @@ final class NativeClosure {
         Object[] args = new Object[length];
         int i;
         for (i = 0; i < argTypes.length; i++) {
-            Object type = argTypes[i];
-            if (Target_com_oracle_truffle_nfi_backend_libffi_LibFFIType_StringType.class.isInstance(type)) {
-                CCharPointerPointer argPtr = argPointers.read(i);
-                args[i] = TruffleNFISupport.utf8ToJavaString(argPtr.read());
-            } else if (Target_com_oracle_truffle_nfi_backend_libffi_LibFFIType_ObjectType.class.isInstance(type)) {
-                WordPointer argPtr = argPointers.read(i);
-                args[i] = ImageSingletons.lookup(TruffleNFISupport.class).resolveHandle(argPtr.read());
-            } else if (Target_com_oracle_truffle_nfi_backend_libffi_LibFFIType_NullableType.class.isInstance(type)) {
-                WordPointer argPtr = argPointers.read(i);
-                args[i] = ImageSingletons.lookup(TruffleNFISupport.class).resolveHandle(argPtr.read());
-            } else if (Target_com_oracle_truffle_nfi_backend_libffi_LibFFIType_EnvType.class.isInstance(type)) {
-                // skip
-            } else {
-                WordPointer argPtr = argPointers.read(i);
-                args[i] = new Target_com_oracle_truffle_nfi_backend_libffi_NativeArgumentBuffer_Pointer(argPtr.rawValue());
+            switch (argTypes[i]) {
+                case ARG_STRING:
+                    CCharPointerPointer strPtr = argPointers.read(i);
+                    args[i] = TruffleNFISupport.utf8ToJavaString(strPtr.read());
+                    break;
+                case ARG_OBJECT:
+                    WordPointer objPtr = argPointers.read(i);
+                    args[i] = ImageSingletons.lookup(TruffleNFISupport.class).resolveHandle(objPtr.read());
+                    break;
+                case ARG_BUFFER:
+                    WordPointer argPtr = argPointers.read(i);
+                    args[i] = new Target_com_oracle_truffle_nfi_backend_libffi_NativeArgumentBuffer_Pointer(argPtr.rawValue());
+                    break;
+                case ARG_SKIP:
+                    // nothing to do
             }
         }
 
@@ -174,8 +205,8 @@ final class NativeClosure {
             return WordFactory.pointer(nativeString.nativePointer);
         } else if (retValue instanceof String) {
             byte[] utf8 = TruffleNFISupport.javaStringToUtf8((String) retValue);
-            try (PinnedObject pinned = PinnedObject.create(utf8)) {
-                CCharPointer source = pinned.addressOfArrayElement(0);
+            try (PrimitiveArrayView ref = PrimitiveArrayView.createForReading(utf8)) {
+                CCharPointer source = ref.addressOfArrayElement(0);
                 return TruffleNFISupport.strdup(source);
             }
         } else {
@@ -186,19 +217,19 @@ final class NativeClosure {
 
     static final FastThreadLocalObject<Throwable> pendingException = FastThreadLocalFactory.createObject(Throwable.class, "NativeClosure.pendingException");
 
-    @CEntryPoint(include = CEntryPoint.NotIncludedAutomatically.class)
-    @CEntryPointOptions(prologue = NoPrologue.class, epilogue = NoEpilogue.class, publishAs = Publish.NotPublished)
+    @CEntryPoint(include = CEntryPoint.NotIncludedAutomatically.class, publishAs = Publish.NotPublished)
+    @CEntryPointOptions(prologue = NoPrologue.class, epilogue = NoEpilogue.class)
     @Uninterruptible(reason = "contains prologue and epilogue for thread state transition", calleeMustBe = false)
     static void invokeClosureBufferRet(@SuppressWarnings("unused") ffi_cif cif, Pointer ret, WordPointer args, ClosureData user) {
         /* Read the C error number before transitioning into the Java state. */
-        int errno = CErrorNumber.getCErrorNumber();
+        int errno = LibC.errno();
 
         if (user.envArgIdx() >= 0) {
             WordPointer envArgPtr = args.read(user.envArgIdx());
             NativeTruffleEnv env = envArgPtr.read();
             CEntryPointActions.enter(env.isolateThread());
         } else {
-            CEntryPointActions.enterIsolate(user.isolate());
+            CEntryPointActions.enterByIsolate(user.isolate());
         }
 
         ErrnoMirror.errnoMirror.getAddress().write(errno);
@@ -212,7 +243,7 @@ final class NativeClosure {
         errno = ErrnoMirror.errnoMirror.getAddress().read();
         CEntryPointActions.leave();
         /* Restore the C error number after being back in the Native state. */
-        CErrorNumber.setCErrorNumber(errno);
+        LibC.setErrno(errno);
     }
 
     private static void doInvokeClosureBufferRet(Pointer ret, WordPointer args, ClosureData user) {
@@ -238,19 +269,19 @@ final class NativeClosure {
         }
     }
 
-    @CEntryPoint(include = CEntryPoint.NotIncludedAutomatically.class)
-    @CEntryPointOptions(prologue = NoPrologue.class, epilogue = NoEpilogue.class, publishAs = Publish.NotPublished)
+    @CEntryPoint(include = CEntryPoint.NotIncludedAutomatically.class, publishAs = Publish.NotPublished)
+    @CEntryPointOptions(prologue = NoPrologue.class, epilogue = NoEpilogue.class)
     @Uninterruptible(reason = "contains prologue and epilogue for thread state transition", calleeMustBe = false)
     static void invokeClosureVoidRet(@SuppressWarnings("unused") ffi_cif cif, @SuppressWarnings("unused") WordPointer ret, WordPointer args, ClosureData user) {
         /* Read the C error number before transitioning into the Java state. */
-        int errno = CErrorNumber.getCErrorNumber();
+        int errno = LibC.errno();
 
         if (user.envArgIdx() >= 0) {
             WordPointer envArgPtr = args.read(user.envArgIdx());
             NativeTruffleEnv env = envArgPtr.read();
             CEntryPointActions.enter(env.isolateThread());
         } else {
-            CEntryPointActions.enterIsolate(user.isolate());
+            CEntryPointActions.enterByIsolate(user.isolate());
         }
 
         ErrnoMirror.errnoMirror.getAddress().write(errno);
@@ -264,26 +295,26 @@ final class NativeClosure {
         errno = ErrnoMirror.errnoMirror.getAddress().read();
         CEntryPointActions.leave();
         /* Restore the C error number after being back in the Native state. */
-        CErrorNumber.setCErrorNumber(errno);
+        LibC.setErrno(errno);
     }
 
     private static void doInvokeClosureVoidRet(WordPointer args, ClosureData user) {
         lookup(user).call(args, null);
     }
 
-    @CEntryPoint(include = CEntryPoint.NotIncludedAutomatically.class)
-    @CEntryPointOptions(prologue = NoPrologue.class, epilogue = NoEpilogue.class, publishAs = Publish.NotPublished)
+    @CEntryPoint(include = CEntryPoint.NotIncludedAutomatically.class, publishAs = Publish.NotPublished)
+    @CEntryPointOptions(prologue = NoPrologue.class, epilogue = NoEpilogue.class)
     @Uninterruptible(reason = "contains prologue and epilogue for thread state transition", calleeMustBe = false)
     static void invokeClosureStringRet(@SuppressWarnings("unused") ffi_cif cif, WordPointer ret, WordPointer args, ClosureData user) {
         /* Read the C error number before transitioning into the Java state. */
-        int errno = CErrorNumber.getCErrorNumber();
+        int errno = LibC.errno();
 
         if (user.envArgIdx() >= 0) {
             WordPointer envArgPtr = args.read(user.envArgIdx());
             NativeTruffleEnv env = envArgPtr.read();
             CEntryPointActions.enter(env.isolateThread());
         } else {
-            CEntryPointActions.enterIsolate(user.isolate());
+            CEntryPointActions.enterByIsolate(user.isolate());
         }
 
         ErrnoMirror.errnoMirror.getAddress().write(errno);
@@ -297,7 +328,7 @@ final class NativeClosure {
         errno = ErrnoMirror.errnoMirror.getAddress().read();
         CEntryPointActions.leave();
         /* Restore the C error number after being back in the Native state. */
-        CErrorNumber.setCErrorNumber(errno);
+        LibC.setErrno(errno);
     }
 
     private static void doInvokeClosureStringRet(WordPointer ret, WordPointer args, ClosureData user) {
@@ -305,19 +336,19 @@ final class NativeClosure {
         ret.write(serializeStringRet(retValue));
     }
 
-    @CEntryPoint(include = CEntryPoint.NotIncludedAutomatically.class)
-    @CEntryPointOptions(prologue = NoPrologue.class, epilogue = NoEpilogue.class, publishAs = Publish.NotPublished)
+    @CEntryPoint(include = CEntryPoint.NotIncludedAutomatically.class, publishAs = Publish.NotPublished)
+    @CEntryPointOptions(prologue = NoPrologue.class, epilogue = NoEpilogue.class)
     @Uninterruptible(reason = "contains prologue and epilogue for thread state transition", calleeMustBe = false)
     static void invokeClosureObjectRet(@SuppressWarnings("unused") ffi_cif cif, WordPointer ret, WordPointer args, ClosureData user) {
         /* Read the C error number before transitioning into the Java state. */
-        int errno = CErrorNumber.getCErrorNumber();
+        int errno = LibC.errno();
 
         if (user.envArgIdx() >= 0) {
             WordPointer envArgPtr = args.read(user.envArgIdx());
             NativeTruffleEnv env = envArgPtr.read();
             CEntryPointActions.enter(env.isolateThread());
         } else {
-            CEntryPointActions.enterIsolate(user.isolate());
+            CEntryPointActions.enterByIsolate(user.isolate());
         }
 
         ErrnoMirror.errnoMirror.getAddress().write(errno);
@@ -331,7 +362,7 @@ final class NativeClosure {
         errno = ErrnoMirror.errnoMirror.getAddress().read();
         CEntryPointActions.leave();
         /* Restore the C error number after being back in the Native state. */
-        CErrorNumber.setCErrorNumber(errno);
+        LibC.setErrno(errno);
     }
 
     private static void doInvokeClosureObjectRet(WordPointer ret, WordPointer args, ClosureData user) {

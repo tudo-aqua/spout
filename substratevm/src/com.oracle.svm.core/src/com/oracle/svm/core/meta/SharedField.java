@@ -52,7 +52,15 @@ public interface SharedField extends ResolvedJavaField {
 
     boolean isAccessed();
 
+    boolean isReachable();
+
     boolean isWritten();
+
+    /**
+     * Returns true if the field's value is available at the time of querying. For unknown fields
+     * this depends on the image build stage when the value is computed.
+     */
+    boolean isValueAvailable();
 
     JavaKind getStorageKind();
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2016, 2023, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -33,26 +33,22 @@ import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.CompilerDirectives.ValueType;
-import com.oracle.truffle.api.dsl.Cached;
-import com.oracle.truffle.api.dsl.GenerateAOT;
-import com.oracle.truffle.api.dsl.Specialization;
-import com.oracle.truffle.api.interop.InteropException;
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.interop.InvalidBufferOffsetException;
+import com.oracle.truffle.api.interop.UnsupportedMessageException;
+import com.oracle.truffle.api.library.CachedLibrary;
+import com.oracle.truffle.api.library.ExportLibrary;
+import com.oracle.truffle.api.library.ExportMessage;
 import com.oracle.truffle.api.memory.ByteArraySupport;
 import com.oracle.truffle.api.nodes.ExplodeLoop;
-import com.oracle.truffle.llvm.runtime.LLVMContext;
-import com.oracle.truffle.llvm.runtime.LLVMLanguage;
-import com.oracle.truffle.llvm.runtime.NativeContextExtension;
-import com.oracle.truffle.llvm.runtime.NativeContextExtension.WellKnownNativeFunctionNode;
-import com.oracle.truffle.llvm.runtime.floating.LLVM80BitFloatFactory.LLVM80BitFloatNativeCallNodeGen;
-import com.oracle.truffle.llvm.runtime.memory.LLVMMemory;
-import com.oracle.truffle.llvm.runtime.nodes.api.LLVMArithmetic;
-import com.oracle.truffle.llvm.runtime.nodes.api.LLVMNode;
-import com.oracle.truffle.llvm.runtime.pointer.LLVMNativePointer;
+import com.oracle.truffle.nfi.api.SerializableLibrary;
 
+import java.nio.ByteOrder;
 import java.util.Arrays;
 
 @ValueType
-public final class LLVM80BitFloat implements LLVMArithmetic {
+@ExportLibrary(value = SerializableLibrary.class, useForAOT = false)
+public final class LLVM80BitFloat extends LLVMLongDoubleFloatingPoint {
 
     private static final int BIT_TO_HEX_FACTOR = 4;
     public static final int BIT_WIDTH = 80;
@@ -87,7 +83,7 @@ public final class LLVM80BitFloat implements LLVMArithmetic {
         } else {
             short exponent = value.getExponent();
             if (value.getSign()) {
-                exponent |= (1 << EXPONENT_BIT_WIDTH);
+                exponent |= (short) (1 << EXPONENT_BIT_WIDTH);
             }
             long fraction = value.getFraction();
             return String.format("0xK%4x%16x", exponent, fraction).replace(' ', '0');
@@ -119,53 +115,56 @@ public final class LLVM80BitFloat implements LLVMArithmetic {
 
     private static final long UNDEFINED_DOUBLE_VALUE = 0x80000000_00000000L;
 
-    public static final int ALL_ONE_EXPONENT = 0b111111111111111;
+    public static final short EXPONENT_MASK = 0b111111111111111; // 15 bit
+    public static final short SIGN_BIT = (short) (1 << 15);
 
     // all cached LLVM80BitFloat objects are escaping objects and must not be used directly
-    private static final LLVM80BitFloat DOUBLE_MINUS_INFINITY_CONVERSION_NUMBER = LLVM80BitFloat.fromRawValues(true, ALL_ONE_EXPONENT, UNDEFINED_DOUBLE_VALUE);
-    private static final LLVM80BitFloat DOUBLE_INFINITY_CONVERSION_NUMBER = LLVM80BitFloat.fromRawValues(false, ALL_ONE_EXPONENT, UNDEFINED_DOUBLE_VALUE);
-    private static final LLVM80BitFloat DOUBLE_NAN_CONVERSION_NUMBER = LLVM80BitFloat.fromRawValues(false, ALL_ONE_EXPONENT, 0xc000000000000000L);
+    private static final LLVM80BitFloat DOUBLE_MINUS_INFINITY_CONVERSION_NUMBER = LLVM80BitFloat.fromRawValues(true, EXPONENT_MASK, UNDEFINED_DOUBLE_VALUE);
+    private static final LLVM80BitFloat DOUBLE_INFINITY_CONVERSION_NUMBER = LLVM80BitFloat.fromRawValues(false, EXPONENT_MASK, UNDEFINED_DOUBLE_VALUE);
+    private static final LLVM80BitFloat DOUBLE_NAN_CONVERSION_NUMBER = LLVM80BitFloat.fromRawValues(false, EXPONENT_MASK, 0xc000000000000000L);
 
-    private static final LLVM80BitFloat POSITIVE_ZERO = new LLVM80BitFloat(false, 0, 0);
-    private static final LLVM80BitFloat NEGATIVE_ZERO = new LLVM80BitFloat(true, 0, 0);
+    private static final LLVM80BitFloat POSITIVE_ZERO = LLVM80BitFloat.fromRawValues(false, 0, 0);
+    private static final LLVM80BitFloat NEGATIVE_ZERO = LLVM80BitFloat.fromRawValues(true, 0, 0);
 
-    private static final LLVM80BitFloat POSITIVE_INFINITY = new LLVM80BitFloat(false, ALL_ONE_EXPONENT, bit(63L));
-    private static final LLVM80BitFloat NEGATIVE_INFINITY = new LLVM80BitFloat(true, ALL_ONE_EXPONENT, bit(63L));
+    private static final LLVM80BitFloat POSITIVE_INFINITY = LLVM80BitFloat.fromRawValues(false, EXPONENT_MASK, bit(63L));
+    private static final LLVM80BitFloat NEGATIVE_INFINITY = LLVM80BitFloat.fromRawValues(true, EXPONENT_MASK, bit(63L));
 
     private static final int EXPLICIT_LEADING_ONE_BITS = 1;
     private static final int EXPONENT_BIAS = 16383;
     private static final int FLOAT_EXPONENT_BIAS = 127;
 
-    private final boolean sign;
-    private final int biasedExponent; // 15 bit
+    private final short expSign; // 1 bit sign + 15 bit biased exponent
     private final long fraction; // 64 bit
 
-    public LLVM80BitFloat(boolean sign, int exponent, long fraction) {
-        this.sign = sign;
-        this.biasedExponent = exponent;
+    public LLVM80BitFloat(short expSign, long fraction) {
+        this.expSign = expSign;
         this.fraction = fraction;
     }
 
+    public static LLVM80BitFloat fromRawValues(boolean sign, int exponent, long fraction) {
+        assert (exponent & 0x7FFFF) == exponent;
+        short expSign = (short) exponent;
+        if (sign) {
+            expSign |= SIGN_BIT;
+        }
+        return new LLVM80BitFloat(expSign, fraction);
+    }
+
     private LLVM80BitFloat(LLVM80BitFloat value) {
-        this.sign = value.sign;
-        this.biasedExponent = value.biasedExponent;
+        this.expSign = value.expSign;
         this.fraction = value.fraction;
     }
 
     private int getUnbiasedExponent() {
-        return biasedExponent - EXPONENT_BIAS;
+        return (expSign & EXPONENT_MASK) - EXPONENT_BIAS;
     }
 
     public static LLVM80BitFloat createPositiveZero() {
         if (CompilerDirectives.inCompiledCode()) {
-            return new LLVM80BitFloat(false, 0, 0);
+            return LLVM80BitFloat.fromRawValues(false, 0, 0);
         } else {
             return POSITIVE_ZERO;
         }
-    }
-
-    private static long bit(int i) {
-        return 1 << i;
     }
 
     public static long bit(long i) {
@@ -191,7 +190,7 @@ public final class LLVM80BitFloat implements LLVMArithmetic {
         }
         long maskedFractionValue = val & fractionMask;
         long fraction = maskedFractionValue << (Long.SIZE - leadingOnePosition);
-        return new LLVM80BitFloat(sign, exponent, fraction);
+        return LLVM80BitFloat.fromRawValues(sign, exponent, fraction);
     }
 
     public static LLVM80BitFloat fromUnsignedLong(long val) {
@@ -223,7 +222,7 @@ public final class LLVM80BitFloat implements LLVMArithmetic {
         long fractionMask = (1L << leadingOnePosition + 1) - 1;
         long maskedFractionValue = posVal & fractionMask;
         long fraction = maskedFractionValue << (Long.SIZE - leadingOnePosition);
-        return new LLVM80BitFloat(sign, exponent, fraction);
+        return LLVM80BitFloat.fromRawValues(sign, exponent, fraction);
     }
 
     private static boolean getBit(int position, long posVal) {
@@ -296,7 +295,7 @@ public final class LLVM80BitFloat implements LLVMArithmetic {
     }
 
     public LLVM80BitFloat abs() {
-        return LLVM80BitFloat.fromRawValues(false, biasedExponent, fraction);
+        return new LLVM80BitFloat((short) (expSign & EXPONENT_MASK), fraction);
     }
 
     public boolean isPositiveInfinity() {
@@ -313,7 +312,7 @@ public final class LLVM80BitFloat implements LLVMArithmetic {
 
     public boolean isSNaN() {
         // Checkstyle: stop magic number name check
-        if (getExponent() == ALL_ONE_EXPONENT) {
+        if (getExponent() == EXPONENT_MASK) {
             if (getBit(63, getFraction())) {
                 if (!getBit(62, getFraction())) {
                     return (getFraction() & 0x3FFFFFFF_FFFFFFFFL) != 0L;
@@ -326,7 +325,7 @@ public final class LLVM80BitFloat implements LLVMArithmetic {
 
     public boolean isQNaN() {
         // Checkstyle: stop magic number name check
-        if (getExponent() == ALL_ONE_EXPONENT) {
+        if (getExponent() == EXPONENT_MASK) {
             if (getBit(63, getFraction())) {
                 if (getBit(62, getFraction())) {
                     return true;
@@ -388,7 +387,7 @@ public final class LLVM80BitFloat implements LLVMArithmetic {
     }
 
     public short getExponent() {
-        return (short) biasedExponent;
+        return (short) (expSign & EXPONENT_MASK);
     }
 
     public long getFraction() {
@@ -399,8 +398,12 @@ public final class LLVM80BitFloat implements LLVMArithmetic {
         return fraction << 1;
     }
 
+    public short getExpSign() {
+        return expSign;
+    }
+
     public boolean getSign() {
-        return sign;
+        return (expSign & SIGN_BIT) != 0;
     }
 
     @Override
@@ -409,7 +412,7 @@ public final class LLVM80BitFloat implements LLVMArithmetic {
             return false;
         }
         LLVM80BitFloat other = ((LLVM80BitFloat) obj);
-        return getSign() == other.getSign() && getExponent() == other.getExponent() && getFraction() == other.getFraction();
+        return this.expSign == other.expSign && this.fraction == other.fraction;
     }
 
     @Override
@@ -419,40 +422,30 @@ public final class LLVM80BitFloat implements LLVMArithmetic {
 
     public byte[] getBytesBigEndian() {
         byte[] array = new byte[BYTE_WIDTH];
-        short signWithExponent = getExponent();
-        short signBit = sign ? (short) bit(Short.SIZE - 1) : 0;
-        signWithExponent |= signBit;
-        ByteArraySupport.bigEndian().putShort(array, 0, signWithExponent);
-        ByteArraySupport.bigEndian().putLong(array, 2, getFraction());
+        ByteArraySupport.bigEndian().putShort(array, 0, expSign);
+        ByteArraySupport.bigEndian().putLong(array, 2, fraction);
         return array;
     }
 
     public byte[] getBytes() {
         byte[] array = new byte[BYTE_WIDTH];
-        short signWithExponent = getExponent();
-        short signBit = sign ? (short) bit(Short.SIZE - 1) : 0;
-        signWithExponent |= signBit;
-        ByteArraySupport.littleEndian().putLong(array, 0, getFraction());
-        ByteArraySupport.littleEndian().putShort(array, 8, signWithExponent);
+        ByteArraySupport.littleEndian().putLong(array, 0, fraction);
+        ByteArraySupport.littleEndian().putShort(array, 8, expSign);
         return array;
     }
 
     public static LLVM80BitFloat fromBytesBigEndian(byte[] bytes) {
         assert bytes.length == BYTE_WIDTH;
-        short readShort = ByteArraySupport.bigEndian().getShort(bytes, 0);
-        int exponent = readShort & BinaryHelper.getBitMask(EXPONENT_BIT_WIDTH);
+        short expSign = ByteArraySupport.bigEndian().getShort(bytes, 0);
         long fraction = ByteArraySupport.bigEndian().getLong(bytes, 2);
-        boolean signSet = getBit(Short.SIZE, readShort);
-        return LLVM80BitFloat.fromRawValues(signSet, exponent, fraction);
+        return new LLVM80BitFloat(expSign, fraction);
     }
 
     public static LLVM80BitFloat fromBytes(byte[] bytes) {
         assert bytes.length == BYTE_WIDTH;
         long fraction = ByteArraySupport.littleEndian().getLong(bytes, 0);
-        short readShort = ByteArraySupport.littleEndian().getShort(bytes, 8);
-        int exponent = readShort & BinaryHelper.getBitMask(EXPONENT_BIT_WIDTH);
-        boolean signSet = getBit(Short.SIZE, readShort);
-        return LLVM80BitFloat.fromRawValues(signSet, exponent, fraction);
+        short expSign = ByteArraySupport.littleEndian().getShort(bytes, 8);
+        return new LLVM80BitFloat(expSign, fraction);
     }
 
     // get value
@@ -462,7 +455,7 @@ public final class LLVM80BitFloat implements LLVMArithmetic {
             return UNDEFINED_FLOAT_TO_BYTE_VALUE;
         } else {
             long value = getFractionAsLong();
-            return (byte) (sign ? -value : value);
+            return (byte) (getSign() ? -value : value);
         }
     }
 
@@ -471,7 +464,7 @@ public final class LLVM80BitFloat implements LLVMArithmetic {
             return UNDEFINED_FLOAT_TO_SHORT_VALUE;
         } else {
             long value = getFractionAsLong();
-            return (short) (sign ? -value : value);
+            return (short) (getSign() ? -value : value);
         }
     }
 
@@ -480,7 +473,7 @@ public final class LLVM80BitFloat implements LLVMArithmetic {
             return UNDEFINED_FLOAT_TO_INT_VALUE;
         }
         int value = (int) getFractionAsLong();
-        return sign ? -value : value;
+        return getSign() ? -value : value;
     }
 
     public long getLongValue() {
@@ -488,7 +481,7 @@ public final class LLVM80BitFloat implements LLVMArithmetic {
             return UNDEFINED_FLOAT_TO_LONG_VALUE;
         } else {
             long value = getFractionAsLong();
-            return sign ? -value : value;
+            return getSign() ? -value : value;
         }
     }
 
@@ -514,7 +507,8 @@ public final class LLVM80BitFloat implements LLVMArithmetic {
         }
     }
 
-    public double getDoubleValue() {
+    @Override
+    public double toDoubleValue() {
         if (isPositiveZero()) {
             return DoubleHelper.POSITIVE_ZERO;
         } else if (isNegativeZero()) {
@@ -536,7 +530,7 @@ public final class LLVM80BitFloat implements LLVMArithmetic {
     }
 
     public LLVM80BitFloat negate() {
-        return new LLVM80BitFloat(!getSign(), getExponent(), getFraction());
+        return new LLVM80BitFloat((short) (expSign ^ SIGN_BIT), fraction);
     }
 
     public static LLVM80BitFloat fromByte(byte from) {
@@ -555,10 +549,6 @@ public final class LLVM80BitFloat implements LLVMArithmetic {
         return fromInt(from);
     }
 
-    public static LLVM80BitFloat fromRawValues(boolean sign, int exp, long fraction) {
-        return new LLVM80BitFloat(sign, exp, fraction);
-    }
-
     @ExplodeLoop
     public static boolean areOrdered(LLVM80BitFloat... vals) {
         CompilerAsserts.compilationConstant(vals.length);
@@ -574,143 +564,22 @@ public final class LLVM80BitFloat implements LLVMArithmetic {
         return val1.compareOrdered(val2);
     }
 
-    protected abstract static class LLVM80BitFloatNativeCallNode extends LLVMNode {
-        private final String name;
+    // serialization for NFI
 
-        public LLVM80BitFloatNativeCallNode(String name) {
-            this.name = name;
-        }
-
-        protected WellKnownNativeFunctionNode createFunction() {
-            LLVMContext context = LLVMContext.get(this);
-            NativeContextExtension nativeContextExtension = context.getContextExtensionOrNull(NativeContextExtension.class);
-            if (nativeContextExtension == null) {
-                return null;
-            } else {
-                return nativeContextExtension.getWellKnownNativeFunction("__sulong_fp80_" + name, "(UINT64,UINT64,UINT64):VOID");
-            }
-        }
-
-        public abstract LLVM80BitFloat execute(LLVM80BitFloat x, LLVM80BitFloat y);
-
-        @Specialization(guards = "function != null")
-        @GenerateAOT.Exclude // TODO: it could be AOT-included as long as we could somehow pre-load
-                             // the function
-        protected LLVM80BitFloat doCall(LLVM80BitFloat x, LLVM80BitFloat y,
-                        @Cached("createFunction()") WellKnownNativeFunctionNode function) {
-            LLVMLanguage language = LLVMLanguage.get(this);
-            LLVMMemory memory = language.getLLVMMemory();
-            LLVMNativePointer mem = memory.allocateMemory(this, 3 * 16);
-            LLVMNativePointer ptrX = mem;
-            LLVMNativePointer ptrY = ptrX.increment(16);
-            LLVMNativePointer ptrZ = ptrY.increment(16);
-            memory.put80BitFloat(this, ptrX, x);
-            memory.put80BitFloat(this, ptrY, y);
-            try {
-                function.execute(ptrZ.asNative(), ptrX.asNative(), ptrY.asNative());
-                LLVM80BitFloat z = memory.get80BitFloat(this, ptrZ);
-                return z;
-            } catch (InteropException e) {
-                throw CompilerDirectives.shouldNotReachHere(e);
-            } finally {
-                memory.free(this, mem);
-            }
-        }
-
-        @Specialization
-        @TruffleBoundary
-        protected LLVM80BitFloat doCall(LLVM80BitFloat x, LLVM80BitFloat y) {
-            // imprecise workaround for cases in which NFI isn't available
-            double xDouble = x.getDoubleValue();
-            double yDouble = y.getDoubleValue();
-            double result;
-            switch (name) {
-                case "add":
-                    result = xDouble + yDouble;
-                    break;
-                case "sub":
-                    result = xDouble - yDouble;
-                    break;
-                case "mul":
-                    result = xDouble * yDouble;
-                    break;
-                case "div":
-                    result = xDouble / yDouble;
-                    break;
-                case "mod":
-                    result = xDouble % yDouble;
-                    break;
-                default:
-                    throw new AssertionError("unexpected 80 bit float operation: " + name);
-            }
-            return LLVM80BitFloat.fromDouble(result);
-        }
-
-        @Override
-        public String toString() {
-            return "fp80 " + name;
-        }
+    @ExportMessage
+    @SuppressWarnings("static-method")
+    boolean isSerializable() {
+        return true;
     }
 
-    private static class LLVM80BitFloatOpNode extends LLVMArithmeticOpNode {
-        @Child private LLVM80BitFloatNativeCallNode node;
-
-        LLVM80BitFloatOpNode(String op) {
-            node = LLVM80BitFloatNativeCallNodeGen.create(op);
+    @ExportMessage(limit = "1")
+    void serialize(Object buffer,
+                    @CachedLibrary("buffer") InteropLibrary interop) {
+        try {
+            interop.writeBufferLong(buffer, ByteOrder.LITTLE_ENDIAN, 0, fraction);
+            interop.writeBufferShort(buffer, ByteOrder.LITTLE_ENDIAN, 8, expSign);
+        } catch (UnsupportedMessageException | InvalidBufferOffsetException ex) {
+            throw CompilerDirectives.shouldNotReachHere(ex);
         }
-
-        @Override
-        public boolean canCompute(Object x, Object y) {
-            return x instanceof LLVM80BitFloat && y instanceof LLVM80BitFloat;
-        }
-
-        @Override
-        public LLVM80BitFloat execute(Object x, Object y) {
-            LLVM80BitFloat a = (LLVM80BitFloat) x;
-            LLVM80BitFloat b = (LLVM80BitFloat) y;
-            return node.execute(a, b);
-        }
-    }
-
-    @Override
-    public LLVMArithmeticOpNode createAddNode() {
-        return new LLVM80BitFloatOpNode("add");
-    }
-
-    @Override
-    public LLVMArithmeticOpNode createSubNode() {
-        return new LLVM80BitFloatOpNode("sub");
-    }
-
-    @Override
-    public LLVMArithmeticOpNode createMulNode() {
-        return new LLVM80BitFloatOpNode("mul");
-    }
-
-    @Override
-    public LLVMArithmeticOpNode createDivNode() {
-        return new LLVM80BitFloatOpNode("div");
-    }
-
-    @Override
-    public LLVMArithmeticOpNode createRemNode() {
-        return new LLVM80BitFloatOpNode("mod");
-    }
-
-    @Override
-    public LLVMArithmeticCompareNode createCmpNode() {
-        return new LLVMArithmeticCompareNode() {
-            @Override
-            public int execute(Object x, Object y) {
-                LLVM80BitFloat a = (LLVM80BitFloat) x;
-                LLVM80BitFloat b = (LLVM80BitFloat) y;
-                return compare(a, b);
-            }
-
-            @Override
-            public boolean canCompute(Object x, Object y) {
-                return x instanceof LLVM80BitFloat && y instanceof LLVM80BitFloat;
-            }
-        };
     }
 }

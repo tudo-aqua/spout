@@ -24,7 +24,6 @@
  */
 package com.oracle.svm.core.jdk.management;
 
-//Checkstyle: stop
 import java.lang.management.ManagementFactory;
 import java.lang.management.RuntimeMXBean;
 import java.net.InetAddress;
@@ -38,7 +37,6 @@ import java.util.Set;
 
 import javax.management.ObjectName;
 
-import org.graalvm.compiler.serviceprovider.GraalServices;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
@@ -48,9 +46,8 @@ import com.oracle.svm.core.JavaMainWrapper;
 import com.oracle.svm.core.jdk.RuntimeSupport;
 
 import sun.management.Util;
-//Checkstyle: resume
 
-final class SubstrateRuntimeMXBean implements RuntimeMXBean {
+public final class SubstrateRuntimeMXBean implements RuntimeMXBean {
 
     private final String managementSpecVersion;
     private long startMillis;
@@ -58,7 +55,7 @@ final class SubstrateRuntimeMXBean implements RuntimeMXBean {
     @Platforms(Platform.HOSTED_ONLY.class)
     SubstrateRuntimeMXBean() {
         managementSpecVersion = ManagementFactory.getRuntimeMXBean().getManagementSpecVersion();
-        RuntimeSupport.getRuntimeSupport().addInitializationHook(this::initialize);
+        RuntimeSupport.getRuntimeSupport().addInitializationHook(isFirstIsolate -> initialize());
     }
 
     void initialize() {
@@ -86,7 +83,7 @@ final class SubstrateRuntimeMXBean implements RuntimeMXBean {
         try {
             id = ProcessProperties.getProcessID();
         } catch (Throwable t) {
-            id = GraalServices.getGlobalTimeStamp();
+            id = startMillis;
         }
         try {
             hostName = InetAddress.getLocalHost().getHostName();
@@ -150,12 +147,12 @@ final class SubstrateRuntimeMXBean implements RuntimeMXBean {
 
     @Override
     public String getBootClassPath() {
-        throw new UnsupportedOperationException("boot class path mechanism is not supported");
+        throw new UnsupportedOperationException("The boot class path mechanism is not supported.");
     }
 
     @Override
     public long getUptime() {
-        return System.currentTimeMillis() - startMillis;
+        return Math.max(0, System.currentTimeMillis() - startMillis);
     }
 
     @Override

@@ -57,6 +57,10 @@ import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.Fallback;
+import com.oracle.truffle.api.dsl.GenerateUncached;
+import com.oracle.truffle.api.dsl.ImportStatic;
+import com.oracle.truffle.api.dsl.Introspectable;
 import com.oracle.truffle.api.dsl.NodeChild;
 import com.oracle.truffle.api.dsl.NodeField;
 import com.oracle.truffle.api.dsl.Specialization;
@@ -65,11 +69,15 @@ import com.oracle.truffle.api.dsl.UnsupportedSpecializationException;
 import com.oracle.truffle.api.dsl.test.AssumptionsTestFactory.AssumptionArrayTestFactory;
 import com.oracle.truffle.api.dsl.test.AssumptionsTestFactory.AssumptionArraysAreCompilationFinalCachedFactory;
 import com.oracle.truffle.api.dsl.test.AssumptionsTestFactory.AssumptionArraysAreCompilationFinalFactory;
+import com.oracle.truffle.api.dsl.test.AssumptionsTestFactory.AssumptionFallbackNodeGen;
+import com.oracle.truffle.api.dsl.test.AssumptionsTestFactory.AssumptionFieldNodeGen;
+import com.oracle.truffle.api.dsl.test.AssumptionsTestFactory.AssumptionGuardNodeGen;
 import com.oracle.truffle.api.dsl.test.AssumptionsTestFactory.AssumptionInvalidateTest1NodeGen;
 import com.oracle.truffle.api.dsl.test.AssumptionsTestFactory.AssumptionInvalidateTest2NodeGen;
 import com.oracle.truffle.api.dsl.test.AssumptionsTestFactory.AssumptionInvalidateTest3NodeGen;
 import com.oracle.truffle.api.dsl.test.AssumptionsTestFactory.AssumptionInvalidateTest4NodeGen;
 import com.oracle.truffle.api.dsl.test.AssumptionsTestFactory.CacheAssumptionTestFactory;
+import com.oracle.truffle.api.dsl.test.AssumptionsTestFactory.CachedAssumptionNodeGen;
 import com.oracle.truffle.api.dsl.test.AssumptionsTestFactory.FieldTestFactory;
 import com.oracle.truffle.api.dsl.test.AssumptionsTestFactory.MethodTestFactory;
 import com.oracle.truffle.api.dsl.test.AssumptionsTestFactory.MultipleAssumptionArraysTestFactory;
@@ -81,6 +89,7 @@ import com.oracle.truffle.api.dsl.test.examples.ExampleNode;
 import com.oracle.truffle.api.dsl.test.examples.ExampleTypes;
 import com.oracle.truffle.api.nodes.Node;
 
+@SuppressWarnings({"truffle-inlining", "truffle-neverdefault", "truffle-sharing"})
 public class AssumptionsTest {
 
     @Test
@@ -98,6 +107,7 @@ public class AssumptionsTest {
     }
 
     @NodeChild
+    @SuppressWarnings({"unused", "truffle-assumption"})
     static class FieldTest extends ValueNode {
 
         protected final Assumption field = Truffle.getRuntime().createAssumption();
@@ -124,6 +134,7 @@ public class AssumptionsTest {
 
     @NodeChild
     @NodeField(name = "field", type = Assumption.class)
+    @SuppressWarnings({"unused", "truffle-assumption"})
     static class NodeFieldTest2 extends ValueNode {
 
         @Specialization(assumptions = "field")
@@ -146,6 +157,7 @@ public class AssumptionsTest {
     }
 
     @NodeChild
+    @SuppressWarnings({"unused", "truffle-assumption"})
     static class StaticFieldTest extends ValueNode {
 
         static final Assumption FIELD = Truffle.getRuntime().createAssumption();
@@ -168,9 +180,24 @@ public class AssumptionsTest {
             fail();
         } catch (UnsupportedSpecializationException e) {
         }
+
+        // there must be one assumption field in the generated code.
+        assertEquals(1, countAssumptionFields(node.getClass()));
+    }
+
+    private static int countAssumptionFields(Class<?> c) {
+        int count = 0;
+        for (Field f : c.getDeclaredFields()) {
+            if (Assumption.class.isAssignableFrom(f.getType()) || Assumption[].class.isAssignableFrom(f.getType())) {
+                // assert no assumption fields from the generated code
+                count++;
+            }
+        }
+        return count;
     }
 
     @NodeChild
+    @SuppressWarnings({"unused", "truffle-assumption"})
     static class MethodTest extends ValueNode {
 
         private final Assumption hiddenAssumption = Truffle.getRuntime().createAssumption();
@@ -260,10 +287,14 @@ public class AssumptionsTest {
         assertEquals("do1", root2.call(42));
         node2.assumption2.invalidate();
         assertEquals("do2", root2.call(42));
+
+        // there must be two assumption field in the generated code.
+        // as the assumption fields are not final.
+        assertEquals(2, countAssumptionFields(node.getClass()));
     }
 
     @NodeChild
-    @SuppressWarnings("unused")
+    @SuppressWarnings({"unused", "truffle-assumption"})
     static class MultipleAssumptionsTest extends ValueNode {
 
         Assumption assumption1;
@@ -299,7 +330,7 @@ public class AssumptionsTest {
     }
 
     @NodeChild
-    @SuppressWarnings("unused")
+    @SuppressWarnings({"unused", "truffle-assumption"})
     static class AssumptionArrayTest extends ValueNode {
 
         Assumption[] assumptions;
@@ -335,7 +366,7 @@ public class AssumptionsTest {
     }
 
     @NodeChild
-    @SuppressWarnings("unused")
+    @SuppressWarnings({"unused", "truffle-assumption"})
     static class MultipleAssumptionArraysTest extends ValueNode {
 
         Assumption[] assumptions1;
@@ -484,6 +515,7 @@ public class AssumptionsTest {
     }
 
     @TypeSystemReference(ExampleTypes.class)
+    @SuppressWarnings({"unused", "truffle-assumption"})
     abstract static class AssumptionInvalidateTest4 extends Node {
 
         Assumption assumptions;
@@ -514,6 +546,7 @@ public class AssumptionsTest {
     }
 
     @NodeChild
+    @SuppressWarnings({"unused", "truffle-assumption"})
     static class AssumptionArraysAreCompilationFinal extends ValueNode {
 
         @Specialization(assumptions = "createAssumptions()")
@@ -552,16 +585,186 @@ public class AssumptionsTest {
         }
     }
 
+    @Test
+    public void testAssumptionFieldNode() {
+        AssumptionFieldNode node = AssumptionFieldNodeGen.create();
+        // there must be no assumption field in the generated code.
+        assertEquals(0, countAssumptionFields(node.getClass()));
+
+        for (int i = 0; i < AssumptionFieldNode.SPECIALIZATIONS; i++) {
+            assertEquals(i, node.execute(i));
+        }
+
+        // check fallback first
+        node = AssumptionFieldNodeGen.create();
+        assertEquals(Integer.MAX_VALUE, node.execute(Integer.MAX_VALUE - 1));
+        for (int i = 0; i < AssumptionFieldNode.SPECIALIZATIONS; i++) {
+            assertEquals(i, node.execute(i));
+        }
+
+        assertEquals(Integer.MAX_VALUE, node.execute(Integer.MAX_VALUE - 1));
+
+    }
+
+    @SuppressWarnings({"unused", "truffle-assumption"})
+    abstract static class AssumptionFieldNode extends Node {
+
+        static final int SPECIALIZATIONS = 5;
+
+        final Assumption finalAssumption = Truffle.getRuntime().createAssumption();
+        final Assumption[] finalAssumptions = new Assumption[]{Truffle.getRuntime().createAssumption()};
+        @CompilationFinal Assumption compilationFinalAssumption = Truffle.getRuntime().createAssumption();
+
+        final AssumptionFields finalFields = new AssumptionFields(2);
+        @CompilationFinal AssumptionFields compilationFinalFields = new AssumptionFields(2);
+
+        abstract int execute(int arg0);
+
+        @Specialization(guards = "arg0 == 0", assumptions = {
+                        "finalAssumption",
+                        "compilationFinalAssumption",
+                        "finalAssumptions"})
+        static int s0(int arg0) {
+            return 0;
+        }
+
+        @Specialization(guards = "arg0 == 1", assumptions = {
+                        "finalFields.finalAssumption",
+                        "finalFields.compilationFinalAssumption",
+                        "finalFields.finalAssumptions"})
+        static int s1(int arg0) {
+            return 1;
+        }
+
+        @Specialization(guards = "arg0 == 2", assumptions = {
+                        "compilationFinalFields.finalAssumption",
+                        "compilationFinalFields.compilationFinalAssumption",
+                        "compilationFinalFields.finalAssumptions"})
+        static int s2(int arg0) {
+            return 2;
+        }
+
+        @Specialization(guards = "arg0 == 3", assumptions = {
+                        "finalFields.finalNext.finalAssumption",
+                        "finalFields.finalNext.compilationFinalAssumption",
+                        "finalFields.finalNext.finalAssumptions"})
+        static int s3(int arg0) {
+            return 3;
+        }
+
+        @Specialization(guards = "arg0 == 4", assumptions = {
+                        "compilationFinalFields.compilationFinalNext.finalAssumption",
+                        "compilationFinalFields.compilationFinalNext.compilationFinalAssumption",
+                        "compilationFinalFields.compilationFinalNext.finalAssumptions"})
+        static int s4(int arg0) {
+            return 4;
+        }
+
+        @Fallback
+        static int f(int arg0) {
+            return Integer.MAX_VALUE;
+        }
+    }
+
+    @Test
+    public void testCachedAssumptionNode() {
+        CachedAssumptionNode node = CachedAssumptionNodeGen.create();
+        for (int i = 0; i < CachedAssumptionNode.SPECIALIZATIONS; i++) {
+            assertEquals(i, node.execute(i));
+        }
+
+        node = CachedAssumptionNodeGen.create();
+        assertEquals(Integer.MAX_VALUE, node.execute(Integer.MAX_VALUE - 1));
+        for (int i = 0; i < CachedAssumptionNode.SPECIALIZATIONS; i++) {
+            assertEquals(i, node.execute(i));
+        }
+
+        node = CachedAssumptionNodeGen.getUncached();
+        for (int i = 0; i < CachedAssumptionNode.SPECIALIZATIONS; i++) {
+            assertEquals(i, node.execute(i));
+        }
+        assertEquals(Integer.MAX_VALUE, node.execute(Integer.MAX_VALUE - 1));
+
+    }
+
+    @SuppressWarnings({"unused", "truffle-assumption"})
+    @GenerateUncached
+    @Introspectable
+    abstract static class CachedAssumptionNode extends Node {
+
+        static final int SPECIALIZATIONS = 3;
+
+        abstract int execute(int arg0);
+
+        @Specialization(guards = "arg0 == 0", assumptions = {
+                        "assumption",
+                        "assumptions"})
+        static int s0(int arg0,
+                        @Cached(value = "createAssumption()", allowUncached = true) Assumption assumption,
+                        @Cached(dimensions = 1, value = "createAssumptions()", allowUncached = true) Assumption[] assumptions) {
+            return 0;
+        }
+
+        @Specialization(guards = "arg0 == 1", assumptions = {
+                        "fields.finalAssumption",
+                        "fields.compilationFinalAssumption",
+                        "fields.finalAssumptions"})
+        static int s1(int arg0,
+                        @Cached(value = "new(2)", allowUncached = true) AssumptionFields fields) {
+            return 1;
+        }
+
+        @Specialization(guards = "arg0 == 2", assumptions = {
+                        "fields.finalNext.finalAssumption",
+                        "fields.compilationFinalNext.compilationFinalAssumption",
+                        "fields.finalNext.finalAssumptions"})
+        static int s2(int arg0,
+                        @Cached(value = "new(2)", allowUncached = true) AssumptionFields fields) {
+            return 2;
+        }
+
+        @Fallback
+        static int f(int arg0) {
+            return Integer.MAX_VALUE;
+        }
+
+        static Assumption createAssumption() {
+            return Truffle.getRuntime().createAssumption();
+        }
+
+        static Assumption[] createAssumptions() {
+            return new Assumption[]{Truffle.getRuntime().createAssumption()};
+        }
+
+    }
+
+    static class AssumptionFields {
+
+        final Assumption finalAssumption = Truffle.getRuntime().createAssumption();
+        final Assumption[] finalAssumptions = new Assumption[]{Truffle.getRuntime().createAssumption()};
+        @CompilationFinal Assumption compilationFinalAssumption = Truffle.getRuntime().createAssumption();
+
+        final AssumptionFields finalNext;
+        @CompilationFinal AssumptionFields compilationFinalNext;
+
+        AssumptionFields(int depth) {
+            this.finalNext = depth > 0 ? new AssumptionFields(depth - 1) : null;
+            this.compilationFinalNext = depth > 0 ? new AssumptionFields(depth - 1) : null;
+        }
+
+    }
+
     @NodeChild
+    @SuppressWarnings("truffle-assumptions")
     static class ErrorIncompatibleReturnType extends ValueNode {
         @ExpectError("Incompatible return type int. Assumptions must be assignable to Assumption or Assumption[].")
-        @Specialization(assumptions = "3")
         static int do1(int value) {
             return value;
         }
     }
 
     @NodeChild
+    @SuppressWarnings({"unused", "truffle-assumption"})
     static class ErrorBoundDynamicValue extends ValueNode {
 
         @ExpectError("Assumption expressions must not bind dynamic parameter values.")
@@ -575,4 +778,85 @@ public class AssumptionsTest {
         }
     }
 
+    @ImportStatic(Assumption.class)
+    @SuppressWarnings("unused")
+    abstract static class AssumptionFallbackNode extends SlowPathListenerNode {
+
+        abstract boolean execute(Object arg);
+
+        @ExpectError("It is discouraged to use assumptions with a specialization that reaches a @Fallback specialization. %")
+        @Specialization(guards = {"arg > 1", "arg == cachedArg"}, assumptions = "assumption", limit = "1")
+        public boolean s0(int arg,
+                        @Cached("arg") int cachedArg,
+                        @Cached("NEVER_VALID") Assumption assumption) {
+            return false;
+        }
+
+        @Fallback
+        public boolean fallback(Object arg) {
+            return true;
+        }
+    }
+
+    @Test
+    public void testAssumptionFallback() {
+        AssumptionFallbackNode node = AssumptionFallbackNodeGen.create();
+
+        node.execute(-1);
+        node.execute(0);
+        node.execute(1);
+        node.execute(2);
+        node.execute(3);
+
+        assertEquals(2, node.specializeCount);
+    }
+
+    @ImportStatic(Assumption.class)
+    @SuppressWarnings("unused")
+    abstract static class AssumptionNoGuardNode extends SlowPathListenerNode {
+
+        abstract boolean execute(Object arg);
+
+        @Specialization(assumptions = "assumption")
+        public boolean s0(Object arg,
+                        @Cached("NEVER_VALID") Assumption assumption) {
+            return false;
+        }
+
+    }
+
+    @ImportStatic(Assumption.class)
+    @SuppressWarnings("unused")
+    @NodeField(name = "assumption", type = Assumption.class)
+    abstract static class AssumptionGuardNode extends SlowPathListenerNode {
+
+        abstract String execute(Object arg);
+
+        @Specialization(guards = "a.isValid()")
+        public String s0(
+                        Assumption a,
+                        Object arg) {
+            return "s0";
+        }
+
+        @Specialization
+        public String s1(Object arg) {
+            return "s1";
+        }
+
+    }
+
+    @Test
+    public void testAssumptionGuardNode() {
+        Assumption a = Truffle.getRuntime().createAssumption();
+        AssumptionGuardNode node = AssumptionGuardNodeGen.create(a);
+
+        assertEquals("s0", node.execute(0));
+        assertEquals("s0", node.execute(0));
+        a.invalidate();
+        assertEquals("s1", node.execute(0));
+        assertEquals("s1", node.execute(0));
+
+        assertEquals(2, node.specializeCount);
+    }
 }

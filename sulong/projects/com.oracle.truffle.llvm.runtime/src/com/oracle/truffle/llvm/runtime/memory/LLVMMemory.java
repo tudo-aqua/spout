@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2018, 2023, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -29,17 +29,18 @@
  */
 package com.oracle.truffle.llvm.runtime.memory;
 
-import java.util.function.IntBinaryOperator;
-import java.util.function.LongBinaryOperator;
-
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerDirectives.ValueType;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.llvm.runtime.LLVMIVarBit;
 import com.oracle.truffle.llvm.runtime.config.LLVMCapability;
+import com.oracle.truffle.llvm.runtime.floating.LLVM128BitFloat;
 import com.oracle.truffle.llvm.runtime.floating.LLVM80BitFloat;
 import com.oracle.truffle.llvm.runtime.pointer.LLVMManagedPointer;
 import com.oracle.truffle.llvm.runtime.pointer.LLVMNativePointer;
+
+import java.util.function.IntBinaryOperator;
+import java.util.function.LongBinaryOperator;
 
 public abstract class LLVMMemory implements LLVMCapability {
 
@@ -64,6 +65,8 @@ public abstract class LLVMMemory implements LLVMCapability {
      */
     @Deprecated
     public abstract LLVMNativePointer reallocateMemory(Node location, LLVMNativePointer addr, long size);
+
+    public abstract int getPageSize();
 
     public final boolean getI1(Node location, LLVMNativePointer addr) {
         return getI1(location, addr.asNative());
@@ -110,6 +113,8 @@ public abstract class LLVMMemory implements LLVMCapability {
     public abstract double getDouble(Node location, long ptr);
 
     public abstract LLVM80BitFloat get80BitFloat(Node location, LLVMNativePointer addr);
+
+    public abstract LLVM128BitFloat get128BitFloat(Node location, LLVMNativePointer addr);
 
     public final LLVMNativePointer getPointer(Node location, LLVMNativePointer addr) {
         return getPointer(location, addr.asNative());
@@ -170,6 +175,12 @@ public abstract class LLVMMemory implements LLVMCapability {
     }
 
     public abstract void put80BitFloat(Node location, long ptr, LLVM80BitFloat value);
+
+    public abstract void put128BitFloat(Node location, long ptr, LLVM128BitFloat value);
+
+    public final void put128BitFloat(Node location, LLVMNativePointer addr, LLVM128BitFloat value) {
+        put128BitFloat(location, addr.asNative(), value);
+    }
 
     public final void putPointer(Node location, LLVMNativePointer addr, LLVMNativePointer value) {
         putPointer(location, addr.asNative(), value.asNative());
@@ -250,6 +261,8 @@ public abstract class LLVMMemory implements LLVMCapability {
         public abstract boolean isHandle(long address);
 
     }
+
+    public abstract boolean supportsHandles();
 
     public abstract HandleContainer createHandleContainer(boolean deref, Assumption noHandleAssumption);
 

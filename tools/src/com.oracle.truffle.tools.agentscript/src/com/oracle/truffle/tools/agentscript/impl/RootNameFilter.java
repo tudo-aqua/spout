@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,10 +25,8 @@
 package com.oracle.truffle.tools.agentscript.impl;
 
 import com.oracle.truffle.api.CompilerDirectives;
-import com.oracle.truffle.api.interop.ArityException;
+import com.oracle.truffle.api.TruffleContext;
 import com.oracle.truffle.api.interop.InteropLibrary;
-import com.oracle.truffle.api.interop.UnsupportedMessageException;
-import com.oracle.truffle.api.interop.UnsupportedTypeException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -65,18 +63,22 @@ final class RootNameFilter implements Predicate<String> {
                 this.querying.set(true);
                 final InteropLibrary iop = InteropLibrary.getFactory().getUncached();
                 computed = false;
-                InsightPerContext ctx = instrument.findCtx();
-                final int len = key.functionsMaxCount();
-                for (int i = 0; i < len; i++) {
-                    InsightFilter.Data data = (InsightFilter.Data) ctx.functionFor(key, i);
-                    if (data == null || data.rootNameFn == null) {
-                        continue;
-                    }
-                    if (rootNameCheck(iop, data, rootName)) {
-                        computed = true;
-                        break;
+                TruffleContext c = instrument.env().getEnteredContext();
+                if (c != null) {
+                    InsightPerContext ctx = instrument.find(c);
+                    final int len = key.functionsMaxCount();
+                    for (int i = 0; i < len; i++) {
+                        InsightFilter.Data data = (InsightFilter.Data) ctx.functionFor(key, i);
+                        if (data == null || data.rootNameFn == null) {
+                            continue;
+                        }
+                        if (rootNameCheck(iop, data, rootName)) {
+                            computed = true;
+                            break;
+                        }
                     }
                 }
+
             }
         } finally {
             this.querying.set(prev);
@@ -86,16 +88,6 @@ final class RootNameFilter implements Predicate<String> {
     }
 
     static boolean rootNameCheck(final InteropLibrary iop, InsightFilter.Data data, String rootName) {
-        Object res;
-        try {
-            res = iop.execute(data.rootNameFn, rootName);
-        } catch (UnsupportedTypeException ex) {
-            return false;
-        } catch (ArityException ex) {
-            return false;
-        } catch (UnsupportedMessageException ex) {
-            return false;
-        }
-        return Boolean.TRUE.equals(res);
+        return FilterExec.checkFilter(iop, data.rootNameFn, rootName);
     }
 }

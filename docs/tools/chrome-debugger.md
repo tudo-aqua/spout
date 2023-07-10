@@ -28,11 +28,10 @@ console.log("Server running at http://localhost:8000/");
 
 1. Save this program as `HelloWorld.js` and then run:
 ```shell
-node --inspect --jvm HelloWorld.js
-Debugger listening on port 9229.
-To start debugging, open the following URL in Chrome:
-    devtools://devtools/bundled/js_app.html?ws=127.0.1.1:9229/76fcb6dd-35267eb09c3
-Server running at http://localhost:8000/
+$JAVA_HOME/bin/node --inspect --jvm HelloWorld.js
+Debugger listening on ws://127.0.0.1:9229/SBqxI5YIqtREaDrXkFr8hLE0HL1AfKx8TjkI8qPMq2s
+For help, see: https://www.graalvm.org/tools/chrome-debugger
+E.g. in Chrome open: devtools://devtools/bundled/js_app.html?ws=127.0.0.1:9229/SBqxI5YIqtREaDrXkFr8hLE0HL1AfKx8TjkI8qPMq2s
 ```
 
 2. Navigate to `http://localhost:8000/` in your browser to launch the node application.
@@ -45,7 +44,7 @@ Server running at http://localhost:8000/
 
 Now you can inspect the stack, variables, evaluate variables, and selected expressions in a tooltip, and so on. By hovering your cursor over the `response` variable, for instance, you can inspect its properties, as seen in the screenshot below:
 
-![](img/ChromeInspector.png)
+![Chrome Inspector](img/ChromeInspector.png)
 
 Consult the [JavaScript Debugging Reference](https://developers.google.com/web/tools/chrome-devtools/javascript/reference) for details on Chrome DevTools debugging features.
 
@@ -122,3 +121,13 @@ class DebuggerSample {
     }
 }
 ```
+When running on OpenJDK, the following Maven dependency must be declared to use the Chrome Inspector tool from an embedding:
+
+```xml
+<dependency>
+    <groupId>org.graalvm.tools</groupId>
+    <artifactId>chromeinspector</artifactId>
+    <version>${graalvm.version}</version>
+</dependency>
+```
+The Chrome Inspector tool is always available as a tool on GraalVM. No dependency needs to be explicitly declared there.

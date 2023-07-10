@@ -40,11 +40,19 @@
  */
 package com.oracle.truffle.api.test.polyglot;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assume.assumeTrue;
+import static org.junit.Assert.fail;
 
+import com.oracle.truffle.api.staticobject.DefaultStaticObjectFactory;
+import com.oracle.truffle.api.staticobject.DefaultStaticProperty;
+import com.oracle.truffle.api.staticobject.StaticProperty;
+import com.oracle.truffle.api.staticobject.StaticShape;
+import com.oracle.truffle.api.test.ReflectionUtils;
 import org.graalvm.polyglot.Context;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.oracle.truffle.api.CompilerDirectives;
@@ -53,10 +61,12 @@ import com.oracle.truffle.api.ContextThreadLocal;
 import com.oracle.truffle.api.ThreadLocalAction;
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.TruffleLanguage.Env;
-import com.oracle.truffle.api.TruffleOptions;
 import com.oracle.truffle.api.TruffleSafepoint;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.RootNode;
+import com.oracle.truffle.tck.tests.TruffleTestAssumptions;
+
+import java.lang.reflect.Field;
 
 /**
  * Note this test class currently depends on being executed in its own SVM image as it uses the
@@ -65,38 +75,129 @@ import com.oracle.truffle.api.nodes.RootNode;
  *
  * This could potentially be improved using some white-box API that allows to explicitly store and
  * restore the preinitialized context.
+ *
+ * This test needs
+ * -Dpolyglot.image-build-time.PreinitializeContexts=ContextPreintializationNativeImageLanguage
+ * provided via com.oracle.truffle.api.test/src/META-INF/native-image/native-image.properties.
+ * Setting the property programmatically in a static initializer via
+ * System.setProperty("polyglot.image-build-time.PreinitializeContexts", LANGUAGE) is not reliable
+ * as its publishing depends on when the class is initialized. The property needs to be available
+ * before com.oracle.truffle.polyglot.PolyglotContextImpl#preInitialize() is invoked, i.e., before
+ * com.oracle.svm.truffle.TruffleBaseFeature#beforeAnalysis().
  */
 public class ContextPreInitializationNativeImageTest {
 
     static final String LANGUAGE = "ContextPreintializationNativeImageLanguage";
+    private static Context ctx;
 
-    static {
-        System.setProperty("polyglot.image-build-time.PreinitializeContexts", LANGUAGE);
+    @BeforeClass
+    public static void beforeClass() {
+        if (TruffleTestAssumptions.isAOT()) {
+            TruffleTestAssumptions.assumeWeakEncapsulation();
+            ctx = Context.create(LANGUAGE);
+            ctx.initialize(LANGUAGE);
+            ctx.enter();
+        }
+    }
+
+    @AfterClass
+    public static void afterClass() {
+        if (ctx != null) {
+            ctx.close();
+        }
     }
 
     @Test
-    public void test() {
+    public void patchedContext() {
         // only supported in AOT
-        assumeTrue(TruffleOptions.AOT);
+        TruffleTestAssumptions.assumeAOT();
+        assertTrue(Language.CONTEXT_REF.get(null).patched);
+    }
 
-        try (Context context = Context.create(LANGUAGE)) {
-            context.initialize(LANGUAGE);
+    @Test
+    public void threadLocalActions() {
+        // only supported in AOT
+        TruffleTestAssumptions.assumeAOT();
+        assertTrue(String.valueOf(Language.CONTEXT_REF.get(null).threadLocalActions), Language.CONTEXT_REF.get(null).threadLocalActions > 0);
+    }
 
-            context.enter();
-            assertTrue(Language.CONTEXT_REF.get(null).patched);
-            assertTrue(String.valueOf(Language.CONTEXT_REF.get(null).threadLocalActions), Language.CONTEXT_REF.get(null).threadLocalActions > 0);
+    @Test
+    public void somShapeAllocatedOnContextPreInit() throws Exception {
+        // only supported in AOT
+        TruffleTestAssumptions.assumeAOT();
+        StaticObjectModelTest somTest = Language.CONTEXT_REF.get(null).staticObjectModelTest;
+        somTest.testShapeAllocatedOnContextPreInit();
+    }
+
+    @Test
+    public void somObjectAllocatedOnContextPreInit() throws Exception {
+        // only supported in AOT
+        TruffleTestAssumptions.assumeAOT();
+        StaticObjectModelTest somTest = Language.CONTEXT_REF.get(null).staticObjectModelTest;
+        somTest.testObjectAllocatedOnContextPreInit();
+    }
+
+    static class StaticObjectModelTest {
+        private final StaticProperty longProperty;
+        private final StaticShape<DefaultStaticObjectFactory> staticShape;
+        private final Object staticObject;
+
+        StaticObjectModelTest(Env env, Language language) {
+            assertTrue(env.isPreInitialization());
+
+            StaticShape.Builder builder = StaticShape.newBuilder(language);
+            longProperty = new DefaultStaticProperty("longProperty");
+            builder.property(longProperty, long.class, false);
+            staticShape = builder.build();
+            staticObject = staticShape.getFactory().create();
+
+            setVolatileLongProperty(longProperty, staticObject, Long.MAX_VALUE);
+
+            try {
+                Field primitive = staticObject.getClass().getDeclaredField("primitive");
+                assertEquals(byte[].class, primitive.getType());
+            } catch (NoSuchFieldException e) {
+                fail(e.getMessage());
+            }
         }
 
+        void testShapeAllocatedOnContextPreInit() throws Exception {
+            Object newStaticObject = staticShape.getFactory().create();
+            setVolatileLongProperty(longProperty, newStaticObject, Long.MAX_VALUE);
+            getVolatileLongProperty(longProperty, newStaticObject);
+            alignedOffset(longProperty);
+        }
+
+        void testObjectAllocatedOnContextPreInit() throws Exception {
+            getVolatileLongProperty(longProperty, staticObject);
+            alignedOffset(longProperty);
+        }
+
+        static void setVolatileLongProperty(StaticProperty longProperty, Object staticObject, long value) {
+            longProperty.setLongVolatile(staticObject, value);
+        }
+
+        static void getVolatileLongProperty(StaticProperty longProperty, Object staticObject) {
+            assertEquals(Long.MAX_VALUE, longProperty.getLongVolatile(staticObject));
+        }
+
+        static void alignedOffset(StaticProperty longProperty) throws Exception {
+            Field offset = StaticProperty.class.getDeclaredField("offset");
+            ReflectionUtils.setAccessible(offset, true);
+            assertEquals(0, ((int) offset.get(longProperty)) % 8);
+        }
     }
 
     static class TestContext {
 
         final Env env;
+        final StaticObjectModelTest staticObjectModelTest;
         boolean patched;
         int threadLocalActions;
 
-        TestContext(Env env) {
+        TestContext(Env env, Language language) {
             this.env = env;
+            staticObjectModelTest = new StaticObjectModelTest(env, language);
         }
 
     }
@@ -104,15 +205,15 @@ public class ContextPreInitializationNativeImageTest {
     @TruffleLanguage.Registration(id = LANGUAGE, name = LANGUAGE, version = "1.0", contextPolicy = TruffleLanguage.ContextPolicy.SHARED)
     public static final class Language extends TruffleLanguage<TestContext> {
 
-        final ContextThreadLocal<Integer> threadLocal = createContextThreadLocal((c, t) -> 42);
-        final ContextLocal<Integer> contextLocal = createContextLocal((c) -> 42);
+        final ContextThreadLocal<Integer> threadLocal = locals.createContextThreadLocal((c, t) -> 42);
+        final ContextLocal<Integer> contextLocal = locals.createContextLocal((c) -> 42);
         private static final ContextReference<TestContext> CONTEXT_REF = ContextReference.create(Language.class);
         private static final LanguageReference<Language> LANGUAGE_REF = LanguageReference.create(Language.class);
 
         @Override
         protected TestContext createContext(Env env) {
             assertTrue(env.isPreInitialization());
-            return new TestContext(env);
+            return new TestContext(env, this);
         }
 
         @Override
@@ -161,6 +262,9 @@ public class ContextPreInitializationNativeImageTest {
 
             }.getCallTarget().call();
 
+            // No need to call `testShapeAllocatedOnContextPreInit()` here.
+            // During context pre-init, it is equivalent to `testObjectAllocatedOnContextPreInit()`.
+            context.staticObjectModelTest.testObjectAllocatedOnContextPreInit();
         }
 
         @Override
@@ -178,6 +282,10 @@ public class ContextPreInitializationNativeImageTest {
             return true;
         }
 
+        @Override
+        protected boolean isThreadAccessAllowed(Thread thread, boolean singleThreaded) {
+            return true;
+        }
     }
 
 }

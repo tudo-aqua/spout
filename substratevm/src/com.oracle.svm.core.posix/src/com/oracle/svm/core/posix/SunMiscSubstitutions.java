@@ -27,28 +27,29 @@ package com.oracle.svm.core.posix;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Function;
 
-import org.graalvm.compiler.serviceprovider.JavaVersionUtil;
 import org.graalvm.nativeimage.Platform;
-import org.graalvm.nativeimage.Platforms;
-import org.graalvm.nativeimage.StackValue;
+import org.graalvm.nativeimage.c.function.CEntryPoint;
+import org.graalvm.nativeimage.c.function.CEntryPoint.Publish;
+import org.graalvm.nativeimage.c.function.CEntryPointLiteral;
 import org.graalvm.nativeimage.c.type.CIntPointer;
-import org.graalvm.nativeimage.hosted.Feature;
 import org.graalvm.word.WordFactory;
 
-import com.oracle.svm.core.CErrorNumber;
 import com.oracle.svm.core.SubstrateOptions;
+import com.oracle.svm.core.SubstrateSegfaultHandler;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.annotate.Alias;
-import com.oracle.svm.core.annotate.AutomaticFeature;
 import com.oracle.svm.core.annotate.Substitute;
 import com.oracle.svm.core.annotate.TargetClass;
-import com.oracle.svm.core.annotate.TargetElement;
-import com.oracle.svm.core.jdk.JDK11OrLater;
-import com.oracle.svm.core.jdk.JDK8OrEarlier;
+import com.oracle.svm.core.c.function.CEntryPointOptions;
+import com.oracle.svm.core.c.function.CEntryPointOptions.NoEpilogue;
+import com.oracle.svm.core.c.function.CEntryPointOptions.NoPrologue;
+import com.oracle.svm.core.feature.AutomaticallyRegisteredFeature;
+import com.oracle.svm.core.feature.InternalFeature;
+import com.oracle.svm.core.graal.stackvalue.UnsafeStackValue;
+import com.oracle.svm.core.headers.LibC;
 import com.oracle.svm.core.jdk.RuntimeSupport;
 import com.oracle.svm.core.log.Log;
-import com.oracle.svm.core.os.IsDefined;
 import com.oracle.svm.core.posix.headers.CSunMiscSignal;
 import com.oracle.svm.core.posix.headers.Errno;
 import com.oracle.svm.core.posix.headers.Signal;
@@ -56,37 +57,18 @@ import com.oracle.svm.core.posix.headers.Signal.SignalDispatcher;
 import com.oracle.svm.core.posix.headers.Time;
 import com.oracle.svm.core.util.VMError;
 
-@Platforms(Platform.HOSTED_ONLY.class)
-class Package_jdk_internal_misc implements Function<TargetClass, String> {
-    @Override
-    public String apply(TargetClass annotation) {
-        if (JavaVersionUtil.JAVA_SPEC <= 8) {
-            return "sun.misc." + annotation.className();
-        } else {
-            return "jdk.internal.misc." + annotation.className();
-        }
-    }
-}
-
-@TargetClass(classNameProvider = Package_jdk_internal_misc.class, className = "Signal")
+@TargetClass(className = "jdk.internal.misc.Signal")
 final class Target_jdk_internal_misc_Signal {
 
     @Substitute
-    @TargetElement(onlyWith = JDK8OrEarlier.class)
-    private static /* native */ int findSignal(String signalName) {
-        return Util_jdk_internal_misc_Signal.numberFromName(signalName);
-    }
-
-    @Substitute
-    @TargetElement(onlyWith = JDK11OrLater.class)
-    private static /* native */ int findSignal0(String signalName) {
+    private static int findSignal0(String signalName) {
         return Util_jdk_internal_misc_Signal.numberFromName(signalName);
     }
 
     @Substitute
     private static long handle0(int sig, long nativeH) {
-        if (!SubstrateOptions.EnableSignalAPI.getValue()) {
-            throw new IllegalArgumentException("Installing signal handlers is not enabled");
+        if (!SubstrateOptions.EnableSignalHandling.getValue()) {
+            throw new IllegalArgumentException("Signal handlers can't be installed if signal handling is disabled, see option '" + SubstrateOptions.EnableSignalHandling.getName() + "'.");
         }
         return Util_jdk_internal_misc_Signal.handle0(sig, nativeH);
     }
@@ -98,14 +80,14 @@ final class Target_jdk_internal_misc_Signal {
     }
 
     /**
-     * Called by the VM to execute Java signal handlers. Except that in sun.misc.Signal, this method
-     * is private.
+     * Called by the VM to execute Java signal handlers. Except that in jdk.internal.misc.Signal,
+     * this method is private.
      */
     @Alias
     static native void dispatch(int number);
 }
 
-/** Support for Target_sun_misc_Signal. */
+/** Support for Target_jdk_internal_misc_Signal. */
 final class Util_jdk_internal_misc_Signal {
 
     /** A thread to dispatch signals as they are raised. */
@@ -123,17 +105,28 @@ final class Util_jdk_internal_misc_Signal {
         /* All-static class. */
     }
 
-    /** Constants for the longs from sun.misc.Signal. */
+    /** Constants for the longs from jdk.internal.misc.Signal. */
     private static final long sunMiscSignalDefaultHandler = 0;
     private static final long sunMiscSignalIgnoreHandler = 1;
     private static final long sunMiscSignalDispatchHandler = 2;
     private static final long sunMiscSignalErrorHandler = -1;
 
     /**
-     * Register a Java signal handler with the the C signal handling mechanism.
+     * Returns whether the currently installed signal handler matched the passed dispatcher.
      *
-     * This implementation does not complain (by returning -1) about registering signal handlers for
-     * signals that the VM itself uses.
+     * Note this method can race with signal installation unless proper locking is used.
+     */
+    static boolean isCurrentDispatcher(int sig, SignalDispatcher dispatcher) {
+        Signal.sigaction handler = UnsafeStackValue.get(Signal.sigaction.class);
+        Signal.sigaction(sig, WordFactory.nullPointer(), handler);
+        return handler.sa_handler() == dispatcher;
+    }
+
+    /**
+     * Register a Java signal handler with the C signal handling mechanism.
+     *
+     * This code is only called from the substitute Target_jdk_internal_misc_Signal#handle0, which
+     * is called from within a static synchronized call to ensure race-free execution.
      */
     static long handle0(int sig, long nativeH) {
         ensureInitialized();
@@ -142,9 +135,27 @@ final class Util_jdk_internal_misc_Signal {
         if ((newDispatcher == CSunMiscSignal.countingHandlerFunctionPointer()) && (CSunMiscSignal.signalRangeCheck(sig) != 1)) {
             return sunMiscSignalErrorHandler;
         }
+
+        /*
+         * If the segfault handler is registered, then the user cannot override this handler within
+         * Java code.
+         */
+        if (SubstrateSegfaultHandler.isInstalled() && (sig == Signal.SignalEnum.SIGSEGV.getCValue() || sig == Signal.SignalEnum.SIGBUS.getCValue())) {
+            return sunMiscSignalErrorHandler;
+        }
+
+        /*
+         * If the following signals are ignored, then a handler should not be registered for them.
+         */
+        if (sig == Signal.SignalEnum.SIGHUP.getCValue() || sig == Signal.SignalEnum.SIGINT.getCValue() || sig == Signal.SignalEnum.SIGTERM.getCValue()) {
+            if (isCurrentDispatcher(sig, Signal.SIG_IGN())) {
+                return sunMiscSignalIgnoreHandler;
+            }
+        }
+
         updateDispatcher(sig, newDispatcher);
-        final Signal.SignalDispatcher oldDispatcher = PosixUtils.installSignalHandler(sig, newDispatcher);
-        CIntPointer sigset = StackValue.get(CIntPointer.class);
+        final Signal.SignalDispatcher oldDispatcher = PosixUtils.installSignalHandler(sig, newDispatcher, Signal.SA_RESTART());
+        CIntPointer sigset = UnsafeStackValue.get(CIntPointer.class);
         sigset.write(1 << (sig - 1));
         Signal.sigprocmask(Signal.SIG_UNBLOCK(), (Signal.sigset_tPointer) sigset, WordFactory.nullPointer());
         return dispatcherToNativeH(oldDispatcher);
@@ -165,15 +176,15 @@ final class Util_jdk_internal_misc_Signal {
                     /* Open the C signal handling mechanism. */
                     final int openResult = CSunMiscSignal.open();
                     if (openResult != 0) {
-                        final int openErrno = CErrorNumber.getCErrorNumber();
+                        final int openErrno = LibC.errno();
                         /* Check for the C signal handling mechanism already being open. */
                         if (openErrno == Errno.EBUSY()) {
                             throw new IllegalArgumentException("C signal handling mechanism is in use.");
                         }
                         /* Report other failure. */
-                        Log.log().string("Util_sun_misc_Signal.ensureInitialized: CSunMiscSignal.create() failed.")
+                        Log.log().string("Util_jdk_internal_misc_Signal.ensureInitialized: CSunMiscSignal.create() failed.")
                                         .string("  errno: ").signed(openErrno).string("  ").string(Errno.strerror(openErrno)).newline();
-                        throw VMError.shouldNotReachHere("Util_sun_misc_Signal.ensureInitialized: CSunMiscSignal.open() failed.");
+                        throw VMError.shouldNotReachHere("Util_jdk_internal_misc_Signal.ensureInitialized: CSunMiscSignal.open() failed.");
                     }
 
                     /* Initialize the table of signal states. */
@@ -184,7 +195,7 @@ final class Util_jdk_internal_misc_Signal {
                     dispatchThread.setName("Signal Dispatcher");
                     dispatchThread.setDaemon(true);
                     dispatchThread.start();
-                    RuntimeSupport.getRuntimeSupport().addTearDownHook(() -> DispatchThread.interrupt(dispatchThread));
+                    RuntimeSupport.getRuntimeSupport().addTearDownHook(isFirstIsolate -> DispatchThread.interrupt(dispatchThread));
 
                     /* Initialization is complete. */
                     initialized = true;
@@ -205,12 +216,11 @@ final class Util_jdk_internal_misc_Signal {
         for (Signal.SignalEnum value : Signal.SignalEnum.values()) {
             signalStateList.add(new SignalState(value.name(), value.getCValue()));
         }
-        if (IsDefined.isLinux()) {
+        if (Platform.includedIn(Platform.LINUX.class)) {
             for (Signal.LinuxSignalEnum value : Signal.LinuxSignalEnum.values()) {
                 signalStateList.add(new SignalState(value.name(), value.getCValue()));
             }
-        }
-        if (IsDefined.isDarwin()) {
+        } else if (Platform.includedIn(Platform.DARWIN.class)) {
             for (Signal.DarwinSignalEnum value : Signal.DarwinSignalEnum.values()) {
                 signalStateList.add(new SignalState(value.name(), value.getCValue()));
             }
@@ -230,7 +240,7 @@ final class Util_jdk_internal_misc_Signal {
                 return entry.getNumber();
             }
         }
-        /* {@link sun.misc.Signal#findSignal(String)} expects a -1 on failure. */
+        /* {@link jdk.internal.misc.Signal#findSignal(String)} expects a -1 on failure. */
         return -1;
     }
 
@@ -367,12 +377,12 @@ final class Util_jdk_internal_misc_Signal {
 
         protected static void await() {
             final int awaitResult = CSunMiscSignal.await();
-            PosixUtils.checkStatusIs0(awaitResult, "Util_sun_misc_Signal.SignalState.await(): CSunMiscSignal.await() failed.");
+            PosixUtils.checkStatusIs0(awaitResult, "Util_jdk_internal_misc_Signal.SignalState.await(): CSunMiscSignal.await() failed.");
         }
 
         protected static void wakeUp() {
             final int awaitResult = CSunMiscSignal.post();
-            PosixUtils.checkStatusIs0(awaitResult, "Util_sun_misc_Signal.SignalState.post(): CSunMiscSignal.post() failed.");
+            PosixUtils.checkStatusIs0(awaitResult, "Util_jdk_internal_misc_Signal.SignalState.post(): CSunMiscSignal.post() failed.");
         }
 
         /*
@@ -386,34 +396,71 @@ final class Util_jdk_internal_misc_Signal {
     }
 }
 
-@AutomaticFeature
-class IgnoreSIGPIPEFeature implements Feature {
+@AutomaticallyRegisteredFeature
+class IgnoreSignalsFeature implements InternalFeature {
 
     @Override
     public void beforeAnalysis(BeforeAnalysisAccess access) {
-        RuntimeSupport.getRuntimeSupport().addStartupHook(new IgnoreSIGPIPEStartupHook());
+        RuntimeSupport.getRuntimeSupport().addStartupHook(new IgnoreSignalsStartupHook());
     }
 }
 
-final class IgnoreSIGPIPEStartupHook implements Runnable {
+final class IgnoreSignalsStartupHook implements RuntimeSupport.Hook {
+
+    @CEntryPoint(publishAs = Publish.NotPublished)
+    @CEntryPointOptions(prologue = NoPrologue.class, epilogue = NoEpilogue.class)
+    @Uninterruptible(reason = "empty signal handler, Isolate is not set up")
+    static void noopSignalHandler(@SuppressWarnings("unused") int sig) {
+    }
+
+    private static final CEntryPointLiteral<Signal.SignalDispatcher> NOOP_SIGNAL_HANDLER = //
+                    CEntryPointLiteral.create(IgnoreSignalsStartupHook.class, "noopSignalHandler", int.class);
 
     /**
+     * HotSpot ignores the SIGPIPE and SIGXFSZ signals (see <a
+     * href=https://github.com/openjdk/jdk/blob/fc76687c2fac39fcbf706c419bfa170b8efa5747/src/hotspot/os/posix/signals_posix.cpp#L608>signals_posix.cpp</a>).
+     * When signal handling is enabled we do the same thing.
+     * <p>
      * Ignore SIGPIPE. Reading from a closed pipe, instead of delivering a process-wide signal whose
      * default action is to terminate the process, will instead return an error code from the
      * specific write operation.
-     *
-     * From pipe(7}: If all file descriptors referring to the read end of a pipe have been closed,
+     * <p>
+     * From pipe(7): If all file descriptors referring to the read end of a pipe have been closed,
      * then a write(2) will cause a SIGPIPE signal to be generated for the calling process. If the
      * calling process is ignoring this signal, then write(2) fails with the error EPIPE.
+     * <p>
+     * Note that the handler must be an empty function and not SIG_IGN. The problem is SIG_IGN is
+     * inherited to subprocess but we only want to affect the current process.
+     * <p>
+     * From signal(7): A child created via fork(2) inherits a copy of its parent's signal
+     * dispositions. During an execve(2), the dispositions of handled signals are reset to the
+     * default; the dispositions of ignored signals are left unchanged.
      */
     @Override
-    public void run() {
-        final SignalDispatcher signalResult = PosixUtils.installSignalHandler(Signal.SignalEnum.SIGPIPE.getCValue(), Signal.SIG_IGN());
-        VMError.guarantee(signalResult != Signal.SIG_ERR(), "IgnoreSIGPIPEFeature.run: Could not ignore SIGPIPE");
+    public void execute(boolean isFirstIsolate) {
+        if (isFirstIsolate && SubstrateOptions.EnableSignalHandling.getValue()) {
+            synchronized (Target_jdk_internal_misc_Signal.class) {
+                installNoopHandler(Signal.SignalEnum.SIGPIPE);
+                installNoopHandler(Signal.SignalEnum.SIGXFSZ);
+            }
+        }
+    }
+
+    private static void installNoopHandler(Signal.SignalEnum signal) {
+        int signum = signal.getCValue();
+        if (Util_jdk_internal_misc_Signal.isCurrentDispatcher(signum, Signal.SIG_DFL())) {
+            /*
+             * Replace with no-op signal handler if a custom one has not already been installed.
+             */
+            final SignalDispatcher signalResult = PosixUtils.installSignalHandler(signum, NOOP_SIGNAL_HANDLER.getFunctionPointer(), Signal.SA_RESTART());
+            if (signalResult == Signal.SIG_ERR()) {
+                throw VMError.shouldNotReachHere(String.format("IgnoreSignalsStartupHook: Could not install signal: %s", signal));
+            }
+        }
     }
 }
 
-@TargetClass(className = "jdk.internal.misc.VM", onlyWith = JDK11OrLater.class)
+@TargetClass(className = "jdk.internal.misc.VM")
 final class Target_jdk_internal_misc_VM {
 
     /* Implementation from src/hotspot/share/prims/jvm.cpp#L286 translated to Java. */
@@ -422,7 +469,7 @@ final class Target_jdk_internal_misc_VM {
         final long maxDiffSecs = 0x0100000000L;
         final long minDiffSecs = -maxDiffSecs;
 
-        Time.timeval tv = StackValue.get(Time.timeval.class);
+        Time.timeval tv = UnsafeStackValue.get(Time.timeval.class);
         int status = Time.NoTransitions.gettimeofday(tv, WordFactory.nullPointer());
         assert status != -1 : "linux error";
         long seconds = tv.tv_sec();

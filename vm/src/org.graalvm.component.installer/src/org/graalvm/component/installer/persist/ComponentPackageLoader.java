@@ -266,7 +266,6 @@ public class ComponentPackageLoader implements Closeable, MetadataLoader {
 
     protected ComponentInfo loadExtendedMetadata(ComponentInfo base) {
         parse(
-                        () -> base.setPolyglotRebuild(parseHeader(BundleConstants.BUNDLE_POLYGLOT_PART, null).getBoolean(Boolean.FALSE)),
                         () -> base.setDistributionType(parseDistributionType()),
                         () -> loadWorkingDirectories(base),
                         () -> loadMessages(base),
@@ -317,7 +316,7 @@ public class ComponentPackageLoader implements Closeable, MetadataLoader {
             desc = remote;
         }
         try {
-            URL u = new URL(remote);
+            URL u = SystemUtils.toURL(remote);
             FileDownloader dn = createFileDownloader(u, feedback.l10n("LICENSE_RemoteLicenseDescription", desc));
             dn.download();
             String s = String.join("\n", Files.readAllLines(dn.getLocalFile().toPath()));

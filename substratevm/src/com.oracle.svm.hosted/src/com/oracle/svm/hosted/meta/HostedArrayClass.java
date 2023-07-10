@@ -34,8 +34,9 @@ public class HostedArrayClass extends HostedClass {
     private final HostedType baseType;
     private final int arrayDepth;
 
+    @SuppressWarnings("this-escape")
     public HostedArrayClass(HostedUniverse universe, AnalysisType wrapped, JavaKind kind, JavaKind storageKind, HostedClass superClass, HostedInterface[] interfaces, HostedType componentType) {
-        super(universe, wrapped, kind, storageKind, superClass, interfaces, true);
+        super(universe, wrapped, kind, storageKind, superClass, interfaces);
         this.componentType = componentType;
 
         HostedType cur = this;
@@ -91,11 +92,5 @@ public class HostedArrayClass extends HostedClass {
     @Override
     public boolean isMember() {
         return false;
-    }
-
-    @Override
-    int compareToEqualClass(HostedType other) {
-        assert getClass().equals(other.getClass());
-        return getComponentType().compareTo(other.getComponentType());
     }
 }

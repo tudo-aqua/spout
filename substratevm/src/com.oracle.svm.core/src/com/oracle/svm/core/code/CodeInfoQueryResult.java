@@ -26,7 +26,7 @@ package com.oracle.svm.core.code;
 
 import org.graalvm.nativeimage.c.function.CodePointer;
 
-import com.oracle.svm.core.annotate.Uninterruptible;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.heap.CodeReferenceMapDecoder;
 import com.oracle.svm.core.heap.CodeReferenceMapEncoder;
 
@@ -72,7 +72,7 @@ public class CodeInfoQueryResult {
         return getTotalFrameSize(encodedFrameSize);
     }
 
-    @Uninterruptible(reason = "called from uninterruptible code", mayBeInlined = true)
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static long getTotalFrameSize(long encodedFrameSize) {
         return CodeInfoDecoder.decodeTotalFrameSize(encodedFrameSize);
     }
@@ -84,7 +84,7 @@ public class CodeInfoQueryResult {
         return isEntryPoint(encodedFrameSize);
     }
 
-    @Uninterruptible(reason = "called from uninterruptible code", mayBeInlined = true)
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static boolean isEntryPoint(long encodedFrameSize) {
         return CodeInfoDecoder.decodeIsEntryPoint(encodedFrameSize);
     }
@@ -96,7 +96,7 @@ public class CodeInfoQueryResult {
         return hasCalleeSavedRegisters(encodedFrameSize);
     }
 
-    @Uninterruptible(reason = "called from uninterruptible code", mayBeInlined = true)
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static boolean hasCalleeSavedRegisters(long encodedFrameSize) {
         return CodeInfoDecoder.decodeHasCalleeSavedRegisters(encodedFrameSize);
     }
@@ -122,6 +122,7 @@ public class CodeInfoQueryResult {
      * Stack frame information used, e.g., for deoptimization and printing of stack frames in debug
      * builds.
      */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public FrameInfoQueryResult getFrameInfo() {
         return frameInfo;
     }

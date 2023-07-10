@@ -58,7 +58,7 @@ import jdk.vm.ci.meta.ResolvedJavaMethod;
  * we need to change out all metadata objects (types, methods, fields, ...). This is easy because
  * the snippets are encoded anyway, so we have a single Object[] array with all objects referenced
  * from the snippet graphs. The object replacement is done in
- * {@link CompileQueue#replaceAnalysisObjects}.
+ * {@link AnalysisToHostedGraphTransplanter#replaceAnalysisObjects}.
  */
 public class HostedReplacements extends SubstrateReplacements {
 
@@ -75,13 +75,13 @@ public class HostedReplacements extends SubstrateReplacements {
     @Override
     public void registerSnippet(ResolvedJavaMethod method, ResolvedJavaMethod original, Object receiver, boolean trackNodeSourcePosition, OptionValues options) {
         /* We must have the snippet already available in the analysis replacements. */
-        assert aReplacements.getSnippet(((HostedMethod) method).wrapped, null, null, trackNodeSourcePosition, null, options) != null;
+        assert aReplacements.getSnippet(((HostedMethod) method).wrapped, null, null, null, trackNodeSourcePosition, null, options) != null;
     }
 
     @Override
     public void encodeSnippets() {
         /* Copy over all snippets from the analysis replacements, changing out metadata objects. */
         IdentityHashMap<Object, Object> mapping = new IdentityHashMap<>();
-        super.copyFrom(aReplacements, obj -> CompileQueue.replaceAnalysisObjects(obj, null, mapping, hUniverse));
+        super.copyFrom(aReplacements, obj -> AnalysisToHostedGraphTransplanter.replaceAnalysisObjects(obj, null, mapping, hUniverse));
     }
 }

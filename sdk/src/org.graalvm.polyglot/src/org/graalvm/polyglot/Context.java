@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -60,9 +60,13 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Predicate;
 import java.util.logging.Handler;
 import java.util.logging.Level;
+import java.util.stream.StreamSupport;
 
+import org.graalvm.polyglot.impl.AbstractPolyglotImpl.IOAccessor;
 import org.graalvm.polyglot.impl.AbstractPolyglotImpl.AbstractContextDispatch;
+import org.graalvm.polyglot.impl.AbstractPolyglotImpl.LogHandler;
 import org.graalvm.polyglot.io.FileSystem;
+import org.graalvm.polyglot.io.IOAccess;
 import org.graalvm.polyglot.io.MessageTransport;
 import org.graalvm.polyglot.io.ProcessHandler;
 import org.graalvm.polyglot.proxy.Proxy;
@@ -818,7 +822,10 @@ public final class Context implements AutoCloseable {
      *            {@link PolyglotException#isCancelled() cancelled}, else an
      *            {@link IllegalStateException} is thrown.
      * @see Engine#close() close an engine.
-     * @throws PolyglotException in case the close failed due to a guest language error.
+     * @throws PolyglotException in case the close failed due to a guest language error, or, if
+     *             cancelIfExecuting is <code>false</code>, the exception is also thrown when the
+     *             context was {@link PolyglotException#isCancelled() cancelled} or the context was
+     *             {@link PolyglotException#isExit() exited} at request of the guest application.
      * @throws IllegalStateException if the context is still running and cancelIfExecuting is
      *             <code>false</code>
      * @since 19.0
@@ -843,7 +850,9 @@ public final class Context implements AutoCloseable {
      * For convenience, before the actual closing process begins, the close method leaves the
      * context on the current thread, if it was entered {@link #enter() explicitly}.
      *
-     * @throws PolyglotException in case the close failed due to a guest language error.
+     * @throws PolyglotException in case the close failed due to a guest language error, or the
+     *             context was {@link PolyglotException#isCancelled() cancelled} or the context was
+     *             {@link PolyglotException#isExit() exited} at request of the guest application.
      * @throws IllegalStateException if the context is currently executing on another thread.
      * @see Engine#close() close an engine.
      * @since 19.0
@@ -858,7 +867,7 @@ public final class Context implements AutoCloseable {
      * executed during interrupt. A context thread may not be interruptiple if it uses
      * non-interruptible waiting or executes non-interruptible host code.
      *
-     * This method may be used as a "soft exit", meaning that it can be used before
+     * This method may be used as a "soft cancel", meaning that it can be used before
      * {@link #close(boolean) close(true)} is executed.
      *
      * @param timeout specifies the duration the interrupt method will wait for the active threads
@@ -961,11 +970,10 @@ public final class Context implements AutoCloseable {
     }
 
     /**
-     * Creates a context with default configuration.
+     * Creates a context with default configuration. This method is a shortcut for
+     * {@link #newBuilder(String...) newBuilder(permittedLanuages).build()}.
      *
-     * @param permittedLanguages names of languages permitted in this context. If no languages are
-     *            provided, then all installed languages will be permitted.
-     * @return a new context
+     * @see #newBuilder(String...)
      * @since 19.0
      */
     public static Context create(String... permittedLanguages) {
@@ -976,7 +984,12 @@ public final class Context implements AutoCloseable {
      * Creates a builder for constructing a context with custom configuration.
      *
      * @param permittedLanguages names of languages permitted in the context. If no languages are
-     *            provided, then all installed languages will be permitted.
+     *            provided, then all installed languages will be permitted. If an explicit
+     *            {@link Builder#engine(Engine) engine} was specified then only those languages may
+     *            be used that were installed and {@link Engine#newBuilder(String...) permitted} by
+     *            the specified engine. Languages are validated when the context is
+     *            {@link Builder#build() built}. An {@link IllegalArgumentException} will be thrown
+     *            if an unknown or a language denied by the engine was used.
      * @return a builder that can create a context
      * @since 19.0
      */
@@ -986,19 +999,19 @@ public final class Context implements AutoCloseable {
 
     private static final Context EMPTY = new Context();
 
-    static final Predicate<String> UNSET_HOST_LOOKUP = new Predicate<String>() {
+    static final Predicate<String> UNSET_HOST_LOOKUP = new Predicate<>() {
         public boolean test(String t) {
             return false;
         }
     };
 
-    static final Predicate<String> NO_HOST_CLASSES = new Predicate<String>() {
+    static final Predicate<String> NO_HOST_CLASSES = new Predicate<>() {
         public boolean test(String t) {
             return false;
         }
     };
 
-    static final Predicate<String> ALL_HOST_CLASSES = new Predicate<String>() {
+    static final Predicate<String> ALL_HOST_CLASSES = new Predicate<>() {
         public boolean test(String t) {
             return true;
         }
@@ -1015,7 +1028,7 @@ public final class Context implements AutoCloseable {
     public final class Builder {
 
         private Engine sharedEngine;
-        private String[] onlyLanguages;
+        private String[] permittedLanguages;
 
         private OutputStream out;
         private OutputStream err;
@@ -1031,8 +1044,10 @@ public final class Context implements AutoCloseable {
         private Boolean allowExperimentalOptions;
         private Boolean allowHostAccess;
         private boolean allowValueSharing = true;
+        private Boolean allowInnerContextOptions;
         private PolyglotAccess polyglotAccess;
         private HostAccess hostAccess;
+        private IOAccess ioAccess;
         private FileSystem customFileSystem;
         private MessageTransport messageTransport;
         private Object customLogHandler;
@@ -1045,13 +1060,14 @@ public final class Context implements AutoCloseable {
         private Path currentWorkingDirectory;
         private ClassLoader hostClassLoader;
         private boolean useSystemExit;
+        private SandboxPolicy sandboxPolicy;
 
-        Builder(String... onlyLanguages) {
-            Objects.requireNonNull(onlyLanguages);
-            for (String onlyLanguage : onlyLanguages) {
-                Objects.requireNonNull(onlyLanguage);
+        Builder(String... permittedLanguages) {
+            Objects.requireNonNull(permittedLanguages);
+            for (String language : permittedLanguages) {
+                Objects.requireNonNull(language);
             }
-            this.onlyLanguages = onlyLanguages;
+            this.permittedLanguages = permittedLanguages;
         }
 
         /**
@@ -1115,7 +1131,7 @@ public final class Context implements AutoCloseable {
          * @deprecated use {@link #allowHostAccess(HostAccess)} or
          *             {@link #allowHostClassLookup(Predicate)} instead.
          */
-        @Deprecated
+        @Deprecated(since = "19.0")
         public Builder allowHostAccess(boolean enabled) {
             this.allowHostAccess = enabled;
             return this;
@@ -1187,11 +1203,13 @@ public final class Context implements AutoCloseable {
          * entries to the class path.
          * <li>Exporting new members into the polyglot {@link Context#getPolyglotBindings()
          * bindings}.
-         * <li>Unrestricted {@link #allowIO(boolean) IO operations} on host system.
+         * <li>Unrestricted {@link #allowIO(IOAccess) IO operations} on host system.
          * <li>Passing {@link #allowExperimentalOptions(boolean) experimental options}.
          * <li>The {@link #allowCreateProcess(boolean) creation} and use of new sub-processes.
          * <li>The {@link #allowEnvironmentAccess(org.graalvm.polyglot.EnvironmentAccess) access} to
          * process environment variables.
+         * <li>The {@link #allowInnerContextOptions(boolean) changing} of options for of inner
+         * contexts spawned by the language.
          * </ul>
          *
          * @param enabled <code>true</code> for all access by default.
@@ -1206,7 +1224,7 @@ public final class Context implements AutoCloseable {
          * If host class loading is enabled, then the guest language is allowed to load new host
          * classes via jar or class files. If {@link #allowAllAccess(boolean) all access} is set to
          * <code>true</code>, then the host class loading is enabled if it is not disallowed
-         * explicitly. For host class loading to be useful, {@link #allowIO(boolean) IO} operations
+         * explicitly. For host class loading to be useful, {@link #allowIO(IOAccess) IO} operations
          * {@link #allowHostClassLookup(Predicate) host class lookup}, and the
          * {@link #allowHostAccess(org.graalvm.polyglot.HostAccess) host access policy} needs to be
          * configured as well.
@@ -1368,6 +1386,26 @@ public final class Context implements AutoCloseable {
         }
 
         /**
+         * Allows this context to spawn inner contexts that may change option values set for the
+         * outer context. If this privilege is set to <code>false</code> then inner contexts are
+         * only allowed to use the same option values as its outer context. If this privilege is set
+         * to <code>true</code> then the context may modify option values for inner contexts it
+         * creates. This privilege should not be enabled for security sensitive use-cases. The
+         * default value for this privilege is inherited from {@link #allowAllAccess(boolean)}.
+         * <p>
+         * Inner contexts are spawned by language implementations to implement language embeddings
+         * of their own. For example, some languages provide dedicated APIs to spawn language
+         * virtual machines. Such APIs are often implemented using the inner context mechanism.
+         *
+         * @see #allowAllAccess(boolean)
+         * @since 22.3
+         */
+        public Builder allowInnerContextOptions(boolean enabled) {
+            this.allowInnerContextOptions = enabled;
+            return this;
+        }
+
+        /**
          * Sets a class filter that allows to limit the classes that are allowed to be loaded by
          * guest languages. If the filter returns <code>true</code>, then the class is accessible,
          * otherwise it is not accessible and throws a guest language error when accessed. In order
@@ -1379,7 +1417,7 @@ public final class Context implements AutoCloseable {
          * @since 19.0
          * @deprecated use {@link #allowHostClassLookup(Predicate)} instead.
          */
-        @Deprecated
+        @Deprecated(since = "19.0")
         public Builder hostClassFilter(Predicate<String> classFilter) {
             Objects.requireNonNull(classFilter);
             this.hostClassFilter = classFilter;
@@ -1421,8 +1459,8 @@ public final class Context implements AutoCloseable {
          * @since 19.0
          */
         public Builder options(Map<String, String> options) {
-            for (String key : options.keySet()) {
-                option(key, options.get(key));
+            for (var entry : options.entrySet()) {
+                option(entry.getKey(), entry.getValue());
             }
             return this;
         }
@@ -1457,6 +1495,26 @@ public final class Context implements AutoCloseable {
         }
 
         /**
+         * Configures guest language access to host IO. Default is {@link IOAccess#NONE}. If
+         * {@link #allowAllAccess(boolean) all access} is set to {@code true}, then
+         * {@link IOAccess#ALL} is used unless explicitly set. This method can be used to virtualize
+         * file system access in the guest language by using an {@link IOAccess} with a custom
+         * filesystem.
+         *
+         * @see IOAccess#ALL - to allow full host IO access
+         * @see IOAccess#NONE - to disable host IO access
+         * @see IOAccess#newBuilder() - to create a custom configuration.
+         *
+         * @param ioAccess the IO configuration
+         * @return the {@link Builder}
+         * @since 23.0
+         */
+        public Builder allowIO(IOAccess ioAccess) {
+            this.ioAccess = ioAccess;
+            return this;
+        }
+
+        /**
          * If <code>true</code>, allows guest language to perform unrestricted IO operations on host
          * system. Default is <code>false</code>. If {@link #allowAllAccess(boolean) all access} is
          * set to <code>true</code>, then IO is enabled if not allowed explicitly.
@@ -1464,7 +1522,10 @@ public final class Context implements AutoCloseable {
          * @param enabled {@code true} to enable Input/Output
          * @return the {@link Builder}
          * @since 19.0
+         * @deprecated If the value was previously {@code true} pass {@link IOAccess#ALL}, otherwise
+         *             pass {@link IOAccess#NONE}.
          */
+        @Deprecated(since = "23.0")
         public Builder allowIO(final boolean enabled) {
             allowIO = enabled;
             return this;
@@ -1476,7 +1537,10 @@ public final class Context implements AutoCloseable {
          * @param fileSystem the file system to be installed
          * @return the {@link Builder}
          * @since 19.0
+         * @deprecated If a file system was previously set use
+         *             {@code allowIO(IOAccess.newBuilder().fileSystem(fileSystem).build())}.
          */
+        @Deprecated(since = "23.0")
         public Builder fileSystem(final FileSystem fileSystem) {
             Objects.requireNonNull(fileSystem, "FileSystem must be non null.");
             this.customFileSystem = fileSystem;
@@ -1619,6 +1683,19 @@ public final class Context implements AutoCloseable {
         }
 
         /**
+         * Sets a code sandbox policy to a context. By default, the context's sandbox policy is
+         * {@link SandboxPolicy#TRUSTED}, there are no restrictions to the context configuration.
+         *
+         * @see SandboxPolicy
+         * @since 23.0
+         */
+        public Builder sandbox(SandboxPolicy policy) {
+            Engine.validateSandboxPolicy(this.sandboxPolicy, policy);
+            this.sandboxPolicy = policy;
+            return this;
+        }
+
+        /**
          * Allow environment access using the provided policy. If {@link #allowAllAccess(boolean)
          * all access} is {@code true} then the default environment access policy is
          * {@link EnvironmentAccess#INHERIT}, otherwise {@link EnvironmentAccess#NONE}. The provided
@@ -1724,15 +1801,24 @@ public final class Context implements AutoCloseable {
          * @since 19.0
          */
         public Context build() {
+
             boolean nativeAccess = orAllAccess(allowNativeAccess);
             boolean createThread = orAllAccess(allowCreateThread);
-            boolean io = orAllAccess(allowIO);
             boolean hostClassLoading = orAllAccess(allowHostClassLoading);
             boolean experimentalOptions = orAllAccess(allowExperimentalOptions);
+            boolean innerContextOptions = orAllAccess(allowInnerContextOptions);
 
             if (this.allowHostAccess != null && this.hostAccess != null) {
-                throw new IllegalArgumentException("The method allowHostAccess with boolean and with HostAccess are mutually exclusive.");
+                throw new IllegalArgumentException("The method Context.Builder.allowHostAccess(boolean) and the method Context.Builder.allowHostAccess(HostAccess) are mutually exclusive.");
             }
+            if (ioAccess != null && allowIO != null) {
+                throw new IllegalArgumentException("The method Context.Builder.allowIO(boolean) and the method Context.Builder.allowIO(IOAccess) are mutually exclusive.");
+            }
+            if (ioAccess != null && customFileSystem != null) {
+                throw new IllegalArgumentException("The method Context.Builder.allowIO(IOAccess) and the method Context.Builder.fileSystem(FileSystem) are mutually exclusive.");
+            }
+            SandboxPolicy useSandboxPolicy = resolveSandboxPolicy();
+            validateSandbox(useSandboxPolicy);
 
             Predicate<String> localHostLookupFilter = this.hostClassFilter;
             HostAccess hostAccess = this.hostAccess;
@@ -1746,7 +1832,13 @@ public final class Context implements AutoCloseable {
                 hostAccess = HostAccess.ALL;
             }
             if (hostAccess == null) {
-                hostAccess = this.allowAllAccess ? HostAccess.ALL : HostAccess.EXPLICIT;
+                hostAccess = switch (useSandboxPolicy) {
+                    case TRUSTED -> allowAllAccess ? HostAccess.ALL : HostAccess.EXPLICIT;
+                    case CONSTRAINED -> HostAccess.CONSTRAINED;
+                    case ISOLATED -> HostAccess.ISOLATED;
+                    case UNTRUSTED -> HostAccess.UNTRUSTED;
+                    default -> throw new IllegalArgumentException(String.valueOf(useSandboxPolicy));
+                };
             }
 
             PolyglotAccess polyglotAccess = this.polyglotAccess;
@@ -1767,9 +1859,7 @@ public final class Context implements AutoCloseable {
             }
 
             boolean createProcess = orAllAccess(allowCreateProcess);
-            if (environmentAccess == null) {
-                environmentAccess = this.allowAllAccess ? EnvironmentAccess.INHERIT : EnvironmentAccess.NONE;
-            }
+            EnvironmentAccess useEnvironmentAccess = environmentAccess != null ? environmentAccess : allowAllAccess ? EnvironmentAccess.INHERIT : EnvironmentAccess.NONE;
             Object limits;
             if (resourceLimits != null) {
                 limits = resourceLimits.receiver;
@@ -1777,8 +1867,25 @@ public final class Context implements AutoCloseable {
                 limits = null;
             }
 
-            if (!io && customFileSystem != null) {
-                throw new IllegalStateException("Cannot install custom FileSystem when IO is disabled.");
+            IOAccess useIOAccess;
+            if (ioAccess != null) {
+                useIOAccess = ioAccess;
+            } else if (allowIO != null || customFileSystem != null) {
+                if (orAllAccess(allowIO)) {
+                    if (customFileSystem != null) {
+                        useIOAccess = IOAccess.newBuilder().fileSystem(customFileSystem).build();
+                    } else {
+                        useIOAccess = IOAccess.ALL;
+                    }
+                } else {
+                    if (customFileSystem != null) {
+                        throw new IllegalStateException("Cannot install custom FileSystem when IO is disabled.");
+                    } else {
+                        useIOAccess = IOAccess.NONE;
+                    }
+                }
+            } else {
+                useIOAccess = allowAllAccess ? IOAccess.ALL : IOAccess.NONE;
             }
             String localCurrentWorkingDirectory = currentWorkingDirectory == null ? null : currentWorkingDirectory.toString();
             Engine engine = this.sharedEngine;
@@ -1788,7 +1895,7 @@ public final class Context implements AutoCloseable {
             InputStream contextIn;
             Map<String, String> contextOptions;
             if (engine == null) {
-                org.graalvm.polyglot.Engine.Builder engineBuilder = Engine.newBuilder().options(options == null ? Collections.emptyMap() : options);
+                org.graalvm.polyglot.Engine.Builder engineBuilder = Engine.newBuilder(permittedLanguages).options(options == null ? Collections.emptyMap() : options);
                 // for bound engines we just pass all the options to the engine so they can be
                 // processed in one step.
                 contextOptions = Collections.emptyMap();
@@ -1813,6 +1920,7 @@ public final class Context implements AutoCloseable {
                 } else if (customLogHandler instanceof OutputStream) {
                     engineBuilder.logHandler((OutputStream) customLogHandler);
                 }
+                engineBuilder.sandbox(useSandboxPolicy);
                 engineBuilder.allowExperimentalOptions(experimentalOptions);
                 engineBuilder.setBoundEngine(true);
                 engine = engineBuilder.build();
@@ -1825,11 +1933,13 @@ public final class Context implements AutoCloseable {
                 contextErr = err;
                 contextIn = in;
             }
-            ctx = engine.dispatch.createContext(engine.receiver, contextOut, contextErr, contextIn, hostClassLookupEnabled, hostAccess, polyglotAccess, nativeAccess, createThread,
-                            io, hostClassLoading, experimentalOptions,
-                            localHostLookupFilter, contextOptions, arguments == null ? Collections.emptyMap() : arguments,
-                            onlyLanguages, customFileSystem, customLogHandler, createProcess, processHandler, environmentAccess, environment, zone, limits,
-                            localCurrentWorkingDirectory, hostClassLoader, allowValueSharing, useSystemExit);
+            LogHandler logHandler = customLogHandler != null ? Engine.getImpl().newLogHandler(customLogHandler) : null;
+            String tmpDir = Engine.getImpl().getIO().hasHostFileAccess(useIOAccess) ? System.getProperty("java.io.tmpdir") : null;
+            ctx = engine.dispatch.createContext(engine.receiver, useSandboxPolicy, contextOut, contextErr, contextIn, hostClassLookupEnabled,
+                            hostAccess, polyglotAccess, nativeAccess, createThread, hostClassLoading, innerContextOptions,
+                            experimentalOptions, localHostLookupFilter, contextOptions, arguments == null ? Collections.emptyMap() : arguments,
+                            permittedLanguages, useIOAccess, logHandler, createProcess, processHandler, useEnvironmentAccess, environment, zone, limits,
+                            localCurrentWorkingDirectory, tmpDir, hostClassLoader, allowValueSharing, useSystemExit);
             return ctx;
         }
 
@@ -1837,5 +1947,211 @@ public final class Context implements AutoCloseable {
             return optionalBoolean != null ? optionalBoolean : allowAllAccess;
         }
 
+        /**
+         * Resolves the actual value of {@code sandboxPolicy}. It can be explicitly set by the
+         * embedder or inherited from a shared engine.
+         */
+        private SandboxPolicy resolveSandboxPolicy() {
+            SandboxPolicy engineSandboxPolicy = sharedEngine != null ? sharedEngine.dispatch.getSandboxPolicy(sharedEngine.receiver) : null;
+            if (sandboxPolicy != null && engineSandboxPolicy != null && sandboxPolicy != engineSandboxPolicy) {
+                throw Engine.Builder.throwSandboxException(sandboxPolicy,
+                                String.format("The engine and context must have the same SandboxPolicy. The Engine.Builder.sandbox(SandboxPolicy) is set to %s, while the Context.Builder.sandbox(SandboxPolicy) is set to %s.",
+                                                engineSandboxPolicy, sandboxPolicy),
+                                String.format("set Engine.Builder.sandbox(SandboxPolicy) to SandboxPolicy.%s or set Context.Builder.sandbox(SandboxPolicy) to SandboxPolicy.%s",
+                                                sandboxPolicy,
+                                                engineSandboxPolicy));
+            }
+            SandboxPolicy useSandboxPolicy;
+            if (sandboxPolicy != null) {
+                useSandboxPolicy = sandboxPolicy;
+            } else if (engineSandboxPolicy != null) {
+                useSandboxPolicy = engineSandboxPolicy;
+            } else {
+                useSandboxPolicy = SandboxPolicy.TRUSTED;
+            }
+            return useSandboxPolicy;
+        }
+
+        /**
+         * Validates configured sandbox policy constrains.
+         *
+         * @throws IllegalArgumentException if the context configuration is not compatible with the
+         *             requested sandbox policy.
+         */
+        private void validateSandbox(SandboxPolicy useSandboxPolicy) {
+            if (useSandboxPolicy == SandboxPolicy.TRUSTED) {
+                return;
+            }
+            if (useSandboxPolicy.isStricterOrEqual(SandboxPolicy.CONSTRAINED)) {
+                if (permittedLanguages.length == 0 && sharedEngine == null) {
+                    throw Engine.Builder.throwSandboxException(useSandboxPolicy, "Builder does not have a list of permitted languages.",
+                                    "create a Builder with a list of permitted languages, for example, Context.newBuilder(\"js\")");
+                }
+                if (allowAllAccess) {
+                    throw Engine.Builder.throwSandboxException(useSandboxPolicy, "Builder.allowAllAccess(boolean) is set to true, but must not be set to true.",
+                                    "do not set Builder.allowAllAccess(boolean)");
+                }
+                if (Boolean.TRUE.equals(allowNativeAccess)) {
+                    throw Engine.Builder.throwSandboxException(useSandboxPolicy, "Builder.allowNativeAccess(boolean) is set to true, but must not be set to true.",
+                                    "do not set Builder.allowNativeAccess(boolean)");
+                }
+                if (Boolean.TRUE.equals(allowHostClassLoading)) {
+                    throw Engine.Builder.throwSandboxException(useSandboxPolicy, "Builder.allowHostClassLoading(boolean) is set to true, but must not be set to true.",
+                                    "do not set Builder.allowHostClassLoading(boolean)");
+                }
+                if (Boolean.TRUE.equals(allowCreateProcess)) {
+                    throw Engine.Builder.throwSandboxException(useSandboxPolicy, "Builder.allowCreateProcess(boolean) is set to true, but must not be set to true.",
+                                    "do not set Builder.allowCreateProcess(boolean)");
+                }
+                if (useSystemExit) {
+                    throw Engine.Builder.throwSandboxException(useSandboxPolicy, "Builder.useSystemExit(boolean) is set to true, but must not be set to true.",
+                                    "do not set Builder.useSystemExit(boolean)");
+                }
+                if (Engine.isSystemStream(in)) {
+                    throw Engine.Builder.throwSandboxException(useSandboxPolicy, "Builder uses the standard input stream, but the input must be redirected.",
+                                    "do not set Builder.in(InputStream) to use InputStream.nullInputStream() or redirect it to other stream than System.in");
+                }
+                if (Engine.isSystemStream(out)) {
+                    throw Engine.Builder.throwSandboxException(useSandboxPolicy, "Builder uses the standard output stream, but the output must be redirected.",
+                                    "set Builder.out(OutputStream)");
+                }
+                if (Engine.isSystemStream(err)) {
+                    throw Engine.Builder.throwSandboxException(useSandboxPolicy, "Builder uses the standard error stream, but the error output must be redirected.",
+                                    "set Builder.err(OutputStream)");
+                }
+                FileSystem fileSystem;
+                if (ioAccess != null) {
+                    IOAccessor ioAccessor = Engine.getImpl().getIO();
+                    if (ioAccessor.hasHostFileAccess(ioAccess)) {
+                        throw Engine.Builder.throwSandboxException(useSandboxPolicy,
+                                        "Builder.allowIO(IOAccess) is set to an IOAccess, which allows access to the host file system, but access to the host file system must be disabled.",
+                                        "disable filesystem access using Builder.allowIO(IOAccess.NONE) or install a custom filesystem using Builder.allowIO(IOAccess.newBuilder().fileSystem(customFs))");
+                    }
+                    if (ioAccessor.hasHostSocketAccess(ioAccess)) {
+                        throw Engine.Builder.throwSandboxException(useSandboxPolicy,
+                                        "Builder.allowIO(IOAccess) is set to an IOAccess, which allows access to host sockets, but access to host sockets must be disabled.",
+                                        "do not set IOAccess.Builder.allowHostSocketAccess(boolean)");
+                    }
+                    assert customFileSystem == null;
+                    fileSystem = ioAccessor.getFileSystem(ioAccess);
+                } else {
+                    fileSystem = customFileSystem;
+                }
+                if (fileSystem != null && Engine.getImpl().isHostFileSystem(fileSystem)) {
+                    throw Engine.Builder.throwSandboxException(useSandboxPolicy,
+                                    "Builder.allowIO(IOAccess) is set to an IOAccess, which has a custom file system that allows access to the host file system, but access to the host file system must be disabled.",
+                                    "disable filesystem access using Builder.allowIO(IOAccess.NONE) or install a non-host custom filesystem using Builder.allowIO(IOAccess.newBuilder().fileSystem(customFs))");
+
+                }
+                if (Boolean.TRUE.equals(allowIO)) {
+                    throw Engine.Builder.throwSandboxException(useSandboxPolicy, "Builder.allowIO(boolean) is set to true, but must not be set to true.",
+                                    "disable filesystem access using Builder.allowIO(IOAccess.NONE) or install a custom filesystem using Builder.allowIO(IOAccess.newBuilder().fileSystem(customFs))");
+                }
+                if (environmentAccess != null && environmentAccess != EnvironmentAccess.NONE) {
+                    throw Engine.Builder.throwSandboxException(useSandboxPolicy,
+                                    "Builder.allowEnvironmentAccess(EnvironmentAccess) is set to " + environmentAccess + ", but must be set to EnvironmentAccess.NONE.",
+                                    "do not set Builder.allowEnvironmentAccess(EnvironmentAccess) or set it to EnvironmentAccess.NONE");
+                }
+                if (Boolean.TRUE.equals(allowHostAccess)) {
+                    throw Engine.Builder.throwSandboxException(useSandboxPolicy, "Builder.allowHostAccess(boolean) is set to true, but must not be set to true.",
+                                    "do not set Builder.allowHostAccess(boolean) to use the sandbox policy preset or set Builder.allowHostAccess(HostAccess)");
+                }
+                if (hostAccess != null) {
+                    if (hostAccess.allowPublic) {
+                        throw Engine.Builder.throwSandboxException(useSandboxPolicy,
+                                        "Builder.allowHostAccess(HostAccess) is set to a HostAccess which was created with HostAccess.Builder.allowPublicAccess(boolean) set to true, " +
+                                                        "but HostAccess.Builder.allowPublicAccess(boolean) must not be set to true.",
+                                        "do not set HostAccess.Builder.allowPublicAccess(boolean)");
+                    }
+                    if (hostAccess.allowAccessInheritance) {
+                        throw Engine.Builder.throwSandboxException(useSandboxPolicy,
+                                        "Builder.allowHostAccess(HostAccess) is set to a HostAccess which was created with HostAccess.Builder.allowAccessInheritance(boolean) set to true, " +
+                                                        "but HostAccess.Builder.allowAccessInheritance(boolean) must not be set to true.",
+                                        "do not set HostAccess.Builder.allowAccessInheritance(boolean)");
+                    }
+                    if (hostAccess.allowAllInterfaceImplementations) {
+                        throw Engine.Builder.throwSandboxException(useSandboxPolicy,
+                                        "Builder.allowHostAccess(HostAccess) is set to a HostAccess which was created with HostAccess.Builder.allowAllImplementations(boolean) set to true, " +
+                                                        "but HostAccess.Builder.allowAllImplementations(boolean) must not be set to true.",
+                                        "do not set HostAccess.Builder.allowAllImplementations(boolean)");
+                    }
+                    if (hostAccess.allowAllClassImplementations) {
+                        throw Engine.Builder.throwSandboxException(useSandboxPolicy,
+                                        "Builder.allowHostAccess(HostAccess) is set to a HostAccess which was created with HostAccess.Builder.allowAllClassImplementations(boolean) set to true, " +
+                                                        "but HostAccess.Builder.allowAllClassImplementations(boolean) must not be set to true.",
+                                        "do not set HostAccess.Builder.allowAllClassImplementations(boolean)");
+                    }
+                    if (hostAccess.implementableAnnotations != null && hostAccess.implementableAnnotations.contains(FunctionalInterface.class)) {
+                        throw Engine.Builder.throwSandboxException(useSandboxPolicy,
+                                        "Builder.allowHostAccess(HostAccess) is set to a HostAccess which allows FunctionalInterface implementations, " +
+                                                        "but FunctionalInterface implementations must not be enabled.",
+                                        "do not set HostAccess.Builder.allowImplementationsAnnotatedBy(FunctionalInterface.class)");
+                    }
+                    HostAccess.MutableTargetMapping[] mutableTargetMappings = hostAccess.getMutableTargetMappings();
+                    if (mutableTargetMappings.length > 0) {
+                        throw Engine.Builder.throwSandboxException(useSandboxPolicy,
+                                        "Builder.allowHostAccess(HostAccess) is set to a HostAccess which allows host object mappings of mutable target types, but it must not be enabled.",
+                                        "disable host object mappings of mutable target types by setting HostAccess.Builder.allowMutableTargetMappings(MutableTargetMapping...) to an empty array");
+                    }
+                }
+            }
+            if (useSandboxPolicy.isStricterOrEqual(SandboxPolicy.ISOLATED)) {
+                if (hostAccess != null && !hostAccess.isMethodScopingEnabled()) {
+                    throw Engine.Builder.throwSandboxException(useSandboxPolicy,
+                                    "Builder.allowHostAccess(HostAccess) is set to a HostAccess which has no HostAccess.Builder.methodScoping(boolean) set to true, " +
+                                                    "but HostAccess.Builder.methodScoping(boolean) must be enabled.",
+                                    "set HostAccess.Builder.methodScoping(boolean)");
+                }
+            }
+            if (useSandboxPolicy.isStricterOrEqual(SandboxPolicy.UNTRUSTED)) {
+                if (hostAccess != null) {
+                    if (hostAccess.allowArrayAccess) {
+                        throw Engine.Builder.throwSandboxException(useSandboxPolicy,
+                                        "Builder.allowHostAccess(HostAccess) is set to a HostAccess which was created with HostAccess.Builder.allowArrayAccess(boolean) set to true, " +
+                                                        "but HostAccess.Builder.allowArrayAccess(boolean) must not be set to true.",
+                                        "do not set HostAccess.Builder.allowArrayAccess(boolean)");
+                    }
+                    if (hostAccess.allowListAccess) {
+                        throw Engine.Builder.throwSandboxException(useSandboxPolicy,
+                                        "Builder.allowHostAccess(HostAccess) is set to a HostAccess which was created with HostAccess.Builder.allowListAccess(boolean) set to true, " +
+                                                        "but HostAccess.Builder.allowListAccess(boolean) must not be set to true.",
+                                        "do not set HostAccess.Builder.allowListAccess(boolean)");
+                    }
+                    if (hostAccess.allowMapAccess) {
+                        throw Engine.Builder.throwSandboxException(useSandboxPolicy,
+                                        "Builder.allowHostAccess(HostAccess) is set to a HostAccess which was created with HostAccess.Builder.allowMapAccess(boolean) set to true, " +
+                                                        "but HostAccess.Builder.allowMapAccess(boolean) must not be set to true.",
+                                        "do not set HostAccess.Builder.allowMapAccess(boolean)");
+                    }
+                    if (hostAccess.allowBufferAccess) {
+                        throw Engine.Builder.throwSandboxException(useSandboxPolicy,
+                                        "Builder.allowHostAccess(HostAccess) is set to a HostAccess which was created with HostAccess.Builder.allowBufferAccess(boolean) set to true, " +
+                                                        "but HostAccess.Builder.allowBufferAccess(boolean) must not be set to true.",
+                                        "do not set HostAccess.Builder.allowBufferAccess(boolean)");
+                    }
+                    if (hostAccess.allowIterableAccess) {
+                        throw Engine.Builder.throwSandboxException(useSandboxPolicy,
+                                        "Builder.allowHostAccess(HostAccess) is set to a HostAccess which was created with HostAccess.Builder.allowIterableAccess(boolean) set to true, " +
+                                                        "but HostAccess.Builder.allowIterableAccess(boolean) must not be set to true.",
+                                        "do not set HostAccess.Builder.allowIterableAccess(boolean)");
+                    }
+                    if (hostAccess.allowIteratorAccess) {
+                        throw Engine.Builder.throwSandboxException(useSandboxPolicy,
+                                        "Builder.allowHostAccess(HostAccess) is set to a HostAccess which was created with HostAccess.Builder.allowIteratorAccess(boolean) set to true, " +
+                                                        "but HostAccess.Builder.allowIteratorAccess(boolean) must not be set to true.",
+                                        "do not set HostAccess.Builder.allowIteratorAccess(boolean)");
+                    }
+                    if (hostAccess.implementableAnnotations != null && !hostAccess.implementableAnnotations.isEmpty()) {
+                        var annotations = StreamSupport.stream(hostAccess.implementableAnnotations.spliterator(), false).map(Class::getSimpleName).toList();
+                        var builderCommands = annotations.stream().map((n) -> String.format("HostAccess.Builder.allowImplementationsAnnotatedBy(%s.class)", n)).toList();
+                        throw Engine.Builder.throwSandboxException(useSandboxPolicy, String.format(
+                                        "Builder.allowHostAccess(HostAccess) is set to a HostAccess which allows implementations of types annotated by %s, " +
+                                                        "but implementations of annotated types must not be enabled.",
+                                        String.join(", ", annotations)),
+                                        String.format("do not set %s", String.join(", ", builderCommands)));
+                    }
+                }
+            }
+        }
     }
 }

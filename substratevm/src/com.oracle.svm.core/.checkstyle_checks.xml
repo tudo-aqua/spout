@@ -1,19 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE module PUBLIC "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN" "https://checkstyle.org/dtds/configuration_1_3.dtd">
 
-<!--
-    This configuration file was written by the eclipse-cs plugin configuration editor
--->
-<!--
-    Checkstyle-Configuration: Checks
-    Description: none
--->
 <module name="Checker">
   <property name="severity" value="error"/>
   <module name="TreeWalker">
     
     <!-- Disallows direct calls to "AnnotatedElement.get(Declared)Annotation(s)". This check can yield false positives,
-    i.e., it will match any ".get(Declared)Annotation(s)" calls that are not preceded by "GuardedAnnotationAccess"
+    i.e., it will match any ".get(Declared)Annotation(s)" calls that are not preceded by "AnnotationAccess"
     since checkstyle relies only on pattern matching and it cannot determine the type of the call's receiver object.
      -->
     <module name="RegexpSinglelineJava">
@@ -21,7 +14,7 @@
       <metadata name="net.sf.eclipsecs.core.comment" value="Disallow calls to AnnotatedElement.get(Declared)Annotation(s)."/>
       <property name="severity" value="error"/>
       <property name="format" value="(?&lt;!AnnotationAccess)\.(getAnnotation|getAnnotations|getDeclaredAnnotation|getDeclaredAnnotations|isAnnotationPresent)\b"/>
-      <property name="message" value="Direct calls to java.lang.reflect.AnnotatedElement.get(Declared)Annotation(s) are restricted. Use either org.graalvm.util.GuardedAnnotationAccess or org.graalvm.util.DirectAnnotationAccess methods. (Use &quot;// Checkstyle: allow direct annotation access... // Checkstyle: disallow direct annotation access&quot; to disable this check.)"/>
+      <property name="message" value="Direct calls to java.lang.reflect.AnnotatedElement.get(Declared)Annotation(s) are restricted. Use org.graalvm.nativeimage.AnnotationAccess methods. (Use &quot;// Checkstyle: allow direct annotation access... // Checkstyle: disallow direct annotation access&quot; to disable this check.)"/>
       <property name="ignoreComments" value="true"/>
     </module>
     <module name="SuppressionCommentFilter">
@@ -61,6 +54,63 @@
       <metadata name="com.atlassw.tools.eclipse.checkstyle.comment" value="Disable Class.getSimpleName calls"/>
     </module>
 
+    <module name="RegexpSinglelineJava">
+      <property name="id" value="userError"/>
+      <metadata name="net.sf.eclipsecs.core.comment" value="Consistent format strings for UserError."/>
+      <property name="severity" value="error"/> 
+      <property name="format" value="UserError\.(abort|guarantee)\(([a-zA-Z$0-9!]+, )?&quot;[a-z]"/>
+      <property name="message" value="'format' passed to UserError.abort() or UserError.guarantee() must not start with a lowercase letter"/>
+      <property name="ignoreComments" value="true"/>
+    </module>
+
+    <module name="RegexpSinglelineJava">
+      <property name="id" value="exceptionsAndErrors"/>
+      <metadata name="net.sf.eclipsecs.core.comment" value="Consistent exception and error messages."/>
+      <property name="severity" value="error"/> 
+      <property name="format" value=" [A-Z][a-zA-Z0-9]*(Error|Exception)\(&quot;[a-z]"/>
+      <property name="message" value="Exception and error messages must not start with a lowercase letter"/>
+      <property name="ignoreComments" value="true"/>
+    </module>
+    <module name="SuppressionCommentFilter">
+      <property name="offCommentFormat" value="Checkstyle: allow inconsistent exceptions and errors"/>
+      <property name="onCommentFormat" value="Checkstyle: disallow inconsistent exceptions and errors"/>
+      <property name="idFormat" value="exceptionsAndErrors"/>
+      <metadata name="com.atlassw.tools.eclipse.checkstyle.comment" value="Tolerate inconsistent exceptions and errors"/>
+    </module>
+
+    <module name="RegexpSinglelineJava">
+      <property name="id" value="infoAndWarnings"/>
+      <metadata name="net.sf.eclipsecs.core.comment" value="Raw info or warning printing."/>
+      <property name="severity" value="error"/> 
+      <property name="format" value="(?i)&quot;(Info|Warning):"/>
+      <property name="message" value="Raw info or warning printing detected. Please use LogUtils#info or #LogUtils#warning"/>
+      <property name="ignoreComments" value="true"/>
+    </module>
+    <module name="SuppressionCommentFilter">
+      <property name="offCommentFormat" value="Checkstyle: Allow raw info or warning printing - begin"/>
+      <property name="onCommentFormat" value="Checkstyle: Allow raw info or warning printing - end"/>
+      <property name="idFormat" value="infoAndWarnings"/>
+      <metadata name="com.atlassw.tools.eclipse.checkstyle.comment" value="Tolerate raw info or warning printing"/>
+    </module>
+
+    <module name="RegexpSinglelineJava">
+      <property name="id" value="infoAndWarningMessages"/>
+      <metadata name="net.sf.eclipsecs.core.comment" value="Consistent info and warning messages."/>
+      <property name="severity" value="error"/> 
+      <property name="format" value="LogUtils\.(info|warning)\(&quot;[a-z]"/>
+      <property name="message" value="Info and warning messages must not start with a lowercase letter"/>
+      <property name="ignoreComments" value="true"/>
+    </module>
+
+    <module name="RegexpSinglelineJava">
+      <property name="id" value="newLinesFormatStrings"/>
+      <metadata name="net.sf.eclipsecs.core.comment" value="Proper new lines in format strings"/>
+      <property name="severity" value="error"/> 
+      <property name="format" value="((err|out|String)\.format|printf)\(&quot;.*\\n"/>
+      <property name="message" value="Format strings must use %n instead of \n for new lines"/>
+      <property name="ignoreComments" value="true"/>
+    </module>
+
     <module name="AvoidStarImport">
       <property name="allowClassImports" value="false"/>
       <property name="allowStaticMemberImports" value="false"/>
@@ -90,8 +140,8 @@
       <property name="tokens" value="SEMI,POST_DEC,POST_INC"/>
     </module>
     <module name="NoWhitespaceBefore">
-	<property name="tokens" value="DOT"/>
-	<property name="allowLineBreaks" value="true"/>
+      <property name="tokens" value="DOT"/>
+      <property name="allowLineBreaks" value="true"/>
     </module>
     <module name="ParenPad"/>
     <module name="TypecastParenPad">
@@ -185,44 +235,6 @@
     <module name="RegexpSinglelineJava">
       <property name="format" value="new (Hashtable|Vector|Stack|StringBuffer)[^\w]"/>
       <property name="message" value="Don't use old synchronized collection classes"/>
-    </module>
-    <module name="IllegalImport">
-      <metadata name="net.sf.eclipsecs.core.comment" value="disallow imports from unsafe packages (reflection)"/>
-      <property name="severity" value="error"/>
-      <property name="illegalPkgs" value="sun,java.lang.reflect"/>
-    </module>
-    <module name="RegexpSinglelineJava">
-      <metadata name="net.sf.eclipsecs.core.comment" value="disallow dynamic class loading through Class.forName()"/>
-      <property name="severity" value="error"/>
-      <property name="format" value="Class\.forName\("/>
-      <property name="message" value="do not use dynamic class loading"/>
-      <property name="ignoreComments" value="true"/>
-    </module>
-    <module name="RegexpSinglelineJava">
-      <metadata name="net.sf.eclipsecs.core.comment" value="Disallow use of String.format()."/>
-      <property name="severity" value="error"/>
-      <property name="format" value="\bString\.format\("/>
-      <property name="message" value="Do not use String formatting in non-hosted code.  (Use &quot;// Checkstyle: stop ... // Checkstyle: resume&quot; in hosted code.)"/>
-      <property name="ignoreComments" value="true"/>
-    </module>
-    <module name="RegexpSinglelineJava">
-      <metadata name="net.sf.eclipsecs.core.comment" value="Disallow use of System.out."/>
-      <property name="severity" value="error"/>
-      <property name="format" value="\bSystem\.out\b"/>
-      <property name="message" value="Do not use System.out in non-hosted code. (Use &quot;// Checkstyle: stop ... // Checkstyle: resume&quot; in hosted code.)"/>
-      <property name="ignoreComments" value="true"/>
-    </module>
-    <module name="RegexpSinglelineJava">
-      <metadata name="net.sf.eclipsecs.core.comment" value="Disallow use of System.err."/>
-      <property name="severity" value="error"/>
-      <property name="format" value="\bSystem\.err\b"/>
-      <property name="message" value="Do not use System.err in non-hosted code. (Use &quot;// Checkstyle: stop ... // Checkstyle: resume&quot; in hosted code.)"/>
-      <property name="ignoreComments" value="true"/>
-    </module>
-    <module name="IllegalToken">
-      <metadata name="net.sf.eclipsecs.core.comment" value="disallow synchronization"/>
-      <property name="severity" value="error"/>
-      <property name="tokens" value="LITERAL_SYNCHRONIZED"/>
     </module>
     <module name="SuppressionCommentFilter">
       <property name="offCommentFormat" value="Checkstyle: stop constant name check"/>

@@ -39,14 +39,15 @@ import org.graalvm.nativeimage.Platform;
 
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.SubstrateUtil;
-import com.oracle.svm.core.c.libc.LibCBase;
 import com.oracle.svm.core.util.InterruptImageBuilding;
 import com.oracle.svm.core.util.UserError;
 import com.oracle.svm.core.util.VMError;
+import com.oracle.svm.hosted.ImageClassLoader;
 import com.oracle.svm.hosted.c.codegen.CCompilerInvoker;
 import com.oracle.svm.hosted.c.codegen.QueryCodeWriter;
 import com.oracle.svm.hosted.c.info.InfoTreeBuilder;
 import com.oracle.svm.hosted.c.info.NativeCodeInfo;
+import com.oracle.svm.hosted.c.libc.HostedLibCBase;
 import com.oracle.svm.hosted.c.query.QueryResultParser;
 import com.oracle.svm.hosted.c.query.RawStructureLayoutPlanner;
 import com.oracle.svm.hosted.c.query.SizeAndSignednessVerifier;
@@ -83,7 +84,7 @@ public class CAnnotationProcessor {
         }
     }
 
-    public NativeCodeInfo process(CAnnotationProcessorCache cache) {
+    public NativeCodeInfo process(CAnnotationProcessorCache cache, ImageClassLoader loader) {
         InfoTreeBuilder constructor = new InfoTreeBuilder(nativeLibs, codeCtx);
         codeInfo = constructor.construct();
         if (nativeLibs.getErrors().size() > 0) {
@@ -108,8 +109,8 @@ public class CAnnotationProcessor {
                 // Only output query code and exit
                 return codeInfo;
             }
-
             Path binary = compileQueryCode(queryFile);
+            loader.watchdog.recordActivity();
             if (nativeLibs.getErrors().size() > 0) {
                 return codeInfo;
             }
@@ -138,7 +139,10 @@ public class CAnnotationProcessor {
             }
             printingProcess.waitFor();
         } catch (IOException ex) {
-            throw shouldNotReachHere(ex);
+            throw shouldNotReachHere(
+                            "Unable to run '" + binaryName +
+                                            "' to compute offsets in C data structures. Is it possible that your antivirus software interferes and puts the resulting file into quarantine?",
+                            ex);
         } catch (InterruptedException e) {
             throw new InterruptImageBuilding();
         } finally {
@@ -159,7 +163,7 @@ public class CAnnotationProcessor {
         ArrayList<String> options = new ArrayList<>();
         options.addAll(codeCtx.getDirectives().getOptions());
         if (Platform.includedIn(Platform.LINUX.class)) {
-            options.addAll(LibCBase.singleton().getAdditionalQueryCodeCompilerOptions());
+            options.addAll(HostedLibCBase.singleton().getAdditionalQueryCodeCompilerOptions());
         }
         compilerInvoker.compileAndParseError(SubstrateOptions.StrictQueryCodeCompilation.getValue(), options, queryFile, binary, this::reportCompilerError);
         return binary;

@@ -27,7 +27,8 @@ package com.oracle.svm.core.graal.meta;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.graalvm.compiler.api.replacements.SnippetReflectionProvider;
+import org.graalvm.compiler.core.common.memory.BarrierType;
+import org.graalvm.compiler.core.common.memory.MemoryOrderMode;
 import org.graalvm.compiler.core.common.spi.ForeignCallsProvider;
 import org.graalvm.compiler.core.common.spi.MetaAccessExtensionProvider;
 import org.graalvm.compiler.core.common.type.AbstractObjectStamp;
@@ -35,7 +36,6 @@ import org.graalvm.compiler.core.common.type.ObjectStamp;
 import org.graalvm.compiler.core.common.type.Stamp;
 import org.graalvm.compiler.core.common.type.StampFactory;
 import org.graalvm.compiler.core.common.type.TypeReference;
-import org.graalvm.compiler.debug.DebugHandlersFactory;
 import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.graph.Node;
 import org.graalvm.compiler.nodes.CompressionNode.CompressionOp;
@@ -48,10 +48,12 @@ import org.graalvm.compiler.nodes.NodeView;
 import org.graalvm.compiler.nodes.StructuredGraph;
 import org.graalvm.compiler.nodes.ValueNode;
 import org.graalvm.compiler.nodes.calc.AndNode;
+import org.graalvm.compiler.nodes.calc.LeftShiftNode;
 import org.graalvm.compiler.nodes.calc.UnsignedRightShiftNode;
 import org.graalvm.compiler.nodes.extended.LoadHubNode;
+import org.graalvm.compiler.nodes.extended.LoadMethodNode;
 import org.graalvm.compiler.nodes.memory.FloatingReadNode;
-import org.graalvm.compiler.nodes.memory.OnHeapMemoryAccess.BarrierType;
+import org.graalvm.compiler.nodes.memory.ReadNode;
 import org.graalvm.compiler.nodes.memory.address.AddressNode;
 import org.graalvm.compiler.nodes.memory.address.OffsetAddressNode;
 import org.graalvm.compiler.nodes.spi.LoweringTool;
@@ -69,6 +71,7 @@ import org.graalvm.nativeimage.Platforms;
 import com.oracle.svm.core.StaticFieldsSupport;
 import com.oracle.svm.core.config.ConfigurationValues;
 import com.oracle.svm.core.config.ObjectLayout;
+import com.oracle.svm.core.graal.code.SubstrateBackend;
 import com.oracle.svm.core.graal.nodes.FloatingWordCastNode;
 import com.oracle.svm.core.graal.nodes.LoweredDeadEndNode;
 import com.oracle.svm.core.graal.nodes.SubstrateCompressionNode;
@@ -80,6 +83,8 @@ import com.oracle.svm.core.heap.ReferenceAccess;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.identityhashcode.IdentityHashCodeSupport;
 import com.oracle.svm.core.meta.SharedField;
+import com.oracle.svm.core.meta.SharedMethod;
+import com.oracle.svm.core.meta.SubstrateMethodPointerStamp;
 import com.oracle.svm.core.snippets.SubstrateIsArraySnippets;
 
 import jdk.vm.ci.code.CodeUtil;
@@ -93,6 +98,7 @@ public abstract class SubstrateBasicLoweringProvider extends DefaultJavaLowering
     private final Map<Class<? extends Node>, NodeLoweringProvider<?>> lowerings;
 
     private RuntimeConfiguration runtimeConfig;
+    private final KnownOffsets knownOffsets;
     private final AbstractObjectStamp hubStamp;
 
     @Platforms(Platform.HOSTED_ONLY.class)
@@ -107,15 +113,15 @@ public abstract class SubstrateBasicLoweringProvider extends DefaultJavaLowering
             hubRefStamp = SubstrateNarrowOopStamp.compressed(hubRefStamp, ReferenceAccess.singleton().getCompressEncoding());
         }
         hubStamp = hubRefStamp;
+        knownOffsets = KnownOffsets.singleton();
     }
 
     @Override
-    public void setConfiguration(RuntimeConfiguration runtimeConfig, OptionValues options, Iterable<DebugHandlersFactory> factories, Providers providers,
-                    SnippetReflectionProvider snippetReflection) {
+    public void setConfiguration(RuntimeConfiguration runtimeConfig, OptionValues options, Providers providers) {
         this.runtimeConfig = runtimeConfig;
-        this.identityHashCodeSnippets = IdentityHashCodeSupport.createSnippetTemplates(options, factories, providers, target);
-        this.isArraySnippets = new IsArraySnippets.Templates(new SubstrateIsArraySnippets(), options, factories, providers, target);
-        initialize(options, factories, Group.NullFactory, providers, snippetReflection);
+        this.identityHashCodeSnippets = IdentityHashCodeSupport.createSnippetTemplates(options, providers);
+        this.isArraySnippets = new IsArraySnippets.Templates(new SubstrateIsArraySnippets(), options, providers);
+        initialize(options, Group.NullFactory, providers);
     }
 
     protected Providers getProviders() {
@@ -137,9 +143,30 @@ public abstract class SubstrateBasicLoweringProvider extends DefaultJavaLowering
             lowerAssertionNode((AssertionNode) n);
         } else if (n instanceof DeadEndNode) {
             lowerDeadEnd((DeadEndNode) n);
+        } else if (n instanceof LoadMethodNode) {
+            lowerLoadMethodNode((LoadMethodNode) n);
         } else {
             super.lower(n, tool);
         }
+    }
+
+    private void lowerLoadMethodNode(LoadMethodNode loadMethodNode) {
+        StructuredGraph graph = loadMethodNode.graph();
+        SharedMethod method = (SharedMethod) loadMethodNode.getMethod();
+        ReadNode methodPointer = createReadVirtualMethod(graph, loadMethodNode.getHub(), method);
+        graph.replaceFixed(loadMethodNode, methodPointer);
+    }
+
+    private ReadNode createReadVirtualMethod(StructuredGraph graph, ValueNode hub, SharedMethod method) {
+        int vtableEntryOffset = knownOffsets.getVTableOffset(method.getVTableIndex());
+        assert vtableEntryOffset > 0;
+        /*
+         * Method pointer will always exist in the vtable due to the fact that all reachable methods
+         * through method pointer constant references will be compiled.
+         */
+        Stamp methodStamp = SubstrateMethodPointerStamp.methodNonNull();
+        AddressNode address = createOffsetAddress(graph, hub, vtableEntryOffset);
+        return graph.add(new ReadNode(address, SubstrateBackend.getVTableIdentity(), methodStamp, BarrierType.NONE, MemoryOrderMode.PLAIN));
     }
 
     @Override
@@ -157,14 +184,14 @@ public abstract class SubstrateBasicLoweringProvider extends DefaultJavaLowering
     private static ValueNode maybeUncompress(ValueNode node) {
         Stamp stamp = node.stamp(NodeView.DEFAULT);
         if (stamp instanceof NarrowOopStamp) {
-            return SubstrateCompressionNode.uncompress(node, ((NarrowOopStamp) stamp).getEncoding());
+            return SubstrateCompressionNode.uncompress(node.graph(), node, ((NarrowOopStamp) stamp).getEncoding());
         }
         return node;
     }
 
     @Override
     protected ValueNode createReadArrayComponentHub(StructuredGraph graph, ValueNode arrayHub, boolean isKnownObjectArray, FixedNode anchor) {
-        ConstantNode componentHubOffset = ConstantNode.forIntegerKind(target.wordJavaKind, runtimeConfig.getComponentHubOffset(), graph);
+        ConstantNode componentHubOffset = ConstantNode.forIntegerKind(target.wordJavaKind, knownOffsets.getComponentHubOffset(), graph);
         AddressNode componentHubAddress = graph.unique(new OffsetAddressNode(arrayHub, componentHubOffset));
         FloatingReadNode componentHubRef = graph.unique(new FloatingReadNode(componentHubAddress, NamedLocationIdentity.FINAL_LOCATION, null, hubStamp, null, BarrierType.NONE));
         return maybeUncompress(componentHubRef);
@@ -174,6 +201,18 @@ public abstract class SubstrateBasicLoweringProvider extends DefaultJavaLowering
     protected ValueNode createReadHub(StructuredGraph graph, ValueNode object, LoweringTool tool) {
         if (tool.getLoweringStage() != LoweringTool.StandardLoweringStage.LOW_TIER) {
             return graph.unique(new LoadHubNode(tool.getStampProvider(), object));
+        }
+
+        if (object.isConstant() && !object.asJavaConstant().isNull()) {
+            /*
+             * Special case: insufficient canonicalization was run since the last lowering, if we
+             * are loading the hub from a constant we want to still fold it.
+             */
+            Stamp loadHubStamp = tool.getStampProvider().createHubStamp(((ObjectStamp) object.stamp(NodeView.DEFAULT)));
+            ValueNode synonym = LoadHubNode.findSynonym(object, loadHubStamp, tool.getMetaAccess(), tool.getConstantReflection());
+            if (synonym != null) {
+                return synonym;
+            }
         }
 
         GraalError.guarantee(!object.isConstant() || object.asJavaConstant().isNull(), "Object should either not be a constant or the null constant %s", object);
@@ -187,16 +226,19 @@ public abstract class SubstrateBasicLoweringProvider extends DefaultJavaLowering
         int reservedBitsMask = Heap.getHeap().getObjectHeader().getReservedBitsMask();
         if (reservedBitsMask != 0) {
             // get rid of the reserved header bits and extract the actual pointer to the hub
-            int encodingShift = ReferenceAccess.singleton().getCompressEncoding().getShift();
-            if ((reservedBitsMask >>> encodingShift) == 0) {
-                hubBits = graph.unique(new UnsignedRightShiftNode(headerBits, ConstantNode.forInt(encodingShift, graph)));
-            } else if (reservedBitsMask < objectLayout.getAlignment()) {
+            assert CodeUtil.isPowerOf2(reservedBitsMask + 1) : "only the lowest bits may be set";
+            int numReservedBits = CodeUtil.log2(reservedBitsMask + 1);
+            int compressionShift = ReferenceAccess.singleton().getCompressEncoding().getShift();
+            int numAlignmentBits = CodeUtil.log2(objectLayout.getAlignment());
+            assert compressionShift <= numAlignmentBits : "compression discards bits";
+            if (numReservedBits == numAlignmentBits && compressionShift == 0) {
                 hubBits = graph.unique(new AndNode(headerBits, ConstantNode.forIntegerStamp(headerBitsStamp, ~reservedBitsMask, graph)));
             } else {
-                assert encodingShift > 0 : "shift below results in a compressed value";
-                assert CodeUtil.isPowerOf2(reservedBitsMask + 1) : "only the lowest bits may be set";
-                int numReservedBits = CodeUtil.log2(reservedBitsMask + 1);
                 hubBits = graph.unique(new UnsignedRightShiftNode(headerBits, ConstantNode.forInt(numReservedBits, graph)));
+                if (compressionShift != numAlignmentBits) {
+                    int shift = numAlignmentBits - compressionShift;
+                    hubBits = graph.unique(new LeftShiftNode(hubBits, ConstantNode.forInt(shift, graph)));
+                }
             }
         } else {
             hubBits = headerBits;
@@ -206,7 +248,7 @@ public abstract class SubstrateBasicLoweringProvider extends DefaultJavaLowering
     }
 
     @Override
-    public FieldLocationIdentity fieldLocationIdentity(ResolvedJavaField field) {
+    public FieldLocationIdentity overrideFieldLocationIdentity(FieldLocationIdentity field) {
         return new SubstrateFieldLocationIdentity(field);
     }
 

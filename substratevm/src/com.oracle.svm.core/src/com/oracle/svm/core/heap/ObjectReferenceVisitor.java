@@ -26,8 +26,7 @@ package com.oracle.svm.core.heap;
 
 import org.graalvm.word.Pointer;
 
-import com.oracle.svm.core.annotate.AlwaysInline;
-import com.oracle.svm.core.annotate.RestrictHeapAccess;
+import com.oracle.svm.core.AlwaysInline;
 import com.oracle.svm.core.util.VMError;
 
 /** Visitor for object references. */
@@ -41,7 +40,7 @@ public interface ObjectReferenceVisitor {
      *            not part of an object.
      * @return {@code true} if visiting should continue, {@code false} if visiting should stop.
      */
-    @RestrictHeapAccess(access = RestrictHeapAccess.Access.UNRESTRICTED, overridesCallers = true, reason = "Some implementations allocate.")
+    @RestrictHeapAccess(access = RestrictHeapAccess.Access.UNRESTRICTED, reason = "Some implementations allocate.")
     boolean visitObjectReference(Pointer objRef, boolean compressed, Object holderObject);
 
     /**
@@ -50,7 +49,7 @@ public interface ObjectReferenceVisitor {
      *            the object reference points in order to get the start of the referenced object.
      */
     @AlwaysInline("GC performance")
-    @RestrictHeapAccess(access = RestrictHeapAccess.Access.UNRESTRICTED, overridesCallers = true, reason = "Some implementations allocate.")
+    @RestrictHeapAccess(access = RestrictHeapAccess.Access.UNRESTRICTED, reason = "Some implementations allocate.")
     default boolean visitObjectReferenceInline(Pointer objRef, int innerOffset, boolean compressed, Object holderObject) {
         VMError.guarantee(innerOffset == 0, "visitor does not support derived references");
         return visitObjectReference(objRef, compressed, holderObject);

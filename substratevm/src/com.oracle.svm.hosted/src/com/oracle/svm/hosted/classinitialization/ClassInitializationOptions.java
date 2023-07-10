@@ -89,11 +89,32 @@ public final class ClassInitializationOptions {
                     deprecated = "Currently there is no replacement for this option. Try using --initialize-at-run-time or use the non-API option -H:ClassInitialization directly.", //
                     defaultValue = "", customHelp = "A comma-separated list of classes (and implicitly all of their subclasses) that are initialized both at runtime and during image building") //
     @Option(help = "A comma-separated list of classes appended with their initialization strategy (':build_time', ':rerun', or ':run_time')", type = OptionType.User)//
-    public static final HostedOptionKey<LocatableMultiOptionValue.Strings> ClassInitialization = new HostedOptionKey<>(new LocatableMultiOptionValue.Strings());
+    public static final HostedOptionKey<LocatableMultiOptionValue.Strings> ClassInitialization = new HostedOptionKey<>(LocatableMultiOptionValue.Strings.build());
+
+    @Option(help = "Instead of abort, only warn if --initialize-at-build-time= is used.", type = OptionType.Debug)//
+    public static final HostedOptionKey<Boolean> AllowDeprecatedInitializeAllClassesAtBuildTime = new HostedOptionKey<>(false);
 
     @Option(help = "Prints class initialization info for all classes detected by analysis.", type = OptionType.Debug)//
     public static final HostedOptionKey<Boolean> PrintClassInitialization = new HostedOptionKey<>(false);
 
     @Option(help = "Assert class initialization is specified for all classes.", type = OptionType.Debug)//
     public static final HostedOptionKey<Boolean> AssertInitializationSpecifiedForAllClasses = new HostedOptionKey<>(false);
+
+    @Option(help = "Use new class initialization strategy that allows all classes to be used at image build time.", type = OptionType.Expert)//
+    public static final HostedOptionKey<Boolean> UseNewExperimentalClassInitialization = new HostedOptionKey<>(false);
+
+    @Option(help = "Simulate the effects of class initializer at image build time, to avoid class initialization at run time.", type = OptionType.Expert)//
+    public static final HostedOptionKey<Boolean> SimulateClassInitializer = new HostedOptionKey<>(true);
+
+    @Option(help = "Configuration for SimulateClassInitializer: Collect all reasons why a class initializer cannot be simulated.", type = OptionType.Expert)//
+    static final HostedOptionKey<Boolean> SimulateClassInitializerCollectAllReasons = new HostedOptionKey<>(false);
+
+    @Option(help = "Configuration for SimulateClassInitializer: Maximum inlining depth during simulation.", type = OptionType.Expert)//
+    static final HostedOptionKey<Integer> SimulateClassInitializerMaxInlineDepth = new HostedOptionKey<>(200);
+
+    @Option(help = "Configuration for SimulateClassInitializer: Maximum number of loop iterations that are unrolled during simulation.", type = OptionType.Expert)//
+    static final HostedOptionKey<Integer> SimulateClassInitializerMaxLoopIterations = new HostedOptionKey<>(2_000);
+
+    @Option(help = "Configuration for SimulateClassInitializer: Maximum number of bytes allocated in the image heap for each class initializer.", type = OptionType.Expert)//
+    static final HostedOptionKey<Integer> SimulateClassInitializerMaxAllocatedBytes = new HostedOptionKey<>(40_000);
 }

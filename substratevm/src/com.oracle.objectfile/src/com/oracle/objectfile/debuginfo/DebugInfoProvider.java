@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2023, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2020, 2020, Red Hat Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -31,6 +31,9 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
+import jdk.vm.ci.meta.JavaConstant;
+import jdk.vm.ci.meta.JavaKind;
+import jdk.vm.ci.meta.ResolvedJavaMethod;
 import jdk.vm.ci.meta.ResolvedJavaType;
 import org.graalvm.compiler.debug.DebugContext;
 
@@ -47,7 +50,7 @@ public interface DebugInfoProvider {
     int oopCompressShift();
 
     /**
-     * Mask delecting low order bits used for tagging oops.
+     * Mask selecting low order bits used for tagging oops.
      */
     int oopTagsMask();
 
@@ -66,6 +69,8 @@ public interface DebugInfoProvider {
      */
     int oopAlignment();
 
+    int compiledCodeMax();
+
     /**
      * An interface implemented by items that can be located in a file.
      */
@@ -80,22 +85,19 @@ public interface DebugInfoProvider {
          *         name or {@code null} if the element is in the empty package.
          */
         Path filePath();
-
-        /**
-         * @return a relative path to the source cache containing the cached source file of a file
-         *         element or {@code null} if sources are not available.
-         */
-        Path cachePath();
     }
 
     interface DebugTypeInfo extends DebugFileInfo {
+        ResolvedJavaType idType();
+
         enum DebugTypeKind {
             PRIMITIVE,
             ENUM,
             INSTANCE,
             INTERFACE,
             ARRAY,
-            HEADER;
+            HEADER,
+            FOREIGN;
 
             @Override
             public String toString() {
@@ -112,6 +114,8 @@ public interface DebugInfoProvider {
                         return "array";
                     case HEADER:
                         return "header";
+                    case FOREIGN:
+                        return "foreign";
                     default:
                         return "???";
                 }
@@ -127,19 +131,27 @@ public interface DebugInfoProvider {
 
         DebugTypeKind typeKind();
 
+        /**
+         * returns the offset in the heap at which the java.lang.Class instance which models this
+         * class is located or -1 if no such instance exists for this class.
+         *
+         * @return the offset of the java.lang.Class instance which models this class or -1.
+         */
+        long classOffset();
+
         int size();
     }
 
     interface DebugInstanceTypeInfo extends DebugTypeInfo {
-        int headerSize();
+        String loaderName();
 
         Stream<DebugFieldInfo> fieldInfoProvider();
 
         Stream<DebugMethodInfo> methodInfoProvider();
 
-        String superName();
+        ResolvedJavaType superClass();
 
-        Stream<String> interfaces();
+        Stream<ResolvedJavaType> interfaces();
     }
 
     interface DebugEnumTypeInfo extends DebugInstanceTypeInfo {
@@ -148,12 +160,32 @@ public interface DebugInfoProvider {
     interface DebugInterfaceTypeInfo extends DebugInstanceTypeInfo {
     }
 
+    interface DebugForeignTypeInfo extends DebugInstanceTypeInfo {
+        String typedefName();
+
+        boolean isWord();
+
+        boolean isStruct();
+
+        boolean isPointer();
+
+        boolean isIntegral();
+
+        boolean isFloat();
+
+        boolean isSigned();
+
+        ResolvedJavaType parent();
+
+        ResolvedJavaType pointerTo();
+    }
+
     interface DebugArrayTypeInfo extends DebugTypeInfo {
         int baseSize();
 
         int lengthOffset();
 
-        String elementType();
+        ResolvedJavaType elementType();
 
         Stream<DebugFieldInfo> fieldInfoProvider();
     }
@@ -188,7 +220,7 @@ public interface DebugInfoProvider {
 
         String name();
 
-        String valueType();
+        ResolvedJavaType valueType();
 
         int modifiers();
     }
@@ -197,18 +229,26 @@ public interface DebugInfoProvider {
         int offset();
 
         int size();
+
+        boolean isEmbedded();
     }
 
     interface DebugMethodInfo extends DebugMemberInfo {
         /**
-         * @return an array of Strings identifying the method parameters.
+         * @return the line number for the outer or inlined segment.
          */
-        List<String> paramTypes();
+        int line();
 
         /**
-         * @return an array of Strings with the method parameters' names.
+         * @return an array of DebugLocalInfo objects holding details of this method's parameters
          */
-        List<String> paramNames();
+        DebugLocalInfo[] getParamInfo();
+
+        /**
+         * @return a DebugLocalInfo objects holding details of the target instance parameter this if
+         *         the method is an instance method or null if it is a static method.
+         */
+        DebugLocalInfo getThisParamInfo();
 
         /**
          * @return the symbolNameForMethod string
@@ -219,14 +259,63 @@ public interface DebugInfoProvider {
          * @return true if this method has been compiled in as a deoptimization target
          */
         boolean isDeoptTarget();
+
+        /**
+         * @return true if this method is a constructor.
+         */
+        boolean isConstructor();
+
+        /**
+         * @return true if this is a virtual method. In Graal a virtual method can become
+         *         non-virtual if all other implementations are non-reachable.
+         */
+        boolean isVirtual();
+
+        /**
+         * @return the offset into the virtual function table for this method if virtual
+         */
+        int vtableOffset();
+
+        /**
+         * @return true if this method is an override of another method.
+         */
+        boolean isOverride();
+
+        /*
+         * Return the unique type that owns this method. <p/>
+         *
+         * @return the unique type that owns this method
+         */
+        ResolvedJavaType ownerType();
+
+        /*
+         * Return the unique identifier for this method. The result can be used to unify details of
+         * methods presented via interface DebugTypeInfo with related details of compiled methods
+         * presented via interface DebugRangeInfo and of call frame methods presented via interface
+         * DebugLocationInfo. <p/>
+         *
+         * @return the unique identifier for this method
+         */
+        ResolvedJavaMethod idMethod();
     }
 
     /**
-     * Access details of a compiled method producing the code in a specific
-     * {@link com.oracle.objectfile.debugentry.Range}.
+     * Access details of a compiled top level or inline method producing the code in a specific
+     * {@link com.oracle.objectfile.debugentry.range.Range}.
      */
     interface DebugRangeInfo extends DebugMethodInfo {
-        ResolvedJavaType ownerType();
+
+        /**
+         * @return the lowest address containing code generated for an outer or inlined code segment
+         *         reported at this line represented as an offset into the code segment.
+         */
+        int addressLo();
+
+        /**
+         * @return the first address above the code generated for an outer or inlined code segment
+         *         reported at this line represented as an offset into the code segment.
+         */
+        int addressHi();
     }
 
     /**
@@ -236,27 +325,10 @@ public interface DebugInfoProvider {
         void debugContext(Consumer<DebugContext> action);
 
         /**
-         * @return the lowest address containing code generated for the method represented as an
-         *         offset into the code segment.
+         * @return a stream of records detailing source local var and line locations within the
+         *         compiled method.
          */
-        int addressLo();
-
-        /**
-         * @return the first address above the code generated for the method represented as an
-         *         offset into the code segment.
-         */
-        int addressHi();
-
-        /**
-         * @return the starting line number for the method.
-         */
-        int line();
-
-        /**
-         * @return a stream of records detailing line numbers and addresses within the compiled
-         *         method.
-         */
-        Stream<DebugLineInfo> lineInfoProvider();
+        Stream<DebugLocationInfo> locationInfoProvider();
 
         /**
          * @return the size of the method frame between prologue and epilogue.
@@ -293,28 +365,63 @@ public interface DebugInfoProvider {
      * Access details of code generated for a specific outer or inlined method at a given line
      * number.
      */
-    interface DebugLineInfo extends DebugRangeInfo {
+    interface DebugLocationInfo extends DebugRangeInfo {
         /**
-         * @return the lowest address containing code generated for an outer or inlined code segment
-         *         reported at this line represented as an offset into the code segment.
+         * @return the {@link DebugLocationInfo} of the nested inline caller-line
          */
-        int addressLo();
+        DebugLocationInfo getCaller();
 
         /**
-         * @return the first address above the code generated for an outer or inlined code segment
-         *         reported at this line represented as an offset into the code segment.
+         * @return a stream of {@link DebugLocalValueInfo} objects identifying local or parameter
+         *         variables present in the frame of the current range.
          */
-        int addressHi();
+        DebugLocalValueInfo[] getLocalValueInfo();
 
-        /**
-         * @return the line number for the outer or inlined segment.
-         */
+        boolean isLeaf();
+    }
+
+    /**
+     * A DebugLocalInfo details a local or parameter variable recording its name and type, the
+     * (abstract machine) local slot index it resides in and the number of slots it occupies.
+     */
+    interface DebugLocalInfo {
+        ResolvedJavaType valueType();
+
+        String name();
+
+        String typeName();
+
+        int slot();
+
+        int slotCount();
+
+        JavaKind javaKind();
+
         int line();
+    }
 
-        /**
-         * @return the {@link DebugLineInfo} of the nested inline caller-line
-         */
-        DebugLineInfo getCaller();
+    /**
+     * A DebugLocalValueInfo details the value a local or parameter variable present in a specific
+     * frame. The value may be undefined. If not then the instance records its type and either its
+     * (constant) value or the register or stack location in which the value resides.
+     */
+    interface DebugLocalValueInfo extends DebugLocalInfo {
+        enum LocalKind {
+            UNDEFINED,
+            REGISTER,
+            STACKSLOT,
+            CONSTANT
+        }
+
+        LocalKind localKind();
+
+        int regIndex();
+
+        int stackSlot();
+
+        long heapOffset();
+
+        JavaConstant constantValue();
     }
 
     interface DebugFrameSizeChange {
@@ -335,4 +442,6 @@ public interface DebugInfoProvider {
 
     @SuppressWarnings("unused")
     Stream<DebugDataInfo> dataInfoProvider();
+
+    Path getCachePath();
 }

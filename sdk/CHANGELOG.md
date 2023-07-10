@@ -2,8 +2,65 @@
 
 This changelog summarizes major changes between GraalVM SDK versions. The main focus is on APIs exported by GraalVM SDK.
 
+## Version 23.1.0
+* (GR-46556) Provide [documentation and example code](https://www.graalvm.org/latest/reference-manual/embed-languages/#compatibility-with-jsr-223-scriptengine) on how to use Truffle languages via the ScriptEngine API. The example code can be inlined and modified for testing, we still recommend to use the Polyglot API for full control over embeddings.
+* (GR-45896) JLine3 upgrade from 3.16 to 3.23. The JLine3 bundle that is used is customized and contains only `jline3-reader`, `jline3-terminal`, and `jline3-builtins` JLine3 components.
+* (GR-44222) Polyglot contexts and engines now print a warning when deprecated options were used. To resolve this migrate the option using the deprecation instructions or set the `engine.WarnOptionDeprecation` to `false` to suppress this warning. It is recommended to prefer migration over suppression whenever possible. 
+
+## Version 23.0.0
+* (GR-26758) Added the [TraceLimits](https://www.graalvm.org/reference-manual/embed-languages/sandbox-resource-limits#determining-sandbox-resource-limits) option to the Truffle Sandbox to measure a guest application's resource consumption and obtain realistic sandbox parameters.
+* (GR-25849) (GR-41634) Added a new way to configure the IO access using the new class `IOAccess`. The IO access configuration determines how a guest language can access the host IO. The `IOAccess` class provides a predefined configuration to [disable](https://www.graalvm.org/sdk/javadoc/org/graalvm/polyglot/io/IOAccess.html#NONE) host IO access, or to [enable](https://www.graalvm.org/sdk/javadoc/org/graalvm/polyglot/io/IOAccess.html#ALL) full host IO access. A custom configuration can be created using an IOAccess [builder](https://www.graalvm.org/sdk/javadoc/org/graalvm/polyglot/io/IOAccess.html#newBuilder--).
+* Deprecated `Context.Builder#allowIO(boolean)` To migrate, use `builder.allowIO(IOAccess.ALL)` to enable unrestricted IO operations on the host system, or `builder.allowIO(IOAccess.NONE)` to disable IO operations.
+* Deprecated `Context.Builder#fileSystem(FileSystem)`. To migrate, use `builder.allowIO(IOAccess.newBuilder().fileSystem(fileSystem).build())`.
+* Added automatic copying of language resources for embedding Truffle languages in native image. Documentation available [here](https://www.graalvm.org/reference-manual/embed-languages/#build-native-executables-from-polyglot-applications).
+* (GR-41716) Added `HostAccess.Builder.allowMutableTargetMappings(HostAccess.MutableTargetMapping[])` to explicitly enable type coercion from guest objects to mutable Java host objects such as `java.util.Map` or `java.util.List`.
+* (GR-42876) Added [FileSystem#newFileSystem](https://www.graalvm.org/sdk/javadoc/org/graalvm/polyglot/io/FileSystem.html#newFileSystem-java.nio.file.FileSystem-) creating a polyglot FileSystem for given Java NIO FileSystem.
+* (GR-43820) Deprecated `org.graalvm.nativeimage.RuntimeOptions#getOptions` methods and `org.graalvm.nativeimage.RuntimeOptions.OptionClass` enum. These elements were mistakenly made API and will be removed in a future version. If your codebase depends on any of these please let us know.
+* (GR-43997) Introduced the `LockFreePool` concurrent collection, and change the `LockFreePrefixTree` API to allow custom allocation policies.
+* (GR-25539) Added `Value#fitsInBigInteger()` and `Value#asBigInteger()` to access guest or host number values that fit into `java.math.BigInteger` without loss of precision. `Value.as(BigInteger.class)` is also supported for such values. 
+* (GR-25539) (potentially breaking-change) By default, all host values of type `java.lang.BigInteger` will now be interpreted as number values (`Value.isNumber()`). Previously, they were not interpreted as numbers. In order to restore the old behavior set `HostAccess.Builder.allowBigIntegerNumberAccess(boolean)` to false. Note that language support for interpreting numbers that do not fit into long values may vary. Some languages, like JavaScript, may require explicit conversions of host big integers. Other languages, like Ruby or Python can use big integers without explicit conversion. The same applies to values passed across guest languages.
+* (GR-30473) Added the [SandboxPolicy](https://www.graalvm.org/sdk/javadoc/org/graalvm/polyglot/SandboxPolicy.html) that presets and validates context or engine configurations to make them suitable as a code sandbox. The policy is set by passing it to the [Engine.Builder#sandbox(SandboxPolicy)](https://www.graalvm.org/sdk/javadoc/org/graalvm/polyglot/Engine.Builder.html#sandbox-org.graalvm.polyglot.SandboxPolicy-) or [Context.Builder#sandbox(SandboxPolicy)](https://www.graalvm.org/sdk/javadoc/org/graalvm/polyglot/Context.Builder.html#sandbox-org.graalvm.polyglot.SandboxPolicy-) builder method.
+* (GR-30473) For each SandboxPolicy a predefined host access policy was added:
+    * [CONSTRAINED](https://www.graalvm.org/sdk/javadoc/org/graalvm/polyglot/HostAccess.html#CONSTRAINED) satisfies the `SandboxPolicy#CONSTRAINED` requirements. This host access is the default value for a Context with `SandboxPolicy#CONSTRAINED`.
+    * [ISOLATED](https://www.graalvm.org/sdk/javadoc/org/graalvm/polyglot/HostAccess.html#ISOLATED) satisfies the `SandboxPolicy#ISOLATED` requirements. This host access is the default value for a Context with `SandboxPolicy#ISOLATED`.
+    * [UNTRUSTED](https://www.graalvm.org/sdk/javadoc/org/graalvm/polyglot/HostAccess.html#UNTRUSTED) satisfies the `SandboxPolicy#UNTRUSTED` requirements. This host access is the default value for a Context with `SandboxPolicy#UNTRUSTED`.
+
+## Version 22.3.0
+* (GR-39852) Native Image API: Added FieldValueTransformer API
+* (GR-35358) Added `Context.Builder.allowInnerContextOptions(boolean)` which allows the context to spawn inner contexts and modify and override language options. The default value for this privilege is set depending `Context.Builder.allowAllPrivilages(boolean)` is set or not. Do not enable this privilege in security sensitive scenarios.
+* (GR-40198) Introduce public API for programmatic JNI / Resource / Proxy / Serialization registration from Feature classes during the image build.
+* (GR-38909) Added Native Image com.oracle.svm.core.annotate annotation classes (@Alias, @TargetClass, @Substitute, ...).
+
+## Version 22.2.0
+* (GR-38925) Added `Value.hasMetaParents() and Value.getMetaParents()` that allow lookup of the hierarchy of parents for meta objects (e.g. super class or implemented interface of Java classes).
+* (GR-38351) Added [FileSystem#allowLanguageHomeAccess](https://www.graalvm.org/sdk/javadoc/org/graalvm/polyglot/io/FileSystem.html#allowLanguageHomeAccess-org.graalvm.polyglot.io.FileSystem-) returning a `FileSystem` that forwards access to files in the language home to the default file system.
+* (GR-38351) Added [FileSystem#newReadOnlyFileSystem](https://www.graalvm.org/sdk/javadoc/org/graalvm/polyglot/io/FileSystem.html#newReadOnlyFileSystem-org.graalvm.polyglot.io.FileSystem-) returning a read-only decorator for the given file system.
+* Changed the behavior of [`Context.close()`](https://www.graalvm.org/sdk/javadoc/org/graalvm/polyglot/Context.html#close--) (as well as `Context.close(false)` which is equivalent). In case the context was cancelled during the close operation or the context was exited during the close operation at request of the guest application, or it was already cancelled or exited before the close operation begins,
+the close operation throws a [`PolyglotException`](https://www.graalvm.org/sdk/javadoc/org/graalvm/polyglot/PolyglotException) with [`PolyglotException.isCancelled()`](https://www.graalvm.org/sdk/javadoc/org/graalvm/polyglot/PolyglotException#isCancelled--) or [`PolyglotException.isExit()`](https://www.graalvm.org/sdk/javadoc/org/graalvm/polyglot/PolyglotException#isExit--), respectively, equal to `true`.
+* (GR-29138)(EE-only) Added the ability to spawn a native-image isolate for a each `Engine` or `Context` in a native launcher or library.  This feature was previously supported only for the JVM deployment (GR-22699).
+* Added [HostAccess.Builder.allowAccessInheritance](https://www.graalvm.org/sdk/javadoc/org/graalvm/polyglot/HostAccess.Builder.html#allowAccessInheritance-boolean-) to inherit access to methods that have been explicitly exported in an interface or superclass vs. only explicitly vetted method implementations (e.g. via `@HostAccess.Export`).
+* Made `HostAccess.Builder.allowAccessInheritance(false)` the default. This restricts the set of accessible methods and might break existing code. To restore the previous behavior of `HostAccess.EXPLICIT`, you can use `HostAccess.newBuilder(HostAccess.EXPLICIT).allowAccessInheritance(true).build()`.
+* Added List#add support for polyglot values that are mapped to java.util.List.
+
+## Version 22.1.0
+* Changed the default [`Object` target type mapping (`Value.as(Object.class)`)](https://www.graalvm.org/sdk/javadoc/org/graalvm/polyglot/Value.html#as-java.lang.Class-) for values that have both array elements and members from `Map` to `List`.
+  Note: This is an incompatible change. Embedders relying on the dynamic type `Map` after a `Object` target type coercion will have to migrate their code.
+  The previous behavior can be restored using a custom [target type mapping](https://www.graalvm.org/sdk/javadoc/org/graalvm/polyglot/HostAccess.Builder.html#targetTypeMapping-java.lang.Class-java.lang.Class-java.util.function.Predicate-java.util.function.Function-), e.g.:
+  ```java
+  HostAccess access = HostAccess.newBuilder(HostAccess.EXPLICIT)
+          .targetTypeMapping(Value.class, Object.class, v -> v.hasMembers() && v.hasArrayElements(), v -> v.as(Map.class))
+          .build();
+  try (Context c = Context.newBuilder().hostAccess(access).build()) {
+      // run application
+  }
+  ```
+* (GR-35010) Added API for Truffle Languages (`Language#getWebsite()`) and Instruments (`Instrument#getWebsite()`) to provide website information.
+* (GR-33851) Dropped Java 8 support.
+
 ## Version 22.0.0
+* (GR-31170) Native Image API: Added `WINDOWS_AARCH64` Platform.
 * (GR-33657) Native Image API: Added `CEntryPoint#include` attribute which can be used to controll if the entry point should be automatically added to the shared library.
+* (GR-22699)(EE-only) Added the ability to spawn a native-image isolate for a each `Engine` or `Context` by calling `Context.Builder.option("engine.SpawnIsolate", "true")`.  This enables heap isolation between the host and guest applications. Using isolates improves security, startup and warmup time of polyglot languages. In this mode, calls between host and guest are more costly as they need to cross a native boundary. It is recommended to use the `HostAccess.SCOPED` policy with this mode to avoid strong cyclic references between host and guest. This mode is experimental in this release and only supported for a limited set of languages. 
 
 ## Version 21.3.0
 * Added the ability to share values between contexts. Please see  `Context.Builder.allowValueSharing(boolean)` for further details. 

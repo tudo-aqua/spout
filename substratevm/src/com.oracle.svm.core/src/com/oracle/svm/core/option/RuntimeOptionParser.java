@@ -39,10 +39,10 @@ import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
+import com.oracle.svm.common.option.CommonOptionParser.BooleanOptionFormat;
+import com.oracle.svm.common.option.CommonOptionParser.OptionParseResult;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.log.Log;
-import com.oracle.svm.core.option.SubstrateOptionsParser.BooleanOptionFormat;
-import com.oracle.svm.core.option.SubstrateOptionsParser.OptionParseResult;
 import com.oracle.svm.core.properties.RuntimePropertyParser;
 import com.oracle.svm.core.util.ImageHeapMap;
 
@@ -75,10 +75,10 @@ public final class RuntimeOptionParser {
      * returned array contains all arguments that were not consumed, i.e., were not recognized as
      * options.
      */
-    public static String[] parseAndConsumeAllOptions(String[] initialArgs) {
+    public static String[] parseAndConsumeAllOptions(String[] initialArgs, boolean ignoreUnrecognized) {
         String[] args = initialArgs;
         if (SubstrateOptions.ParseRuntimeOptions.getValue()) {
-            args = RuntimeOptionParser.singleton().parse(args, NORMAL_OPTION_PREFIX, GRAAL_OPTION_PREFIX, X_OPTION_PREFIX, true);
+            args = RuntimeOptionParser.singleton().parse(args, NORMAL_OPTION_PREFIX, GRAAL_OPTION_PREFIX, X_OPTION_PREFIX, ignoreUnrecognized);
             args = RuntimePropertyParser.parse(args);
         }
         return args;
@@ -113,23 +113,20 @@ public final class RuntimeOptionParser {
      * @param normalOptionPrefix prefix for normal Native Image runtime options
      * @param graalOptionPrefix prefix for Graal-style options
      * @param xOptionPrefix prefix for X-options
-     * @param systemExitOnError determines whether to call {@link System#exit(int)} if any element
-     *            in {@code args} matches a runtime option but has an invalid format
      * @return elements in {@code args} that do not match any runtime options
-     * @throws IllegalArgumentException if an element in {@code args} is invalid and
-     *             {@code systemExitOnError == false}. The parse error is described by
-     *             {@link Throwable#getMessage()}.
+     * @throws IllegalArgumentException if an element in {@code args} is invalid. The parse error is
+     *             described by {@link Throwable#getMessage()}.
      */
-    public String[] parse(String[] args, String normalOptionPrefix, String graalOptionPrefix, String xOptionPrefix, boolean systemExitOnError) {
+    public String[] parse(String[] args, String normalOptionPrefix, String graalOptionPrefix, String xOptionPrefix, boolean ignoreUnrecognized) {
         int newIdx = 0;
         EconomicMap<OptionKey<?>, Object> values = OptionValues.newOptionMap();
         for (int oldIdx = 0; oldIdx < args.length; oldIdx++) {
             String arg = args[oldIdx];
             if (arg.startsWith(normalOptionPrefix)) {
-                parseOptionAtRuntime(arg, normalOptionPrefix, BooleanOptionFormat.PLUS_MINUS, values, systemExitOnError);
+                parseOptionAtRuntime(arg, normalOptionPrefix, BooleanOptionFormat.PLUS_MINUS, values, ignoreUnrecognized);
             } else if (graalOptionPrefix != null && arg.startsWith(graalOptionPrefix)) {
-                parseOptionAtRuntime(arg, graalOptionPrefix, BooleanOptionFormat.NAME_VALUE, values, systemExitOnError);
-            } else if (xOptionPrefix != null && arg.startsWith(xOptionPrefix) && XOptions.parse(arg.substring(xOptionPrefix.length()), values, systemExitOnError)) {
+                parseOptionAtRuntime(arg, graalOptionPrefix, BooleanOptionFormat.NAME_VALUE, values, ignoreUnrecognized);
+            } else if (xOptionPrefix != null && arg.startsWith(xOptionPrefix) && XOptions.parse(arg.substring(xOptionPrefix.length()), values)) {
                 // option value was already parsed and added to the map
             } else {
                 assert newIdx <= oldIdx;
@@ -137,6 +134,7 @@ public final class RuntimeOptionParser {
                 newIdx += 1;
             }
         }
+
         if (!values.isEmpty()) {
             RuntimeOptionValues.singleton().update(values);
         }
@@ -153,23 +151,20 @@ public final class RuntimeOptionParser {
      *
      * @param arg argument to be parsed
      * @param optionPrefix prefix for the runtime option
-     * @param systemExitOnError determines whether to call {@link System#exit(int)} if {@code arg}
-     *            is an invalid option
-     * @throws IllegalArgumentException if {@code arg} is invalid and
-     *             {@code systemExitOnError == false}. The parse error is described by
+     * @throws IllegalArgumentException if {@code arg} is invalid. The parse error is described by
      *             {@link Throwable#getMessage()}.
      */
-    private void parseOptionAtRuntime(String arg, String optionPrefix, BooleanOptionFormat booleanOptionFormat, EconomicMap<OptionKey<?>, Object> values, boolean systemExitOnError) {
+    private void parseOptionAtRuntime(String arg, String optionPrefix, BooleanOptionFormat booleanOptionFormat, EconomicMap<OptionKey<?>, Object> values, boolean ignoreUnrecognized) {
         Predicate<OptionKey<?>> isHosted = optionKey -> false;
         OptionParseResult parseResult = SubstrateOptionsParser.parseOption(options, isHosted, arg.substring(optionPrefix.length()), values, optionPrefix, booleanOptionFormat);
         if (parseResult.printFlags() || parseResult.printFlagsWithExtraHelp()) {
-            SubstrateOptionsParser.printFlags(parseResult::matchesFlagsRuntime, options, optionPrefix, Log.logStream(), parseResult.printFlagsWithExtraHelp());
+            SubstrateOptionsParser.printFlags(d -> parseResult.matchesFlags(d, d.getOptionKey() instanceof RuntimeOptionKey),
+                            options, optionPrefix, Log.logStream(), parseResult.printFlagsWithExtraHelp());
             System.exit(0);
         }
         if (!parseResult.isValid()) {
-            if (systemExitOnError) {
-                Log.logStream().println("error: " + parseResult.getError());
-                System.exit(1);
+            if (parseResult.optionUnrecognized() && ignoreUnrecognized) {
+                return;
             }
             throw new IllegalArgumentException(parseResult.getError());
         }
@@ -179,7 +174,9 @@ public final class RuntimeOptionParser {
         OptionDescriptor descriptor = option.getDescriptor();
         if (descriptor != null && descriptor.isDeprecated()) {
             Log log = Log.log();
+            // Checkstyle: Allow raw info or warning printing - begin
             log.string("Warning: Option '").string(descriptor.getName()).string("' is deprecated and might be removed from future versions");
+            // Checkstyle: Allow raw info or warning printing - end
             String deprecationMessage = descriptor.getDeprecationMessage();
             if (deprecationMessage != null && !deprecationMessage.isEmpty()) {
                 log.string(": ").string(deprecationMessage);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -41,46 +41,50 @@
 package com.oracle.truffle.polyglot;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Formatter;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import org.graalvm.options.OptionDescriptor;
 import org.graalvm.options.OptionDescriptors;
 import org.graalvm.options.OptionKey;
 import org.graalvm.options.OptionStability;
 import org.graalvm.options.OptionValues;
+import org.graalvm.polyglot.SandboxPolicy;
+
+import com.oracle.truffle.api.TruffleOptionDescriptors;
 
 final class OptionValuesImpl implements OptionValues {
 
     private static final float FUZZY_MATCH_THRESHOLD = 0.7F;
 
-    // TODO is this too long? Make sure to update Engine#setUseSystemProperties javadoc.
-    // Just using graalvm as prefix is not good enough as it is ambiguous with host compilation
-    // For example the property graalvm.compiler is an option for which compiler. The java compiler?
-    // or the truffle compiler?
-    static final String SYSTEM_PROPERTY_PREFIX = "polyglot.";
-
-    private final PolyglotEngineImpl engine;
     private final OptionDescriptors descriptors;
+    private final SandboxPolicy sandboxPolicy;
     private final Map<OptionKey<?>, Object> values;
+    private List<OptionDescriptor> usedDeprecatedDescriptors;
     private final Map<OptionKey<?>, String> unparsedValues;
+    private volatile Set<OptionKey<?>> validAssertKeys;
+    private final boolean trackDeprecatedOptions;
 
-    OptionValuesImpl(PolyglotEngineImpl engine, OptionDescriptors descriptors, boolean preserveUnparsedValues) {
+    OptionValuesImpl(OptionDescriptors descriptors, SandboxPolicy sandboxPolicy, boolean preserveUnparsedValues, boolean trackDeprecatedOptions) {
         Objects.requireNonNull(descriptors);
-        this.engine = engine;
+        Objects.requireNonNull(sandboxPolicy);
         this.descriptors = descriptors;
+        this.sandboxPolicy = sandboxPolicy;
         this.values = new HashMap<>();
         this.unparsedValues = preserveUnparsedValues ? new HashMap<>() : null;
+        this.trackDeprecatedOptions = trackDeprecatedOptions;
     }
 
     @Override
     public int hashCode() {
         int result = 31 + descriptors.hashCode();
-        result = 31 * result + Objects.hashCode(engine);
         result = 31 * result + values.hashCode();
         return result;
     }
@@ -94,52 +98,68 @@ final class OptionValuesImpl implements OptionValues {
                 return true;
             }
             OptionValues other = ((OptionValues) obj);
-            if (getDescriptors().equals(other.getDescriptors())) {
-                if (!hasSetOptions() && !other.hasSetOptions()) {
-                    return true;
+            if (!getDescriptors().equals(other.getDescriptors())) {
+                return false;
+            }
+            if (!hasSetOptions() && !other.hasSetOptions()) {
+                return true;
+            }
+            if (other instanceof OptionValuesImpl) {
+                // faster comparison that only depends on the set values
+                OptionValuesImpl otherOptions = (OptionValuesImpl) other;
+                if (!values.equals(otherOptions.values)) {
+                    return false;
                 }
-                if (other instanceof OptionValuesImpl) {
-                    // faster comparison that only depends on the set values
-                    for (OptionKey<?> key : values.keySet()) {
-                        if (hasBeenSet(key) || other.hasBeenSet(key)) {
-                            if (!get(key).equals(other.get(key))) {
-                                return false;
-                            }
-                        }
+            } else {
+                // slow comparison for arbitrary option values
+                for (OptionDescriptor descriptor : getDescriptors()) {
+                    OptionKey<?> key = descriptor.getKey();
+                    if (!slowCompareKey(key, other)) {
+                        return false;
                     }
-                    for (OptionKey<?> key : ((OptionValuesImpl) other).values.keySet()) {
-                        if (hasBeenSet(key) || other.hasBeenSet(key)) {
-                            if (!get(key).equals(other.get(key))) {
-                                return false;
-                            }
-                        }
-                    }
-                    return true;
-                } else {
-                    // slow comparison for arbitrary option values
-                    for (OptionDescriptor descriptor : getDescriptors()) {
-                        OptionKey<?> key = descriptor.getKey();
-                        if (hasBeenSet(key) || other.hasBeenSet(key)) {
-                            if (!get(key).equals(other.get(key))) {
-                                return false;
-                            }
-                        }
-                    }
-                    return true;
                 }
             }
+            return true;
+        }
+    }
+
+    Collection<OptionDescriptor> getUsedDeprecatedDescriptors() {
+        if (!trackDeprecatedOptions) {
+            throw new UnsupportedOperationException("Deprecated options not tracked.");
+        }
+        if (usedDeprecatedDescriptors == null) {
+            return List.of();
+        }
+        return usedDeprecatedDescriptors;
+    }
+
+    private boolean slowCompareKey(OptionKey<?> key, OptionValues other) {
+        boolean set = hasBeenSet(key);
+        if (set != other.hasBeenSet(key)) {
             return false;
         }
+        if (set && !get(key).equals(other.get(key))) {
+            return false;
+        }
+        return true;
     }
 
-    public void putAll(Map<String, String> providedValues, boolean allowExperimentalOptions) {
+    public void putAll(PolyglotEngineImpl engine, Map<String, String> providedValues, boolean allowExperimentalOptions) {
         for (String key : providedValues.keySet()) {
-            put(key, providedValues.get(key), allowExperimentalOptions);
+            put(engine, key, providedValues.get(key), allowExperimentalOptions);
         }
     }
 
-    public void put(String key, String value, boolean allowExperimentalOptions) {
-        OptionDescriptor descriptor = findDescriptor(key, allowExperimentalOptions);
+    public OptionDescriptor put(PolyglotEngineImpl engine, String key, String value, boolean allowExperimentalOptions) {
+        OptionDescriptor descriptor = findDescriptor(engine, key, allowExperimentalOptions);
+        if (sandboxPolicy != SandboxPolicy.TRUSTED) {
+            SandboxPolicy optionSandboxPolicy = descriptors instanceof TruffleOptionDescriptors ? ((TruffleOptionDescriptors) descriptors).getSandboxPolicy(key) : SandboxPolicy.TRUSTED;
+            if (sandboxPolicy.isStricterThan(optionSandboxPolicy)) {
+                throw PolyglotEngineException.illegalArgument(PolyglotImpl.sandboxPolicyException(sandboxPolicy,
+                                String.format("The option %s can only be used up to the %s sandbox policy.", descriptor.getName(), optionSandboxPolicy),
+                                String.format("do not set the %s option by removing Builder.option(\"%s\", \"%s\")", descriptor.getName(), descriptor.getName(), value)));
+            }
+        }
         OptionKey<?> optionKey = descriptor.getKey();
         Object previousValue;
         if (values.containsKey(optionKey)) {
@@ -162,26 +182,50 @@ final class OptionValuesImpl implements OptionValues {
         } catch (IllegalArgumentException e) {
             throw PolyglotEngineException.illegalArgument(e);
         }
+        if (trackDeprecatedOptions && descriptor.isDeprecated()) {
+            if (usedDeprecatedDescriptors == null) {
+                usedDeprecatedDescriptors = new ArrayList<>();
+            }
+            usedDeprecatedDescriptors.add(descriptor);
+        }
         values.put(descriptor.getKey(), convertedValue);
+
         if (unparsedValues != null) {
             unparsedValues.put(descriptor.getKey(), value);
         }
+        return descriptor;
     }
 
     private OptionValuesImpl(OptionValuesImpl copy) {
-        this.engine = copy.engine;
         this.values = new HashMap<>(copy.values);
         this.descriptors = copy.descriptors;
+        this.sandboxPolicy = copy.sandboxPolicy;
         this.unparsedValues = copy.unparsedValues;
+        this.usedDeprecatedDescriptors = copy.usedDeprecatedDescriptors;
+        this.trackDeprecatedOptions = copy.trackDeprecatedOptions;
     }
 
     private <T> boolean contains(OptionKey<T> optionKey) {
-        for (OptionDescriptor descriptor : descriptors) {
-            if (descriptor.getKey() == optionKey) {
-                return true;
-            }
+        /*
+         * Iterating the keys is too slow so we use a cached set to speed up the check.
+         */
+        Set<OptionKey<?>> keys = this.validAssertKeys;
+        if (keys == null) {
+            keys = initializeValidAssertKeys();
         }
-        return false;
+        return keys.contains(optionKey);
+    }
+
+    private synchronized Set<OptionKey<?>> initializeValidAssertKeys() {
+        Set<OptionKey<?>> keys = validAssertKeys;
+        if (keys == null) {
+            keys = new HashSet<>();
+            for (OptionDescriptor descriptor : descriptors) {
+                keys.add(descriptor.getKey());
+            }
+            validAssertKeys = keys;
+        }
+        return keys;
     }
 
     @Override
@@ -197,6 +241,9 @@ final class OptionValuesImpl implements OptionValues {
     void copyInto(OptionValuesImpl target) {
         if (!target.values.isEmpty()) {
             throw new IllegalStateException("Values must be empty.");
+        }
+        if (sandboxPolicy != target.sandboxPolicy) {
+            throw new AssertionError("Source and target must have the same SandboxPolicy.");
         }
         target.values.putAll(values);
     }
@@ -234,10 +281,10 @@ final class OptionValuesImpl implements OptionValues {
         return unparsedValues.get(key);
     }
 
-    private OptionDescriptor findDescriptor(String key, boolean allowExperimentalOptions) {
+    private OptionDescriptor findDescriptor(PolyglotEngineImpl engine, String key, boolean allowExperimentalOptions) {
         OptionDescriptor descriptor = descriptors.get(key);
         if (descriptor == null) {
-            throw failNotFound(key);
+            throw failNotFound(engine, key);
         }
         if (!allowExperimentalOptions && descriptor.getStability() == OptionStability.EXPERIMENTAL) {
             throw failExperimental(key);
@@ -251,11 +298,11 @@ final class OptionValuesImpl implements OptionValues {
         return PolyglotEngineException.illegalArgument(message);
     }
 
-    private RuntimeException failNotFound(String key) {
+    private RuntimeException failNotFound(PolyglotEngineImpl engine, String key) {
         OptionDescriptors allOptions;
         Exception errorOptions = null;
         try {
-            allOptions = engine == null ? this.descriptors : this.engine.getAllOptions();
+            allOptions = engine == null ? this.descriptors : engine.getAllOptions();
         } catch (Exception e) {
             errorOptions = e;
             allOptions = this.descriptors;
@@ -317,10 +364,26 @@ final class OptionValuesImpl implements OptionValues {
 
     @Override
     public String toString() {
+        Map<OptionKey<?>, ? extends Object> options;
         if (unparsedValues != null) {
-            return unparsedValues.toString();
+            options = this.unparsedValues;
         } else {
-            return values.toString();
+            options = this.values;
         }
+
+        StringBuilder b = new StringBuilder("{");
+        String sep = "";
+        for (OptionDescriptor descriptor : getDescriptors()) {
+            OptionKey<?> key = descriptor.getKey();
+            if (hasBeenSet(key)) {
+                b.append(sep);
+                b.append(descriptor.getName());
+                b.append("=");
+                b.append(options.get(key));
+                sep = ", ";
+            }
+        }
+        b.append("}");
+        return b.toString();
     }
 }

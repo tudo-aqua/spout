@@ -43,7 +43,7 @@ package com.oracle.truffle.api.staticobject;
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.TruffleLanguage;
-import com.oracle.truffle.api.TruffleOptions;
+import org.graalvm.nativeimage.ImageInfo;
 import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
@@ -53,6 +53,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * A StaticShape is an immutable descriptor of the layout of a static object and is a good entry
@@ -91,7 +92,8 @@ import java.util.Objects;
 public abstract class StaticShape<T> {
     enum StorageStrategy {
         ARRAY_BASED,
-        FIELD_BASED
+        FIELD_BASED,
+        POD_BASED
     }
 
     static final Unsafe UNSAFE = getUnsafe();
@@ -152,11 +154,17 @@ public abstract class StaticShape<T> {
         return factory;
     }
 
-    final Class<?> getStorageClass() {
-        return storageClass;
+    @SuppressWarnings("unchecked")
+    final Class<T> getFactoryInterface() {
+        assert factory.getClass().getInterfaces().length == 1;
+        return (Class<T>) factory.getClass().getInterfaces()[0];
     }
 
     abstract Object getStorage(Object obj, boolean primitive);
+
+    final Class<?> getStorageClass() {
+        return storageClass;
+    }
 
     final <U> U cast(Object obj, Class<U> type, boolean checkCondition) {
         if (safetyChecks) {
@@ -165,13 +173,6 @@ public abstract class StaticShape<T> {
             assert checkedCast(obj, type) != null;
             return SomAccessor.RUNTIME.unsafeCast(obj, type, !checkCondition || type.isInstance(obj), false, false);
         }
-    }
-
-    @SuppressWarnings("unchecked")
-    final Class<T> getFactoryInterface() {
-        // Builder.validate() makes sure that the factory class implements a single interface
-        assert factory.getClass().getInterfaces().length == 1;
-        return (Class<T>) factory.getClass().getInterfaces()[0];
     }
 
     private static <U> U checkedCast(Object obj, Class<U> type) {
@@ -206,6 +207,9 @@ public abstract class StaticShape<T> {
     public static final class Builder {
         private static final int MAX_NUMBER_OF_PROPERTIES = 65535;
         private static final int MAX_PROPERTY_ID_BYTE_LENGTH = 65535;
+        private static final String DELIMITER = "$$";
+        private static final AtomicInteger counter = new AtomicInteger();
+        private final String storageClassName;
         private final HashMap<String, StaticProperty> staticProperties = new LinkedHashMap<>();
         private final TruffleLanguage<?> language;
         boolean hasLongPropertyId = false;
@@ -213,6 +217,11 @@ public abstract class StaticShape<T> {
 
         Builder(TruffleLanguage<?> language) {
             this.language = language;
+            storageClassName = storageClassName();
+        }
+
+        static String storageClassName() {
+            return ShapeGenerator.class.getPackage().getName().replace('.', '/') + "/GeneratedStaticObject" + DELIMITER + counter.incrementAndGet();
         }
 
         /**
@@ -232,14 +241,13 @@ public abstract class StaticShape<T> {
          *
          * @see DefaultStaticProperty
          * @param property the {@link StaticProperty} to be added
-         * @param type the type of the {@link StaticProperty} to be added. Can only be a primitive
-         *            class or Object.class
+         * @param type the type of the {@link StaticProperty} to be added.
          * @param storeAsFinal if this property value can be stored in a final field
          * @return the Builder instance
-         * @throws IllegalArgumentException if more than 65535 properties are added, if the
+         * @throws IllegalArgumentException if more than 65535 properties are added, or if the
          *             {@linkplain StaticProperty#getId() property id} is an empty string or it is
          *             equal to the id of another static property already registered to this
-         *             builder, or if the type is not a primitive class or Object.class
+         *             builder.
          * @throws IllegalStateException if this method is invoked after building a static shape
          * @throws NullPointerException if the {@linkplain StaticProperty#getId() property id} is
          *             null
@@ -247,8 +255,9 @@ public abstract class StaticShape<T> {
          */
         public Builder property(StaticProperty property, Class<?> type, boolean storeAsFinal) {
             CompilerAsserts.neverPartOfCompilation();
+            StaticPropertyValidator.validate(type);
             checkStatus();
-            property.init(StaticPropertyKind.valueOf(validateType(type)), storeAsFinal);
+            property.init(type, storeAsFinal);
             staticProperties.put(validateAndGetId(property), property);
             return this;
         }
@@ -263,8 +272,9 @@ public abstract class StaticShape<T> {
          * @see StaticShape.Builder#build(Class, Class)
          * @return the new {@link StaticShape}
          * @throws IllegalStateException if a static property was added to more than one builder or
-         *             multiple times to the same builder, or if this method is invoked more than
-         *             once
+         *             multiple times to the same builder, if this method is invoked more than once,
+         *             or if one of the static property types is not visible to the class loader
+         *             that loaded the default factory interface.
          * @since 21.3.0
          */
         public StaticShape<DefaultStaticObjectFactory> build() {
@@ -285,14 +295,15 @@ public abstract class StaticShape<T> {
          * @param <T> the generic type of the parent {@linkplain StaticShape shape}
          * @return the new {@link StaticShape}
          * @throws IllegalStateException if a static property was added to more than one builder or
-         *             multiple times to the same builder, or if this method is invoked more than
-         *             once
+         *             multiple times to the same builder, if this method is invoked more than once,
+         *             or if one of the static property types is not visible to the class loader
+         *             that loaded the default factory interface.
          * @since 21.3.0
          */
         public <T> StaticShape<T> build(StaticShape<T> parentShape) {
             Objects.requireNonNull(parentShape);
-            GeneratorClassLoader gcl = getOrCreateClassLoader(parentShape.getFactoryInterface());
-            ShapeGenerator<T> sg = ShapeGenerator.getShapeGenerator(language, gcl, parentShape, getStorageStrategy());
+            GeneratorClassLoaders gcls = getOrCreateClassLoader(parentShape.getFactoryInterface());
+            ShapeGenerator<T> sg = ShapeGenerator.getShapeGenerator(language, gcls, parentShape, getStorageStrategy(), storageClassName);
             return build(sg, parentShape);
         }
 
@@ -324,18 +335,20 @@ public abstract class StaticShape<T> {
          * @throws IllegalArgumentException if factoryInterface is not an interface, if the
          *             arguments of a method in factoryInterface do not match those of a visible
          *             constructor in superClass, if the return type of a method in factoryInterface
-         *             is not assignable from superClass, if superClass has abstract methods or if
-         *             superClass is {@link Cloneable} and overrides {@link Object#clone()} with a
-         *             final method
+         *             is not assignable from superClass, if {@link StaticShape} is not visible to
+         *             the class loader of factoryInterface, if superClass has abstract methods or
+         *             if superClass is {@link Cloneable} and overrides {@link Object#clone()} with
+         *             a final method
          * @throws IllegalStateException if a static property was added to more than one builder or
-         *             multiple times to the same builder, or if this method is invoked more than
-         *             once
+         *             multiple times to the same builder, if this method is invoked more than once,
+         *             or if one of the static property types is not visible to the class loader
+         *             that loaded the factory interface.
          * @since 21.3.0
          */
         public <T> StaticShape<T> build(Class<?> superClass, Class<T> factoryInterface) {
             validateClasses(superClass, factoryInterface);
-            GeneratorClassLoader gcl = getOrCreateClassLoader(factoryInterface);
-            ShapeGenerator<T> sg = ShapeGenerator.getShapeGenerator(language, gcl, superClass, factoryInterface, getStorageStrategy());
+            GeneratorClassLoaders gcls = getOrCreateClassLoader(factoryInterface);
+            ShapeGenerator<T> sg = ShapeGenerator.getShapeGenerator(language, gcls, superClass, factoryInterface, getStorageStrategy(), storageClassName);
             return build(sg, null);
         }
 
@@ -344,7 +357,7 @@ public abstract class StaticShape<T> {
             checkStatus();
             Map<String, StaticProperty> properties = hasLongPropertyId ? defaultPropertyIds(staticProperties) : staticProperties;
             boolean safetyChecks = !SomAccessor.ENGINE.areStaticObjectSafetyChecksRelaxed(SomAccessor.LANGUAGE.getPolyglotLanguageInstance(language));
-            StaticShape<T> shape = sg.generateShape(parentShape, properties, safetyChecks);
+            StaticShape<T> shape = sg.generateShape(parentShape, properties, safetyChecks, storageClassName);
             for (StaticProperty staticProperty : properties.values()) {
                 staticProperty.initShape(shape);
             }
@@ -362,23 +375,17 @@ public abstract class StaticShape<T> {
             isActive = false;
         }
 
-        private GeneratorClassLoader getOrCreateClassLoader(Class<?> referenceClass) {
-            ClassLoader cl = SomAccessor.ENGINE.getStaticObjectClassLoader(SomAccessor.LANGUAGE.getPolyglotLanguageInstance(language), referenceClass);
-            if (cl == null) {
-                cl = new GeneratorClassLoader(referenceClass);
-                SomAccessor.ENGINE.setStaticObjectClassLoader(SomAccessor.LANGUAGE.getPolyglotLanguageInstance(language), referenceClass, cl);
+        private GeneratorClassLoaders getOrCreateClassLoader(Class<?> referenceClass) {
+            Object gcls = SomAccessor.ENGINE.getStaticObjectClassLoaders(SomAccessor.LANGUAGE.getPolyglotLanguageInstance(language), referenceClass);
+            if (gcls == null) {
+                gcls = new GeneratorClassLoaders(referenceClass);
+                SomAccessor.ENGINE.setStaticObjectClassLoaders(SomAccessor.LANGUAGE.getPolyglotLanguageInstance(language), referenceClass, gcls);
+            } else {
+                if (!GeneratorClassLoaders.class.isInstance(gcls)) {
+                    throw new RuntimeException("The Truffle language instance associated to this Builder returned an unexpected class loader");
+                }
             }
-            if (!GeneratorClassLoader.class.isInstance(cl)) {
-                throw new RuntimeException("The Truffle language instance associated to this Builder returned an unexpected class loader");
-            }
-            return (GeneratorClassLoader) cl;
-        }
-
-        private static Class<?> validateType(Class<?> type) {
-            if (!type.isPrimitive() && type != Object.class) {
-                throw new IllegalArgumentException("The static property type can be a primitive class or Object.class");
-            }
-            return type;
+            return (GeneratorClassLoaders) gcls;
         }
 
         private String validateAndGetId(StaticProperty property) {
@@ -405,16 +412,13 @@ public abstract class StaticShape<T> {
             return id;
         }
 
+        // Reflectively invoked also from TruffleBaseFeature.StaticObjectSupport
         private static void validateClasses(Class<?> storageSuperClass, Class<?> storageFactoryInterface) {
-            // Reflective accesses must be registered by TruffleFeature.StaticObjectSupport, or
-            // these checks might be performed at image build time but not at run time.
-            // This would probably lead to class generation at run time, which is not supported by
-            // Native Image.
             CompilerAsserts.neverPartOfCompilation();
             if (!storageFactoryInterface.isInterface()) {
                 throw new IllegalArgumentException(storageFactoryInterface.getName() + " must be an interface.");
             }
-            // since methods in the factory interface must have the storage super class as return
+            // Since methods in the factory interface must have the storage super class as return
             // type, calling `storageFactoryInterface.getMethods()` also verifies that the class
             // loader of the factory interface can load the storage super class
             for (Method m : storageFactoryInterface.getMethods()) {
@@ -429,6 +433,13 @@ public abstract class StaticShape<T> {
                     throw new IllegalArgumentException("Method '" + m + "' does not match any constructor in '" + storageSuperClass.getName() + "'", e);
                 }
             }
+            // The array-based storage strategy stores the StaticShape in an extra field of the
+            // generated class. Therefore, the class loader that loads generated classes must have
+            // visibility of StaticShape.
+            if (!isClassVisible(storageFactoryInterface.getClassLoader(), StaticShape.class)) {
+                throw new IllegalArgumentException("The class loader of factory interface '" + storageFactoryInterface.getName() + "' (cl: '" + storageFactoryInterface.getClassLoader() +
+                                "') must have visibility of '" + StaticShape.class.getName() + "' (cl: '" + StaticShape.class.getClassLoader() + "')");
+            }
             for (Class<?> c = storageSuperClass; c != null; c = c.getSuperclass()) {
                 for (Method m : c.getDeclaredMethods()) {
                     if (Modifier.isAbstract(m.getModifiers())) {
@@ -440,6 +451,20 @@ public abstract class StaticShape<T> {
                 Method clone = getCloneMethod(storageSuperClass);
                 if (clone != null && Modifier.isFinal(clone.getModifiers())) {
                     throw new IllegalArgumentException("'" + storageSuperClass.getName() + "' implements Cloneable and declares a final 'clone()' method");
+                }
+            }
+        }
+
+        private static boolean isClassVisible(ClassLoader cl, Class<?> clazz) {
+            if (cl == null) {
+                return clazz.getClassLoader() == null;
+            } else {
+                try {
+                    cl.loadClass(clazz.getName());
+                    return true;
+                } catch (ClassNotFoundException e) {
+                    // Swallow the exception
+                    return false;
                 }
             }
         }
@@ -486,14 +511,19 @@ public abstract class StaticShape<T> {
             String strategy = SomAccessor.ENGINE.getStaticObjectStorageStrategy(SomAccessor.LANGUAGE.getPolyglotLanguageInstance(language));
             switch (strategy) {
                 case "DEFAULT":
-                    return TruffleOptions.AOT ? StorageStrategy.ARRAY_BASED : StorageStrategy.FIELD_BASED;
+                    if (ImageInfo.inImageCode()) {
+                        return StorageStrategy.ARRAY_BASED;
+                    } else {
+                        return StorageStrategy.FIELD_BASED;
+                    }
+                case "FIELD_BASED":
+                    if (ImageInfo.inImageCode()) {
+                        return StorageStrategy.POD_BASED;
+                    } else {
+                        return StorageStrategy.FIELD_BASED;
+                    }
                 case "ARRAY_BASED":
                     return StorageStrategy.ARRAY_BASED;
-                case "FIELD_BASED":
-                    if (TruffleOptions.AOT) {
-                        throw new IllegalArgumentException("The field-based storage strategy is not yet supported on Native Image");
-                    }
-                    return StorageStrategy.FIELD_BASED;
                 default:
                     throw new IllegalArgumentException("Should not reach here. Unexpected storage strategy: " + strategy);
             }

@@ -122,13 +122,11 @@ public class NativeImageResourcePath implements Path {
                 }
             }
 
-            // Checkstyle: stop
             synchronized (this) {
                 if (offsets == null) {
                     offsets = result;
                 }
             }
-            // Checkstyle: resume
         }
     }
 
@@ -140,6 +138,10 @@ public class NativeImageResourcePath implements Path {
     @Override
     public boolean isAbsolute() {
         return (this.path.length > 0 && path[0] == '/');
+    }
+
+    public boolean isEmpty() {
+        return this.path.length == 0;
     }
 
     @Override
@@ -297,7 +299,7 @@ public class NativeImageResourcePath implements Path {
     public Path resolve(Path other) {
         NativeImageResourcePath p1 = this;
         NativeImageResourcePath p2 = checkPath(other);
-        if (p2.isAbsolute()) {
+        if (p1.isEmpty() || p2.isAbsolute()) {
             return p2;
         }
         byte[] result;
@@ -389,9 +391,7 @@ public class NativeImageResourcePath implements Path {
         try {
             return new URI(
                             "resource",
-                            fileSystem.getResourcePath().toUri() +
-                                            "!" +
-                                            fileSystem.getString(toAbsolutePath().path),
+                            fileSystem.getString(toAbsolutePath().path),
                             null);
         } catch (URISyntaxException e) {
             throw new AssertionError(e);
@@ -433,7 +433,7 @@ public class NativeImageResourcePath implements Path {
 
     @Override
     public Iterator<Path> iterator() {
-        return new Iterator<Path>() {
+        return new Iterator<>() {
             private int i = 0;
 
             @Override
@@ -540,7 +540,7 @@ public class NativeImageResourcePath implements Path {
             } else {
                 r = toAbsolutePath().getResolvedPath();
             }
-            if (r[0] == '/') {
+            if (r[0] == '/' && r.length > 1) {
                 r = Arrays.copyOfRange(r, 1, r.length);
             }
             resolved = r;
@@ -555,7 +555,7 @@ public class NativeImageResourcePath implements Path {
         int i = 0;
         for (int j = 0; j < resourcePath.length; j++) {
             int k = resourcePath[j];
-            if (k == '\\') {
+            if (k == '\\' || (k == '/' && j == resourcePath.length - 1)) {
                 return normalize(resourcePath, j);
             }
             if ((k == '/') && (i == '/')) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,13 +24,12 @@
  */
 package com.oracle.svm.hosted.code;
 
-import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.oracle.graal.pointsto.flow.InvokeTypeFlow;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
-import com.oracle.svm.core.annotate.RestrictHeapAccess;
+import com.oracle.graal.pointsto.meta.InvokeInfo;
+import com.oracle.svm.core.heap.RestrictHeapAccess;
 import com.oracle.svm.hosted.code.AnalysisMethodCalleeWalker.CallPathVisitor.VisitResult;
 
 import jdk.vm.ci.code.BytecodePosition;
@@ -65,7 +64,6 @@ public class AnalysisMethodCalleeWalker {
         return (epilogueResult != VisitResult.CONTINUE);
     }
 
-    /** Visit this method, and the methods it calls. */
     VisitResult walkMethodAndCallees(AnalysisMethod method, AnalysisMethod caller, BytecodePosition invokePosition, CallPathVisitor visitor) {
         if (path.contains(method)) {
             /*
@@ -76,32 +74,19 @@ public class AnalysisMethodCalleeWalker {
         }
         path.add(method);
         try {
-            /* Visit the method directly. */
-            final VisitResult directResult = visitor.visitMethod(method, caller, invokePosition, path.size());
+            VisitResult directResult = visitor.visitMethod(method, caller, invokePosition, path.size());
             if (directResult != VisitResult.CONTINUE) {
                 return directResult;
             }
-            /* Visit the callees of this method. */
-            final VisitResult calleeResult = walkCallees(method, visitor);
-            if (calleeResult != VisitResult.CONTINUE) {
-                return calleeResult;
-            }
-            /* Visit all the implementations of this method, ignoring if any of them says CUT. */
-            for (AnalysisMethod impl : method.getImplementations()) {
-                walkMethodAndCallees(impl, caller, invokePosition, visitor);
+            for (InvokeInfo invoke : method.getInvokes()) {
+                for (AnalysisMethod target : invoke.getOriginalCallees()) {
+                    walkMethodAndCallees(target, method, invoke.getPosition(), visitor);
+                }
             }
             return VisitResult.CONTINUE;
         } finally {
             path.remove(method);
         }
-    }
-
-    /** Visit the callees of this method. */
-    VisitResult walkCallees(AnalysisMethod method, CallPathVisitor visitor) {
-        for (InvokeTypeFlow invoke : method.getTypeFlow().getInvokes()) {
-            walkMethodAndCallees(invoke.getTargetMethod(), method, invoke.getSource(), visitor);
-        }
-        return VisitResult.CONTINUE;
     }
 
     /** A visitor for HostedMethods, with a caller path. */
@@ -118,7 +103,6 @@ public class AnalysisMethodCalleeWalker {
          * false.
          */
         public VisitResult prologue() {
-            /* The default is to continue the walk. */
             return VisitResult.CONTINUE;
         }
 
@@ -134,19 +118,7 @@ public class AnalysisMethodCalleeWalker {
          * else false.
          */
         public VisitResult epilogue() {
-            /* The default is to continue the walk. */
             return VisitResult.CONTINUE;
-        }
-
-        /** Printing a path to a stream. */
-
-        void printPath(PrintStream trace, List<AnalysisMethod> path) {
-            trace.print("  [Path: ");
-            for (AnalysisMethod element : path) {
-                trace.println();
-                trace.print("     " + element.format("%h.%n(%p)"));
-            }
-            trace.println("]");
         }
     }
 }

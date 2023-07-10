@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,68 +24,58 @@
  */
 package com.oracle.svm.core.posix;
 
-import org.graalvm.nativeimage.ImageSingletons;
-import org.graalvm.nativeimage.StackValue;
 import org.graalvm.nativeimage.c.function.CEntryPoint;
+import org.graalvm.nativeimage.c.function.CEntryPoint.Publish;
 import org.graalvm.nativeimage.c.function.CEntryPointLiteral;
-import org.graalvm.nativeimage.c.struct.SizeOf;
-import org.graalvm.nativeimage.hosted.Feature;
+import org.graalvm.nativeimage.c.type.VoidPointer;
 import org.graalvm.word.PointerBase;
-import org.graalvm.word.WordFactory;
 
 import com.oracle.svm.core.SubstrateSegfaultHandler;
-import com.oracle.svm.core.annotate.AutomaticFeature;
-import com.oracle.svm.core.annotate.RestrictHeapAccess;
-import com.oracle.svm.core.annotate.Uninterruptible;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.c.function.CEntryPointOptions;
 import com.oracle.svm.core.c.function.CEntryPointOptions.NoEpilogue;
 import com.oracle.svm.core.c.function.CEntryPointOptions.NoPrologue;
-import com.oracle.svm.core.c.function.CEntryPointOptions.Publish;
+import com.oracle.svm.core.feature.AutomaticallyRegisteredImageSingleton;
+import com.oracle.svm.core.heap.RestrictHeapAccess;
 import com.oracle.svm.core.log.Log;
-import com.oracle.svm.core.os.MemoryProtectionKeyProvider;
-import com.oracle.svm.core.posix.headers.LibC;
+import com.oracle.svm.core.os.MemoryProtectionProvider;
 import com.oracle.svm.core.posix.headers.Signal;
 import com.oracle.svm.core.posix.headers.Signal.AdvancedSignalDispatcher;
-import com.oracle.svm.core.posix.headers.Signal.sigaction;
 import com.oracle.svm.core.posix.headers.Signal.siginfo_t;
 import com.oracle.svm.core.posix.headers.Signal.ucontext_t;
 import com.oracle.svm.core.util.VMError;
 
-@AutomaticFeature
-class PosixSubstrateSegfaultHandlerFeature implements Feature {
-    @Override
-    public void afterRegistration(AfterRegistrationAccess access) {
-        ImageSingletons.add(SubstrateSegfaultHandler.class, new PosixSubstrateSegfaultHandler());
-    }
-}
-
+@AutomaticallyRegisteredImageSingleton(SubstrateSegfaultHandler.class)
 class PosixSubstrateSegfaultHandler extends SubstrateSegfaultHandler {
-    @CEntryPoint(include = CEntryPoint.NotIncludedAutomatically.class)
-    @CEntryPointOptions(prologue = NoPrologue.class, epilogue = NoEpilogue.class, publishAs = Publish.NotPublished)
+    @CEntryPoint(include = CEntryPoint.NotIncludedAutomatically.class, publishAs = Publish.NotPublished)
+    @CEntryPointOptions(prologue = NoPrologue.class, epilogue = NoEpilogue.class)
     @RestrictHeapAccess(access = RestrictHeapAccess.Access.NO_ALLOCATION, reason = "Must not allocate in segfault signal handler.")
     @Uninterruptible(reason = "Must be uninterruptible until it gets immune to safepoints")
     private static void dispatch(@SuppressWarnings("unused") int signalNumber, @SuppressWarnings("unused") siginfo_t sigInfo, ucontext_t uContext) {
-        if (MemoryProtectionKeyProvider.isAvailable()) {
-            MemoryProtectionKeyProvider.singleton().handleSegfault(sigInfo);
+        if (MemoryProtectionProvider.isAvailable()) {
+            MemoryProtectionProvider.singleton().handleSegfault(sigInfo);
         }
 
         if (tryEnterIsolate(uContext)) {
             dump(sigInfo, uContext);
-            throw VMError.shouldNotReachHere();
+            throw VMError.shouldNotReachHereAtRuntime();
         }
     }
 
     @Override
     protected void printSignalInfo(Log log, PointerBase signalInfo) {
-        if (MemoryProtectionKeyProvider.isAvailable()) {
-            MemoryProtectionKeyProvider.singleton().printSignalInfo(signalInfo);
+        if (MemoryProtectionProvider.isAvailable()) {
+            MemoryProtectionProvider.singleton().printSignalInfo(signalInfo);
         } else {
             siginfo_t sigInfo = (siginfo_t) signalInfo;
             log.string("siginfo: si_signo: ").signed(sigInfo.si_signo()).string(", si_code: ").signed(sigInfo.si_code());
             if (sigInfo.si_errno() != 0) {
                 log.string(", si_errno: ").signed(sigInfo.si_errno());
             }
-            log.string(", si_addr: ").zhex(sigInfo.si_addr());
+
+            VoidPointer addr = sigInfo.si_addr();
+            log.string(", si_addr: ");
+            printSegfaultAddressInfo(log, addr.rawValue());
             log.newline();
         }
     }
@@ -96,13 +86,7 @@ class PosixSubstrateSegfaultHandler extends SubstrateSegfaultHandler {
 
     @Override
     protected void installInternal() {
-        int structSigActionSize = SizeOf.get(sigaction.class);
-        sigaction structSigAction = StackValue.get(structSigActionSize);
-        LibC.memset(structSigAction, WordFactory.signed(0), WordFactory.unsigned(structSigActionSize));
-        /* Register sa_sigaction signal handler */
-        structSigAction.sa_flags(Signal.SA_SIGINFO() | Signal.SA_NODEFER());
-        structSigAction.sa_sigaction(advancedSignalDispatcher.getFunctionPointer());
-        Signal.sigaction(Signal.SignalEnum.SIGSEGV.getCValue(), structSigAction, WordFactory.nullPointer());
-        Signal.sigaction(Signal.SignalEnum.SIGBUS.getCValue(), structSigAction, WordFactory.nullPointer());
+        PosixUtils.installSignalHandler(Signal.SignalEnum.SIGSEGV, advancedSignalDispatcher.getFunctionPointer(), Signal.SA_NODEFER());
+        PosixUtils.installSignalHandler(Signal.SignalEnum.SIGBUS, advancedSignalDispatcher.getFunctionPointer(), Signal.SA_NODEFER());
     }
 }

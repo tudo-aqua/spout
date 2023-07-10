@@ -24,10 +24,6 @@
  */
 package com.oracle.svm.hosted.meta;
 
-import static com.oracle.svm.core.util.VMError.shouldNotReachHere;
-
-import java.lang.annotation.Annotation;
-
 import org.graalvm.word.WordBase;
 
 import com.oracle.graal.pointsto.infrastructure.OriginalClassProvider;
@@ -36,6 +32,7 @@ import com.oracle.graal.pointsto.meta.AnalysisMethod;
 import com.oracle.graal.pointsto.meta.AnalysisType;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.meta.SharedType;
+import com.oracle.svm.core.util.VMError;
 
 import jdk.vm.ci.meta.Assumptions.AssumptionResult;
 import jdk.vm.ci.meta.JavaConstant;
@@ -44,7 +41,9 @@ import jdk.vm.ci.meta.ResolvedJavaField;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 import jdk.vm.ci.meta.ResolvedJavaType;
 
-public abstract class HostedType implements SharedType, WrappedJavaType, Comparable<HostedType>, OriginalClassProvider {
+public abstract class HostedType extends HostedElement implements SharedType, WrappedJavaType, OriginalClassProvider {
+
+    public static final HostedType[] EMPTY_ARRAY = new HostedType[0];
 
     protected final HostedUniverse universe;
     protected final AnalysisType wrapped;
@@ -55,7 +54,6 @@ public abstract class HostedType implements SharedType, WrappedJavaType, Compara
     private final HostedClass superClass;
     private final HostedInterface[] interfaces;
 
-    private HostedType enclosingType;
     protected HostedArrayClass arrayType;
     protected HostedType[] subTypes;
     protected HostedField[] staticFields;
@@ -96,9 +94,7 @@ public abstract class HostedType implements SharedType, WrappedJavaType, Compara
      */
     protected HostedType strengthenStampType;
 
-    private final boolean isCloneable;
-
-    public HostedType(HostedUniverse universe, AnalysisType wrapped, JavaKind kind, JavaKind storageKind, HostedClass superClass, HostedInterface[] interfaces, boolean isCloneable) {
+    public HostedType(HostedUniverse universe, AnalysisType wrapped, JavaKind kind, JavaKind storageKind, HostedClass superClass, HostedInterface[] interfaces) {
         this.universe = universe;
         this.wrapped = wrapped;
         this.kind = kind;
@@ -106,7 +102,6 @@ public abstract class HostedType implements SharedType, WrappedJavaType, Compara
         this.superClass = superClass;
         this.interfaces = interfaces;
         this.typeID = -1;
-        this.isCloneable = isCloneable;
     }
 
     public HostedType getStrengthenStampType() {
@@ -200,6 +195,16 @@ public abstract class HostedType implements SharedType, WrappedJavaType, Compara
     }
 
     @Override
+    public String toJavaName() {
+        return wrapped.toJavaName();
+    }
+
+    @Override
+    public String toJavaName(boolean qualified) {
+        return wrapped.toJavaName(qualified);
+    }
+
+    @Override
     public final JavaKind getJavaKind() {
         return kind;
     }
@@ -233,7 +238,18 @@ public abstract class HostedType implements SharedType, WrappedJavaType, Compara
 
     @Override
     public final boolean isInitialized() {
-        return wrapped.isInitialized();
+        if (!wrapped.isReachable()) {
+            /* Workaround until ParseOnce can always be enabled. */
+            return wrapped.isInitialized();
+        }
+
+        /*
+         * Note that we do not delegate to wrapped.isInitialized here: when a class initializer is
+         * simulated at image build time, then AnalysisType.isInitialized() returns false but
+         * DynamicHub.isInitialized returns true. We want to treat such classes as initialized
+         * during AOT compilation.
+         */
+        return getHub().isInitialized();
     }
 
     @Override
@@ -327,12 +343,6 @@ public abstract class HostedType implements SharedType, WrappedJavaType, Compara
             hResult = universe.lookup(aResult);
         }
 
-        /**
-         * Check that the SharedType implementation, which is used for JIT compilation, gives the
-         * same result as the hosted implementation.
-         */
-        assert hResult == null || isWordType() || hResult.equals(SharedType.super.resolveConcreteMethod(method, callerType));
-
         return hResult;
     }
 
@@ -353,28 +363,13 @@ public abstract class HostedType implements SharedType, WrappedJavaType, Compara
     }
 
     @Override
-    public Annotation[] getAnnotations() {
-        return wrapped.getAnnotations();
-    }
-
-    @Override
-    public Annotation[] getDeclaredAnnotations() {
-        return wrapped.getDeclaredAnnotations();
-    }
-
-    @Override
-    public final <T extends Annotation> T getAnnotation(Class<T> annotationClass) {
-        return wrapped.getAnnotation(annotationClass);
-    }
-
-    @Override
     public String getSourceFileName() {
         return wrapped.getSourceFileName();
     }
 
     @Override
     public String toString() {
-        return "HostedType<" + toJavaName(true) + "   " + wrapped.toString() + ">";
+        return "HostedType<" + toJavaName(false) + " -> " + wrapped.toString() + ">";
     }
 
     @Override
@@ -389,17 +384,29 @@ public abstract class HostedType implements SharedType, WrappedJavaType, Compara
 
     @Override
     public HostedType getEnclosingType() {
-        return enclosingType;
+        return universe.lookup(wrapped.getEnclosingType());
     }
 
     @Override
-    public HostedMethod[] getDeclaredConstructors() {
-        return universe.lookup(wrapped.getDeclaredConstructors());
+    public ResolvedJavaMethod[] getDeclaredConstructors() {
+        return getDeclaredConstructors(true);
     }
 
     @Override
-    public HostedMethod[] getDeclaredMethods() {
-        return universe.lookup(wrapped.getDeclaredMethods());
+    public HostedMethod[] getDeclaredConstructors(boolean forceLink) {
+        VMError.guarantee(forceLink == false, "only use getDeclaredConstructors without forcing to link, because linking can throw LinkageError");
+        return universe.lookup(wrapped.getDeclaredConstructors(forceLink));
+    }
+
+    @Override
+    public ResolvedJavaMethod[] getDeclaredMethods() {
+        return getDeclaredMethods(true);
+    }
+
+    @Override
+    public HostedMethod[] getDeclaredMethods(boolean forceLink) {
+        VMError.guarantee(forceLink == false, "only use getDeclaredMethods without forcing to link, because linking can throw LinkageError");
+        return universe.lookup(wrapped.getDeclaredMethods(forceLink));
     }
 
     @Override
@@ -433,7 +440,7 @@ public abstract class HostedType implements SharedType, WrappedJavaType, Compara
 
     @Override
     public boolean isCloneableWithAllocation() {
-        return isCloneable;
+        return wrapped.isCloneableWithAllocation();
     }
 
     @SuppressWarnings("deprecation")
@@ -442,44 +449,8 @@ public abstract class HostedType implements SharedType, WrappedJavaType, Compara
         return universe.lookup(wrapped.getHostClass());
     }
 
-    public void setEnclosingType(HostedType enclosingType) {
-        this.enclosingType = enclosingType;
-    }
-
     @Override
     public Class<?> getJavaClass() {
-        return OriginalClassProvider.getJavaClass(universe.getSnippetReflection(), wrapped);
-    }
-
-    @Override
-    public int compareTo(HostedType other) {
-        if (this.equals(other)) {
-            return 0;
-        }
-        if (this.getClass().equals(other.getClass())) {
-            return compareToEqualClass(other);
-        }
-        int result = this.ordinal() - other.ordinal();
-        assert result != 0 : "Types not distinguishable: " + this + ", " + other;
-        return result;
-    }
-
-    int compareToEqualClass(HostedType other) {
-        assert getClass().equals(other.getClass());
-        return getName().compareTo(other.getName());
-    }
-
-    private int ordinal() {
-        if (isInterface()) {
-            return 4;
-        } else if (isArray()) {
-            return 3;
-        } else if (isInstanceClass()) {
-            return 2;
-        } else if (getJavaKind() != JavaKind.Object) {
-            return 1;
-        } else {
-            throw shouldNotReachHere();
-        }
+        return wrapped.getJavaClass();
     }
 }

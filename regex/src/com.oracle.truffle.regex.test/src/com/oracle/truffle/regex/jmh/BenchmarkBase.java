@@ -40,18 +40,25 @@
  */
 package com.oracle.truffle.regex.jmh;
 
+import java.util.concurrent.TimeUnit;
+
+import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
 import org.openjdk.jmh.annotations.Measurement;
+import org.openjdk.jmh.annotations.Mode;
+import org.openjdk.jmh.annotations.OutputTimeUnit;
 import org.openjdk.jmh.annotations.Warmup;
 
-@Warmup(iterations = BenchmarkBase.Defaults.WARMUP_ITERATIONS)
-@Measurement(iterations = BenchmarkBase.Defaults.MEASUREMENT_ITERATIONS)
+@Warmup(iterations = BenchmarkBase.Defaults.WARMUP_ITERATIONS, time = 4)
+@Measurement(iterations = BenchmarkBase.Defaults.MEASUREMENT_ITERATIONS, time = 2)
 @Fork(BenchmarkBase.Defaults.FORKS)
+@BenchmarkMode(Mode.AverageTime)
+@OutputTimeUnit(TimeUnit.NANOSECONDS)
 public class BenchmarkBase {
 
     public static class Defaults {
-        public static final int MEASUREMENT_ITERATIONS = 5;
-        public static final int WARMUP_ITERATIONS = 5;
+        public static final int MEASUREMENT_ITERATIONS = 3;
+        public static final int WARMUP_ITERATIONS = 3;
         public static final int FORKS = 1;
     }
 }

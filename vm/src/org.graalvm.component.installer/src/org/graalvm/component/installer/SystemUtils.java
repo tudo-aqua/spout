@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,10 +24,24 @@
  */
 package org.graalvm.component.installer;
 
+import static org.graalvm.component.installer.CommonConstants.ARCH_AARCH64;
+import static org.graalvm.component.installer.CommonConstants.ARCH_AMD64;
+import static org.graalvm.component.installer.CommonConstants.ARCH_X8664;
+import static org.graalvm.component.installer.CommonConstants.CAP_OS_NAME;
+import static org.graalvm.component.installer.CommonConstants.OS_MACOS_DARWIN;
+import static org.graalvm.component.installer.CommonConstants.OS_TOKEN_LINUX;
+import static org.graalvm.component.installer.CommonConstants.OS_TOKEN_MAC;
+import static org.graalvm.component.installer.CommonConstants.OS_TOKEN_MACOS;
+import static org.graalvm.component.installer.CommonConstants.OS_TOKEN_WINDOWS;
+import static org.graalvm.component.installer.CommonConstants.SYSPROP_ARCH_NAME;
+import static org.graalvm.component.installer.CommonConstants.SYSPROP_JAVA_VERSION;
+import static org.graalvm.component.installer.CommonConstants.SYSPROP_OS_NAME;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import java.io.File;
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.nio.ByteBuffer;
@@ -49,6 +63,8 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.graalvm.component.installer.model.ComponentRegistry;
+import java.net.URLEncoder;
+import java.util.Collection;
 import java.util.Locale;
 
 /**
@@ -73,30 +89,101 @@ public class SystemUtils {
     private static final String SPLIT_DELIMITER = Pattern.quote(DELIMITER);
 
     public enum OS {
-        WINDOWS,
-        LINUX,
-        MAC,
-        UNKNOWN;
+        WINDOWS(OS_TOKEN_WINDOWS),
+        LINUX(OS_TOKEN_LINUX),
+        MAC(OS_TOKEN_MACOS),
+        UNKNOWN(null);
+
+        private final String name;
+
+        public String getName() {
+            return name;
+        }
+
+        OS(String name) {
+            this.name = name;
+        }
+
+        public static String sysName() {
+            return System.getProperty(SYSPROP_OS_NAME);
+        }
 
         /**
-         * Obtain OS enum.
+         * Obtains current OS enum.
+         *
+         * @return OS enum identifier
          */
         public static OS get() {
-            String osName = System.getProperty("os.name");
-            if (!(osName == null || osName.isEmpty())) {
-                String osNameLower = osName.toLowerCase(Locale.ENGLISH);
-                if (osNameLower.contains("windows")) {
+            return fromName(sysName());
+        }
+
+        public static OS fromName(String osName) {
+            return osName == null ? UNKNOWN : fromNameLower(osName.toLowerCase(Locale.ENGLISH));
+        }
+
+        private static OS fromNameLower(String osNameLower) {
+            if (!osNameLower.isBlank()) {
+                if (osNameLower.contains(OS_TOKEN_WINDOWS)) {
                     return WINDOWS;
                 }
-                if (osNameLower.contains("linux")) {
+                if (osNameLower.contains(OS_TOKEN_LINUX)) {
                     return LINUX;
                 }
-                if (osNameLower.contains("mac") || osNameLower.contains("darwin")) {
+                if (osNameLower.contains(OS_TOKEN_MAC) || osNameLower.contains(OS_MACOS_DARWIN)) {
                     return MAC;
                 }
             }
             return UNKNOWN;
         }
+    }
+
+    public enum ARCH {
+        AMD64(ARCH_AMD64),
+        AARCH64(ARCH_AARCH64),
+        UNKNOWN(null);
+
+        private final String name;
+
+        public String getName() {
+            return name;
+        }
+
+        ARCH(String name) {
+            this.name = name;
+        }
+
+        public static String sysName() {
+            return System.getProperty(SYSPROP_ARCH_NAME);
+        }
+
+        /**
+         * Obtain current ARCH enum.
+         *
+         * @return ARCH enum identifier
+         */
+        public static ARCH get() {
+            return fromName(sysName());
+        }
+
+        public static ARCH fromName(String archName) {
+            return archName == null ? UNKNOWN : fromNameLower(archName.toLowerCase(Locale.ENGLISH));
+        }
+
+        private static ARCH fromNameLower(String archNameLower) {
+            if (!archNameLower.isBlank()) {
+                if (archNameLower.contains(ARCH_AARCH64)) {
+                    return AARCH64;
+                }
+                if (archNameLower.contains(ARCH_AMD64) || archNameLower.contains(ARCH_X8664)) {
+                    return AMD64;
+                }
+            }
+            return UNKNOWN;
+        }
+    }
+
+    public static boolean nonBlankString(String string) {
+        return string != null && !string.isBlank();
     }
 
     /**
@@ -177,8 +264,7 @@ public class SystemUtils {
      * @return true, if on Windows.
      */
     public static boolean isWindows() {
-        String osName = System.getProperty("os.name"); // NOI18N
-        return osName != null && osName.toLowerCase(Locale.ENGLISH).contains("windows");
+        return OS.get().equals(OS.WINDOWS);
     }
 
     /**
@@ -187,8 +273,7 @@ public class SystemUtils {
      * @return true, if on Linux.
      */
     public static boolean isLinux() {
-        String osName = System.getProperty("os.name"); // NOI18N
-        return osName != null && osName.toLowerCase(Locale.ENGLISH).contains("linux");
+        return OS.get().equals(OS.LINUX);
     }
 
     /**
@@ -197,8 +282,7 @@ public class SystemUtils {
      * @return true, if on Mac.
      */
     public static boolean isMac() {
-        String osName = System.getProperty("os.name"); // NOI18N
-        return osName != null && osName.toLowerCase(Locale.ENGLISH).contains("mac");
+        return OS.get().equals(OS.MAC);
     }
 
     /**
@@ -342,8 +426,7 @@ public class SystemUtils {
     }
 
     public static Path getGraalVMJDKRoot(ComponentRegistry reg) {
-        if (CommonConstants.OS_TOKEN_MACOS.equals(
-                        reg.getGraalCapabilities().get(CommonConstants.CAP_OS_NAME))) {
+        if (OS.MAC.equals(OS.fromName(reg.getGraalCapabilities().get(CAP_OS_NAME)))) {
             return Paths.get("Contents", "Home");
         } else {
             return Paths.get("");
@@ -375,7 +458,7 @@ public class SystemUtils {
         return licenseTracking;
     }
 
-    public static String parseURLParameters(String s, Map<String, String> params) throws MalformedURLException {
+    public static String parseURLParameters(String s, Map<String, String> params) {
         int q = s.indexOf('?'); // NOI18N
         if (q == -1) {
             return s;
@@ -386,18 +469,12 @@ public class SystemUtils {
             String n;
             String v;
 
-            try {
-                n = URLDecoder.decode(nameAndVal[0], "UTF-8"); // NOI18N
-                if (n.isEmpty()) {
-                    continue;
-                }
-                v = nameAndVal.length > 1 ? URLDecoder.decode(nameAndVal[1], "UTF-8") : ""; // NOI18N
-                params.put(n, v);
-            } catch (UnsupportedEncodingException ex) {
-                MalformedURLException newEx = new MalformedURLException(ex.getLocalizedMessage());
-                newEx.initCause(ex);
-                throw newEx;
+            n = URLDecoder.decode(nameAndVal[0], UTF_8);
+            if (n.isEmpty()) {
+                continue;
             }
+            v = nameAndVal.length > 1 ? URLDecoder.decode(nameAndVal[1], UTF_8) : "";
+            params.put(n, v);
         }
         return s.substring(0, q);
     }
@@ -405,8 +482,8 @@ public class SystemUtils {
     public static int getJavaMajorVersion(CommandInput cmd) {
         String v = cmd.getLocalRegistry() != null ? cmd.getLocalRegistry().getJavaVersion() : null;
         if (v == null) {
-            cmd.getParameter(CommonConstants.SYSPROP_JAVA_VERSION, true);
-        } // NOI18N
+            cmd.getParameter(SYSPROP_JAVA_VERSION, true);
+        }
         if (v != null) {
             return interpretJavaMajorVersion(v);
         } else {
@@ -414,9 +491,30 @@ public class SystemUtils {
         }
     }
 
+    public static String buildUrlStringWithParameters(String baseURL, Map<String, ? extends Collection<String>> params) {
+        if (params == null || params.isEmpty()) {
+            return baseURL;
+        }
+        StringBuilder url = new StringBuilder(baseURL);
+        url.append('?');
+        for (Map.Entry<String, ? extends Collection<String>> entry : params.entrySet()) {
+            Collection<String> vals = entry.getValue();
+            String key = entry.getKey();
+            if (key == null || key.isBlank() || vals == null || vals.isEmpty()) {
+                continue;
+            }
+            for (String val : vals) {
+                url.append(URLEncoder.encode(entry.getKey(), UTF_8));
+                url.append('=');
+                url.append(URLEncoder.encode(val, UTF_8));
+                url.append('&');
+            }
+        }
+        return url.substring(0, url.length() - 1);
+    }
+
     public static int getJavaMajorVersion() {
-        String v = System.getProperty(CommonConstants.SYSPROP_JAVA_VERSION); // NOI18N
-        return interpretJavaMajorVersion(v);
+        return interpretJavaMajorVersion(System.getProperty(SYSPROP_JAVA_VERSION));
     }
 
     /**
@@ -426,15 +524,9 @@ public class SystemUtils {
      * @return the major version number, or zero if unknown
      */
     public static int interpretJavaMajorVersion(String v) {
-        String s;
-        if (v.startsWith("1.")) { // NOI18N
-            s = v.substring(2);
-        } else {
-            s = v;
-        }
         try {
-            return Integer.parseInt(s);
-        } catch (NumberFormatException ex) {
+            return Integer.parseInt(v.startsWith("1.") ? v.substring(2) : v); // NOI18N
+        } catch (NumberFormatException | NullPointerException ex) {
             return 0;
         }
     }
@@ -452,12 +544,11 @@ public class SystemUtils {
         Path base = getRuntimeBaseDir(graalPath);
         switch (OS.get()) {
             case LINUX:
-                String arch = System.getProperty("os.arch"); // NOI18N
                 Path temp = base.resolve(Paths.get("lib")); // NOI18N
                 if (!archDir || SystemUtils.getJavaMajorVersion() >= 10) {
                     newLibPath = temp;
                 } else {
-                    newLibPath = temp.resolve(Paths.get(arch));
+                    newLibPath = temp.resolve(Paths.get(OS.sysName()));
                 }
                 break;
             case MAC:
@@ -626,17 +717,21 @@ public class SystemUtils {
         }
     }
 
-    public static String patternOsName(String os) {
+    public static String patternOsName(String os, String variant) {
         if (os == null) {
             return null;
         }
         String lc = os.toLowerCase(Locale.ENGLISH);
+        String suffix = "";
+        if (variant != null && !variant.isEmpty()) {
+            suffix = "_" + variant.toLowerCase(Locale.ENGLISH);
+        }
         switch (lc) {
-            case CommonConstants.OS_MACOS_DARWIN:
-            case CommonConstants.OS_TOKEN_MACOS:
-                return "(:?" + CommonConstants.OS_MACOS_DARWIN + "|" + CommonConstants.OS_TOKEN_MACOS + ")";
+            case OS_MACOS_DARWIN:
+            case OS_TOKEN_MACOS:
+                return String.format("(:?%s%s|%s%s)", OS_MACOS_DARWIN, suffix, OS_TOKEN_MACOS, suffix);
             default:
-                return lc;
+                return lc + suffix;
         }
     }
 
@@ -646,9 +741,9 @@ public class SystemUtils {
         }
         String lc = arch.toLowerCase(Locale.ENGLISH);
         switch (lc) {
-            case CommonConstants.ARCH_AMD64:
-            case CommonConstants.ARCH_X8664:
-                return "(:?" + CommonConstants.ARCH_AMD64 + "|" + CommonConstants.ARCH_X8664 + ")";
+            case ARCH_AMD64:
+            case ARCH_X8664:
+                return "(:?" + ARCH_AMD64 + "|" + ARCH_X8664 + ")";
             default:
                 return lc;
         }
@@ -666,8 +761,8 @@ public class SystemUtils {
             return null;
         }
         switch (arch.toLowerCase(Locale.ENGLISH)) {
-            case CommonConstants.ARCH_X8664:
-                return CommonConstants.ARCH_AMD64;
+            case ARCH_X8664:
+                return ARCH_AMD64;
             default:
                 return arch.toLowerCase(Locale.ENGLISH);
         }
@@ -685,8 +780,8 @@ public class SystemUtils {
             return null;
         }
         switch (os.toLowerCase(Locale.ENGLISH)) {
-            case CommonConstants.OS_MACOS_DARWIN:
-                return CommonConstants.OS_TOKEN_MACOS;
+            case OS_MACOS_DARWIN:
+                return OS_TOKEN_MACOS;
             default:
                 return os.toLowerCase(Locale.ENGLISH);
         }
@@ -731,11 +826,11 @@ public class SystemUtils {
      * as relative.
      * 
      * @param pathOrURL path or URL to check.
-     * @return true, if the path is actually an URL.
+     * @return true, if the path is actually a URL.
      */
     public static boolean isRemotePath(String pathOrURL) {
         try {
-            URL u = new URL(pathOrURL);
+            URL u = toURL(pathOrURL);
             String proto = u.getProtocol();
             if ("file".equals(proto)) { // NOI18N
                 throw new IllegalArgumentException("Absolute file:// URLs are not permitted.");
@@ -748,5 +843,57 @@ public class SystemUtils {
         // will fail with an exception if the relative path contains bad chars or traverses up
         fromCommonRelative(pathOrURL);
         return false;
+    }
+
+    /**
+     * Creates a {@link URI} from a string and converts it to a {@link URL}. Works around the
+     * deprecation of {@code new URL(String)} in Java 20.
+     *
+     * @param url the string to be parsed into a URL
+     * @return a url
+     * @throws MalformedURLException wrapper for thrown exceptions
+     */
+    public static URL toURL(String url) throws MalformedURLException {
+        try {
+            return new URI(url).toURL();
+        } catch (URISyntaxException | IllegalArgumentException ex) {
+            throw (MalformedURLException) new MalformedURLException().initCause(ex);
+        }
+    }
+
+    /**
+     * Creates a {@link URI} from a first string, resolves the second string against it, and
+     * converts the result to a {@link URL}. Works around the deprecation of {@code new URL(String)}
+     * in Java 20.
+     *
+     * @param context the string to be parsed into a URL
+     * @param spec the string to be parsed into a URL in the context of {@code context}
+     * @return a url
+     * @throws MalformedURLException wrapper for thrown exceptions
+     */
+    public static URL toURL(String context, String spec) throws MalformedURLException {
+        try {
+            return new URI(context).resolve(spec).toURL();
+        } catch (URISyntaxException | IllegalArgumentException ex) {
+            throw (MalformedURLException) new MalformedURLException().initCause(ex);
+        }
+    }
+
+    /**
+     * Converts the given {@link URL} to a {@link URI}, resolves the given string against it, and
+     * converts the result to a {@link URL}. Works around the deprecation of
+     * {@code new URL(URL, String)} in Java 20.
+     *
+     * @param context the URL to be converted to a URI
+     * @param spec the string to be resolved
+     * @return a url
+     * @throws MalformedURLException wrapper for thrown exceptions
+     */
+    public static URL toURL(URL context, String spec) throws MalformedURLException {
+        try {
+            return context.toURI().resolve(spec).toURL();
+        } catch (URISyntaxException | IllegalArgumentException ex) {
+            throw (MalformedURLException) new MalformedURLException().initCause(ex);
+        }
     }
 }

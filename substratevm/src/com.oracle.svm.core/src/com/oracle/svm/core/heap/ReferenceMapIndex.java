@@ -24,6 +24,8 @@
  */
 package com.oracle.svm.core.heap;
 
+import com.oracle.svm.core.Uninterruptible;
+
 public class ReferenceMapIndex {
     /**
      * Marker value returned by
@@ -40,16 +42,11 @@ public class ReferenceMapIndex {
      */
     public static final int NO_REFERENCE_MAP = -1;
 
-    /**
-     * Reference map index value for {@link StoredContinuation} to indicate this instance needs
-     * special treatment during allocation and GC.
-     */
-    public static final int STORED_CONTINUATION = -2;
-
     public static boolean denotesEmptyReferenceMap(long referenceMapIndex) {
         return referenceMapIndex == EMPTY_REFERENCE_MAP || referenceMapIndex == NO_REFERENCE_MAP;
     }
 
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static boolean denotesValidReferenceMap(long referenceMapIndex) {
         return referenceMapIndex != NO_REFERENCE_MAP;
     }

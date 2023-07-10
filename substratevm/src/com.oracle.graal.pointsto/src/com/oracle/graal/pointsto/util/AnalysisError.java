@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -38,13 +38,10 @@ import jdk.vm.ci.code.BytecodePosition;
 import jdk.vm.ci.meta.ResolvedJavaType;
 
 @Platforms(Platform.HOSTED_ONLY.class)
+@SuppressWarnings("serial")
 public class AnalysisError extends Error {
 
     private static final long serialVersionUID = -4489048906003856416L;
-
-    AnalysisError() {
-        super();
-    }
 
     AnalysisError(String msg) {
         super(msg);
@@ -96,12 +93,23 @@ public class AnalysisError extends Error {
             return method;
         }
 
-        private static String message(AnalysisMethod method) {
-            String msg = String.format("Error encountered while parsing %s %n", method.format("%H.%n(%P)"));
+        public static String message(AnalysisMethod method) {
+            String msg = String.format("Error encountered while parsing %s %n", method.asStackTraceElement(0));
             msg += "Parsing context:" + ReportUtils.parsingContext(method);
             return msg;
         }
+    }
 
+    /**
+     * Thrown when the analysis is misused.
+     */
+    public static class UserError extends AnalysisError {
+
+        private static final long serialVersionUID = -7167507945764369928L;
+
+        UserError(String message) {
+            super(message);
+        }
     }
 
     public static class FieldNotPresentError extends AnalysisError {
@@ -125,6 +133,14 @@ public class AnalysisError extends Error {
         }
     }
 
+    public static class InterruptAnalysis extends AnalysisError {
+        private static final long serialVersionUID = 7126612141948542452L;
+
+        InterruptAnalysis(String msg) {
+            super(msg);
+        }
+    }
+
     public static TypeNotFoundError typeNotFound(ResolvedJavaType type) {
         throw new TypeNotFoundError(type);
     }
@@ -133,16 +149,20 @@ public class AnalysisError extends Error {
         throw new ParsingError(method, original);
     }
 
+    public static UserError userError(String message) {
+        throw new UserError(message);
+    }
+
     public static FieldNotPresentError fieldNotPresentError(PointsToAnalysis bb, TypeFlow<?> objectFlow, BytecodePosition context, AnalysisField field, AnalysisType type) {
         throw new FieldNotPresentError(bb, objectFlow, context, field, type);
     }
 
-    public static RuntimeException shouldNotReachHere() {
-        throw new AnalysisError("should not reach here");
+    public static RuntimeException shouldNotReachHereUnexpectedInput(Object input) {
+        throw new AnalysisError("Should not reach here: unexpected input: " + input);
     }
 
     public static RuntimeException shouldNotReachHere(String msg) {
-        throw new AnalysisError("should not reach here: " + msg);
+        throw new AnalysisError("Should not reach here: " + msg);
     }
 
     public static RuntimeException shouldNotReachHere(Throwable cause) {
@@ -155,15 +175,17 @@ public class AnalysisError extends Error {
 
     public static void guarantee(boolean condition) {
         if (!condition) {
-            throw new AnalysisError("guarantee failed");
+            throw new AnalysisError("Guarantee failed");
         }
     }
 
     public static void guarantee(boolean condition, String format, Object... args) {
         if (!condition) {
-            // Checkstyle: stop
             throw new AnalysisError(String.format(format, args));
-            // Checkstyle: resume
         }
+    }
+
+    public static RuntimeException interruptAnalysis(String msg) {
+        throw new InterruptAnalysis(msg);
     }
 }

@@ -30,7 +30,7 @@ import org.graalvm.compiler.api.replacements.Fold;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.PointerBase;
 
-import com.oracle.svm.core.annotate.Uninterruptible;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.c.NonmovableArrays;
 import com.oracle.svm.core.c.NonmovableObjectArray;
 import com.oracle.svm.core.config.ConfigurationValues;
@@ -38,19 +38,20 @@ import com.oracle.svm.core.heap.ReferenceAccess;
 import com.oracle.svm.core.meta.SubstrateObjectConstant;
 
 import jdk.vm.ci.meta.Constant;
+import jdk.vm.ci.meta.JavaConstant;
 
 /**
  * Tool for adjusting references to objects in non-movable data structures.
  */
 public interface ReferenceAdjuster {
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
-    <T> void setConstantTargetInArray(NonmovableObjectArray<T> array, int index, SubstrateObjectConstant constant);
+    <T> void setConstantTargetInArray(NonmovableObjectArray<T> array, int index, JavaConstant constant);
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     <T> void setObjectInArray(NonmovableObjectArray<T> array, int index, T object);
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
-    void setConstantTargetAt(PointerBase address, int length, SubstrateObjectConstant constant);
+    void setConstantTargetAt(PointerBase address, int length, JavaConstant constant);
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     default <T extends Constant> NonmovableObjectArray<Object> copyOfObjectConstantArray(T[] constants) {

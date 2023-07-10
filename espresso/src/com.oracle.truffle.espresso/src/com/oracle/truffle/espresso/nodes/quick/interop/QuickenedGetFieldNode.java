@@ -25,6 +25,7 @@ package com.oracle.truffle.espresso.nodes.quick.interop;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.impl.Field;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
+import com.oracle.truffle.espresso.nodes.EspressoFrame;
 import com.oracle.truffle.espresso.nodes.helper.AbstractGetFieldNode;
 import com.oracle.truffle.espresso.nodes.quick.QuickNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
@@ -34,17 +35,17 @@ public final class QuickenedGetFieldNode extends QuickNode {
 
     @Child AbstractGetFieldNode getFieldNode;
 
-    public QuickenedGetFieldNode(int top, int callerBCI, int statementIndex, Field.FieldVersion field) {
+    public QuickenedGetFieldNode(int top, int callerBCI, int statementIndex, Field field) {
         super(top, callerBCI);
-        assert !field.getField().isStatic();
+        assert !field.isStatic();
         this.getFieldNode = AbstractGetFieldNode.create(field);
         this.statementIndex = statementIndex;
     }
 
     @Override
-    public int execute(VirtualFrame frame, long[] primitives, Object[] refs) {
+    public int execute(VirtualFrame frame) {
         BytecodeNode root = getBytecodeNode();
-        StaticObject receiver = nullCheck(BytecodeNode.popObject(refs, top - 1));
-        return getFieldNode.getField(frame, primitives, refs, root, receiver, top - 1, statementIndex) - 1; // -receiver
+        StaticObject receiver = nullCheck(EspressoFrame.popObject(frame, top - 1));
+        return getFieldNode.getField(frame, root, receiver, top - 1, statementIndex) - 1; // -receiver
     }
 }

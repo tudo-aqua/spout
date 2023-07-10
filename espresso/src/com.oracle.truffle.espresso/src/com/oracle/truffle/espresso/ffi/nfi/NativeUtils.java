@@ -28,6 +28,7 @@ import java.nio.ByteOrder;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.TruffleObject;
@@ -45,22 +46,33 @@ public final class NativeUtils {
 
     private static final Unsafe UNSAFE = UnsafeAccess.get();
 
-    public static ByteBuffer directByteBuffer(@Pointer TruffleObject addressPtr, long size, JavaKind kind) {
-        return directByteBuffer(addressPtr, Math.multiplyExact(size, kind.getByteCount()));
-    }
-
     private static final Class<?> DIRECT_BYTE_BUFFER_CLASS;
     private static final long ADDRESS_FIELD_OFFSET;
     private static final long CAPACITY_FIELD_OFFSET;
 
+    @SuppressWarnings("deprecation")
+    private static long getBufferFieldOffset(String name) throws NoSuchFieldException {
+        // TODO replace with panama?
+        return UNSAFE.objectFieldOffset(java.nio.Buffer.class.getDeclaredField(name));
+    }
+
     static {
         try {
-            ADDRESS_FIELD_OFFSET = UNSAFE.objectFieldOffset(java.nio.Buffer.class.getDeclaredField("address"));
-            CAPACITY_FIELD_OFFSET = UNSAFE.objectFieldOffset(java.nio.Buffer.class.getDeclaredField("capacity"));
+            ADDRESS_FIELD_OFFSET = getBufferFieldOffset("address");
+            CAPACITY_FIELD_OFFSET = getBufferFieldOffset("capacity");
             DIRECT_BYTE_BUFFER_CLASS = Class.forName("java.nio.DirectByteBuffer");
         } catch (ClassNotFoundException | NoSuchFieldException e) {
             throw EspressoError.shouldNotReachHere(e);
         }
+    }
+
+    public static ByteBuffer directByteBuffer(@Pointer TruffleObject addressPtr, long size, JavaKind kind) {
+        return directByteBuffer(addressPtr, Math.multiplyExact(size, kind.getByteCount()));
+    }
+
+    @TruffleBoundary
+    public static ByteBuffer directByteBuffer(@Pointer TruffleObject addressPtr, long capacity) {
+        return directByteBuffer(interopAsPointer(addressPtr), capacity);
     }
 
     @TruffleBoundary
@@ -84,17 +96,13 @@ public final class NativeUtils {
         try {
             return InteropLibrary.getUncached().asPointer(interopPtr);
         } catch (UnsupportedMessageException e) {
+            CompilerDirectives.transferToInterpreterAndInvalidate();
             throw EspressoError.shouldNotReachHere(e);
         }
     }
 
     public static String interopPointerToString(@Pointer TruffleObject interopPtr) {
         return fromUTF8Ptr(interopAsPointer(interopPtr));
-    }
-
-    @TruffleBoundary
-    public static ByteBuffer directByteBuffer(@Pointer TruffleObject addressPtr, long capacity) {
-        return directByteBuffer(interopAsPointer(addressPtr), capacity);
     }
 
     public static void writeToIntPointer(TruffleObject pointer, int value) {

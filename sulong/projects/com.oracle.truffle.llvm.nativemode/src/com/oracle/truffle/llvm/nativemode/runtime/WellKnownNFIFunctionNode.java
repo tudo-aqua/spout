@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2020, 2023, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -55,10 +55,10 @@ abstract class WellKnownNFIFunctionNode extends WellKnownNativeFunctionNode {
 
     Object getFunction() {
         NFIContextExtension ctxExt = (NFIContextExtension) ctxExtKey.get(getContext());
-        return ctxExt.getCachedWellKnownFunction(function);
+        return ctxExt.getCachedWellKnownFunction(function).getBoundSignature();
     }
 
-    @Specialization(assumptions = "singleContextAssumption()")
+    @Specialization(guards = "isSingleContext($node)")
     @GenerateAOT.Exclude
     Object doCached(Object[] args,
                     @Cached("getFunction()") Object cachedFunction,

@@ -40,12 +40,17 @@
 #
 import os
 import re
-import tempfile
+import io
+import shutil
 import sys
+import tempfile
+import difflib
 import zipfile
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from collections import OrderedDict
-from os.path import exists, isdir, join
+from os.path import exists, isdir, join, abspath
+from urllib.parse import urljoin # pylint: disable=unused-import,no-name-in-module
+from pathlib import PurePath, PurePosixPath
 
 import mx
 import mx_benchmark
@@ -56,25 +61,9 @@ import mx_sdk_vm
 import mx_unittest
 import tck
 from mx_gate import Task
-from mx_jackpot import jackpot
-from mx_javamodules import as_java_module, get_java_module_info
+from mx_javamodules import as_java_module, get_java_module_info, get_module_name
 from mx_sigtest import sigtest
 from mx_unittest import unittest
-
-# Temporary imports and (re)definitions while porting mx from Python 2 to Python 3
-if sys.version_info[0] < 3:
-    from urlparse import urljoin as _urllib_urljoin
-    def _decode(x):
-        return x
-    def _encode(x):
-        return x
-else:
-    from urllib.parse import urljoin as _urllib_urljoin # pylint: disable=unused-import,no-name-in-module
-    def _decode(x):
-        return x.decode()
-    def _encode(x):
-        return x.encode()
-
 
 _suite = mx.suite('truffle')
 
@@ -90,7 +79,11 @@ class JMHRunnerTruffleBenchmarkSuite(mx_benchmark.JMHRunnerBenchmarkSuite):
         return "truffle"
 
     def extraVmArgs(self):
-        return ['-XX:-UseJVMCIClassLoader'] + super(JMHRunnerTruffleBenchmarkSuite, self).extraVmArgs()
+        extraVmArgs = super(JMHRunnerTruffleBenchmarkSuite, self).extraVmArgs()
+        extraVmArgs.extend(_open_module_exports_args())
+        # com.oracle.truffle.api.benchmark.InterpreterCallBenchmark$BenchmarkState needs DefaultTruffleRuntime
+        extraVmArgs.append('--add-exports=org.graalvm.truffle/com.oracle.truffle.api.impl=ALL-UNNAMED')
+        return extraVmArgs
 
 mx_benchmark.add_bm_suite(JMHRunnerTruffleBenchmarkSuite())
 #mx_benchmark.add_java_vm(mx_benchmark.DefaultJavaVm("server", "default"), priority=3)
@@ -98,7 +91,8 @@ mx_benchmark.add_bm_suite(JMHRunnerTruffleBenchmarkSuite())
 def javadoc(args, vm=None):
     """build the Javadoc for all API packages"""
     extraArgs = mx_sdk.build_oracle_compliant_javadoc_args(_suite, 'GraalVM', 'Truffle')
-    mx.javadoc(['--unified', '--exclude-packages', 'com.oracle.truffle.tck,com.oracle.truffle.tck.impl'] + extraArgs + args)
+    mx.javadoc(['--unified', '--exclude-packages',
+                'com.oracle.truffle.tck,com.oracle.truffle.tck.impl'] + extraArgs + args)
     javadoc_dir = os.sep.join([_suite.dir, 'javadoc'])
     checkLinks(javadoc_dir)
 
@@ -111,7 +105,7 @@ def checkLinks(javadocDir):
                 html = os.path.join(root, f)
                 content = open(html, 'r').read()
                 for url in href.findall(content):
-                    full = _urllib_urljoin(html, url)
+                    full = urljoin(html, url)
                     sectionIndex = full.find('#')
                     questionIndex = full.find('?')
                     minIndex = sectionIndex
@@ -177,33 +171,35 @@ def _path_args(depNames=None):
             return ['--add-modules=' + ','.join([m.name for m in modules]), '--module-path=' + os.pathsep.join(modulepath), '-cp', os.pathsep.join(classpath)]
     return ['-cp', mx.classpath(depNames)]
 
+def _open_module_exports_args():
+    """
+    Gets the VM args for exporting all Truffle API packages on JDK9 or later.
+    The default Truffle moduleInfo is opened but closed version is deployed into graalvm.
+    To run benchmarks on the graalvm we need to open the closed Truffle packages.
+    """
+    assert mx.get_jdk().javaCompliance >= '1.9'
+    truffle_api_dist = mx.distribution('TRUFFLE_API')
+    truffle_api_module_name = truffle_api_dist.moduleInfo['name']
+    module_info_open_exports = getattr(truffle_api_dist, 'moduleInfo')['exports']
+    args = []
+    for export in module_info_open_exports:
+        if ' to ' in export: # Qualified exports
+            package, targets = export.split(' to ')
+            targets = targets.replace(' ', '')
+        else: # Unqualified exports
+            package = export
+            targets = 'ALL-UNNAMED'
+        args.append('--add-exports=' + truffle_api_module_name + '/' + package + '=' + targets)
+    return args
+
 def _unittest_config_participant(config):
     vmArgs, mainClass, mainClassArgs = config
     # Disable DefaultRuntime warning
     vmArgs = vmArgs + ['-Dpolyglot.engine.WarnInterpreterOnly=false']
-    jdk = mx.get_jdk(tag='default')
-    if jdk.javaCompliance > '1.8':
-        # This is required to access jdk.internal.module.Modules which
-        # in turn allows us to dynamically open fields/methods to reflection.
-        vmArgs = vmArgs + ['--add-exports=java.base/jdk.internal.module=ALL-UNNAMED']
 
-        # The arguments below are only actually needed if Truffle is deployed as a
-        # module. However, that's determined by the compiler suite which may not
-        # be present. In that case, adding these options results in annoying
-        # but harmless messages from the VM:
-        #
-        #  WARNING: Unknown module: org.graalvm.truffle specified to --add-opens
-        #
-
-        # Needed for com.oracle.truffle.api.dsl.test.TestHelper#instrumentSlowPath
-        vmArgs = vmArgs + ['--add-opens=org.graalvm.truffle/com.oracle.truffle.api.nodes=ALL-UNNAMED']
-
-        # This is required for the call to setAccessible in
-        # TruffleTCK.testValueWithSource to work.
-        vmArgs = vmArgs + ['--add-opens=org.graalvm.truffle/com.oracle.truffle.polyglot=ALL-UNNAMED', '--add-modules=ALL-MODULE-PATH']
-
-        # Needed for object model tests.
-        vmArgs = vmArgs + ['--add-opens=org.graalvm.truffle/com.oracle.truffle.object=ALL-UNNAMED']
+    # This is required to access jdk.internal.module.Modules which
+    # in turn allows us to dynamically open fields/methods to reflection.
+    vmArgs = vmArgs + ['--add-exports=java.base/jdk.internal.module=ALL-UNNAMED']
 
     config = (vmArgs, mainClass, mainClassArgs)
     if _shouldRunTCKParticipant:
@@ -219,8 +215,6 @@ def sl(args):
 
 def _truffle_gate_runner(args, tasks):
     jdk = mx.get_jdk(tag=mx.DEFAULT_JDK_TAG)
-    with Task('Jackpot check', tasks) as t:
-        if t: jackpot(['--fail-on-warnings'], suite=None, nonZeroIsFatal=True)
     if jdk.javaCompliance < '9':
         with Task('Truffle Javadoc', tasks) as t:
             if t: javadoc([])
@@ -229,11 +223,15 @@ def _truffle_gate_runner(args, tasks):
     with Task('Truffle Signature Tests', tasks) as t:
         if t: sigtest(['--check', 'binary'])
     with Task('Truffle UnitTests', tasks) as t:
-        if t: unittest(list(['--suite', 'truffle', '--enable-timing', '--verbose', '--fail-fast']))
+        if t: unittest(list(['--suite', 'truffle', '--enable-timing', '--verbose', '--max-class-failures=25']))
+    with Task('TruffleString UnitTests without Java String Compaction', tasks) as t:
+        if t: unittest(list(['-XX:-CompactStrings', '--suite', 'truffle', '--enable-timing', '--verbose', '--max-class-failures=25', 'com.oracle.truffle.api.strings.test']))
     if os.getenv('DISABLE_DSL_STATE_BITS_TESTS', 'false').lower() != 'true':
         with Task('Truffle DSL max state bit tests', tasks) as t:
             if t:
                 _truffle_gate_state_bitwidth_tests()
+    with Task('Validate parsers', tasks) as t:
+        if t: validate_parsers()
 
 # The Truffle DSL specialization state bit width computation is complicated and
 # rarely used as the default maximum bit width of 32 is rarely exceeded. Therefore
@@ -241,12 +239,12 @@ def _truffle_gate_runner(args, tasks):
 # force using multiple state fields for the tests. This makes sure the tests
 # do not break for rarely used combination of features and bit widths.
 def _truffle_gate_state_bitwidth_tests():
-    runs = [1, 2, 4, 8, 16, 64]
+    runs = [1, 2, 4, 8, 16]
     for run_bits in runs:
         build_args = ['-f', '-p', '--dependencies', 'TRUFFLE_TEST', '--force-javac',
                       '-A-Atruffle.dsl.StateBitWidth={0}'.format(run_bits)]
 
-        unittest_args = ['--suite', 'truffle', '--enable-timing', '--fail-fast', '-Dtruffle.dsl.StateBitWidth={0}'.format(run_bits),
+        unittest_args = ['--suite', 'truffle', '--enable-timing', '--max-class-failures=25', '-Dtruffle.dsl.StateBitWidth={0}'.format(run_bits),
                          'com.oracle.truffle.api.dsl.test', 'com.oracle.truffle.api.library.test', 'com.oracle.truffle.sl.test']
         try:
             mx.build(build_args)
@@ -325,12 +323,44 @@ def _collect_class_path_entries_by_resource(requiredResources, entries_collector
             return False
     _collect_class_path_entries(has_resource, entries_collector, properties_collector)
 
+
+def _collect_class_path_entries_by_module_descriptor(required_services, entries_collector, properties_collector):
+    """
+    Collects class path for JAR distributions providing any service from requiredServices.
+
+    :param required_services: an iterable of service fully qualified names. At least one of them has to exist to include
+            distribution class path entries.
+    :param entries_collector: the list to add the class paths entries into.
+    :param properties_collector: the list to add the distribution Java properties into.
+    """
+    required_set = set(required_services)
+
+    def provides_service(dist):
+        if dist.isJARDistribution() and exists(dist.path):
+            module_name = get_module_name(dist)
+            if module_name:
+                jmd = as_java_module(dist, mx.get_jdk())
+                return len(required_set.intersection(jmd.provides.keys())) != 0
+        return False
+    _collect_class_path_entries(provides_service, entries_collector, properties_collector)
+
 def _collect_class_path_entries_by_name(distributionName, entries_collector, properties_collector):
     cp_filter = lambda dist: dist.isJARDistribution() and  dist.name == distributionName and exists(dist.path)
     _collect_class_path_entries(cp_filter, entries_collector, properties_collector)
 
 def _collect_languages(entries_collector, properties_collector):
-    _collect_class_path_entries_by_resource(["META-INF/truffle/language", "META-INF/services/com.oracle.truffle.api.TruffleLanguage$Provider"], entries_collector, properties_collector)
+    _collect_class_path_entries_by_module_descriptor([
+        "com.oracle.truffle.api.provider.TruffleLanguageProvider"],
+        entries_collector, properties_collector)
+    _collect_class_path_entries_by_resource([
+        # GR-46292 Remove the deprecated TruffleLanguage.Provider
+        "META-INF/truffle/language",
+        # GR-46292 Remove the deprecated TruffleLanguage.Provider
+        "META-INF/services/com.oracle.truffle.api.TruffleLanguage$Provider",
+        # Not all languages are already modularized. For non-modularized languages we require
+        # a registration of the TruffleLanguageProvider in the META-INF/services
+        "META-INF/services/com.oracle.truffle.api.provider.TruffleLanguageProvider"],
+        entries_collector, properties_collector)
 
 def _collect_tck_providers(entries_collector, properties_collector):
     _collect_class_path_entries_by_resource(["META-INF/services/org.graalvm.polyglot.tck.LanguageProvider"], entries_collector, properties_collector)
@@ -424,7 +454,7 @@ class TruffleArchiveParticipant:
         m = TruffleArchiveParticipant.providersRE.match(arcname)
         if m:
             provider = m.group(2)
-            for service in _decode(contents_supplier()).strip().split(os.linesep):
+            for service in contents_supplier().decode().strip().split(os.linesep):
                 assert service
                 version = m.group(1)
                 if version is None:
@@ -646,7 +676,7 @@ def create_parser(grammar_project, grammar_package, grammar_name, copyright_temp
         # remove first line
         content = "\n".join(content.split("\n")[1:])
         # modify SuppressWarnings to remove useless entries
-        content = PTRN_SUPPRESS_WARNINGS.sub('@SuppressWarnings("all")', content)
+        content = PTRN_SUPPRESS_WARNINGS.sub('@SuppressWarnings({"all", "this-escape"})', content)
         # remove useless casts
         content = PTRN_LOCALCTXT_CAST.sub('_localctx', content)
         content = PTRN_TOKEN_CAST.sub('_errHandler.recoverInline(this)', content)
@@ -658,6 +688,30 @@ def create_parser(grammar_project, grammar_package, grammar_name, copyright_temp
         with open(filename, 'w') as content_file:
             content_file.write(content)
 
+def validate_parsers(args=None, out=None):
+    validate_parser("com.oracle.truffle.sl", "com/oracle/truffle/sl/parser/SimpleLanguage.g4", create_sl_parser)
+    validate_parser("com.oracle.truffle.dsl.processor", "com/oracle/truffle/dsl/processor/expression/Expression.g4", create_dsl_parser)
+
+def validate_parser(grammar_project, grammar_path, create_command, args=None, out=None):
+    def read_file(path):
+        with open(path, "r") as f:
+            return f.readlines()
+    parser_path = grammar_path.replace(".g4", "Parser.java")
+    lexer_path = grammar_path.replace(".g4", "Lexer.java")
+    parser = abspath(mx.project(grammar_project).source_dirs()[0] + "/" + parser_path)
+    lexer = abspath(mx.project(grammar_project).source_dirs()[0] + "/" + lexer_path)
+    parser_before = read_file(parser)
+    lexer_before = read_file(lexer)
+    create_command([], out)
+    parser_after = read_file(parser)
+    lexer_after = read_file(lexer)
+    for before, after, path in ((parser_before, parser_after, parser), (lexer_before, lexer_after, lexer)):
+        if before != after:
+            diff = ''.join(difflib.unified_diff(before, after))
+            nl = os.linesep
+            mx.abort(f"Content generated from {grammar_path} does not match content of {path}:{nl}" +
+                    f"{diff}{nl}" +
+                    "Make sure the grammar files are up to date with the generated code. You can regenerate the generated code using mx.")
 
 class LibffiBuilderProject(mx.AbstractNativeProject, mx_native.NativeDependency):  # pylint: disable=too-many-ancestors
     """Project for building libffi from source.
@@ -677,7 +731,7 @@ class LibffiBuilderProject(mx.AbstractNativeProject, mx_native.NativeDependency)
         self.out_dir = self.get_output_root()
         if mx.get_os() == 'windows':
             self.delegate = mx_native.DefaultNativeProject(suite, name, subDir, [], [], None,
-                                                           mx.join(self.out_dir, 'libffi-3.3'),
+                                                           mx.join(self.out_dir, 'libffi-3.4.2'),
                                                            'static_lib',
                                                            deliverable='ffi',
                                                            cflags=['-MD', '-O2', '-DFFI_BUILDING_DLL'])
@@ -692,6 +746,7 @@ class LibffiBuilderProject(mx.AbstractNativeProject, mx_native.NativeDependency)
                                                        mx.join('src', 'prep_cif.c'),
                                                        mx.join('src', 'raw_api.c'),
                                                        mx.join('src', 'types.c'),
+                                                       mx.join('src', 'tramp.c'),
                                                        mx.join('src', 'x86', 'ffiw64.c')],
                                                 '.S': [mx.join('src', 'x86', 'win64_intel.S')]})
         else:
@@ -713,19 +768,18 @@ class LibffiBuilderProject(mx.AbstractNativeProject, mx_native.NativeDependency)
                                                   'include/ffi.h',
                                                   'include/ffitarget.h'],
                                                  mx.join(self.out_dir, 'libffi-build'),
-                                                 mx.join(self.out_dir, 'libffi-3.3'))
+                                                 mx.join(self.out_dir, 'libffi-3.4.2'))
+            configure_args = ['--disable-dependency-tracking',
+                              '--disable-shared',
+                              '--with-pic',
+                              ' CFLAGS="{}"'.format(' '.join(['-g', '-O3'] + (['-m64'] if mx.get_os() == 'solaris' else []))),
+                              'CPPFLAGS="-DNO_JAVA_RAW_API"',
+                             ]
+
             self.delegate.buildEnv = dict(
                 SOURCES=mx.basename(self.delegate.dir),
                 OUTPUT=mx.basename(self.delegate.getOutput()),
-                CONFIGURE_ARGS=' '.join([
-                    '--disable-dependency-tracking',
-                    '--disable-shared',
-                    '--with-pic',
-                    'CFLAGS="{}"'.format(' '.join(
-                        ['-g', '-O3'] + (['-m64'] if mx.get_os() == 'solaris' else [])
-                    )),
-                    'CPPFLAGS="-DNO_JAVA_RAW_API"',
-                ])
+                CONFIGURE_ARGS=' '.join(configure_args)
             )
 
         self.include_dirs = self.delegate.include_dirs
@@ -744,12 +798,22 @@ class LibffiBuilderProject(mx.AbstractNativeProject, mx_native.NativeDependency)
     @property
     def patches(self):
         """A list of patches that will be applied during a build."""
-        os_arch_dir = mx.join(self.source_dirs()[0], '{}-{}'.format(mx.get_os(), mx.get_arch()))
-        if mx.exists(os_arch_dir):
-            return [mx.join(os_arch_dir, patch) for patch in os.listdir(os_arch_dir)]
+        def patch_dir(d):
+            return mx.join(self.source_dirs()[0], d)
 
-        others_dir = mx.join(self.source_dirs()[0], 'others')
-        return [mx.join(others_dir, patch) for patch in os.listdir(others_dir)]
+        def get_patches(patchdir):
+            for patch in os.listdir(patchdir):
+                yield mx.join(patchdir, patch)
+
+        for p in get_patches(patch_dir('common')):
+            yield p
+        os_arch_dir = patch_dir('{}-{}'.format(mx.get_os(), mx.get_arch()))
+        if mx.exists(os_arch_dir):
+            for p in get_patches(os_arch_dir):
+                yield p
+        else:
+            for p in get_patches(patch_dir('others')):
+                yield p
 
     def getBuildTask(self, args):
         return LibffiBuildTask(args, self)
@@ -790,7 +854,7 @@ class LibffiBuildTask(mx.AbstractNativeBuildTask):
 
         mx.log('Applying patches...')
         git_apply = ['git', 'apply', '--whitespace=nowarn', '--unsafe-paths', '--directory',
-                     os.path.relpath(self.subject.delegate.dir, self.subject.suite.vc_dir)]
+                     os.path.realpath(self.subject.delegate.dir)]
         for patch in self.subject.patches:
             mx.run(git_apply + [patch], cwd=self.subject.suite.vc_dir)
 
@@ -800,6 +864,290 @@ class LibffiBuildTask(mx.AbstractNativeBuildTask):
     def clean(self, forBuild=False):
         mx.rmtree(self.subject.out_dir, ignore_errors=True)
 
+class ShadedLibraryProject(mx.JavaProject):
+    """
+    A special JavaProject for shading third-party libraries.
+    Configuration:
+        shadedDependencies: [
+            # one or more library dependencies
+        ],
+        "shade": {
+            "packages" : {
+                # a list of package name/path prefixes that should be shaded.
+                # only .java/.class files that are in one of these packages are included.
+                # package names must contain at least one '.' (i.e., two package parts).
+                "old.pkg.name": "new.pkg.name",
+            },
+            "include" : [
+                # a list of resource path patterns that should be copied.
+                # by default, only shaded .java/.class files are included.
+                "pkg/name/**",
+            ],
+            "exclude" : [
+                # a list of (re)source path patterns that should be excluded from the generated jar
+                "**/*.html",
+            ],
+            "patch" : [
+                # a list of (re)source path patterns that should be patched with regex substitutions
+                "pkg/name/my.properties" : {
+                    "<pattern>" : "<replacement>",
+                },
+            ],
+        }
+    The build task then runs a Java program to shade the library and generates a .jar file.
+    """
+    def __init__(self, suite, name, deps, workingSets, theLicense, **args):
+        self.shade = args.pop('shade')
+        subDir = args.pop('subDir', 'src')
+        srcDirs = args.pop('sourceDirs', ['src']) # + [source_gen_dir()], added below
+        d = mx.join(suite.dir, subDir, name)
+        shadedLibraries = args.pop('shadedDependencies', [])
+        self.shadedDeps = list(set(mx.dependency(d) for d in shadedLibraries))
+        assert all(dep.isLibrary() for dep in self.shadedDeps), f"shadedDependencies must all be libraries: {self.shadedDeps}"
+        super().__init__(suite, name, subDir=subDir, srcDirs=srcDirs, deps=deps, # javaCompliance
+                        workingSets=workingSets, d=d, theLicense=theLicense, **args)
+
+        # add 'src_gen' dir to srcDirs (self.source_gen_dir() should only be called after Project.__init__)
+        src_gen_dir = self.source_gen_dir()
+        self.srcDirs.append(src_gen_dir)
+        mx.ensure_dir_exists(src_gen_dir)
+
+        self.checkstyleProj = args.get('checkstyle', name)
+        self.checkPackagePrefix = False
+
+    def getBuildTask(self, args):
+        jdk = mx.get_jdk(self.javaCompliance, tag=mx.DEFAULT_JDK_TAG, purpose='building ' + self.name)
+        return ShadedLibraryBuildTask(args, self, jdk)
+
+    def shaded_deps(self):
+        return self.shadedDeps
+
+    def shaded_package_paths(self):
+        result = getattr(self, '_shaded_package_paths', None)
+        if not result:
+            result = {k.replace('.', '/'): v.replace('.', '/') for (k, v) in self.shaded_package_names().items()}
+            self._shaded_package_paths = result
+        return result
+
+    def shaded_package_names(self):
+        return self.shade.get('packages', {})
+
+    def included_paths(self):
+        return self.shade.get('include', [])
+
+    def excluded_paths(self):
+        return self.shade.get('exclude', [])
+
+    def defined_java_packages(self):
+        """Get defined java packages from the dependencies, rename them, and remove any non-shaded packages."""
+        packagesDefinedByDeps = [pkg for dep in self.shaded_deps() for pkg in dep.defined_java_packages()]
+        return set([self.substitute_package_name(pkg) for pkg in packagesDefinedByDeps]).difference(set(packagesDefinedByDeps))
+
+    def substitute_path(self, old_filename, mappings=None, default=None, reverse=False):
+        """renames package path (using '/' as separator)."""
+        assert isinstance(old_filename, str), old_filename
+        if mappings is None:
+            mappings = self.shaded_package_paths()
+        if default is None:
+            default = old_filename
+        for (orig, shad) in mappings.items():
+            if old_filename.startswith(orig):
+                return old_filename.replace(orig, shad) if not reverse else old_filename.replace(shad, orig)
+        return default
+
+    def substitute_package_name(self, old_package_name):
+        """renames java package name (using '.' as separator)."""
+        return self.substitute_path(old_package_name, mappings=self.shaded_package_names())
+
+class ShadedLibraryBuildTask(mx.JavaBuildTask):
+    def __str__(self):
+        return f'Shading {self.subject}'
+
+    def needsBuild(self, newestInput):
+        is_needed, reason = mx.ProjectBuildTask.needsBuild(self, newestInput)
+        if is_needed:
+            return True, reason
+
+        proj = self.subject
+        for outDir in [proj.output_dir(), proj.source_gen_dir()]:
+            if not exists(outDir):
+                return True, f"{outDir} does not exist"
+
+        suite_py_ts = mx.TimeStampFile.newest([self.subject.suite.suite_py(), __file__])
+
+        for dep in proj.shaded_deps():
+            jarFilePath = dep.get_path(False)
+            srcFilePath = dep.get_source_path(False)
+
+            input_ts = mx.TimeStampFile.newest([jarFilePath, srcFilePath])
+            if suite_py_ts.isNewerThan(input_ts):
+                input_ts = suite_py_ts
+
+            for zipFilePath, outDir in [(srcFilePath, proj.source_gen_dir())]:
+                try:
+                    with zipfile.ZipFile(zipFilePath, 'r') as zf:
+                        for zi in zf.infolist():
+                            if zi.is_dir():
+                                continue
+
+                            old_filename = zi.filename
+                            if old_filename.endswith('.java'):
+                                filepath = PurePosixPath(old_filename)
+                                if any(glob_match(filepath, i) for i in proj.excluded_paths()):
+                                    continue
+                                new_filename = proj.substitute_path(old_filename)
+                                if old_filename != new_filename:
+                                    output_file = join(outDir, new_filename)
+                                    output_ts = mx.TimeStampFile(output_file)
+                                    if output_ts.isOlderThan(input_ts):
+                                        return True, f'{output_ts} is older than {input_ts}'
+                except FileNotFoundError:
+                    return True, f"{zipFilePath} does not exist"
+
+        return super().needsBuild(newestInput)
+
+    def prepare(self, daemons):
+        # delay prepare until build
+        self.daemons = daemons
+
+    def build(self):
+        dist = self.subject
+        shadedDeps = dist.shaded_deps()
+        includedPaths = dist.included_paths()
+        patch = dist.shade.get('patch', [])
+        excludedPaths = dist.excluded_paths()
+
+        binDir = dist.output_dir()
+        srcDir = dist.source_gen_dir()
+        mx.ensure_dir_exists(binDir)
+        mx.ensure_dir_exists(srcDir)
+
+        javaSubstitutions = [
+                                sub for orig, shad in dist.shaded_package_names().items() for sub in [
+                                    (re.compile(r'\b' + re.escape(orig) + r'(?=\.[\w]+\b)'), shad),
+                                ]
+                            ] + [
+                                sub for orig, shad in dist.shaded_package_paths().items() for sub in [
+                                    (re.compile(r'(?<=")' + re.escape(orig) + r'(?=/[\w./]+")'), shad),
+                                ]
+                            ]
+
+        for dep in shadedDeps:
+            jarFilePath = dep.get_path(True)
+            srcFilePath = dep.get_source_path(True)
+
+            for zipFilePath, outDir in [(jarFilePath, binDir), (srcFilePath, srcDir)]:
+                with zipfile.ZipFile(zipFilePath, 'r') as zf:
+                    for zi in zf.infolist():
+                        if zi.is_dir():
+                            continue
+
+                        old_filename = zi.filename
+                        filepath = PurePosixPath(old_filename)
+                        if any(glob_match(filepath, i) for i in excludedPaths):
+                            mx.logv(f'ignoring file {old_filename} (matches {", ".join(i for i in excludedPaths if glob_match(filepath, i))})')
+                            continue
+
+                        if filepath.suffix not in ['.java', '.class'] and not any(glob_match(filepath, i) for i in includedPaths):
+                            mx.warn(f'file {old_filename} is not included (if this is intended, please add the file to the exclude list)')
+                            continue
+
+                        new_filename = dist.substitute_path(old_filename)
+                        applicableSubs = []
+
+                        if filepath.suffix == '.java':
+                            applicableSubs += javaSubstitutions
+                        if filepath.suffix == '.class':
+                            continue
+
+                        mx.logv(f'extracting file {old_filename} to {new_filename}')
+                        extraPatches = [sub for filepattern, subs in patch.items() if glob_match(filepath, filepattern) for sub in subs.items()]
+                        extraSubs = list((re.compile(s, flags=re.MULTILINE), r) for (s, r) in extraPatches)
+                        applicableSubs += extraSubs
+                        if old_filename == new_filename and len(applicableSubs) == 0:
+                            # same file name, no substitutions: just extract
+                            zf.extract(zi, outDir)
+                        else:
+                            output_file = join(outDir, new_filename)
+                            mx.ensure_dir_exists(mx.dirname(output_file))
+                            if len(applicableSubs) == 0:
+                                with zf.open(zi) as src, open(output_file, 'wb') as dst:
+                                    shutil.copyfileobj(src, dst)
+                            else:
+                                assert filepath.suffix != '.class', filepath
+                                with io.TextIOWrapper(zf.open(zi), encoding='utf-8') as src, open(output_file, 'w', encoding='utf-8') as dst:
+                                    contents = src.read()
+
+                                    # remove trailing whitespace and duplicate blank lines.
+                                    contents = re.sub(r'(\n)?\s*(\n|$)', r'\1\2', contents)
+
+                                    # apply substitutions
+                                    for (srch, repl) in applicableSubs:
+                                        contents = re.sub(srch, repl, contents)
+
+                                    # turn off eclipseformat for generated .java files
+                                    if filepath.suffix == '.java':
+                                        dst.write('// @formatter:off\n')
+
+                                    dst.write(contents)
+
+        # After generating (re)sources, run the normal Java build task.
+        if getattr(self, '_javafiles', None) == {}:
+            self._javafiles = None
+        super().prepare(self.daemons)
+        super().build()
+
+def glob_match(path, pattern):
+    """
+    Like PurePath.match(pattern), but adds support for the recursive wildcard '**'.
+    :param path: a PurePath
+    :param pattern: a string or a PurePath representing the glob pattern
+    """
+    assert isinstance(path, PurePath), path
+    if sys.version_info[:2] >= (3, 13):
+        # Since Python 3.13, PurePath.match already supports '**'.
+        return path.match(pattern)
+
+    pathType = type(path)
+    patternParts = pathType(pattern).parts
+    if not '**' in patternParts:
+        if len(path.parts) != len(patternParts):
+            return False
+        return path.match(str(pattern))
+    else:
+        # split pattern at first '**'
+        i = next(i for (i, p) in enumerate(patternParts) if p == '**')
+        lhs = patternParts[:i]
+        if (lhs == () or glob_match(pathType(*path.parts[:len(lhs)]), pathType(*lhs))):
+            rhs = patternParts[i+1:]
+            if rhs == ():
+                return True
+            min_start = len(lhs)
+            max_start = len(path.parts) - len(rhs)
+            if not '**' in rhs:
+                return glob_match(pathType(*path.parts[max_start:]), pathType(*rhs))
+            else:
+                # multiple '**', must recurse
+                for start in range(min_start, max_start + 1):
+                    if glob_match(pathType(*path.parts[start:]), pathType(*rhs)):
+                        return True
+        return False
+
+mx_sdk_vm.register_graalvm_component(mx_sdk_vm.GraalVmJreComponent(
+    suite=_suite,
+    name='Truffle API',
+    short_name='tfla',
+    dir_name='truffle',
+    license_files=[],
+    third_party_license_files=[],
+    dependencies=['Graal SDK'],
+    jar_distributions=[],
+    jvmci_parent_jars=[
+        'truffle:TRUFFLE_API',
+    ],
+    stability="supported",
+))
+
 
 mx_sdk_vm.register_graalvm_component(mx_sdk_vm.GraalVmJreComponent(
     suite=_suite,
@@ -808,19 +1156,25 @@ mx_sdk_vm.register_graalvm_component(mx_sdk_vm.GraalVmJreComponent(
     dir_name='truffle',
     license_files=[],
     third_party_license_files=[],
-    dependencies=['Graal SDK'],
-    jar_distributions=[
-        'truffle:TRUFFLE_DSL_PROCESSOR',
-        'truffle:TRUFFLE_TCK',
+    dependencies=[
+        'Truffle API',
+        'GraalVM Launcher Common'
     ],
+    jar_distributions=[],
     jvmci_parent_jars=[
-        'truffle:TRUFFLE_API',
         'truffle:LOCATOR',
     ],
     stability="supported",
 ))
 
-
+# This component is useful only if `SubstrateVM` is included. However, we do
+# not declare a dependency because:
+# - it should be possible to build a GraalVM that includes this macro and not
+#   `SubstrateVM`, which can be installed via `gu`
+# - we prefer to define this component here rather than in the `substratevm`
+#   suite
+# - The `SubstrateVM` component explicitly depends on this macro, to make sure
+#   that it is always present whenever `SubstrateVM` is included
 mx_sdk_vm.register_graalvm_component(mx_sdk_vm.GraalVMSvmMacro(
     suite=_suite,
     name='Truffle Macro',
@@ -828,13 +1182,26 @@ mx_sdk_vm.register_graalvm_component(mx_sdk_vm.GraalVMSvmMacro(
     dir_name='truffle',
     license_files=[],
     third_party_license_files=[],
-    dependencies=['Truffle'],
+    dependencies=[],
     support_distributions=['truffle:TRUFFLE_GRAALVM_SUPPORT'],
     stability="supported",
 ))
 
+# Typically not included in releases
+mx_sdk_vm.register_graalvm_component(mx_sdk_vm.GraalVmJreComponent(
+    suite=_suite,
+    name='Truffle DSL Processor',
+    short_name='tflp',
+    dir_name='truffle',
+    license_files=[],
+    third_party_license_files=[],
+    dependencies=[],
+    jar_distributions=['truffle:TRUFFLE_DSL_PROCESSOR'],
+    jvmci_parent_jars=[],
+    stability="supported",
+))
 
-mx_sdk_vm.register_graalvm_component(mx_sdk_vm.GraalVmLanguage(
+truffle_nfi_component = mx_sdk_vm.GraalVmLanguage(
     suite=_suite,
     name='Truffle NFI',
     short_name='nfi',
@@ -842,10 +1209,58 @@ mx_sdk_vm.register_graalvm_component(mx_sdk_vm.GraalVmLanguage(
     license_files=[],
     third_party_license_files=[],
     dependencies=['Truffle'],
-    truffle_jars=['truffle:TRUFFLE_NFI', 'truffle:TRUFFLE_NFI_LIBFFI'],
+    truffle_jars=['truffle:TRUFFLE_NFI'],
     support_distributions=['truffle:TRUFFLE_NFI_GRAALVM_SUPPORT'],
     support_libraries_distributions=['truffle:TRUFFLE_NFI_NATIVE_GRAALVM_SUPPORT'],
     installable=False,
+    stability="supported",
+)
+mx_sdk_vm.register_graalvm_component(truffle_nfi_component)
+
+mx_sdk_vm.register_graalvm_component(mx_sdk_vm.GraalVmLanguage(
+    suite=_suite,
+    name='Truffle NFI LIBFFI',
+    short_name='nfi-libffi',
+    dir_name='nfi',
+    license_files=[],
+    third_party_license_files=[],
+    dependencies=['Truffle NFI'],
+    truffle_jars=['truffle:TRUFFLE_NFI_LIBFFI'],
+    installable=False,
+    stability="supported",
+))
+
+mx_sdk_vm.register_graalvm_component(mx_sdk_vm.GraalVmLanguage(
+    suite=_suite,
+    name='ICU4J',
+    short_name='icu4j',
+    dir_name='icu4j',
+    license_files=[],
+    third_party_license_files=[],
+    dependencies=['Truffle'],
+    truffle_jars=[
+        'truffle:ICU4J',
+        'truffle:ICU4J-CHARSET',
+        'truffle:TRUFFLE_ICU4J',
+    ],
+    support_distributions=['truffle:TRUFFLE_ICU4J_GRAALVM_SUPPORT'],
+    installable=True,
+    standalone=False,
+    stability="supported",
+))
+
+mx_sdk_vm.register_graalvm_component(mx_sdk_vm.GraalVmLanguage(
+    suite=_suite,
+    name='ANTLR4',
+    short_name='antlr4',
+    dir_name='antlr4',
+    license_files=[],
+    third_party_license_files=[],
+    dependencies=['Truffle'],
+    truffle_jars=['truffle:ANTLR4'],
+    support_distributions=['truffle:TRUFFLE_ANTLR4_GRAALVM_SUPPORT'],
+    installable=True,
+    standalone=False,
     stability="supported",
 ))
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -44,7 +44,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.fail;
 
-import com.oracle.truffle.api.frame.VirtualFrame;
 import org.junit.Test;
 
 import com.oracle.truffle.api.Assumption;
@@ -75,9 +74,10 @@ import com.oracle.truffle.api.dsl.test.GenerateUncachedTestFactory.UncachedTrivi
 import com.oracle.truffle.api.dsl.test.GenerateUncachedTestFactory.UncachedTrivial5NodeGen;
 import com.oracle.truffle.api.dsl.test.GenerateUncachedTestFactory.UncachedTrivial6NodeGen;
 import com.oracle.truffle.api.dsl.test.GenerateUncachedTestFactory.UncachedTrivial7NodeGen;
+import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
 
-@SuppressWarnings("unused")
+@SuppressWarnings({"truffle-inlining", "truffle-neverdefault", "truffle-sharing", "unused"})
 public class GenerateUncachedTest {
 
     @GenerateUncached
@@ -85,7 +85,7 @@ public class GenerateUncachedTest {
 
         abstract Object execute(Object arg);
 
-        @Specialization(guards = "v == cachedV")
+        @Specialization(guards = "v == cachedV", limit = "3")
         static String s1(int v, @Cached("v") int cachedV) {
             return "s1";
         }
@@ -114,9 +114,10 @@ public class GenerateUncachedTest {
 
         abstract Object execute(Object arg);
 
-        @Specialization(guards = "v == cachedV")
+        @Specialization(guards = "v == cachedV", limit = "3")
         static String s1(int v,
                         @Cached("v") int cachedV) {
+
             return "s1";
         }
 
@@ -191,6 +192,7 @@ public class GenerateUncachedTest {
 
         static Assumption testAssumption = Truffle.getRuntime().createAssumption();
 
+        @SuppressWarnings("truffle-assumption")
         @Specialization(assumptions = "testAssumption")
         static String s1(int v) {
             return "s1";
@@ -209,7 +211,7 @@ public class GenerateUncachedTest {
         Uncached5Node.testAssumption.invalidate();
         assertEquals("s2", node.execute(42));
         Uncached5Node.testAssumption = null;
-        assertEquals("s1", node.execute(42));
+        assertEquals("s2", node.execute(42));
     }
 
     @TypeSystem
@@ -488,19 +490,6 @@ public class GenerateUncachedTest {
 
         int nonTrivialCache(int v) {
             // we cannot know this is trivial
-            return v;
-        }
-
-    }
-
-    @GenerateUncached
-    abstract static class ErrorNode3 extends Node {
-
-        abstract Object execute(Object arg);
-
-        @ExpectError("Failed to generate code for @GenerateUncached: The specialization must declare the modifier static. Add a static modifier to the method to resolve this.")
-        @Specialization
-        int f0(int v) {
             return v;
         }
 

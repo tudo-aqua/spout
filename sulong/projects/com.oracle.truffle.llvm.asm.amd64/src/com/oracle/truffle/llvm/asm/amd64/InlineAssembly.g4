@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2020, Oracle and/or its affiliates.
+ * Copyright (c) 2016, 2023, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -93,7 +93,7 @@ inline_assembly :
     )
     assembly_instruction
     ( ( ';' | '\n' )
-      ( prefix
+      ( prefix ( ';' )?
       |                                          { factory.setPrefix(null); }
       )
       ( assembly_instruction )?
@@ -322,10 +322,13 @@ unary_op :
   | 'setpo'
   | 'sets'
   | 'setz'
+  | 'fstcw'
   | 'push'
   | 'pop'
   | 'cmpxchg8b'
   | 'cmpxchg16b'
+  | 'fstcw'
+  | 'fnstcw'
   )
   operand                                        { factory.createUnaryOperationImplicitSize($op.getText(), $operand.op); }
   ;

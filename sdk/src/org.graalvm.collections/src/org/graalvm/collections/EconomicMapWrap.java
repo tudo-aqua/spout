@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -127,7 +127,7 @@ public class EconomicMapWrap<K, V> implements EconomicMap<K, V> {
     @Override
     public MapCursor<K, V> getEntries() {
         Iterator<Map.Entry<K, V>> iterator = map.entrySet().iterator();
-        return new MapCursor<K, V>() {
+        return new MapCursor<>() {
 
             private Map.Entry<K, V> current;
 
@@ -155,6 +155,11 @@ public class EconomicMapWrap<K, V> implements EconomicMap<K, V> {
             public void remove() {
                 iterator.remove();
             }
+
+            @Override
+            public V setValue(V newValue) {
+                return current.setValue(newValue);
+            }
         };
     }
 
@@ -162,5 +167,11 @@ public class EconomicMapWrap<K, V> implements EconomicMap<K, V> {
     @Override
     public void replaceAll(BiFunction<? super K, ? super V, ? extends V> function) {
         map.replaceAll(function);
+    }
+
+    /** @since 23.1 */
+    @Override
+    public String toString() {
+        return EconomicMapImpl.toString(false, size(), getEntries());
     }
 }

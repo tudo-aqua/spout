@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,23 +24,21 @@
  */
 package com.oracle.svm.core.genscavenge;
 
-import org.graalvm.compiler.options.Option;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 import org.graalvm.word.UnsignedWord;
+import org.graalvm.word.WordFactory;
 
 import com.oracle.svm.core.SubstrateOptions;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.heap.GCCause;
 import com.oracle.svm.core.heap.PhysicalMemory;
-import com.oracle.svm.core.option.HostedOptionKey;
 import com.oracle.svm.core.util.UserError;
+import com.oracle.svm.util.ReflectionUtil;
 
 /** The interface for a garbage collection policy. All sizes are in bytes. */
 public interface CollectionPolicy {
-    final class Options {
-        @Option(help = "The garbage collection policy, either Adaptive (default) or BySpaceAndTime.")//
-        public static final HostedOptionKey<String> InitialCollectionPolicy = new HostedOptionKey<>("Adaptive");
-    }
+    UnsignedWord UNDEFINED = WordFactory.unsigned(-1);
 
     @Platforms(Platform.HOSTED_ONLY.class)
     static String getInitialPolicyName() {
@@ -49,7 +47,7 @@ public interface CollectionPolicy {
         } else if (!SubstrateOptions.useRememberedSet()) {
             return "OnlyCompletely";
         }
-        String name = Options.InitialCollectionPolicy.getValue();
+        String name = SerialGCOptions.InitialCollectionPolicy.getValue();
         String legacyPrefix = "com.oracle.svm.core.genscavenge.CollectionPolicy$";
         if (name.startsWith(legacyPrefix)) {
             return name.substring(legacyPrefix.length());
@@ -60,19 +58,27 @@ public interface CollectionPolicy {
     @Platforms(Platform.HOSTED_ONLY.class)
     static CollectionPolicy getInitialPolicy() {
         String name = getInitialPolicyName();
+        Class<? extends CollectionPolicy> clazz = getPolicyClass(name);
+        return ReflectionUtil.newInstance(clazz);
+    }
+
+    @Platforms(Platform.HOSTED_ONLY.class)
+    static Class<? extends CollectionPolicy> getPolicyClass(String name) {
         switch (name) {
             case "Adaptive":
-                return new AdaptiveCollectionPolicy();
+                return AdaptiveCollectionPolicy.class;
+            case "AggressiveShrink":
+                return AggressiveShrinkCollectionPolicy.class;
             case "Proportionate":
-                return new ProportionateSpacesPolicy();
+                return ProportionateSpacesPolicy.class;
             case "BySpaceAndTime":
-                return new BasicCollectionPolicies.BySpaceAndTime();
+                return BasicCollectionPolicies.BySpaceAndTime.class;
             case "OnlyCompletely":
-                return new BasicCollectionPolicies.OnlyCompletely();
+                return BasicCollectionPolicies.OnlyCompletely.class;
             case "OnlyIncrementally":
-                return new BasicCollectionPolicies.OnlyIncrementally();
+                return BasicCollectionPolicies.OnlyIncrementally.class;
             case "NeverCollect":
-                return new BasicCollectionPolicies.NeverCollect();
+                return BasicCollectionPolicies.NeverCollect.class;
         }
         throw UserError.abort("Policy %s does not exist.", name);
     }
@@ -80,14 +86,14 @@ public interface CollectionPolicy {
     @Platforms(Platform.HOSTED_ONLY.class)
     static int getMaxSurvivorSpaces(Integer userValue) {
         String name = getInitialPolicyName();
-        if ("Adaptive".equals(name) || "Proportionate".equals(name)) {
-            return AbstractCollectionPolicy.getMaxSurvivorSpaces(userValue);
+        if (BasicCollectionPolicies.BasicPolicy.class.isAssignableFrom(getPolicyClass(name))) {
+            return BasicCollectionPolicies.getMaxSurvivorSpaces(userValue);
         }
-        return BasicCollectionPolicies.getMaxSurvivorSpaces(userValue);
+        return AbstractCollectionPolicy.getMaxSurvivorSpaces(userValue);
     }
 
     static boolean shouldCollectYoungGenSeparately(boolean defaultValue) {
-        Boolean optionValue = HeapParameters.Options.CollectYoungGenerationSeparately.getValue();
+        Boolean optionValue = SerialGCOptions.CollectYoungGenerationSeparately.getValue();
         return (optionValue != null) ? optionValue : defaultValue;
     }
 
@@ -116,6 +122,13 @@ public interface CollectionPolicy {
     boolean shouldCollectOnAllocation();
 
     /**
+     * Return true if a user-requested GC (e.g., call to {@link System#gc()} or
+     * {@link org.graalvm.compiler.serviceprovider.GraalServices#notifyLowMemoryPoint(boolean)})
+     * should be performed.
+     */
+    boolean shouldCollectOnRequest(GCCause cause, boolean fullGC);
+
+    /**
      * At a safepoint, decides whether to do a complete collection (returning {@code true}) or an
      * incremental collection (returning {@code false}).
      *
@@ -134,6 +147,11 @@ public interface CollectionPolicy {
      */
     UnsignedWord getCurrentHeapCapacity();
 
+    /** May be {@link #UNDEFINED}. */
+    UnsignedWord getInitialEdenSize();
+
+    UnsignedWord getMaximumEdenSize();
+
     /**
      * The hard limit for the size of the entire heap. Exceeding this limit triggers an
      * {@link OutOfMemoryError}.
@@ -149,12 +167,29 @@ public interface CollectionPolicy {
     /** The minimum heap size, for inclusion in diagnostic output. */
     UnsignedWord getMinimumHeapSize();
 
+    /** May be {@link #UNDEFINED}. */
+    UnsignedWord getInitialSurvivorSize();
+
+    UnsignedWord getMaximumSurvivorSize();
+
     /**
      * The total capacity of all survivor-from spaces of all ages, equal to the size of all
      * survivor-to spaces of all ages. In other words, when copying during a collection, up to 2x
      * this amount can be used for surviving objects.
      */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     UnsignedWord getSurvivorSpacesCapacity();
+
+    /** The capacity of the young generation, comprising the eden and survivor spaces. */
+    UnsignedWord getYoungGenerationCapacity();
+
+    /** May be {@link #UNDEFINED}. */
+    UnsignedWord getInitialOldSize();
+
+    /** The capacity of the old generation. */
+    UnsignedWord getOldGenerationCapacity();
+
+    UnsignedWord getMaximumOldSize();
 
     /**
      * The maximum number of bytes that should be kept readily available for allocation or copying
@@ -167,6 +202,7 @@ public interface CollectionPolicy {
      * 1 (straight from eden) and the {@linkplain HeapParameters#getMaxSurvivorSpaces() number of
      * survivor spaces + 1}.
      */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     int getTenuringAge();
 
     /** Called at the beginning of a collection, in the safepoint operation. */

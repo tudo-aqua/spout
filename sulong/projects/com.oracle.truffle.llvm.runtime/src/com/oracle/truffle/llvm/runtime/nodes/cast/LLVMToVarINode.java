@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2016, 2023, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -37,6 +37,7 @@ import com.oracle.truffle.api.nodes.ExplodeLoop;
 import com.oracle.truffle.llvm.runtime.LLVMIVarBit;
 import com.oracle.truffle.llvm.runtime.LLVMIVarBitLarge;
 import com.oracle.truffle.llvm.runtime.LLVMIVarBitSmall;
+import com.oracle.truffle.llvm.runtime.floating.LLVM128BitFloat;
 import com.oracle.truffle.llvm.runtime.floating.LLVM80BitFloat;
 import com.oracle.truffle.llvm.runtime.nodes.api.LLVMExpressionNode;
 import com.oracle.truffle.llvm.runtime.nodes.api.LLVMToNativeNode;
@@ -91,6 +92,11 @@ public abstract class LLVMToVarINode extends LLVMExpressionNode {
         }
 
         @Specialization
+        protected LLVMIVarBit doBoolean(boolean from) {
+            return from ? LLVMIVarBit.fromInt(getBits(), -1) : LLVMIVarBit.fromInt(getBits(), 0);
+        }
+
+        @Specialization
         protected LLVMIVarBit doI8(byte from) {
             return LLVMIVarBit.fromByte(getBits(), from);
         }
@@ -124,6 +130,11 @@ public abstract class LLVMToVarINode extends LLVMExpressionNode {
         protected LLVMIVarBit do80BitFloat(LLVM80BitFloat from) {
             return LLVMIVarBit.create(getBits(), from.getBytesBigEndian(), LLVM80BitFloat.BIT_WIDTH, true);
         }
+
+        @Specialization
+        protected LLVMIVarBit do128BitFloat(LLVM128BitFloat from) {
+            return LLVMIVarBit.create(getBits(), from.getBytesBigEndian(), LLVM128BitFloat.BIT_WIDTH, true);
+        }
     }
 
     public abstract static class LLVMUnsignedCastToIVarNode extends LLVMToVarINode {
@@ -138,6 +149,11 @@ public abstract class LLVMToVarINode extends LLVMExpressionNode {
         @Override
         protected LLVMToVarINode createRecursive() {
             return LLVMUnsignedCastToIVarNodeGen.create(true, null, getBits());
+        }
+
+        @Specialization
+        protected LLVMIVarBit doBoolean(boolean from) {
+            return from ? LLVMIVarBit.createZeroExt(getBits(), 1) : LLVMIVarBit.createZeroExt(getBits(), 0);
         }
 
         @Specialization
@@ -186,6 +202,11 @@ public abstract class LLVMToVarINode extends LLVMExpressionNode {
         }
 
         @Specialization
+        protected LLVMIVarBit doBoolean(boolean from) {
+            return from ? LLVMIVarBit.fromInt(getBits(), 1) : LLVMIVarBit.fromInt(getBits(), 0);
+        }
+
+        @Specialization
         protected LLVMIVarBit doI8(byte from) {
             return LLVMIVarBit.fromByte(getBits(), from);
         }
@@ -224,6 +245,12 @@ public abstract class LLVMToVarINode extends LLVMExpressionNode {
         protected LLVMIVarBit do80BitFloat(LLVM80BitFloat from) {
             assert getBits() == LLVM80BitFloat.BIT_WIDTH;
             return LLVMIVarBit.create(getBits(), from.getBytesBigEndian(), LLVM80BitFloat.BIT_WIDTH, true);
+        }
+
+        @Specialization
+        protected LLVMIVarBit do128BitFloat(LLVM128BitFloat from) {
+            assert getBits() == LLVM128BitFloat.BIT_WIDTH;
+            return LLVMIVarBit.create(getBits(), from.getBytesBigEndian(), LLVM128BitFloat.BIT_WIDTH, true);
         }
 
         @Specialization

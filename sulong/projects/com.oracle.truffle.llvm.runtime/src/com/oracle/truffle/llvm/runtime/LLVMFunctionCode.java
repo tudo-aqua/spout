@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2019, 2023, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -29,9 +29,6 @@
  */
 package com.oracle.truffle.llvm.runtime;
 
-import java.util.HashMap;
-import java.util.Map;
-
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerAsserts;
@@ -42,6 +39,7 @@ import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.dsl.Fallback;
 import com.oracle.truffle.api.dsl.GenerateUncached;
+import com.oracle.truffle.api.dsl.Idempotent;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.interop.InteropLibrary;
@@ -62,6 +60,9 @@ import com.oracle.truffle.llvm.runtime.nodes.api.LLVMNode;
 import com.oracle.truffle.llvm.runtime.pointer.LLVMNativePointer;
 import com.oracle.truffle.llvm.runtime.types.FunctionType;
 import com.oracle.truffle.llvm.runtime.types.Type;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * {@link LLVMFunctionCode} represents the callable function of a {@link LLVMFunction}.
@@ -159,6 +160,11 @@ public final class LLVMFunctionCode {
             } else {
                 return generateTarget(type);
             }
+        }
+
+        @TruffleBoundary
+        public RootCallTarget cachedCallTargetSlowPath(FunctionType type) {
+            return cachedCallTarget(type);
         }
 
         public LLVMExpressionNode createIntrinsicNode(LLVMExpressionNode[] arguments, Type[] argTypes) {
@@ -361,11 +367,13 @@ public final class LLVMFunctionCode {
         }
     }
 
+    @Idempotent
     public boolean isLLVMIRFunction() {
         final LLVMFunctionCode.Function currentFunction = getFunction();
         return currentFunction instanceof LLVMFunctionCode.LLVMIRFunction || currentFunction instanceof LLVMFunctionCode.LazyLLVMIRFunction;
     }
 
+    @Idempotent
     public boolean isIntrinsicFunctionSlowPath() {
         CompilerAsserts.neverPartOfCompilation();
         return isIntrinsicFunction(ResolveFunctionNodeGen.getUncached());
@@ -375,6 +383,7 @@ public final class LLVMFunctionCode {
         return resolve.execute(getFunction(), this) instanceof LLVMFunctionCode.IntrinsicFunction;
     }
 
+    @Idempotent
     public boolean isNativeFunctionSlowPath() {
         CompilerAsserts.neverPartOfCompilation();
         return isNativeFunction(ResolveFunctionNodeGen.getUncached());
@@ -388,6 +397,7 @@ public final class LLVMFunctionCode {
         return !(getFunction() instanceof LLVMFunctionCode.UnresolvedFunction);
     }
 
+    @TruffleBoundary
     public void define(LLVMIntrinsicProvider intrinsicProvider, NodeFactory nodeFactory) {
         Intrinsic intrinsification = new Intrinsic(intrinsicProvider, llvmFunction.getName(), nodeFactory);
         define(new IntrinsicFunction(intrinsification, getFunction().getSourceType()));
@@ -422,6 +432,16 @@ public final class LLVMFunctionCode {
         Function fn = ResolveFunctionNodeGen.getUncached().execute(getFunction(), this);
         Object nativeFunction = ((NativeFunction) fn).nativeFunction;
         if (nativeFunction == null) {
+            throw new LLVMLinkerException("Native function " + fn.toString() + " not found");
+        }
+        return nativeFunction;
+    }
+
+    public Object getNativeFunction(ResolveFunctionNode resolveFunctionNode) {
+        Function fn = resolveFunctionNode.execute(getFunction(), this);
+        Object nativeFunction = ((NativeFunction) fn).nativeFunction;
+        if (nativeFunction == null) {
+            CompilerDirectives.transferToInterpreterAndInvalidate();
             throw new LLVMLinkerException("Native function " + fn.toString() + " not found");
         }
         return nativeFunction;

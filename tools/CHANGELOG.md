@@ -2,6 +2,29 @@
 
 This changelog summarizes major changes between Truffle Tools versions.
 
+## Version 23.0.0
+* GR-41407: Added new option `--dap.SourcePath` to allow to resolve sources with relative paths.
+
+## Version 22.3.0
+* GR-40233: The interpretation of the `depth` parameter in [Insight heap dumping](../docs/tools/insight/Insight-Manual.md#heap-dumping) was off by one and was applied to primitive values as well. This is now corrected to match the documentation.
+
+## Version 22.2.0
+* GR-37442: Added new options `--heap.cacheSize=<int>` and `--heap.cacheReplacement=flush|lru` to enable memory cache in [Heap Dumping via Insight](../docs/tools/insight/Insight-Manual.md#heap-dumping-cache). 
+* GR-37442: Added new method `flush()` to [heap dumping object](../docs/tools/insight/Insight-Manual.md#heap-dumping) to flush cached events to the heap dump file.
+
+## Version 22.1.0
+* Dumping JavaScript `Array` as `Object[]` into the `.hprof` file
+* [HeapDump.newArray](https://www.graalvm.org/tools/javadoc/org/graalvm/tools/insight/heap/HeapDump.html) to start building an array
+
+## Version 22.0.0
+* GR-33316 Remove deprecated cpusampler APIs and CLIs
+* GR-34745 Allow short-hand usage of the `--cpusampler` flag to enable and specify output. For example, `--cpusampler=calltree` is equivalent to `--cpusampler --cpusampler.Output=calltree`. NOTE: Since the flame graph output is unreadable in the terminal `--cpusampler=flamegraph` is equivalent to `--cpusampler --cpusampler.Output=flamegraph -cpusampler.OutputFile=flamegraph.svg`.
+* GR-34209 Added overload of `CPUSampler.takeSample` with a timeout. By default samples time out when the configured period is exceeded.
+
+## Version 21.3.2
+* Dumping JavaScript `Array` as `Object[]` into the `.hprof` file
+* [HeapDump.newArray](https://www.graalvm.org/tools/javadoc/org/graalvm/tools/insight/heap/HeapDump.html) to start building an array
+
 ## Version 21.3.0
 * Reimplemented CPUSampler to use the Truffle language safepoints thus deprecating several API functions.
 * Added new option `--cpusampler.SampleContextInitialization` which includes code executed during context initialization in the general sampling profile instead of grouping it into a single entry.

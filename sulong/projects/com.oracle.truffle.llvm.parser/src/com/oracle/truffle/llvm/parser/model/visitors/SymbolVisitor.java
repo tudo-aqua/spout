@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2016, 2023, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -51,6 +51,7 @@ import com.oracle.truffle.llvm.parser.model.symbols.constants.aggregate.ArrayCon
 import com.oracle.truffle.llvm.parser.model.symbols.constants.aggregate.StructureConstant;
 import com.oracle.truffle.llvm.parser.model.symbols.constants.aggregate.VectorConstant;
 import com.oracle.truffle.llvm.parser.model.symbols.constants.floatingpoint.DoubleConstant;
+import com.oracle.truffle.llvm.parser.model.symbols.constants.floatingpoint.FP128Constant;
 import com.oracle.truffle.llvm.parser.model.symbols.constants.floatingpoint.FloatConstant;
 import com.oracle.truffle.llvm.parser.model.symbols.constants.floatingpoint.X86FP80Constant;
 import com.oracle.truffle.llvm.parser.model.symbols.constants.integer.BigIntegerConstant;
@@ -62,6 +63,11 @@ import com.oracle.truffle.llvm.parser.model.symbols.instructions.BinaryOperation
 import com.oracle.truffle.llvm.parser.model.symbols.instructions.BranchInstruction;
 import com.oracle.truffle.llvm.parser.model.symbols.instructions.CallInstruction;
 import com.oracle.truffle.llvm.parser.model.symbols.instructions.CastInstruction;
+import com.oracle.truffle.llvm.parser.model.symbols.instructions.CatchPadInstruction;
+import com.oracle.truffle.llvm.parser.model.symbols.instructions.CatchRetInstruction;
+import com.oracle.truffle.llvm.parser.model.symbols.instructions.CatchSwitchInstruction;
+import com.oracle.truffle.llvm.parser.model.symbols.instructions.CleanupPadInstruction;
+import com.oracle.truffle.llvm.parser.model.symbols.instructions.CleanupRetInstruction;
 import com.oracle.truffle.llvm.parser.model.symbols.instructions.CompareExchangeInstruction;
 import com.oracle.truffle.llvm.parser.model.symbols.instructions.CompareInstruction;
 import com.oracle.truffle.llvm.parser.model.symbols.instructions.ConditionalBranchInstruction;
@@ -145,6 +151,10 @@ public interface SymbolVisitor extends ValueList.ValueVisitor<SymbolImpl> {
         defaultAction(constant);
     }
 
+    default void visit(FP128Constant constant) {
+        defaultAction(constant);
+    }
+
     default void visit(FunctionDeclaration function) {
         defaultAction(function);
     }
@@ -198,6 +208,26 @@ public interface SymbolVisitor extends ValueList.ValueVisitor<SymbolImpl> {
     }
 
     default void visit(CallInstruction inst) {
+        defaultAction(inst);
+    }
+
+    default void visit(CleanupPadInstruction inst) {
+        defaultAction(inst);
+    }
+
+    default void visit(CleanupRetInstruction inst) {
+        defaultAction(inst);
+    }
+
+    default void visit(CatchSwitchInstruction inst) {
+        defaultAction(inst);
+    }
+
+    default void visit(CatchPadInstruction inst) {
+        defaultAction(inst);
+    }
+
+    default void visit(CatchRetInstruction inst) {
         defaultAction(inst);
     }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -43,17 +43,26 @@ package com.oracle.truffle.nfi;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.Cached.Shared;
 import com.oracle.truffle.api.dsl.Fallback;
+import com.oracle.truffle.api.dsl.GenerateAOT;
 import com.oracle.truffle.api.dsl.ImportStatic;
+import com.oracle.truffle.api.dsl.NeverDefault;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.interop.ArityException;
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.interop.InvalidArrayIndexException;
 import com.oracle.truffle.api.interop.TruffleObject;
+import com.oracle.truffle.api.interop.UnknownIdentifierException;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.interop.UnsupportedTypeException;
 import com.oracle.truffle.api.library.CachedLibrary;
 import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
+import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.profiles.InlinedBranchProfile;
 import com.oracle.truffle.nfi.CallSignatureNode.CachedCallSignatureNode;
 import com.oracle.truffle.nfi.CallSignatureNode.CallSignatureRootNode;
 import com.oracle.truffle.nfi.NFIType.TypeCachedState;
@@ -62,7 +71,8 @@ import com.oracle.truffle.nfi.backend.spi.NFIBackendSignatureBuilderLibrary;
 import com.oracle.truffle.nfi.backend.spi.NFIBackendSignatureLibrary;
 import com.oracle.truffle.nfi.backend.spi.util.ProfiledArrayBuilder;
 
-@ExportLibrary(SignatureLibrary.class)
+@ExportLibrary(InteropLibrary.class)
+@ExportLibrary(value = SignatureLibrary.class, useForAOT = true, useForAOTPriority = 1)
 final class NFISignature implements TruffleObject {
 
     final String backendId;
@@ -75,21 +85,6 @@ final class NFISignature implements TruffleObject {
 
     final int nativeArgCount;
     final int managedArgCount;
-
-    static final NFISignature NO_SIGNATURE = new NFISignature();
-
-    /**
-     * Only for NO_SIGNATURE marker object.
-     */
-    private NFISignature() {
-        backendId = null;
-        cachedState = null;
-        nativeSignature = null;
-        retType = null;
-        argTypes = null;
-        nativeArgCount = -1;
-        managedArgCount = -1;
-    }
 
     NFISignature(String backendId, SignatureCachedState cachedState, Object nativeSignature, NFIType retType, NFIType[] argTypes, int nativeArgCount, int managedArgCount) {
         this.backendId = backendId;
@@ -107,17 +102,17 @@ final class NFISignature implements TruffleObject {
         return call.execute(this, function, args);
     }
 
-    @ExportMessage
-    static class Bind {
+    @ExportMessage(name = "bind")
+    static class BindMsg {
 
         @Specialization
         static Object doSymbol(NFISignature signature, NFISymbol function) {
-            return NFISymbol.createBound(signature.backendId, function.nativeSymbol, signature);
+            return NFISymbol.createBound(function.nativeSymbol, signature);
         }
 
         @Fallback
         static Object doOther(NFISignature signature, Object function) {
-            return NFISymbol.createBound(signature.backendId, function, signature);
+            return NFISymbol.createBound(function, signature);
         }
     }
 
@@ -125,12 +120,14 @@ final class NFISignature implements TruffleObject {
     @ImportStatic(NFILanguage.class)
     static class CreateClosure {
 
+        @NeverDefault
         static NFIClosure createClosure(Object executable, NFISignature signature) {
             return new NFIClosure(executable, signature);
         }
 
-        @Specialization(guards = {"executable == cachedClosure.executable", "signature == cachedClosure.signature"}, assumptions = "getSingleContextAssumption()")
+        @Specialization(guards = {"executable == cachedClosure.executable", "signature == cachedClosure.signature"}, assumptions = "getSingleContextAssumption()", limit = "3")
         @SuppressWarnings("unused")
+        @GenerateAOT.Exclude
         static Object doCached(NFISignature signature, Object executable,
                         @Cached("createClosure(executable, signature)") NFIClosure cachedClosure,
                         @CachedLibrary("cachedClosure.signature.nativeSignature") NFIBackendSignatureLibrary lib,
@@ -139,10 +136,105 @@ final class NFISignature implements TruffleObject {
         }
 
         @Specialization(replaces = "doCached")
+        @GenerateAOT.Exclude
         static Object doCreate(NFISignature signature, Object executable,
                         @CachedLibrary("signature.nativeSignature") NFIBackendSignatureLibrary lib) {
             NFIClosure closure = new NFIClosure(executable, signature);
             return lib.createClosure(signature.nativeSignature, closure);
+        }
+    }
+
+    static boolean isBind(String member) {
+        return "bind".equals(member);
+    }
+
+    static boolean isCreateClosure(String member) {
+        return "createClosure".equals(member);
+    }
+
+    @ExportMessage
+    @SuppressWarnings("static-method")
+    boolean hasMembers() {
+        return true;
+    }
+
+    @ExportMessage
+    @SuppressWarnings("static-method")
+    Object getMembers(@SuppressWarnings("unused") boolean includeInternal) {
+        return new SignatureMembers();
+    }
+
+    @ExportLibrary(InteropLibrary.class)
+    @SuppressWarnings({"static-method", "unused"})
+    static final class SignatureMembers implements TruffleObject {
+
+        @ExportMessage
+        boolean hasArrayElements() {
+            return true;
+        }
+
+        @ExportMessage
+        Object readArrayElement(long index,
+                        @Bind("$node") Node node,
+                        @Cached InlinedBranchProfile ioob) throws InvalidArrayIndexException {
+            if (index == 0) {
+                return "bind";
+            } else if (index == 1) {
+                return "createClosure";
+            } else {
+                ioob.enter(node);
+                throw InvalidArrayIndexException.create(index);
+            }
+        }
+
+        @ExportMessage
+        long getArraySize() {
+            return 2;
+        }
+
+        @ExportMessage
+        boolean isArrayElementReadable(long index) {
+            return Long.compareUnsigned(index, 2) < 0;
+        }
+    }
+
+    @ExportMessage
+    @SuppressWarnings("static-method")
+    boolean isMemberInvocable(String member) {
+        return isBind(member) || isCreateClosure(member);
+    }
+
+    @ExportMessage
+    static class InvokeMember {
+
+        @Specialization(guards = "isBind(member)")
+        static Object doBind(NFISignature signature, @SuppressWarnings("unused") String member, Object[] args,
+                        @Bind("$node") Node node,
+                        @CachedLibrary("signature") SignatureLibrary signatureLibrary,
+                        @Shared("invokeException") @Cached InlinedBranchProfile exception) throws ArityException {
+            if (args.length != 1) {
+                exception.enter(node);
+                throw ArityException.create(1, 1, args.length);
+            }
+            return signatureLibrary.bind(signature, args[0]);
+        }
+
+        @Specialization(guards = "isCreateClosure(member)")
+        static Object doCreateClosure(NFISignature signature, @SuppressWarnings("unused") String member, Object[] args,
+                        @Bind("$node") Node node,
+                        @CachedLibrary("signature") SignatureLibrary signatureLibrary,
+                        @Shared("invokeException") @Cached InlinedBranchProfile exception) throws ArityException {
+            if (args.length != 1) {
+                exception.enter(node);
+                throw ArityException.create(1, 1, args.length);
+            }
+            return signatureLibrary.createClosure(signature, args[0]);
+        }
+
+        @Fallback
+        @SuppressWarnings("unused")
+        static Object doUnknown(NFISignature signature, String member, Object[] args) throws UnknownIdentifierException {
+            throw UnknownIdentifierException.create(member);
         }
     }
 
@@ -167,6 +259,7 @@ final class NFISignature implements TruffleObject {
             this.prev = prev;
         }
 
+        @NeverDefault
         ArgsCachedState addArg(TypeCachedState type) {
             return new ArgsCachedState(nativeArgCount + 1, managedArgCount + type.managedArgCount, type, this);
         }
@@ -185,15 +278,18 @@ final class NFISignature implements TruffleObject {
             this.args = args;
         }
 
+        @NeverDefault
         static SignatureCachedState create(SignatureBuilder builder) {
             return new SignatureCachedState(builder.retTypeState, builder.argsState);
         }
 
+        @NeverDefault
         CallSignatureNode createOptimizedSignatureCall() {
             CompilerAsserts.neverPartOfCompilation("createOptimizedSignatureCall");
             return CallSignatureNode.createOptimizedCall(retType, args);
         }
 
+        @NeverDefault
         CallSignatureNode createOptimizedClosureCall() {
             CompilerAsserts.neverPartOfCompilation("createOptimizedClosureCall");
             return CallSignatureNode.createOptimizedClosure(retType, args);
@@ -208,6 +304,7 @@ final class NFISignature implements TruffleObject {
             }
         }
 
+        @NeverDefault
         CallTarget getPolymorphicSignatureCall() {
             if (polymorphicSignatureCall == null) {
                 initPolymorphicSignatureCall();
@@ -225,6 +322,7 @@ final class NFISignature implements TruffleObject {
             }
         }
 
+        @NeverDefault
         CallTarget getPolymorphicClosureCall() {
             if (polymorphicClosureCall == null) {
                 initPolymorphicClosureCall();
@@ -244,7 +342,7 @@ final class NFISignature implements TruffleObject {
         ProfiledArrayBuilder<NFIType> argTypes;
 
         TypeCachedState retTypeState;
-        ArgsCachedState argsState;
+        @NeverDefault ArgsCachedState argsState;
 
         SignatureBuilder(String backendId, Object backendBuilder, ProfiledArrayBuilder<NFIType> argTypes) {
             this.backendId = backendId;
@@ -266,7 +364,7 @@ final class NFISignature implements TruffleObject {
         @ExportMessage
         static class AddArgument {
 
-            @Specialization(guards = {"builder.argsState == prevArgsState", "type.cachedState == argState"})
+            @Specialization(guards = {"builder.argsState == prevArgsState", "type.cachedState == argState"}, limit = "1")
             static void doCached(SignatureBuilder builder, NFIType type,
                             @Cached("builder.argsState") ArgsCachedState prevArgsState,
                             @Cached("type.cachedState") TypeCachedState argState,
@@ -304,7 +402,7 @@ final class NFISignature implements TruffleObject {
         @ExportMessage
         static class Build {
 
-            @Specialization(guards = {"builder.argsState == cachedState.args", "builder.retTypeState == cachedState.retType"})
+            @Specialization(guards = {"builder.argsState == cachedState.args", "builder.retTypeState == cachedState.retType"}, limit = "1")
             static NFISignature doCached(SignatureBuilder builder,
                             @Cached("create(builder)") SignatureCachedState cachedState,
                             @CachedLibrary("builder.backendBuilder") NFIBackendSignatureBuilderLibrary backendLibrary) {

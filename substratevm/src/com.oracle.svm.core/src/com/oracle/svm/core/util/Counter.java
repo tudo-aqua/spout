@@ -24,8 +24,6 @@
  */
 package com.oracle.svm.core.util;
 
-// Checkstyle: allow reflection
-
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -35,12 +33,12 @@ import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
+import com.oracle.svm.core.AlwaysInline;
+import com.oracle.svm.core.NeverInline;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.annotate.Alias;
-import com.oracle.svm.core.annotate.AlwaysInline;
-import com.oracle.svm.core.annotate.NeverInline;
 import com.oracle.svm.core.annotate.RecomputeFieldValue;
 import com.oracle.svm.core.annotate.TargetClass;
-import com.oracle.svm.core.annotate.Uninterruptible;
 import com.oracle.svm.core.log.Log;
 import com.oracle.svm.core.option.HostedOptionKey;
 import com.oracle.svm.core.util.Counter.Group;
@@ -50,8 +48,8 @@ import com.oracle.svm.core.util.Counter.Group;
  * option is enabled. Counters are {@link Group grouped} for printing.
  *
  * Currently there is no shutdown hook in Substrate VM that is invoked automatically, so
- * {@link Counter#logValues} needs to be called manually at the end of the application to print
- * counter values.
+ * {@link CounterSupport#logValues} needs to be called manually at the end of the application to
+ * print counter values.
  *
  * Use this class in the following way:
  *
@@ -93,7 +91,7 @@ public final class Counter {
             this.name = name;
             this.enabledOption = enabledOption;
 
-            ImageSingletons.lookup(CounterGroupList.class).value.add(this);
+            ImageSingletons.lookup(CounterGroupList.class).addGroup(this);
         }
 
         public Counter[] getCounters() {
@@ -185,7 +183,7 @@ public final class Counter {
      * Increments the value of this counter.
      */
     @AlwaysInline("Constant folding and dead code elimination remove code for disabled counters")
-    @Uninterruptible(reason = "Gets always inlined", mayBeInlined = true)
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public void inc() {
         add(1);
     }
@@ -194,7 +192,7 @@ public final class Counter {
      * Increments the value of this counter.
      */
     @AlwaysInline("Constant folding and dead code elimination remove code for disabled counters")
-    @Uninterruptible(reason = "Gets always inlined", mayBeInlined = true)
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public void add(long increment) {
         if (group.enabled) {
             value += increment;
@@ -207,15 +205,6 @@ public final class Counter {
     @NeverInline("Counters can be incremented in snippets, prevent wrong memory access reordering")
     public void reset() {
         value = 0;
-    }
-
-    /**
-     * Prints all counters of all enabled groups to the {@link Log}.
-     */
-    public static void logValues(Log log) {
-        for (Counter.Group group : ImageSingletons.lookup(CounterSupport.class).enabledGroups) {
-            group.logValues(log);
-        }
     }
 }
 
@@ -232,15 +221,16 @@ final class Target_com_oracle_svm_core_util_Counter {
 }
 
 class CounterGroupList {
-    final List<Group> value = new ArrayList<>();
-}
+    private final List<Group> value = new ArrayList<>();
+    private boolean frozen = false;
 
-class CounterSupport {
-
-    final Counter.Group[] enabledGroups;
-
-    CounterSupport(Counter.Group[] enabledGroups) {
-        this.enabledGroups = enabledGroups;
+    public List<Group> getGroups() {
+        frozen = true;
+        return value;
     }
 
+    public void addGroup(Group group) {
+        VMError.guarantee(!frozen);
+        value.add(group);
+    }
 }

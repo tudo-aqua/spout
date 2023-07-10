@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -43,15 +43,17 @@ package com.oracle.truffle.regex.charset;
 import java.util.Arrays;
 
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.regex.tregex.buffer.CompilationBuffer;
 import com.oracle.truffle.regex.tregex.buffer.IntRangesBuffer;
 import com.oracle.truffle.regex.tregex.string.Encodings.Encoding;
 import com.oracle.truffle.regex.tregex.util.json.Json;
 import com.oracle.truffle.regex.tregex.util.json.JsonConvertible;
 import com.oracle.truffle.regex.tregex.util.json.JsonValue;
+import com.oracle.truffle.regex.util.EmptyArrays;
 
 public final class CodePointSet extends ImmutableSortedListOfIntRanges implements Comparable<CodePointSet>, JsonConvertible {
 
-    private static final CodePointSet CONSTANT_EMPTY = new CodePointSet(new int[0]);
+    private static final CodePointSet CONSTANT_EMPTY = new CodePointSet(EmptyArrays.INT);
 
     private static final CodePointSet[] CONSTANT_ASCII = new CodePointSet[128];
     private static final CodePointSet[] CONSTANT_CASE_FOLD_ASCII = new CodePointSet[26];
@@ -106,6 +108,17 @@ public final class CodePointSet extends ImmutableSortedListOfIntRanges implement
         return constant;
     }
 
+    /**
+     * Expects {@code ranges} to be a list of sorted and disjoint ranges (can be adjacent though).
+     */
+    public static CodePointSet createNoDedup(SortedListOfRanges ranges) {
+        IntRangesBuffer buf = new IntRangesBuffer(2 * ranges.size());
+        for (int i = 0; i < ranges.size(); i++) {
+            buf.appendRangeConcatAdjacent(ranges.getLo(i), ranges.getHi(i));
+        }
+        return createNoDedup(buf.toArray());
+    }
+
     private static CodePointSet checkConstants(int[] ranges, int length) {
         if (length == 0) {
             return CONSTANT_EMPTY;
@@ -152,6 +165,10 @@ public final class CodePointSet extends ImmutableSortedListOfIntRanges implement
     @Override
     public CodePointSet createInverse(Encoding encoding) {
         return createInverse(this, encoding);
+    }
+
+    public CodePointSet createInverse(CodePointSet allCharacters, CompilationBuffer compilationBuffer) {
+        return createInverse(compilationBuffer.getEncoding()).createIntersection(allCharacters, compilationBuffer);
     }
 
     public static CodePointSet createInverse(SortedListOfRanges src, Encoding encoding) {
@@ -251,39 +268,15 @@ public final class CodePointSet extends ImmutableSortedListOfIntRanges implement
         return getRanges();
     }
 
-    public byte[] inverseToByteArray(Encoding encoding) {
-        byte[] array = new byte[inverseValueCount(encoding)];
+    public int[] valuesToArray() {
+        int[] array = new int[valueCount()];
         int index = 0;
-        int lastHi = -1;
         for (int i = 0; i < size(); i++) {
-            for (int j = lastHi + 1; j < getLo(i); j++) {
-                assert j <= 0xff;
-                array[index++] = (byte) j;
+            for (int j = getLo(i); j <= getHi(i); j++) {
+                array[index++] = j;
             }
-            lastHi = getHi(i);
         }
-        for (int j = lastHi + 1; j <= encoding.getMaxValue(); j++) {
-            assert j <= 0xff;
-            array[index++] = (byte) j;
-        }
-        return array;
-    }
-
-    public char[] inverseToCharArray(Encoding encoding) {
-        char[] array = new char[inverseValueCount(encoding)];
-        int index = 0;
-        int lastHi = -1;
-        for (int i = 0; i < size(); i++) {
-            for (int j = lastHi + 1; j < getLo(i); j++) {
-                assert j <= Character.MAX_VALUE;
-                array[index++] = (char) j;
-            }
-            lastHi = getHi(i);
-        }
-        for (int j = lastHi + 1; j <= encoding.getMaxValue(); j++) {
-            assert j <= Character.MAX_VALUE;
-            array[index++] = (char) j;
-        }
+        assert index == array.length;
         return array;
     }
 }

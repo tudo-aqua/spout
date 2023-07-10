@@ -42,25 +42,35 @@ package com.oracle.truffle.polyglot;
 
 import java.lang.reflect.Type;
 
-import org.graalvm.polyglot.impl.AbstractPolyglotImpl.AbstractHostService;
+import org.graalvm.polyglot.impl.AbstractPolyglotImpl.AbstractHostLanguageService;
 
 import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.GenerateCached;
+import com.oracle.truffle.api.dsl.GenerateInline;
+import com.oracle.truffle.api.dsl.InlineSupport.InlineTarget;
+import com.oracle.truffle.api.dsl.InlineSupport.ReferenceField;
+import com.oracle.truffle.api.dsl.InlineSupport.RequiredField;
+import com.oracle.truffle.api.dsl.InlineSupport.StateField;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.nodes.Node;
 
+@GenerateInline
+@GenerateCached(false)
 abstract class PolyglotToHostNode extends Node {
 
-    abstract Object execute(PolyglotLanguageContext languageContext, Object value, Class<?> targetType, Type genericType);
+    abstract Object execute(Node node, PolyglotLanguageContext languageContext, Object value, Class<?> targetType, Type genericType);
 
     @Specialization
-    static Object doDefault(PolyglotLanguageContext languageContext, Object value, Class<?> targetType, Type genericType,
-                    @Cached("languageContext.context.engine.host") AbstractHostService host,
-                    @Cached("createToHostNode(host)") Node toHostNode) {
-        return host.toHostType(toHostNode, languageContext.context.getHostContextImpl(), value, targetType, genericType);
+    static Object doDefault(Node node, PolyglotLanguageContext languageContext, Object value, Class<?> targetType, Type genericType,
+                    @Cached(value = "languageContext.context.engine.host", neverDefault = true) AbstractHostLanguageService host,
+                    @Cached(inlineMethod = "inlineToHost") Node toHostNode) {
+        return host.toHostType(toHostNode, node, languageContext.context.getHostContextImpl(), value, targetType, genericType);
     }
 
-    static Node createToHostNode(AbstractHostService host) {
-        return (Node) host.createToHostTypeNode();
+    static Node inlineToHost(
+                    @RequiredField(bits = 3, value = StateField.class) //
+                    @RequiredField(type = Node.class, value = ReferenceField.class) InlineTarget target) {
+        return EngineAccessor.HOST.inlineToHostNode(target);
     }
 
 }

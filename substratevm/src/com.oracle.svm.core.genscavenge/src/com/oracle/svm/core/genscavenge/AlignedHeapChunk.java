@@ -30,16 +30,14 @@ import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 import org.graalvm.nativeimage.c.struct.RawStructure;
-import org.graalvm.nativeimage.hosted.Feature;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.WordFactory;
 
+import com.oracle.svm.core.AlwaysInline;
 import com.oracle.svm.core.MemoryWalker;
-import com.oracle.svm.core.SubstrateOptions;
-import com.oracle.svm.core.annotate.AlwaysInline;
-import com.oracle.svm.core.annotate.AutomaticFeature;
-import com.oracle.svm.core.annotate.Uninterruptible;
+import com.oracle.svm.core.Uninterruptible;
+import com.oracle.svm.core.feature.AutomaticallyRegisteredImageSingleton;
 import com.oracle.svm.core.genscavenge.remset.RememberedSet;
 import com.oracle.svm.core.heap.ObjectVisitor;
 import com.oracle.svm.core.util.PointerUtils;
@@ -85,6 +83,7 @@ public final class AlignedHeapChunk {
     public interface AlignedHeader extends HeapChunk.Header<AlignedHeader> {
     }
 
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static void initialize(AlignedHeader chunk, UnsignedWord chunkSize) {
         HeapChunk.initialize(chunk, AlignedHeapChunk.getObjectsStart(chunk), chunkSize);
     }
@@ -103,6 +102,7 @@ public final class AlignedHeapChunk {
     }
 
     /** Allocate uninitialized memory within this AlignedHeapChunk. */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     static Pointer allocateMemory(AlignedHeader that, UnsignedWord size) {
         Pointer result = WordFactory.nullPointer();
         UnsignedWord available = HeapChunk.availableObjectMemory(that);
@@ -119,16 +119,19 @@ public final class AlignedHeapChunk {
         return HeapChunk.getEndOffset(that).subtract(getObjectsStartOffset());
     }
 
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static AlignedHeader getEnclosingChunk(Object obj) {
         Pointer ptr = Word.objectToUntrackedPointer(obj);
         return getEnclosingChunkFromObjectPointer(ptr);
     }
 
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static AlignedHeader getEnclosingChunkFromObjectPointer(Pointer ptr) {
         return (AlignedHeader) PointerUtils.roundDown(ptr, HeapParameters.getAlignedHeapChunkAlignment());
     }
 
     /** Return the offset of an object within the objects part of a chunk. */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static UnsignedWord getObjectOffset(AlignedHeader that, Pointer objectPointer) {
         Pointer objectsStart = getObjectsStart(that);
         return objectPointer.subtract(objectsStart);
@@ -139,6 +142,7 @@ public final class AlignedHeapChunk {
     }
 
     @AlwaysInline("GC performance")
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     static boolean walkObjectsInline(AlignedHeader that, ObjectVisitor visitor) {
         return HeapChunk.walkObjectsFromInline(that, getObjectsStart(that), visitor);
     }
@@ -154,6 +158,7 @@ public final class AlignedHeapChunk {
     }
 
     /** Methods for a {@link MemoryWalker} to access an aligned heap chunk. */
+    @AutomaticallyRegisteredImageSingleton(onlyWith = UseSerialOrEpsilonGC.class)
     static final class MemoryWalkerAccessImpl extends HeapChunk.MemoryWalkerAccessImpl<AlignedHeapChunk.AlignedHeader> {
 
         @Platforms(Platform.HOSTED_ONLY.class)
@@ -169,18 +174,5 @@ public final class AlignedHeapChunk {
         public UnsignedWord getAllocationStart(AlignedHeapChunk.AlignedHeader heapChunk) {
             return getObjectsStart(heapChunk);
         }
-    }
-}
-
-@AutomaticFeature
-class AlignedHeapChunkMemoryWalkerAccessFeature implements Feature {
-    @Override
-    public boolean isInConfiguration(IsInConfigurationAccess access) {
-        return SubstrateOptions.UseSerialGC.getValue();
-    }
-
-    @Override
-    public void afterRegistration(AfterRegistrationAccess access) {
-        ImageSingletons.add(AlignedHeapChunk.MemoryWalkerAccessImpl.class, new AlignedHeapChunk.MemoryWalkerAccessImpl());
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -387,7 +387,6 @@ public class DynamicDispatchTest extends AbstractParametrizedLibraryTest {
     // test that cast cannot be override
     @ExportLibrary(DynamicDispatchLibrary.class)
     @SuppressWarnings("static-method")
-    @ExpectError("No message 'cast' found for library DynamicDispatchLibrary.")
     static final class ErrorOverrideCast1 {
 
         @ExportMessage
@@ -396,6 +395,7 @@ public class DynamicDispatchTest extends AbstractParametrizedLibraryTest {
         }
 
         @ExportMessage
+        @ExpectError("No message 'cast' found for library DynamicDispatchLibrary.")
         Object cast() {
             return null;
         }

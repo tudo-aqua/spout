@@ -40,31 +40,39 @@
  */
 package com.oracle.truffle.polyglot;
 
+import static com.oracle.truffle.polyglot.EngineAccessor.LANGUAGE;
+
+import java.util.BitSet;
 import java.util.LinkedList;
 
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.TruffleSafepoint;
 import com.oracle.truffle.api.dsl.SpecializationStatistics;
+import com.oracle.truffle.api.nodes.EncapsulatingNodeReference;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.utilities.TruffleWeakReference;
 import com.oracle.truffle.polyglot.PolyglotLocals.LocalLocation;
 
 final class PolyglotThreadInfo {
 
-    static final PolyglotThreadInfo NULL = new PolyglotThreadInfo(null, null);
+    static final PolyglotThreadInfo NULL = new PolyglotThreadInfo(null, null, false);
     private static final Object NULL_CLASS_LOADER = new Object();
 
     final PolyglotContextImpl context;
     @CompilationFinal private final TruffleWeakReference<Thread> thread;
+    final PolyglotContextImpl polyglotThreadOwnerContext;
 
     /*
      * Only modify if Thread.currentThread() == thread.get().
      */
     private volatile int enteredCount;
+    private volatile TruffleSafepoint.Interrupter leaveAndEnterInterrupter;
     final LinkedList<Object[]> explicitContextStack = new LinkedList<>();
     volatile boolean cancelled;
+    volatile boolean leaveAndEnterInterrupted;
     private Object originalContextClassLoader = NULL_CLASS_LOADER;
     private ClassLoaderEntry prevContextClassLoader;
     private SpecializationStatisticsEntry executionStatisticsEntry;
@@ -74,15 +82,76 @@ final class PolyglotThreadInfo {
 
     // only accessed from PolyglotFastThreadLocals
     final Object[] fastThreadLocals;
+    final EncapsulatingNodeReference encapsulatingNodeReference;
 
-    PolyglotThreadInfo(PolyglotContextImpl context, Thread thread) {
+    private final BitSet initializedLanguageContexts;
+    private boolean finalizationComplete;
+
+    PolyglotThreadInfo(PolyglotContextImpl context, Thread thread, boolean polyglotThreadFirstEnter) {
         this.context = context;
         this.thread = new TruffleWeakReference<>(thread);
-        this.fastThreadLocals = context == null ? null : PolyglotFastThreadLocals.createFastThreadLocals(this);
+        if (thread instanceof PolyglotThread) {
+            assert !polyglotThreadFirstEnter || ((PolyglotThread) thread).getOwnerContext() == context;
+            this.polyglotThreadOwnerContext = ((PolyglotThread) thread).getOwnerContext();
+        } else if (polyglotThreadFirstEnter) {
+            /*
+             * This branch is only for host thread created for a host call from a polyglot thread in
+             * a polyglot isolate. First enters for threads that are instances of PolyglotThread
+             * also have polyglotThreadFirstEnter == true, but they are handled by the first branch
+             * of this if statement.
+             */
+            this.polyglotThreadOwnerContext = context;
+        } else {
+            this.polyglotThreadOwnerContext = null;
+        }
+        if (context == null) {
+            this.encapsulatingNodeReference = null;
+            this.fastThreadLocals = null;
+        } else {
+            this.encapsulatingNodeReference = EngineAccessor.NODES.createEncapsulatingNodeReference(thread);
+            this.fastThreadLocals = PolyglotFastThreadLocals.createFastThreadLocals(this);
+        }
+        if (context != null) {
+            initializedLanguageContexts = new BitSet(context.contexts.length);
+        } else {
+            initializedLanguageContexts = null;
+        }
     }
 
     Thread getThread() {
         return thread.get();
+    }
+
+    boolean isLanguageContextInitialized(PolyglotLanguage language) {
+        assert Thread.holdsLock(context);
+        return initializedLanguageContexts.get(language.engineIndex);
+    }
+
+    void initializeLanguageContext(PolyglotLanguageContext languageContext) {
+        assert Thread.holdsLock(context);
+        assert !finalizationComplete;
+        LANGUAGE.initializeThread(languageContext.env, getThread());
+        initializedLanguageContexts.set(languageContext.language.engineIndex);
+    }
+
+    void clearLanguageContextInitialized(PolyglotLanguage language) {
+        assert Thread.holdsLock(context);
+        initializedLanguageContexts.clear(language.engineIndex);
+    }
+
+    int initializedLanguageContextsCount() {
+        assert Thread.holdsLock(context);
+        return initializedLanguageContexts.cardinality();
+    }
+
+    boolean isFinalizationComplete() {
+        assert Thread.holdsLock(context);
+        return finalizationComplete;
+    }
+
+    void setFinalizationComplete() {
+        assert Thread.holdsLock(context);
+        this.finalizationComplete = true;
     }
 
     boolean isSafepointActive() {
@@ -90,7 +159,7 @@ final class PolyglotThreadInfo {
         return safepointActive;
     }
 
-    public void setSafepointActive(boolean safepointActive) {
+    void setSafepointActive(boolean safepointActive) {
         assert isCurrent();
         this.safepointActive = safepointActive;
     }
@@ -107,6 +176,18 @@ final class PolyglotThreadInfo {
 
     boolean isCurrent() {
         return getThread() == Thread.currentThread();
+    }
+
+    TruffleSafepoint.Interrupter getLeaveAndEnterInterrupter() {
+        return leaveAndEnterInterrupter;
+    }
+
+    boolean isInLeaveAndEnter() {
+        return leaveAndEnterInterrupter != null;
+    }
+
+    void setLeaveAndEnterInterrupter(TruffleSafepoint.Interrupter interrupter) {
+        this.leaveAndEnterInterrupter = interrupter;
     }
 
     /**
@@ -148,10 +229,7 @@ final class PolyglotThreadInfo {
     }
 
     boolean isPolyglotThread(PolyglotContextImpl c) {
-        if (getThread() instanceof PolyglotThread) {
-            return ((PolyglotThread) getThread()).isOwner(c);
-        }
-        return false;
+        return polyglotThreadOwnerContext == c;
     }
 
     /*
@@ -221,7 +299,8 @@ final class PolyglotThreadInfo {
 
     @Override
     public String toString() {
-        return super.toString() + "[thread=" + getThread() + ", enteredCount=" + enteredCount + ", cancelled=" + cancelled + "]";
+        return super.toString() + "[thread=" + getThread() + ", enteredCount=" + enteredCount + ", cancelled=" + cancelled +
+                        ", leaveAndEnterInterrupted=" + leaveAndEnterInterrupted + "]";
     }
 
     @TruffleBoundary

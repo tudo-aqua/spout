@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.tutorial;
 
+import java.nio.file.Path;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
@@ -60,8 +61,6 @@ import org.graalvm.word.SignedWord;
 import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.WordFactory;
 
-import com.oracle.svm.core.c.ProjectHeaderFile;
-import com.oracle.svm.core.util.VMError;
 import com.oracle.svm.tutorial.CInterfaceTutorial.CInterfaceTutorialDirectives;
 
 @CContext(CInterfaceTutorialDirectives.class)
@@ -75,7 +74,7 @@ public class CInterfaceTutorial {
              * The header file with the C declarations that are imported. We use a helper class that
              * locates the file in our project structure.
              */
-            return Collections.singletonList(ProjectHeaderFile.resolve("com.oracle.svm.tutorial", "native/mydata.h"));
+            return Collections.singletonList("\"" + Path.of(System.getProperty("com.oracle.svm.tutorial.headerfile")).toAbsolutePath() + "\"");
         }
     }
 
@@ -173,13 +172,13 @@ public class CInterfaceTutorial {
     protected static CCharPointerHolder pin;
 
     protected static void dump(MyData data) {
-        System.out.format("**** In Java ****\n");
-        System.out.format("primitive: %d\n", data.getPrimitive());
-        System.out.format("length: %d\n", getDataLength());
+        System.out.format("**** In Java ****%n");
+        System.out.format("primitive: %d%n", data.getPrimitive());
+        System.out.format("length: %d%n", getDataLength());
         for (int i = 0; i < getDataLength(); i++) {
             System.out.format("%d ", data.addressOfArray().read(i));
         }
-        System.out.format("\n");
+        System.out.format("%n");
 
         IsolateThread currentThread = CurrentIsolate.getCurrentThread();
         /* Call a C function directly. */
@@ -233,7 +232,7 @@ public class CInterfaceTutorial {
         /* Retrieve the object we have stored in a handle. */
         ObjectHandle handle = data.getJavaObject();
         String javaObject = ObjectHandles.getGlobal().get(handle);
-        System.out.format("javaObject: %s\n", javaObject);
+        System.out.format("javaObject: %s%n", javaObject);
         /* Free the handle. After this call, the handle must not be used anymore. */
         ObjectHandles.getGlobal().destroy(handle);
 
@@ -298,7 +297,7 @@ public class CInterfaceTutorial {
          */
         @CFieldOffset("header")
         static int offsetOfHeader() {
-            throw VMError.shouldNotReachHere("Calls to the method are replaced with a compile time constant for the offset, so this method body is not reachable.");
+            throw new RuntimeException("Calls to the method are replaced with a compile time constant for the offset, so this method body is not reachable.");
         }
 
         @CField

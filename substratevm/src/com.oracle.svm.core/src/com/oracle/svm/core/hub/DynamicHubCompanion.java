@@ -24,27 +24,48 @@
  */
 package com.oracle.svm.core.hub;
 
-import static com.oracle.svm.core.hub.DynamicHub.NO_CLASS_LOADER;
-
+import java.lang.ref.SoftReference;
+import java.lang.reflect.Constructor;
 import java.security.ProtectionDomain;
 
-import com.oracle.svm.core.hub.DynamicHub.ReflectionData;
+import org.graalvm.nativeimage.Platform;
+import org.graalvm.nativeimage.Platforms;
+
+import com.oracle.svm.core.jdk.ProtectionDomainSupport;
 import com.oracle.svm.core.util.VMError;
 
-/** An optional, non-immutable companion to a {@link DynamicHub} instance. */
+import sun.reflect.annotation.AnnotationType;
+import sun.reflect.generics.repository.ClassRepository;
+
+/**
+ * The mutable parts of a {@link DynamicHub} instance.
+ */
 public final class DynamicHubCompanion {
-    private final DynamicHub hub;
+    /** Marker value for {@link #classLoader}. */
+    private static final Object NO_CLASS_LOADER = new Object();
 
     private String packageName;
-    private Object classLoader = NO_CLASS_LOADER;
+    /**
+     * Classloader used for loading this class. Most classes have the correct class loader set
+     * already at image build time. {@link PredefinedClassesSupport Predefined classes} get their
+     * classloader only at run time, before "loading" the field value is {@link #NO_CLASS_LOADER}.
+     */
+    private Object classLoader;
     private ProtectionDomain protectionDomain;
-    private ReflectionData completeReflectionData;
+    private ClassRepository genericInfo;
+    private SoftReference<Target_java_lang_Class_ReflectionData<?>> reflectionData;
+    private AnnotationType annotationType;
+    private Target_java_lang_Class_AnnotationData annotationData;
+    private Constructor<?> cachedConstructor;
+    private Class<?> newInstanceCallerCache;
+    private Object jfrEventConfiguration;
 
-    public DynamicHubCompanion(DynamicHub hub) {
-        this.hub = hub;
+    @Platforms(Platform.HOSTED_ONLY.class)
+    DynamicHubCompanion(Class<?> hostedJavaClass, ClassLoader classLoader) {
+        this.classLoader = PredefinedClassesSupport.isPredefined(hostedJavaClass) ? NO_CLASS_LOADER : classLoader;
     }
 
-    public String getPackageName() {
+    String getPackageName(DynamicHub hub) {
         if (packageName == null) {
             packageName = hub.computePackageName();
         }
@@ -55,33 +76,69 @@ public final class DynamicHubCompanion {
         return classLoader != NO_CLASS_LOADER;
     }
 
-    public ClassLoader getClassLoader() {
+    ClassLoader getClassLoader() {
         Object loader = classLoader;
         VMError.guarantee(loader != NO_CLASS_LOADER);
         return (ClassLoader) loader;
     }
 
-    public void setClassLoader(ClassLoader loader) {
+    void setClassLoader(ClassLoader loader) {
         VMError.guarantee(classLoader == NO_CLASS_LOADER && loader != NO_CLASS_LOADER);
         classLoader = loader;
     }
 
-    public ProtectionDomain getProtectionDomain() {
+    ProtectionDomain getProtectionDomain() {
         if (protectionDomain == null) {
-            protectionDomain = DynamicHub.allPermDomainReference.get();
+            protectionDomain = ProtectionDomainSupport.allPermDomain();
         }
         return protectionDomain;
     }
 
-    public void setProtectionDomain(ProtectionDomain domain) {
+    void setProtectionDomain(ProtectionDomain domain) {
         VMError.guarantee(protectionDomain == null && domain != null);
         protectionDomain = domain;
     }
 
-    public ReflectionData getCompleteReflectionData() {
-        if (completeReflectionData == null) {
-            completeReflectionData = hub.loadReflectionMetadata();
+    public ClassRepository getGenericInfo(DynamicHub hub) {
+        if (genericInfo == null) {
+            genericInfo = hub.computeGenericInfo();
         }
-        return completeReflectionData;
+        return (genericInfo != ClassRepository.NONE) ? genericInfo : null;
+    }
+
+    SoftReference<Target_java_lang_Class_ReflectionData<?>> getReflectionData() {
+        return reflectionData;
+    }
+
+    AnnotationType getAnnotationType() {
+        return annotationType;
+    }
+
+    Target_java_lang_Class_AnnotationData getAnnotationData() {
+        return annotationData;
+    }
+
+    Constructor<?> getCachedConstructor() {
+        return cachedConstructor;
+    }
+
+    void setCachedConstructor(Constructor<?> constructor) {
+        cachedConstructor = constructor;
+    }
+
+    Class<?> getNewInstanceCallerCache() {
+        return newInstanceCallerCache;
+    }
+
+    void setNewInstanceCallerCache(Class<?> constructor) {
+        newInstanceCallerCache = constructor;
+    }
+
+    public void setJfrEventConfiguration(Object configuration) {
+        jfrEventConfiguration = configuration;
+    }
+
+    public Object getJfrEventConfiguration() {
+        return jfrEventConfiguration;
     }
 }

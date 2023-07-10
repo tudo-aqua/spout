@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -118,11 +118,7 @@ public final class EventContext {
     }
 
     private static boolean languageDeclaresTag(RootNode root, Class<?> tag) {
-        Object polyglotEngine = InstrumentAccessor.nodesAccess().getPolyglotEngine(root);
-        if (polyglotEngine == null) {
-            return true;
-        }
-        InstrumentationHandler handler = (InstrumentationHandler) InstrumentAccessor.engineAccess().getInstrumentationHandler(polyglotEngine);
+        InstrumentationHandler handler = (InstrumentationHandler) InstrumentAccessor.engineAccess().getInstrumentationHandler(root);
         Set<Class<?>> providedTags = handler.getProvidedTags(root);
         if (!providedTags.contains(tag)) {
             TruffleLanguage<?> language = InstrumentAccessor.nodesAccess().getLanguage(root);
@@ -214,7 +210,6 @@ public final class EventContext {
      *
      * @since 0.12
      */
-    @SuppressWarnings("deprecation")
     public Node getInstrumentedNode() {
         WrapperNode wrapper = probeNode.findWrapper();
         return wrapper != null ? wrapper.getDelegateNode() : null;
@@ -354,7 +349,7 @@ public final class EventContext {
      *             observable by the guest language application.
      * @since 20.0
      */
-    @Deprecated
+    @Deprecated(since = "21.3")
     @SuppressWarnings("static-method")
     public RuntimeException createError(RuntimeException e) {
         return e;

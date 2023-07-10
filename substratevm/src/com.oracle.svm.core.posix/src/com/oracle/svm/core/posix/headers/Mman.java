@@ -24,10 +24,15 @@
  */
 package com.oracle.svm.core.posix.headers;
 
+import org.graalvm.nativeimage.Platform;
+import org.graalvm.nativeimage.Platforms;
 import org.graalvm.nativeimage.c.CContext;
 import org.graalvm.nativeimage.c.constant.CConstant;
 import org.graalvm.nativeimage.c.function.CFunction;
 import org.graalvm.nativeimage.c.function.CFunction.Transition;
+import org.graalvm.nativeimage.c.function.CLibrary;
+import org.graalvm.nativeimage.c.type.CCharPointer;
+import org.graalvm.nativeimage.c.type.CConst;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.PointerBase;
 import org.graalvm.word.UnsignedWord;
@@ -68,6 +73,10 @@ public class Mman {
     public static native int MAP_NORESERVE();
 
     @CConstant
+    @Platforms(Platform.MACOS_AARCH64.class)
+    public static native int MAP_JIT();
+
+    @CConstant
     public static native PointerBase MAP_FAILED();
 
     @CFunction
@@ -85,5 +94,15 @@ public class Mman {
 
         @CFunction(transition = Transition.NO_TRANSITION)
         public static native int mprotect(PointerBase addr, UnsignedWord len, int prot);
+
+        @CFunction(transition = Transition.NO_TRANSITION)
+        @Platforms(Platform.LINUX.class)
+        @CLibrary("rt")
+        public static native int shm_open(@CConst CCharPointer name, int oflag, int mode);
+
+        @CFunction(transition = Transition.NO_TRANSITION)
+        @Platforms(Platform.LINUX.class)
+        @CLibrary("rt")
+        public static native int shm_unlink(@CConst CCharPointer name);
     }
 }

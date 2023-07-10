@@ -25,7 +25,7 @@ package com.oracle.truffle.espresso.nodes.quick.interop;
 
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.bytecode.Bytecodes;
-import com.oracle.truffle.espresso.nodes.BytecodeNode;
+import com.oracle.truffle.espresso.nodes.EspressoFrame;
 import com.oracle.truffle.espresso.nodes.bytecodes.ByteArrayLoad;
 import com.oracle.truffle.espresso.nodes.bytecodes.ByteArrayLoadNodeGen;
 import com.oracle.truffle.espresso.nodes.quick.QuickNode;
@@ -46,10 +46,10 @@ public final class ByteArrayLoadQuickNode extends QuickNode {
     }
 
     @Override
-    public int execute(VirtualFrame frame, long[] primitives, Object[] refs) {
-        int index = BytecodeNode.popInt(primitives, top - 1);
-        StaticObject array = nullCheck(BytecodeNode.popObject(refs, top - 2));
-        BytecodeNode.putInt(primitives, top - 2, byteArrayLoad.execute(array, index));
+    public int execute(VirtualFrame frame) {
+        int index = EspressoFrame.popInt(frame, top - 1);
+        StaticObject array = nullCheck(EspressoFrame.popObject(frame, top - 2));
+        EspressoFrame.putInt(frame, top - 2, byteArrayLoad.execute(array, index));
         return stackEffectOf_BALOAD;
     }
 }

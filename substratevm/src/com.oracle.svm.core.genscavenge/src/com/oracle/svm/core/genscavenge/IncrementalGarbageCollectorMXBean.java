@@ -24,7 +24,6 @@
  */
 package com.oracle.svm.core.genscavenge;
 
-//Checkstyle: stop
 import java.lang.management.ManagementFactory;
 
 import javax.management.MBeanNotificationInfo;
@@ -40,7 +39,6 @@ import com.oracle.svm.core.util.TimeUtils;
 import com.sun.management.GcInfo;
 
 import sun.management.Util;
-//Checkstyle: resume
 
 public final class IncrementalGarbageCollectorMXBean implements com.sun.management.GarbageCollectorMXBean, NotificationEmitter {
 
@@ -50,25 +48,27 @@ public final class IncrementalGarbageCollectorMXBean implements com.sun.manageme
 
     @Override
     public long getCollectionCount() {
-        return HeapImpl.getHeapImpl().getGCImpl().getAccounting().getIncrementalCollectionCount();
+        return HeapImpl.getGCImpl().getAccounting().getIncrementalCollectionCount();
     }
 
     @Override
     public long getCollectionTime() {
-        long nanos = HeapImpl.getHeapImpl().getGCImpl().getAccounting().getIncrementalCollectionTotalNanos();
+        long nanos = HeapImpl.getGCImpl().getAccounting().getIncrementalCollectionTotalNanos();
         return TimeUtils.roundNanosToMillis(nanos);
     }
 
     @Override
     public String[] getMemoryPoolNames() {
         /* Return a new array each time because arrays are not immutable. */
-        return new String[]{"young generation space"};
+        return new String[]{
+                        GenScavengeMemoryPoolMXBeans.EDEN_SPACE,
+                        GenScavengeMemoryPoolMXBeans.SURVIVOR_SPACE};
     }
 
     @Override
     public String getName() {
         /* Changing this name will break assumptions we take in the object replacer. */
-        return "young generation scavenger";
+        return GenScavengeMemoryPoolMXBeans.YOUNG_GEN_SCAVENGER;
     }
 
     @Override

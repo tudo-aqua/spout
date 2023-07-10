@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -40,6 +40,7 @@
  */
 package com.oracle.truffle.api.debug;
 
+import java.math.BigInteger;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -114,7 +115,7 @@ public abstract class DebugValue {
      *             set}({@link #getSession()}{@link DebuggerSession#createPrimitiveValue(Object, Languageinfo)
      *             .createPrimitiveValue(primitiveValue, null)}) instead.
      */
-    @Deprecated
+    @Deprecated(since = "21.2")
     public abstract void set(Object primitiveValue) throws DebugException;
 
     /**
@@ -135,7 +136,7 @@ public abstract class DebugValue {
      * @since 0.17
      * @deprecated Use {@link #toDisplayString()} instead.
      */
-    @Deprecated
+    @Deprecated(since = "20.1")
     public abstract <T> T as(Class<T> clazz) throws DebugException;
 
     /**
@@ -424,6 +425,53 @@ public abstract class DebugValue {
         try {
             Object value = get();
             return INTEROP.asLong(value);
+        } catch (ThreadDeath td) {
+            throw td;
+        } catch (UnsupportedMessageException uex) {
+            throw new UnsupportedOperationException("Not a long", uex);
+        } catch (Throwable ex) {
+            throw DebugException.create(getSession(), ex, resolveLanguage());
+        }
+    }
+
+    /**
+     * Returns <code>true</code> if this value represents a {@link #isNumber() number} and the value
+     * fits in <code>BigInteger</code>, else <code>false</code>.
+     *
+     * @throws DebugException when guest language code throws an exception
+     * @see #asBigInteger()
+     * @since 23.0.0
+     */
+    public boolean fitsInBigInteger() {
+        if (!isReadable()) {
+            return false;
+        }
+        try {
+            Object value = get();
+            return INTEROP.fitsInBigInteger(value);
+        } catch (ThreadDeath td) {
+            throw td;
+        } catch (Throwable ex) {
+            throw DebugException.create(getSession(), ex, resolveLanguage());
+        }
+    }
+
+    /**
+     * Returns a <code>BigInteger</code> representation of this value if it is {@link #isNumber()
+     * number} and the value {@link #fitsInBigInteger() fits}.
+     *
+     * @throws UnsupportedOperationException if this value could not be converted.
+     * @throws DebugException when guest language code throws an exception
+     * @see #fitsInBigInteger()
+     * @since 23.0.0
+     */
+    public BigInteger asBigInteger() {
+        if (!isReadable()) {
+            throw new UnsupportedOperationException("Value is not readable");
+        }
+        try {
+            Object value = get();
+            return INTEROP.asBigInteger(value);
         } catch (ThreadDeath td) {
             throw td;
         } catch (UnsupportedMessageException uex) {

@@ -24,22 +24,23 @@
  */
 package com.oracle.svm.hosted.lambda;
 
-import org.graalvm.compiler.java.LambdaUtils;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.debug.DebugContext.Builder;
+import org.graalvm.compiler.java.LambdaUtils;
 import org.graalvm.compiler.options.OptionValues;
+import org.graalvm.compiler.phases.util.Providers;
 import org.graalvm.compiler.printer.GraalDebugHandlersFactory;
 
 import com.oracle.graal.pointsto.BigBang;
 import com.oracle.graal.pointsto.infrastructure.SubstitutionProcessor;
 import com.oracle.graal.pointsto.phases.NoClassInitializationPlugin;
-import com.oracle.svm.hosted.c.GraalAccess;
+import com.oracle.graal.pointsto.util.GraalAccess;
+
 import jdk.vm.ci.meta.ResolvedJavaType;
-import org.graalvm.compiler.phases.util.Providers;
 
 /**
  * This substitution replaces all lambda proxy types with types that have a stable names. The name
@@ -84,7 +85,7 @@ public class LambdaProxyRenamingSubstitutionProcessor extends SubstitutionProces
     private LambdaSubstitutionType getSubstitution(ResolvedJavaType original) {
         return typeSubstitutions.computeIfAbsent(original, (key) -> {
             OptionValues options = bb.getOptions();
-            DebugContext debug = new Builder(options, new GraalDebugHandlersFactory(bb.getProviders().getSnippetReflection())).build();
+            DebugContext debug = new Builder(options, new GraalDebugHandlersFactory(bb.getSnippetReflectionProvider())).build();
 
             Providers providers = GraalAccess.getOriginalProviders();
             String lambdaTargetName = LambdaUtils.findStableLambdaName(new NoClassInitializationPlugin(), providers, key, options, debug, this);

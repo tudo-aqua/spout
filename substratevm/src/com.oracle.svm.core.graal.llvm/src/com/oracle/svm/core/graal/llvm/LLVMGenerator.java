@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -33,16 +33,10 @@ import static com.oracle.svm.core.graal.llvm.util.LLVMUtils.dumpTypes;
 import static com.oracle.svm.core.graal.llvm.util.LLVMUtils.dumpValues;
 import static com.oracle.svm.core.graal.llvm.util.LLVMUtils.getType;
 import static com.oracle.svm.core.graal.llvm.util.LLVMUtils.getVal;
-import static jdk.vm.ci.code.MemoryBarriers.JMM_POST_VOLATILE_READ;
-import static jdk.vm.ci.code.MemoryBarriers.JMM_POST_VOLATILE_WRITE;
-import static jdk.vm.ci.code.MemoryBarriers.JMM_PRE_VOLATILE_READ;
-import static jdk.vm.ci.code.MemoryBarriers.JMM_PRE_VOLATILE_WRITE;
 import static org.graalvm.compiler.debug.GraalError.shouldNotReachHere;
+import static org.graalvm.compiler.debug.GraalError.shouldNotReachHereUnexpectedValue;
 import static org.graalvm.compiler.debug.GraalError.unimplemented;
 
-// Checkstyle: allow reflection
-import java.lang.reflect.Field;
-// Checkstyle: disallow reflection
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -52,49 +46,51 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
 
 import org.graalvm.compiler.code.CompilationResult;
+import org.graalvm.compiler.code.DataSection;
 import org.graalvm.compiler.core.common.CompressEncoding;
 import org.graalvm.compiler.core.common.LIRKind;
 import org.graalvm.compiler.core.common.NumUtil;
 import org.graalvm.compiler.core.common.calc.Condition;
 import org.graalvm.compiler.core.common.calc.FloatConvert;
-import org.graalvm.compiler.core.common.cfg.AbstractBlockBase;
+import org.graalvm.compiler.core.common.cfg.BasicBlock;
+import org.graalvm.compiler.core.common.memory.BarrierType;
+import org.graalvm.compiler.core.common.memory.MemoryExtendKind;
 import org.graalvm.compiler.core.common.memory.MemoryOrderMode;
 import org.graalvm.compiler.core.common.spi.CodeGenProviders;
 import org.graalvm.compiler.core.common.spi.ForeignCallLinkage;
 import org.graalvm.compiler.core.common.spi.ForeignCallsProvider;
 import org.graalvm.compiler.core.common.spi.LIRKindTool;
+import org.graalvm.compiler.core.common.type.CompressibleConstant;
 import org.graalvm.compiler.core.common.type.IllegalStamp;
 import org.graalvm.compiler.core.common.type.RawPointerStamp;
 import org.graalvm.compiler.core.common.type.Stamp;
 import org.graalvm.compiler.core.common.type.StampFactory;
-import org.graalvm.compiler.debug.GraalError;
+import org.graalvm.compiler.graph.Node;
 import org.graalvm.compiler.lir.LIRFrameState;
 import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.LabelRef;
 import org.graalvm.compiler.lir.Variable;
 import org.graalvm.compiler.lir.VirtualStackSlot;
 import org.graalvm.compiler.lir.gen.ArithmeticLIRGeneratorTool;
+import org.graalvm.compiler.lir.gen.BarrierSetLIRGeneratorTool;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 import org.graalvm.compiler.lir.gen.LIRGeneratorTool;
+import org.graalvm.compiler.lir.gen.MoveFactory;
 import org.graalvm.compiler.nodes.AbstractBeginNode;
 import org.graalvm.compiler.nodes.ParameterNode;
 import org.graalvm.compiler.nodes.StructuredGraph;
 import org.graalvm.compiler.nodes.ValueNode;
-import org.graalvm.compiler.nodes.cfg.Block;
+import org.graalvm.compiler.nodes.cfg.HIRBlock;
 import org.graalvm.compiler.nodes.type.NarrowOopStamp;
 import org.graalvm.compiler.phases.util.Providers;
-import org.graalvm.compiler.serviceprovider.JavaVersionUtil;
+import org.graalvm.nativeimage.AnnotationAccess;
 import org.graalvm.nativeimage.c.constant.CEnum;
-import org.graalvm.util.GuardedAnnotationAccess;
+import org.graalvm.nativeimage.c.function.CEntryPoint;
 
 import com.oracle.svm.core.FrameAccess;
 import com.oracle.svm.core.ReservedRegisters;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.SubstrateUtil;
-import com.oracle.svm.core.annotate.Uninterruptible;
-import com.oracle.svm.core.c.function.CEntryPointBuiltins;
-import com.oracle.svm.core.c.function.CEntryPointNativeFunctions;
-import com.oracle.svm.core.c.function.CEntryPointOptions;
 import com.oracle.svm.core.graal.code.SubstrateCallingConvention;
 import com.oracle.svm.core.graal.code.SubstrateCallingConventionType;
 import com.oracle.svm.core.graal.code.SubstrateDataBuilder;
@@ -108,21 +104,22 @@ import com.oracle.svm.core.graal.llvm.util.LLVMIRBuilder.GCStrategy;
 import com.oracle.svm.core.graal.llvm.util.LLVMIRBuilder.InlineAssemblyConstraint;
 import com.oracle.svm.core.graal.llvm.util.LLVMIRBuilder.InlineAssemblyConstraint.Location;
 import com.oracle.svm.core.graal.llvm.util.LLVMIRBuilder.InlineAssemblyConstraint.Type;
+import com.oracle.svm.core.graal.llvm.util.LLVMIRBuilder.LLVMCallingConvention;
 import com.oracle.svm.core.graal.llvm.util.LLVMIRBuilder.LinkageType;
-import com.oracle.svm.core.graal.llvm.util.LLVMOptions;
 import com.oracle.svm.core.graal.llvm.util.LLVMStackMapInfo;
 import com.oracle.svm.core.graal.llvm.util.LLVMTargetSpecific;
 import com.oracle.svm.core.graal.llvm.util.LLVMUtils;
 import com.oracle.svm.core.graal.llvm.util.LLVMUtils.LLVMConstant;
 import com.oracle.svm.core.graal.llvm.util.LLVMUtils.LLVMKind;
+import com.oracle.svm.core.graal.llvm.util.LLVMUtils.LLVMPendingPtrToInt;
 import com.oracle.svm.core.graal.llvm.util.LLVMUtils.LLVMPendingSpecialRegisterRead;
 import com.oracle.svm.core.graal.llvm.util.LLVMUtils.LLVMStackSlot;
 import com.oracle.svm.core.graal.llvm.util.LLVMUtils.LLVMValueWrapper;
 import com.oracle.svm.core.graal.llvm.util.LLVMUtils.LLVMVariable;
 import com.oracle.svm.core.graal.meta.SubstrateRegisterConfig;
-import com.oracle.svm.core.graal.snippets.CEntryPointSnippets;
+import com.oracle.svm.core.graal.nodes.WriteCurrentVMThreadNode;
+import com.oracle.svm.core.graal.nodes.WriteHeapBaseNode;
 import com.oracle.svm.core.heap.ReferenceAccess;
-import com.oracle.svm.core.meta.SubstrateObjectConstant;
 import com.oracle.svm.core.snippets.SnippetRuntime;
 import com.oracle.svm.core.util.VMError;
 import com.oracle.svm.hosted.code.CEntryPointData;
@@ -131,10 +128,13 @@ import com.oracle.svm.hosted.meta.HostedType;
 import com.oracle.svm.shadowed.org.bytedeco.llvm.LLVM.LLVMBasicBlockRef;
 import com.oracle.svm.shadowed.org.bytedeco.llvm.LLVM.LLVMTypeRef;
 import com.oracle.svm.shadowed.org.bytedeco.llvm.LLVM.LLVMValueRef;
+import com.oracle.svm.shadowed.org.bytedeco.llvm.global.LLVM;
 
+import jdk.internal.misc.Unsafe;
 import jdk.vm.ci.code.CallingConvention;
 import jdk.vm.ci.code.CodeCacheProvider;
 import jdk.vm.ci.code.DebugInfo;
+import jdk.vm.ci.code.MemoryBarriers;
 import jdk.vm.ci.code.Register;
 import jdk.vm.ci.code.RegisterValue;
 import jdk.vm.ci.code.StackSlot;
@@ -169,21 +169,17 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
 
     private final String functionName;
     private final boolean isEntryPoint;
-    private final boolean canModifySpecialRegisters;
+    private final boolean modifiesSpecialRegisters;
     private final boolean returnsEnum;
     private final boolean returnsCEnum;
 
-    private Block currentBlock;
+    private HIRBlock currentBlock;
     private final Map<AbstractBeginNode, LLVMBasicBlockRef> basicBlockMap = new HashMap<>();
-    private final Map<Block, LLVMBasicBlockRef> splitBlockEndMap = new HashMap<>();
-    private final Map<Block, LLVMValueRef[]> specialRegValues = new HashMap<>();
-    private final Map<Block, LLVMValueRef[]> initialSpecialRegValues = new HashMap<>();
-    private final Map<Block, LLVMValueRef[]> handlerSpecialRegValues = new HashMap<>();
+    private final Map<HIRBlock, LLVMBasicBlockRef> splitBlockEndMap = new HashMap<>();
 
-    private final LLVMValueRef[] stackSlots = new LLVMValueRef[SpecialRegister.count()];
     private final Map<Constant, String> constants = new HashMap<>();
 
-    LLVMGenerator(Providers providers, CompilationResult result, ResolvedJavaMethod method, int debugLevel) {
+    LLVMGenerator(Providers providers, CompilationResult result, StructuredGraph graph, ResolvedJavaMethod method, int debugLevel) {
         this.providers = providers;
         this.compilationResult = result;
         this.builder = new LLVMIRBuilder(method.format("%H.%n"));
@@ -191,15 +187,20 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
         this.lirKindTool = new LLVMUtils.LLVMKindTool(builder);
         this.debugInfoPrinter = new DebugInfoPrinter(this, debugLevel);
 
-        this.functionName = SubstrateUtil.uniqueShortName(method);
+        this.functionName = ((HostedMethod) method).getUniqueShortName();
         this.isEntryPoint = isEntryPoint(method);
-        this.canModifySpecialRegisters = canModifySpecialRegisters(method);
+        this.modifiesSpecialRegisters = modifiesSpecialRegisters(graph);
 
         ResolvedJavaType returnType = method.getSignature().getReturnType(null).resolve(null);
         this.returnsEnum = returnType.isEnum();
         this.returnsCEnum = isCEnumType(returnType);
 
         addMainFunction(method);
+    }
+
+    @Override
+    public BarrierSetLIRGeneratorTool getBarrierSet() {
+        return null;
     }
 
     @Override
@@ -261,11 +262,13 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
 
     private void addMainFunction(ResolvedJavaMethod method) {
         builder.setMainFunction(functionName, getLLVMFunctionType(method, true));
+        builder.setTarget(LLVMTargetSpecific.get().getTargetTriple());
         builder.setFunctionLinkage(LinkageType.External);
         builder.setFunctionAttribute(Attribute.NoInline);
         builder.setFunctionAttribute(Attribute.NoRedZone);
         builder.setFunctionAttribute(Attribute.NoRealignStack);
         builder.setGarbageCollector(GCStrategy.CompressedPointers);
+        builder.setFunctionCallingConvention(LLVMCallingConvention.GraalCallingConvention);
         builder.setPersonalityFunction(getFunction(LLVMExceptionUnwind.getPersonalityStub(getMetaAccess())));
 
         if (isEntryPoint) {
@@ -274,7 +277,7 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
             Object entryPointData = ((HostedMethod) method).getWrapped().getEntryPointData();
             if (entryPointData instanceof CEntryPointData) {
                 CEntryPointData cEntryPointData = (CEntryPointData) entryPointData;
-                if (cEntryPointData.getPublishAs() != CEntryPointOptions.Publish.NotPublished) {
+                if (cEntryPointData.getPublishAs() != CEntryPoint.Publish.NotPublished) {
                     String entryPointSymbolName = cEntryPointData.getSymbolName();
                     assert !entryPointSymbolName.isEmpty();
                     builder.addAlias(entryPointSymbolName);
@@ -296,49 +299,52 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
     }
 
     private static String getFunctionName(ResolvedJavaMethod method) {
-        return SubstrateUtil.uniqueShortName(method);
+        return ((HostedMethod) method).getUniqueShortName();
     }
 
     private static boolean isEntryPoint(ResolvedJavaMethod method) {
         return ((HostedMethod) method).isEntryPoint();
     }
 
-    private boolean canModifySpecialRegisters(ResolvedJavaMethod method) {
-        CEntryPointOptions entryPointOptions = GuardedAnnotationAccess.getAnnotation(method, CEntryPointOptions.class);
-        return (entryPointOptions != null) && entryPointOptions.prologue() == CEntryPointOptions.NoPrologue.class ||
-                        method.getDeclaringClass().equals(getMetaAccess().lookupJavaType(CEntryPointSnippets.class)) ||
-                        method.getDeclaringClass().equals(getMetaAccess().lookupJavaType(CEntryPointNativeFunctions.class)) ||
-                        method.getDeclaringClass().equals(getMetaAccess().lookupJavaType(CEntryPointBuiltins.class));
+    private static boolean modifiesSpecialRegisters(StructuredGraph graph) {
+        if (graph != null) {
+            for (Node node : graph.getNodes()) {
+                if (node instanceof WriteCurrentVMThreadNode || node instanceof WriteHeapBaseNode) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /* Basic blocks */
 
-    void appendBasicBlock(Block block) {
+    void appendBasicBlock(HIRBlock block) {
         LLVMBasicBlockRef basicBlock = builder.appendBasicBlock(block.toString());
         basicBlockMap.put(block.getBeginNode(), basicBlock);
     }
 
-    void beginBlock(Block block) {
+    void beginBlock(HIRBlock block) {
         currentBlock = block;
         builder.positionAtEnd(getBlock(block));
     }
 
-    void resumeBlock(Block block) {
+    void resumeBlock(HIRBlock block) {
         currentBlock = block;
         builder.positionAtEnd(getBlockEnd(block));
     }
 
-    void editBlock(Block block) {
+    void editBlock(HIRBlock block) {
         currentBlock = block;
         builder.positionBeforeTerminator(getBlockEnd(block));
     }
 
     @Override
-    public AbstractBlockBase<?> getCurrentBlock() {
+    public BasicBlock<?> getCurrentBlock() {
         return currentBlock;
     }
 
-    LLVMBasicBlockRef getBlock(Block block) {
+    LLVMBasicBlockRef getBlock(HIRBlock block) {
         return getBlock(block.getBeginNode());
     }
 
@@ -346,7 +352,7 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
         return basicBlockMap.get(begin);
     }
 
-    LLVMBasicBlockRef getBlockEnd(Block block) {
+    LLVMBasicBlockRef getBlockEnd(HIRBlock block) {
         return (splitBlockEndMap.containsKey(block)) ? splitBlockEndMap.get(block) : getBlock(block);
     }
 
@@ -407,7 +413,7 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
                 return builder.voidType();
             case Illegal:
             default:
-                throw shouldNotReachHere("Illegal type");
+                throw shouldNotReachHere("Illegal type"); // ExcludeFromJacocoGeneratedReport
         }
     }
 
@@ -433,7 +439,7 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
         } else if (LLVMIRBuilder.isVoidType(type)) {
             return JavaKind.Void;
         } else {
-            throw shouldNotReachHere("Unknown LLVM type");
+            throw shouldNotReachHere("Unknown LLVM type"); // ExcludeFromJacocoGeneratedReport
         }
     }
 
@@ -447,43 +453,17 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
 
     LLVMTypeRef getLLVMFunctionReturnType(ResolvedJavaMethod method, boolean forMainFunction) {
         ResolvedJavaType returnType = method.getSignature().getReturnType(null).resolve(null);
-        LLVMTypeRef llvmReturnType = getLLVMStackType(getTypeKind(returnType, forMainFunction));
-
-        if (LLVMOptions.ReturnSpecialRegs.getValue() && !(forMainFunction && isEntryPoint)) {
-            boolean voidReturnType = LLVMIRBuilder.isVoidType(llvmReturnType);
-            LLVMTypeRef[] returnTypes = new LLVMTypeRef[SpecialRegister.count() + (voidReturnType ? 0 : 1)];
-            for (SpecialRegister reg : SpecialRegister.registers()) {
-                returnTypes[reg.index] = builder.wordType();
-            }
-            if (!voidReturnType) {
-                returnTypes[SpecialRegister.count()] = llvmReturnType;
-            }
-            llvmReturnType = builder.structType(returnTypes);
-        }
-
-        return llvmReturnType;
+        return getLLVMStackType(getTypeKind(returnType, forMainFunction));
     }
 
     boolean isVoidReturnType(LLVMTypeRef returnType) {
-        if (LLVMOptions.ReturnSpecialRegs.getValue()) {
-            return LLVMIRBuilder.countElementTypes(returnType) == SpecialRegister.count();
-        }
         return LLVMIRBuilder.isVoidType(returnType);
     }
 
     private LLVMTypeRef[] getLLVMFunctionArgTypes(ResolvedJavaMethod method, boolean forMainFunction) {
         ResolvedJavaType receiver = method.hasReceiver() ? method.getDeclaringClass() : null;
         JavaType[] javaParameterTypes = method.getSignature().toParameterTypes(receiver);
-        LLVMTypeRef[] parameterTypes = Arrays.stream(javaParameterTypes).map(type -> getLLVMStackType(getTypeKind(type.resolve(null), forMainFunction))).toArray(LLVMTypeRef[]::new);
-        LLVMTypeRef[] newParameterTypes = parameterTypes;
-        if (!isEntryPoint(method) && SpecialRegister.count() > 0) {
-            newParameterTypes = new LLVMTypeRef[SpecialRegister.count() + parameterTypes.length];
-            for (SpecialRegister reg : SpecialRegister.registers()) {
-                newParameterTypes[reg.index] = !LLVMOptions.ReturnSpecialRegs.getValue() && canModifySpecialRegisters(method) ? builder.pointerType(builder.wordType()) : builder.wordType();
-            }
-            System.arraycopy(parameterTypes, 0, newParameterTypes, SpecialRegister.count(), parameterTypes.length);
-        }
-        return newParameterTypes;
+        return Arrays.stream(javaParameterTypes).map(type -> getLLVMStackType(getTypeKind(type.resolve(null), forMainFunction))).toArray(LLVMTypeRef[]::new);
     }
 
     /**
@@ -504,7 +484,7 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
     }
 
     private static boolean isCEnumType(ResolvedJavaType type) {
-        return type.isEnum() && GuardedAnnotationAccess.isAnnotationPresent(type, CEnum.class);
+        return type.isEnum() && AnnotationAccess.isAnnotationPresent(type, CEnum.class);
     }
 
     /* Constants */
@@ -550,7 +530,7 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
                     return builder.buildLoad(getLLVMPlaceholderForConstant(constant), builder.objectType(LLVMIRBuilder.isCompressedPointerType(type)));
                 }
             default:
-                throw shouldNotReachHere(dumpTypes("unsupported constant type", type));
+                throw shouldNotReachHere(dumpTypes("unsupported constant type", type)); // ExcludeFromJacocoGeneratedReport
         }
     }
 
@@ -573,15 +553,16 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
             symbolName = "constant_" + functionName + "#" + nextConstantId++;
             constants.put(constant, symbolName);
 
-            Constant storedConstant = uncompressedObject ? ((SubstrateObjectConstant) constant).compress() : constant;
-            DataSectionReference reference = compilationResult.getDataSection().insertData(dataBuilder.createDataItem(storedConstant));
+            Constant storedConstant = uncompressedObject ? ((CompressibleConstant) constant).compress() : constant;
+            DataSection.Data data = dataBuilder.createDataItem(storedConstant);
+            DataSectionReference reference = compilationResult.getDataSection().insertData(data);
             compilationResult.recordDataPatchWithNote(0, reference, symbolName);
         }
         return builder.getExternalObject(symbolName, isUncompressedObjectConstant(constant));
     }
 
     private static boolean isUncompressedObjectConstant(Constant constant) {
-        return SubstrateOptions.SpawnIsolates.getValue() && constant instanceof SubstrateObjectConstant && !((SubstrateObjectConstant) constant).isCompressed();
+        return SubstrateOptions.SpawnIsolates.getValue() && constant instanceof CompressibleConstant && !((CompressibleConstant) constant).isCompressed();
     }
 
     private static boolean isUncompressedObjectKind(LIRKind kind) {
@@ -603,12 +584,12 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
     @Override
     public <K extends ValueKind<K>> K toRegisterKind(K kind) {
         /* Registers are handled by LLVM. */
-        throw unimplemented("only needed when emitting LIR constants");
+        throw unimplemented("only needed when emitting LIR constants"); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
     public void emitMoveConstant(AllocatableValue dst, Constant src) {
-        throw unimplemented("the LLVM backend doesn't need to move constants");
+        throw unimplemented("the LLVM backend doesn't need to move constants"); // ExcludeFromJacocoGeneratedReport
     }
 
     /* Values */
@@ -630,7 +611,24 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
         } else if (input instanceof LLVMValueWrapper) {
             return new LLVMVariable(getVal(input));
         }
-        throw shouldNotReachHere("Unknown move input");
+        throw shouldNotReachHere("Unknown move input"); // ExcludeFromJacocoGeneratedReport
+    }
+
+    @Override
+    public Variable emitMove(ValueKind<?> dst, Value src) {
+        LLVMValueRef source = getVal(src);
+        LLVMTypeRef sourceType = typeOf(source);
+        LLVMTypeRef destType = ((LLVMKind) dst.getPlatformKind()).get();
+
+        /* Floating word cast */
+        if (LLVMIRBuilder.isObjectType(destType) && LLVMIRBuilder.isWordType(sourceType)) {
+            source = builder.buildIntToPtr(source, destType);
+        } else if (((LIRKind) dst).isValue() && LLVMIRBuilder.isWordType(destType) && LLVMIRBuilder.isObjectType(sourceType)) {
+            source = builder.buildPtrToInt(source);
+        } else if (!((LIRKind) dst).isValue() && LLVMIRBuilder.isWordType(destType) && LLVMIRBuilder.isObjectType(sourceType)) {
+            return new LLVMPendingPtrToInt(this, source);
+        }
+        return new LLVMVariable(source);
     }
 
     @Override
@@ -704,7 +702,7 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
     }
 
     @Override
-    public Variable emitByteSwap(Value operand) {
+    public Variable emitReverseBytes(Value operand) {
         LLVMValueRef byteSwap = builder.buildBswap(getVal(operand));
         return new LLVMVariable(byteSwap);
     }
@@ -717,62 +715,82 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
     }
 
     @Override
-    public Value emitAtomicReadAndWrite(Value address, ValueKind<?> valueKind, Value newValue) {
+    public Value emitAtomicReadAndWrite(LIRKind accessKind, Value address, Value newValue, BarrierType barrierType) {
         LLVMValueRef atomicRMW = builder.buildAtomicXchg(getVal(address), getVal(newValue));
         return new LLVMVariable(atomicRMW);
     }
 
     @Override
-    public Value emitAtomicReadAndAdd(Value address, ValueKind<?> valueKind, Value delta) {
+    public Value emitAtomicReadAndAdd(LIRKind accessKind, Value address, Value delta) {
         LLVMValueRef atomicRMW = builder.buildAtomicAdd(getVal(address), getVal(delta));
         return new LLVMVariable(atomicRMW);
     }
 
     @Override
-    public Variable emitLogicCompareAndSwap(LIRKind accessKind, Value address, Value expectedValue, Value newValue, Value trueValue, Value falseValue, MemoryOrderMode memoryOrder) {
-        LLVMValueRef success = buildCmpxchg(getVal(address), getVal(expectedValue), getVal(newValue), false);
+    public Variable emitLogicCompareAndSwap(LIRKind accessKind, Value address, Value expectedValue, Value newValue, Value trueValue, Value falseValue, MemoryOrderMode memoryOrder,
+                    BarrierType barrierType) {
+        LLVMValueRef success = buildCmpxchg(getVal(address), getVal(expectedValue), getVal(newValue), memoryOrder, false);
         LLVMValueRef result = builder.buildSelect(success, getVal(trueValue), getVal(falseValue));
         return new LLVMVariable(result);
     }
 
     @Override
-    public Value emitValueCompareAndSwap(LIRKind accessKind, Value address, Value expectedValue, Value newValue, MemoryOrderMode memoryOrder) {
-        LLVMValueRef result = buildCmpxchg(getVal(address), getVal(expectedValue), getVal(newValue), true);
+    public Value emitValueCompareAndSwap(LIRKind accessKind, Value address, Value expectedValue, Value newValue, MemoryOrderMode memoryOrder, BarrierType barrierType) {
+        LLVMValueRef result = buildCmpxchg(getVal(address), getVal(expectedValue), getVal(newValue), memoryOrder, true);
         return new LLVMVariable(result);
     }
 
-    private LLVMValueRef buildCmpxchg(LLVMValueRef address, LLVMValueRef expectedValue, LLVMValueRef newValue, boolean returnValue) {
+    private LLVMValueRef buildCmpxchg(LLVMValueRef address, LLVMValueRef expectedValue, LLVMValueRef newValue, MemoryOrderMode memoryOrder, boolean returnValue) {
         LLVMTypeRef expectedType = LLVMIRBuilder.typeOf(expectedValue);
         LLVMTypeRef newType = LLVMIRBuilder.typeOf(newValue);
         assert LLVMIRBuilder.compatibleTypes(expectedType, newType) : dumpValues("invalid cmpxchg arguments", expectedValue, newValue);
 
+        boolean convertResult = LLVMIRBuilder.isFloatType(expectedType) || LLVMIRBuilder.isDoubleType(expectedType);
+        LLVMValueRef castedExpectedValue = expectedValue;
+        LLVMValueRef castedNewValue = newValue;
+        LLVMTypeRef castedExpectedType = expectedType;
+        if (convertResult) {
+            LLVMTypeRef cmpxchgType = LLVMIRBuilder.isFloatType(expectedType) ? builder.intType() : builder.longType();
+            castedExpectedValue = builder.buildBitcast(expectedValue, cmpxchgType);
+            castedNewValue = builder.buildBitcast(newValue, cmpxchgType);
+            castedExpectedType = LLVMIRBuilder.typeOf(castedExpectedValue);
+        }
+
         boolean trackedAddress = LLVMIRBuilder.isObjectType(typeOf(address));
         LLVMValueRef castedAddress;
         if (!trackedAddress && LLVMIRBuilder.isObjectType(expectedType)) {
-            castedAddress = builder.buildAddrSpaceCast(address, builder.pointerType(expectedType, true, false));
+            castedAddress = builder.buildAddrSpaceCast(address, builder.pointerType(castedExpectedType, true, false));
         } else {
-            castedAddress = builder.buildBitcast(address, builder.pointerType(expectedType, trackedAddress, false));
+            castedAddress = builder.buildBitcast(address, builder.pointerType(castedExpectedType, trackedAddress, false));
         }
-        return builder.buildCmpxchg(castedAddress, expectedValue, newValue, returnValue);
+
+        LLVMValueRef result = builder.buildCmpxchg(castedAddress, castedExpectedValue, castedNewValue, memoryOrder, returnValue);
+        if (returnValue && convertResult) {
+            return builder.buildBitcast(result, expectedType);
+        } else {
+            return result;
+        }
     }
 
     @Override
     public Variable emitReadRegister(Register register, ValueKind<?> kind) {
         LLVMValueRef value;
         if (register.equals(ReservedRegisters.singleton().getThreadRegister())) {
-            if (isEntryPoint || canModifySpecialRegisters) {
-                return new LLVMPendingSpecialRegisterRead(this, SpecialRegister.ThreadPointer);
+            LLVMValueRef specialRegister = builder.register(LLVMTargetSpecific.get().getLLVMRegisterName(ReservedRegisters.singleton().getThreadRegister().name));
+            if (isEntryPoint || modifiesSpecialRegisters) {
+                return new LLVMPendingSpecialRegisterRead(this, specialRegister);
             }
-            value = getSpecialRegister(SpecialRegister.ThreadPointer);
+            value = builder.buildReadRegister(specialRegister);
         } else if (register.equals(ReservedRegisters.singleton().getHeapBaseRegister())) {
-            if (isEntryPoint || canModifySpecialRegisters) {
-                return new LLVMPendingSpecialRegisterRead(this, SpecialRegister.HeapBase);
+            LLVMValueRef specialRegister = builder.register(LLVMTargetSpecific.get().getLLVMRegisterName(ReservedRegisters.singleton().getHeapBaseRegister().name));
+            if (isEntryPoint || modifiesSpecialRegisters) {
+                return new LLVMPendingSpecialRegisterRead(this, specialRegister);
             }
-            value = getSpecialRegister(SpecialRegister.HeapBase);
+            value = builder.buildReadRegister(specialRegister);
         } else if (register.equals(ReservedRegisters.singleton().getFrameRegister())) {
             value = builder.buildReadRegister(builder.register(ReservedRegisters.singleton().getFrameRegister().name));
         } else {
-            throw VMError.shouldNotReachHere();
+            throw VMError.shouldNotReachHereUnexpectedInput(register); // ExcludeFromJacocoGeneratedReport
         }
         return new LLVMVariable(value);
     }
@@ -780,27 +798,24 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
     @Override
     public void emitWriteRegister(Register dst, Value src, ValueKind<?> kind) {
         if (dst.equals(ReservedRegisters.singleton().getThreadRegister())) {
-            VMError.guarantee(isEntryPoint || canModifySpecialRegisters, "Can only write to registers in a method where it is expected.");
-            if (LLVMOptions.ReturnSpecialRegs.getValue()) {
-                setSpecialRegisterValue(SpecialRegister.ThreadPointer, getVal(src));
+            if (isEntryPoint) {
+                builder.buildWriteRegister(builder.register(LLVMTargetSpecific.get().getLLVMRegisterName(ReservedRegisters.singleton().getThreadRegister().name)), getVal(src));
             } else {
-                builder.buildStore(getVal(src), getSpecialRegisterPointer(SpecialRegister.ThreadPointer));
+                buildInlineSetRegister(ReservedRegisters.singleton().getThreadRegister().name, getVal(src));
             }
-            return;
         } else if (dst.equals(ReservedRegisters.singleton().getHeapBaseRegister())) {
-            VMError.guarantee(isEntryPoint || canModifySpecialRegisters, "Can only write to registers in a method where it is expected.");
-            if (LLVMOptions.ReturnSpecialRegs.getValue()) {
-                setSpecialRegisterValue(SpecialRegister.HeapBase, getVal(src));
+            if (isEntryPoint) {
+                builder.buildWriteRegister(builder.register(LLVMTargetSpecific.get().getLLVMRegisterName(ReservedRegisters.singleton().getHeapBaseRegister().name)), getVal(src));
             } else {
-                builder.buildStore(getVal(src), getSpecialRegisterPointer(SpecialRegister.HeapBase));
+                buildInlineSetRegister(ReservedRegisters.singleton().getHeapBaseRegister().name, getVal(src));
             }
-            return;
+        } else {
+            throw VMError.shouldNotReachHereUnexpectedInput(dst); // ExcludeFromJacocoGeneratedReport
         }
-        throw VMError.shouldNotReachHere();
     }
 
     @Override
-    public Variable load(Value value) {
+    public AllocatableValue addressAsAllocatableInteger(Value value) {
         LLVMValueRef load = builder.buildPtrToInt(getVal(value));
         return new LLVMVariable(load);
     }
@@ -812,13 +827,13 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
 
     @Override
     public Value emitCompress(Value pointer, CompressEncoding encoding, boolean nonNull) {
-        LLVMValueRef heapBase = getSpecialRegister(SpecialRegister.HeapBase);
+        LLVMValueRef heapBase = buildInlineGetRegister(ReservedRegisters.singleton().getHeapBaseRegister().name);
         return new LLVMVariable(builder.buildCompress(getVal(pointer), heapBase, nonNull, encoding.getShift()));
     }
 
     @Override
     public Value emitUncompress(Value pointer, CompressEncoding encoding, boolean nonNull) {
-        LLVMValueRef heapBase = getSpecialRegister(SpecialRegister.HeapBase);
+        LLVMValueRef heapBase = buildInlineGetRegister(ReservedRegisters.singleton().getHeapBaseRegister().name);
         return new LLVMVariable(builder.buildUncompress(getVal(pointer), heapBase, nonNull, encoding.getShift()));
     }
 
@@ -836,24 +851,13 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
         if (stackslot instanceof LLVMStackSlot) {
             return new LLVMVariable(builder.buildPtrToInt(getVal(stackslot)));
         }
-        throw shouldNotReachHere("Unknown address type");
-    }
-
-    void allocateRegisterSlots() {
-        if (!isEntryPoint) {
-            /* Non-entry point methods get the stack slots of their caller as argument. */
-            return;
-        }
-
-        for (SpecialRegister reg : SpecialRegister.registers()) {
-            stackSlots[reg.index] = builder.buildAlloca(builder.wordType());
-        }
+        throw shouldNotReachHere("Unknown address type"); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
     public Value emitReadCallerStackPointer(Stamp wordStamp) {
         LLVMValueRef basePointer = builder.buildFrameAddress(builder.constantInt(0));
-        LLVMValueRef callerSP = builder.buildAdd(builder.buildPtrToInt(basePointer), builder.constantLong(16));
+        LLVMValueRef callerSP = builder.buildAdd(builder.buildPtrToInt(basePointer), builder.constantLong(LLVMTargetSpecific.get().getCallerSPOffset()));
         return new LLVMVariable(callerSP);
     }
 
@@ -867,25 +871,17 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
 
     static final AtomicLong nextPatchpointId = new AtomicLong(0);
 
-    LLVMValueRef buildStatepointCall(LLVMValueRef callee, boolean nativeABI, long statepointId, LLVMValueRef... args) {
+    LLVMValueRef buildStatepointCall(LLVMValueRef callee, long statepointId, LLVMValueRef... args) {
         LLVMValueRef result;
         result = builder.buildCall(callee, args);
         builder.setCallSiteAttribute(result, Attribute.StatepointID, Long.toString(statepointId));
-
-        if (!nativeABI && LLVMOptions.ReturnSpecialRegs.getValue()) {
-            for (SpecialRegister reg : SpecialRegister.registers()) {
-                setSpecialRegisterValue(reg, builder.buildExtractValue(result, reg.index));
-            }
-            int numReturnValues = LLVMIRBuilder.countElementTypes(typeOf(result));
-            return numReturnValues > SpecialRegister.count() ? builder.buildExtractValue(result, SpecialRegister.count()) : result;
-        }
         return result;
     }
 
     LLVMValueRef buildStatepointInvoke(LLVMValueRef callee, boolean nativeABI, LLVMBasicBlockRef successor, LLVMBasicBlockRef handler, long statepointId, LLVMValueRef... args) {
         LLVMBasicBlockRef successorBlock;
         LLVMBasicBlockRef handlerBlock;
-        if (!nativeABI && LLVMOptions.ReturnSpecialRegs.getValue()) {
+        if (!nativeABI) {
             successorBlock = builder.appendBasicBlock(currentBlock.toString() + "_invoke_successor");
             handlerBlock = builder.appendBasicBlock(currentBlock.toString() + "_invoke_handler");
             splitBlockEndMap.put(currentBlock, successorBlock);
@@ -897,23 +893,12 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
         LLVMValueRef result = builder.buildInvoke(callee, successorBlock, handlerBlock, args);
         builder.setCallSiteAttribute(result, Attribute.StatepointID, Long.toString(statepointId));
 
-        if (!nativeABI && LLVMOptions.ReturnSpecialRegs.getValue()) {
-            builder.positionAtEnd(handlerBlock);
-            builder.buildLandingPad();
-            for (SpecialRegister reg : SpecialRegister.registers()) {
-                setHandlerSpecialRegisterValue(reg, getSpecialRegisterValue(reg));
-            }
-            builder.buildBranch(handler);
+        builder.positionAtEnd(handlerBlock);
+        builder.buildLandingPad();
+        builder.buildBranch(handler);
 
-            builder.positionAtEnd(successorBlock);
-            int numReturnValues = LLVMIRBuilder.countElementTypes(typeOf(result));
-            for (SpecialRegister reg : SpecialRegister.registers()) {
-                assert reg.index < numReturnValues;
-                setSpecialRegisterValue(reg, builder.buildExtractValue(result, reg.index));
-            }
-            result = numReturnValues > SpecialRegister.count() ? builder.buildExtractValue(result, SpecialRegister.count()) : result;
-            builder.buildBranch(successor);
-        }
+        builder.positionAtEnd(successorBlock);
+        builder.buildBranch(successor);
 
         return result;
     }
@@ -928,7 +913,7 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
 
         DebugInfo debugInfo = null;
         if (state != null) {
-            state.initDebugInfo(null, false);
+            state.initDebugInfo();
             debugInfo = state.debugInfo();
         }
 
@@ -938,44 +923,17 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
         LLVMValueRef callee = getFunction(targetMethod);
         LLVMValueRef[] args = Arrays.stream(arguments).map(LLVMUtils::getVal).toArray(LLVMValueRef[]::new);
         CallingConvention.Type callType = ((SubstrateCallingConvention) linkage.getOutgoingCallingConvention()).getType();
-        LLVMValueRef[] callArguments = getCallArguments(args, callType, targetMethod);
 
         LLVMValueRef call;
         boolean nativeABI = ((SubstrateCallingConventionType) callType).nativeABI();
         if (successor == null && handler == null) {
-            call = buildStatepointCall(callee, nativeABI, patchpointId, callArguments);
+            call = buildStatepointCall(callee, patchpointId, args);
         } else {
             assert successor != null && handler != null;
-            call = buildStatepointInvoke(callee, nativeABI, successor, handler, patchpointId, callArguments);
+            call = buildStatepointInvoke(callee, nativeABI, successor, handler, patchpointId, args);
         }
 
         return (isVoidReturnType(getLLVMFunctionReturnType(targetMethod, false))) ? null : new LLVMVariable(call);
-    }
-
-    LLVMValueRef[] getCallArguments(LLVMValueRef[] args, CallingConvention.Type callType, ResolvedJavaMethod targetMethod) {
-        LLVMValueRef[] newArgs = args;
-
-        if (!((SubstrateCallingConventionType) callType).nativeABI() && SpecialRegister.hasRegisters()) {
-            newArgs = new LLVMValueRef[SpecialRegister.count() + args.length];
-            for (SpecialRegister reg : SpecialRegister.registers()) {
-                newArgs[reg.index] = getSpecialRegisterArgument(reg, targetMethod);
-            }
-            System.arraycopy(args, 0, newArgs, SpecialRegister.count(), args.length);
-        }
-        return newArgs;
-    }
-
-    LLVMTypeRef[] getUnknownCallArgumentTypes(LLVMTypeRef[] types, CallingConvention.Type callType) {
-        LLVMTypeRef[] newTypes = types;
-
-        if (!((SubstrateCallingConventionType) callType).nativeABI() && SpecialRegister.count() > 0) {
-            newTypes = new LLVMTypeRef[SpecialRegister.count() + types.length];
-            for (SpecialRegister reg : SpecialRegister.registers()) {
-                newTypes[reg.index] = builder.wordType();
-            }
-            System.arraycopy(types, 0, newTypes, SpecialRegister.count(), types.length);
-        }
-        return newTypes;
     }
 
     public static final String JNI_WRAPPER_BASE_NAME = "__llvm_jni_wrapper_";
@@ -993,16 +951,17 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
         LLVMValueRef transitionWrapper = builder.getNamedFunction(wrapperName);
         if (transitionWrapper == null) {
             try (LLVMIRBuilder tempBuilder = new LLVMIRBuilder(builder)) {
-                LLVMTypeRef wrapperType = prependArgumentTypes(calleeType, nativeABI ? 0 : SpecialRegister.count(), tempBuilder.rawPointerType(), LLVMIRBuilder.typeOf(callee));
+                LLVMTypeRef wrapperType = prependArgumentTypes(calleeType, 0, tempBuilder.rawPointerType(), LLVMIRBuilder.typeOf(callee));
                 transitionWrapper = tempBuilder.addFunction(wrapperName, wrapperType);
                 LLVMIRBuilder.setLinkage(transitionWrapper, LinkageType.LinkOnce);
                 tempBuilder.setGarbageCollector(transitionWrapper, GCStrategy.CompressedPointers);
+                tempBuilder.setFunctionCallingConvention(transitionWrapper, LLVMCallingConvention.GraalCallingConvention);
                 tempBuilder.setFunctionAttribute(transitionWrapper, Attribute.NoInline);
 
                 LLVMBasicBlockRef block = tempBuilder.appendBasicBlock(transitionWrapper, "main");
                 tempBuilder.positionAtEnd(block);
 
-                LLVMValueRef anchor = LLVMIRBuilder.getParam(transitionWrapper, 0 + (nativeABI ? 0 : SpecialRegister.count()));
+                LLVMValueRef anchor = LLVMIRBuilder.getParam(transitionWrapper, 0);
                 LLVMValueRef lastIPAddr = tempBuilder.buildGEP(anchor, tempBuilder.constantInt(anchorIPOffset));
                 LLVMValueRef callIP = tempBuilder.buildReturnAddress(tempBuilder.constantInt(0));
                 LLVMValueRef castedLastIPAddr = tempBuilder.buildBitcast(lastIPAddr, tempBuilder.pointerType(tempBuilder.rawPointerType()));
@@ -1010,13 +969,9 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
 
                 LLVMValueRef[] args = new LLVMValueRef[numArgs];
                 for (int i = 0; i < numArgs; ++i) {
-                    if (!nativeABI && i < SpecialRegister.count()) {
-                        args[i] = LLVMIRBuilder.getParam(transitionWrapper, i);
-                    } else {
-                        args[i] = LLVMIRBuilder.getParam(transitionWrapper, i + 2);
-                    }
+                    args[i] = LLVMIRBuilder.getParam(transitionWrapper, i + 2);
                 }
-                LLVMValueRef target = LLVMIRBuilder.getParam(transitionWrapper, 1 + (nativeABI ? 0 : SpecialRegister.count()));
+                LLVMValueRef target = LLVMIRBuilder.getParam(transitionWrapper, 1);
                 LLVMValueRef ret = tempBuilder.buildCall(target, args);
                 tempBuilder.setCallSiteAttribute(ret, Attribute.GCLeafFunction);
 
@@ -1040,19 +995,14 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
         builder.buildStackmap(builder.constantLong(startPatchpointId));
         compilationResult.recordInfopoint(NumUtil.safeToInt(startPatchpointId), null, InfopointReason.METHOD_START);
 
-        LLVMValueRef jumpAddressAddress;
+        LLVMValueRef jumpAddress;
         if (SubstrateOptions.SpawnIsolates.getValue()) {
-            LLVMValueRef thread = buildInlineGetRegister(threadArg.getRegister().name);
-            LLVMValueRef heapBaseAddress = builder.buildGEP(builder.buildIntToPtr(thread, builder.rawPointerType()), builder.constantInt(threadIsolateOffset));
-            LLVMValueRef heapBase = builder.buildLoad(heapBaseAddress, builder.rawPointerType());
-            LLVMValueRef methodId = buildInlineGetRegister(methodIdArg.getRegister().name);
-            LLVMValueRef methodBase = builder.buildGEP(builder.buildIntToPtr(heapBase, builder.rawPointerType()), builder.buildPtrToInt(methodId));
-            jumpAddressAddress = builder.buildGEP(methodBase, builder.constantInt(methodObjEntryPointOffset));
+            buildInlineLoad(threadArg.getRegister().name, LLVMTargetSpecific.get().getScratchRegister(), threadIsolateOffset);
+            buildInlineAdd(LLVMTargetSpecific.get().getScratchRegister(), methodIdArg.getRegister().name);
+            jumpAddress = buildInlineLoad(LLVMTargetSpecific.get().getScratchRegister(), LLVMTargetSpecific.get().getScratchRegister(), methodObjEntryPointOffset);
         } else {
-            LLVMValueRef methodBase = buildInlineGetRegister(methodIdArg.getRegister().name);
-            jumpAddressAddress = builder.buildGEP(builder.buildIntToPtr(methodBase, builder.rawPointerType()), builder.constantInt(methodObjEntryPointOffset));
+            jumpAddress = buildInlineLoad(methodIdArg.getRegister().name, LLVMTargetSpecific.get().getScratchRegister(), methodObjEntryPointOffset);
         }
-        LLVMValueRef jumpAddress = builder.buildLoad(jumpAddressAddress, builder.rawPointerType());
         buildInlineJump(jumpAddress);
         builder.buildUnreachable();
     }
@@ -1061,21 +1011,7 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
     public void emitReturn(JavaKind javaKind, Value input) {
         if (javaKind == JavaKind.Void) {
             debugInfoPrinter.printRetVoid();
-            if (LLVMOptions.ReturnSpecialRegs.getValue() && !isEntryPoint) {
-                LLVMTypeRef[] retTypes = new LLVMTypeRef[SpecialRegister.count()];
-                LLVMValueRef[] retValues = new LLVMValueRef[SpecialRegister.count()];
-                for (SpecialRegister reg : SpecialRegister.registers()) {
-                    retTypes[reg.index] = builder.wordType();
-                    retValues[reg.index] = getSpecialRegisterValue(reg);
-                }
-                LLVMValueRef retStruct = builder.constantNull(builder.structType(retTypes));
-                for (int i = 0; i < retValues.length; ++i) {
-                    retStruct = builder.buildInsertValue(retStruct, i, retValues[i]);
-                }
-                builder.buildRet(retStruct);
-            } else {
-                builder.buildRetVoid();
-            }
+            builder.buildRetVoid();
         } else {
             debugInfoPrinter.printRet(javaKind, input);
             LLVMValueRef retVal = getVal(input);
@@ -1096,29 +1032,13 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
                 retVal = result;
             }
 
-            if (LLVMOptions.ReturnSpecialRegs.getValue() && !isEntryPoint) {
-                LLVMTypeRef[] retTypes = new LLVMTypeRef[SpecialRegister.count() + 1];
-                LLVMValueRef[] retValues = new LLVMValueRef[SpecialRegister.count() + 1];
-                for (SpecialRegister reg : SpecialRegister.registers()) {
-                    retTypes[reg.index] = builder.wordType();
-                    retValues[reg.index] = getSpecialRegisterValue(reg);
-                }
-                retTypes[SpecialRegister.count()] = LLVMIRBuilder.typeOf(retVal);
-                retValues[SpecialRegister.count()] = retVal;
-
-                LLVMValueRef retStruct = builder.constantNull(builder.structType(retTypes));
-                for (int i = 0; i < retValues.length; ++i) {
-                    retStruct = builder.buildInsertValue(retStruct, i, retValues[i]);
-                }
-                retVal = retStruct;
-            }
             builder.buildRet(retVal);
         }
     }
 
     @Override
     public void emitJump(LabelRef label) {
-        builder.buildBranch(getBlock((Block) label.getTargetBlock()));
+        builder.buildBranch(getBlock((HIRBlock) label.getTargetBlock()));
     }
 
     @Override
@@ -1149,194 +1069,92 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
         builder.setCallSiteAttribute(call, Attribute.GCLeafFunction);
     }
 
-    private LLVMValueRef buildInlineGetRegister(String registerName) {
+    private LLVMValueRef buildInlineLoad(String inputRegisterName, String outputRegisterName, int offset) {
         LLVMTypeRef inlineAsmType = builder.functionType(builder.rawPointerType());
-        String asmSnippet = LLVMTargetSpecific.get().getRegisterInlineAsm(registerName);
-        InlineAssemblyConstraint outputConstraint = new InlineAssemblyConstraint(Type.Output, Location.namedRegister(LLVMTargetSpecific.get().getLLVMRegisterName(registerName)));
+        String asmSnippet = LLVMTargetSpecific.get().getLoadInlineAsm(inputRegisterName, offset);
+        InlineAssemblyConstraint outputConstraint = new InlineAssemblyConstraint(Type.Output, Location.namedRegister(outputRegisterName));
 
-        LLVMValueRef getRegister = builder.buildInlineAsm(inlineAsmType, asmSnippet, false, false, outputConstraint);
+        LLVMValueRef load = builder.buildInlineAsm(inlineAsmType, asmSnippet, true, false, outputConstraint);
+        LLVMValueRef call = builder.buildCall(load);
+        builder.setCallSiteAttribute(call, Attribute.GCLeafFunction);
+        return call;
+    }
+
+    public LLVMValueRef buildInlineGetRegister(String registerName) {
+        LLVMTypeRef inlineAsmType = builder.functionType(builder.wordType());
+        String asmSnippet = LLVMTargetSpecific.get().getRegisterInlineAsm(registerName);
+        InlineAssemblyConstraint outputConstraint = new InlineAssemblyConstraint(Type.Output, Location.register());
+
+        LLVMValueRef getRegister = builder.buildInlineAsm(inlineAsmType, asmSnippet, true, false, outputConstraint);
         LLVMValueRef call = builder.buildCall(getRegister);
         builder.setCallSiteAttribute(call, Attribute.GCLeafFunction);
         return call;
     }
 
-    /* Special registers */
+    public void buildInlineSetRegister(String registerName, LLVMValueRef value) {
+        LLVMTypeRef inlineAsmType = builder.functionType(builder.voidType(), builder.wordType());
+        String asmSnippet = LLVMTargetSpecific.get().setRegisterInlineAsm(registerName);
+        InlineAssemblyConstraint inputConstraint = new InlineAssemblyConstraint(Type.Input, Location.register());
 
-    private void setSpecialRegisterValue(SpecialRegister reg, LLVMValueRef value) {
-        assert getInitialSpecialRegisterValue(reg, currentBlock) != null;
-        specialRegValues.computeIfAbsent(currentBlock, (b) -> new LLVMValueRef[SpecialRegister.count()])[reg.index] = value;
+        LLVMValueRef setRegister = builder.buildInlineAsm(inlineAsmType, asmSnippet, true, false, inputConstraint);
+        LLVMValueRef call = builder.buildCall(setRegister, value);
+        builder.setCallSiteAttribute(call, Attribute.GCLeafFunction);
     }
 
-    void setInitialSpecialRegisterValue(SpecialRegister reg, LLVMValueRef value) {
-        initialSpecialRegValues.computeIfAbsent(currentBlock, (b) -> new LLVMValueRef[SpecialRegister.count()])[reg.index] = value;
-        setSpecialRegisterValue(reg, value);
+    private void buildInlineAdd(String outputRegisterName, String inputRegisterName) {
+        LLVMTypeRef inlineAsmType = builder.functionType(builder.voidType());
+        String asmSnippet = LLVMTargetSpecific.get().getAddInlineAssembly(outputRegisterName, inputRegisterName);
+
+        LLVMValueRef add = builder.buildInlineAsm(inlineAsmType, asmSnippet, true, false);
+        LLVMValueRef call = builder.buildCall(add);
+        builder.setCallSiteAttribute(call, Attribute.GCLeafFunction);
     }
 
-    private void setHandlerSpecialRegisterValue(SpecialRegister reg, LLVMValueRef value) {
-        handlerSpecialRegValues.computeIfAbsent(currentBlock, (b) -> new LLVMValueRef[SpecialRegister.count()])[reg.index] = value;
-    }
+    public void clobberRegister(String register) {
+        LLVMTypeRef inlineAsmType = builder.functionType(builder.voidType());
+        String asmSnippet = LLVMTargetSpecific.get().getNopInlineAssembly();
+        InlineAssemblyConstraint clobberConstraint = new InlineAssemblyConstraint(Type.Clobber, Location.namedRegister(register));
 
-    public LLVMValueRef getSpecialRegister(SpecialRegister register) {
-        if (LLVMOptions.ReturnSpecialRegs.getValue()) {
-            return getSpecialRegisterValue(register);
-        }
-
-        LLVMValueRef specialRegister;
-        if (isEntryPoint || canModifySpecialRegisters) {
-            LLVMValueRef specialRegisterPointer = getSpecialRegisterPointer(register);
-            specialRegister = builder.buildLoad(specialRegisterPointer, builder.wordType());
-        } else {
-            specialRegister = builder.getFunctionParam(register.index);
-        }
-        return specialRegister;
-    }
-
-    private LLVMValueRef getSpecialRegisterPointer(SpecialRegister register) {
-        assert !LLVMOptions.ReturnSpecialRegs.getValue();
-        if (isEntryPoint) {
-            return stackSlots[register.index];
-        } else if (canModifySpecialRegisters) {
-            return builder.getFunctionParam(register.index);
-        } else {
-            throw VMError.shouldNotReachHere();
-        }
-    }
-
-    private LLVMValueRef getSpecialRegisterArgument(SpecialRegister register, ResolvedJavaMethod targetMethod) {
-        if (LLVMOptions.ReturnSpecialRegs.getValue()) {
-            return getSpecialRegisterValue(register);
-        }
-
-        LLVMValueRef specialRegisterArg;
-        if (targetMethod != null && canModifySpecialRegisters(targetMethod)) {
-            if (isEntryPoint || canModifySpecialRegisters) {
-                specialRegisterArg = getSpecialRegisterPointer(register);
-            } else {
-                /*
-                 * This means that an entry point method is called directly from Java code. We only
-                 * accept this in the case of a method that doesn't do anything Java-related, and
-                 * therefore doesn't need the actual value of its special registers.
-                 */
-                assert GuardedAnnotationAccess.isAnnotationPresent(targetMethod, Uninterruptible.class);
-                specialRegisterArg = builder.constantNull(builder.pointerType(builder.wordType()));
-            }
-        } else if (isEntryPoint || canModifySpecialRegisters) {
-            specialRegisterArg = builder.buildLoad(getSpecialRegisterPointer(register), builder.wordType());
-        } else {
-            specialRegisterArg = getSpecialRegister(register);
-        }
-
-        return specialRegisterArg;
-    }
-
-    LLVMValueRef getSpecialRegisterValue(SpecialRegister reg) {
-        return getSpecialRegisterValue(reg, currentBlock);
-    }
-
-    LLVMValueRef getSpecialRegisterValue(SpecialRegister reg, Block block) {
-        return specialRegValues.get(block)[reg.index];
-    }
-
-    LLVMValueRef getInitialSpecialRegisterValue(SpecialRegister reg, Block block) {
-        if (!initialSpecialRegValues.containsKey(block)) {
-            return null;
-        }
-        return initialSpecialRegValues.get(block)[reg.index];
-    }
-
-    LLVMValueRef getHandlerSpecialRegisterValue(SpecialRegister reg, Block block) {
-        return handlerSpecialRegValues.get(block)[reg.index];
-    }
-
-    /*
-     * Special registers (thread pointer and heap base) are implemented in the LLVM backend by
-     * passing them as arguments to functions. As these registers can be modified in entry point
-     * methods, these hold the values of these registers in stack slots, which get passed to callees
-     * that can potentially modify them and hold the updated version of the "register" upon return.
-     */
-    public enum SpecialRegister {
-        ThreadPointer(SubstrateOptions.MultiThreaded.getValue()),
-        HeapBase(SubstrateOptions.SpawnIsolates.getValue());
-
-        private static final int presentCount;
-        private static final SpecialRegister[] presentRegisters;
-        static {
-            int index = 0;
-            for (SpecialRegister reg : values()) {
-                if (reg.isPresent) {
-                    reg.index = index;
-                    index++;
-                }
-            }
-            presentCount = index;
-
-            presentRegisters = new SpecialRegister[presentCount];
-            for (SpecialRegister reg : values()) {
-                if (reg.isPresent) {
-                    presentRegisters[reg.index] = reg;
-                }
-            }
-        }
-
-        private boolean isPresent;
-        private int index;
-
-        SpecialRegister(boolean isPresent) {
-            this.isPresent = isPresent;
-        }
-
-        int getIndex() {
-            return index;
-        }
-
-        static boolean hasRegisters() {
-            return presentCount > 0;
-        }
-
-        static int count() {
-            return presentCount;
-        }
-
-        static SpecialRegister[] registers() {
-            return presentRegisters.clone();
-        }
+        LLVMValueRef clobber = builder.buildInlineAsm(inlineAsmType, asmSnippet, true, false, clobberConstraint);
+        LLVMValueRef call = builder.buildCall(clobber);
+        builder.setCallSiteAttribute(call, Attribute.GCLeafFunction);
     }
 
     /* Unimplemented */
 
     @Override
     public LIRGenerationResult getResult() {
-        throw unimplemented("the LLVM backend doesn't produce an LIRGenerationResult");
+        throw unimplemented("the LLVM backend doesn't produce an LIRGenerationResult"); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
     public MoveFactory getMoveFactory() {
-        throw unimplemented("the LLVM backend doesn't use LIR moves");
+        throw unimplemented("the LLVM backend doesn't use LIR moves"); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
     public MoveFactory getSpillMoveFactory() {
-        throw unimplemented("the LLVM backend doesn't use LIR moves");
+        throw unimplemented("the LLVM backend doesn't use LIR moves"); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
     public void emitNullCheck(Value address, LIRFrameState state) {
-        throw unimplemented("the LLVM backend doesn't support deoptimization");
+        throw unimplemented("the LLVM backend doesn't support deoptimization"); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
     public void emitDeoptimize(Value actionAndReason, Value failedSpeculation, LIRFrameState state) {
-        throw unimplemented("the LLVM backend doesn't support deoptimization");
+        throw unimplemented("the LLVM backend doesn't support deoptimization"); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
     public void emitFarReturn(AllocatableValue result, Value sp, Value ip, boolean fromMethodWithCalleeSavedRegisters) {
-        throw unimplemented("the LLVM backend delegates exception handling to libunwind");
+        throw unimplemented("the LLVM backend delegates exception handling to libunwind"); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
     public void emitUnwind(Value operand) {
-        throw shouldNotReachHere("handled by lowering");
+        throw shouldNotReachHere("handled by lowering"); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
@@ -1348,52 +1166,52 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
 
     @Override
     public void emitInstructionSynchronizationBarrier() {
-        throw unimplemented("the LLVM backend doesn't support instruction synchronization");
+        throw unimplemented("the LLVM backend doesn't support instruction synchronization"); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
     public <I extends LIRInstruction> I append(I op) {
-        throw unimplemented("the LLVM backend doesn't support LIR instructions");
+        throw unimplemented("the LLVM backend doesn't support LIR instructions"); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
     public void emitSpeculationFence() {
-        throw unimplemented("the LLVM backend doesn't support speculative execution attack mitigation");
+        throw unimplemented("the LLVM backend doesn't support speculative execution attack mitigation"); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
     public LIRInstruction createBenchmarkCounter(String name, String group, Value increment) {
-        throw unimplemented("the LLVM backend doesn't support diagnostic operations");
+        throw unimplemented("the LLVM backend doesn't support diagnostic operations"); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
     public LIRInstruction createMultiBenchmarkCounter(String[] names, String[] groups, Value[] increments) {
-        throw unimplemented("the LLVM backend doesn't support diagnostic operations");
+        throw unimplemented("the LLVM backend doesn't support diagnostic operations"); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
     public LIRInstruction createZapRegisters(Register[] zappedRegisters, JavaConstant[] zapValues) {
-        throw unimplemented("the LLVM backend doesn't support diagnostic operations");
+        throw unimplemented("the LLVM backend doesn't support diagnostic operations"); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
     public LIRInstruction createZapRegisters(Register[] zappedRegisters) {
-        throw unimplemented("the LLVM backend doesn't support diagnostic operations");
+        throw unimplemented("the LLVM backend doesn't support diagnostic operations"); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
     public LIRInstruction createZapRegisters() {
-        throw unimplemented("the LLVM backend doesn't support diagnostic operations");
+        throw unimplemented("the LLVM backend doesn't support diagnostic operations"); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
     public LIRInstruction createZapArgumentSpace(StackSlot[] zappedStack, JavaConstant[] zapValues) {
-        throw unimplemented("the LLVM backend doesn't support diagnostic operations");
+        throw unimplemented("the LLVM backend doesn't support diagnostic operations"); // ExcludeFromJacocoGeneratedReport
     }
 
     @Override
     public LIRInstruction zapArgumentSpace() {
-        throw unimplemented("the LLVM backend doesn't support diagnostic operations");
+        throw unimplemented("the LLVM backend doesn't support diagnostic operations"); // ExcludeFromJacocoGeneratedReport
     }
 
     /* Arithmetic */
@@ -1403,7 +1221,7 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
         }
 
         @Override
-        public Value emitNegate(Value input) {
+        public Value emitNegate(Value input, boolean setFlags) {
             LLVMValueRef neg = builder.buildNeg(getVal(input));
             return new LLVMVariable(neg);
         }
@@ -1523,27 +1341,44 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
                 return emitReinterpret(resultKind, result);
             }
 
-            throw unimplemented("the LLVM backend only supports XOR of integers, vectors and floating point numbers");
+            throw unimplemented("the LLVM backend only supports XOR of integers, vectors and floating point numbers"); // ExcludeFromJacocoGeneratedReport
+        }
+
+        private LLVMValueRef actualShiftingDistance(LLVMValueRef a, LLVMValueRef b) {
+            // https://docs.oracle.com/javase/specs/jls/se7/html/jls-15.html#jls-15.19
+
+            LLVMTypeRef typeA = typeOf(a);
+            int bitWidthA = LLVMIRBuilder.integerTypeWidth(typeA);
+
+            if (bitWidthA == 8 || bitWidthA == 16) {
+                bitWidthA = 32;
+            }
+
+            assert bitWidthA == 32 || bitWidthA == 64;
+
+            LLVMValueRef shiftDistanceBitMask = builder.constantInteger(bitWidthA - 1, bitWidthA);
+            LLVMValueRef valB = emitIntegerConvert(b, typeA);
+            return builder.buildAnd(valB, shiftDistanceBitMask);
         }
 
         @Override
         public Value emitShl(Value a, Value b) {
             LLVMValueRef valA = getVal(a);
-            LLVMValueRef shl = builder.buildShl(valA, emitIntegerConvert(getVal(b), typeOf(valA)));
+            LLVMValueRef shl = builder.buildShl(valA, actualShiftingDistance(valA, getVal(b)));
             return new LLVMVariable(shl);
         }
 
         @Override
         public Value emitShr(Value a, Value b) {
             LLVMValueRef valA = getVal(a);
-            LLVMValueRef shr = builder.buildShr(valA, emitIntegerConvert(getVal(b), typeOf(valA)));
+            LLVMValueRef shr = builder.buildShr(valA, actualShiftingDistance(valA, getVal(b)));
             return new LLVMVariable(shr);
         }
 
         @Override
         public Value emitUShr(Value a, Value b) {
             LLVMValueRef valA = getVal(a);
-            LLVMValueRef ushr = builder.buildUShr(valA, emitIntegerConvert(getVal(b), typeOf(valA)));
+            LLVMValueRef ushr = builder.buildUShr(valA, actualShiftingDistance(valA, getVal(b)));
             return new LLVMVariable(ushr);
         }
 
@@ -1582,18 +1417,13 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
                     destType = builder.doubleType();
                     break;
                 default:
-                    throw shouldNotReachHere("invalid FloatConvert type");
+                    throw shouldNotReachHere("invalid FloatConvert type"); // ExcludeFromJacocoGeneratedReport
             }
 
             LLVMValueRef convert;
             switch (op.getCategory()) {
                 case FloatingPointToInteger:
-                    /* NaNs are converted to 0 in Java, but are undefined in LLVM */
-                    LLVMValueRef value = getVal(inputVal);
-                    LLVMValueRef isNan = builder.buildCompare(Condition.NE, value, value, true);
-                    LLVMValueRef converted = builder.buildFPToSI(getVal(inputVal), destType);
-                    LLVMValueRef zero = builder.constantInteger(0, LLVMIRBuilder.integerTypeWidth(destType));
-                    convert = builder.buildSelect(isNan, zero, converted);
+                    convert = builder.buildSaturatingFloatingPointToInteger(op, getVal(inputVal));
                     break;
                 case IntegerToFloatingPoint:
                     convert = builder.buildSIToFP(getVal(inputVal), destType);
@@ -1602,7 +1432,7 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
                     convert = builder.buildFPCast(getVal(inputVal), destType);
                     break;
                 default:
-                    throw shouldNotReachHere("invalid FloatConvert type");
+                    throw shouldNotReachHere("invalid FloatConvert type"); // ExcludeFromJacocoGeneratedReport
             }
             return new LLVMVariable(convert);
         }
@@ -1634,8 +1464,18 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
 
         @Override
         public Value emitMathAbs(Value input) {
-            LLVMValueRef abs = builder.buildAbs(getVal(input));
-            return new LLVMVariable(abs);
+            LLVMValueRef value = getVal(input);
+            LLVMTypeRef type = LLVM.LLVMTypeOf(value);
+
+            switch (LLVM.LLVMGetTypeKind(type)) {
+                case LLVM.LLVMIntegerTypeKind:
+                    return new LLVMVariable(builder.buildAbs(value));
+                case LLVM.LLVMFloatTypeKind:
+                case LLVM.LLVMDoubleTypeKind:
+                    return new LLVMVariable(builder.buildFabs(value));
+                default:
+                    throw shouldNotReachHere("Unsupported abs type " + type); // ExcludeFromJacocoGeneratedReport
+            }
         }
 
         @Override
@@ -1788,13 +1628,27 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
         }
 
         @Override
-        public Variable emitLoad(LIRKind kind, Value address, LIRFrameState state) {
-            LLVMValueRef load = builder.buildLoad(getVal(address), getType(kind));
+        public Variable emitLoad(LIRKind kind, Value address, LIRFrameState state, MemoryOrderMode memoryOrder, MemoryExtendKind extendKind) {
+            assert extendKind.isNotExtended();
+            assert memoryOrder != MemoryOrderMode.RELEASE && memoryOrder != MemoryOrderMode.RELEASE_ACQUIRE;
+            LLVMValueRef load = builder.buildAlignedLoad(getVal(address), getType(kind), kind.getPlatformKind().getSizeInBytes());
+            if (memoryOrder == MemoryOrderMode.ACQUIRE || memoryOrder == MemoryOrderMode.VOLATILE) {
+                /*
+                 * Ensure subsequent memory operations cannot execute before this load. Additional
+                 * volatile ordering requirements are enforced at stores.
+                 */
+                emitMembar(MemoryBarriers.LOAD_LOAD | MemoryBarriers.LOAD_STORE);
+            }
             return new LLVMVariable(load);
         }
 
         @Override
-        public void emitStore(ValueKind<?> kind, Value addr, Value input, LIRFrameState state) {
+        public void emitStore(ValueKind<?> kind, Value addr, Value input, LIRFrameState state, MemoryOrderMode memoryOrder) {
+            assert memoryOrder != MemoryOrderMode.ACQUIRE && memoryOrder != MemoryOrderMode.RELEASE_ACQUIRE;
+            if (memoryOrder == MemoryOrderMode.RELEASE || memoryOrder == MemoryOrderMode.VOLATILE) {
+                emitMembar(MemoryBarriers.LOAD_STORE | MemoryBarriers.STORE_STORE);
+            }
+
             LLVMValueRef address = getVal(addr);
             LLVMValueRef value = getVal(input);
             LLVMTypeRef addressType = LLVMIRBuilder.typeOf(address);
@@ -1805,29 +1659,20 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
                 castedValue = builder.buildAddrSpaceCast(value, builder.rawPointerType());
             }
             LLVMValueRef castedAddress = builder.buildBitcast(address, builder.pointerType(valueType, LLVMIRBuilder.isObjectType(addressType), false));
-            builder.buildStore(castedValue, castedAddress);
-        }
+            builder.buildAlignedStore(castedValue, castedAddress, input.getValueKind().getPlatformKind().getSizeInBytes());
 
-        @Override
-        public Variable emitVolatileLoad(LIRKind kind, Value address, LIRFrameState state) {
-            emitMembar(JMM_PRE_VOLATILE_READ);
-            Variable var = emitLoad(kind, address, state);
-            emitMembar(JMM_POST_VOLATILE_READ);
-            return var;
-        }
-
-        @Override
-        public void emitVolatileStore(ValueKind<?> kind, Value address, Value input, LIRFrameState state) {
-            emitMembar(JMM_PRE_VOLATILE_WRITE);
-            emitStore(kind, address, input, state);
-            emitMembar(JMM_POST_VOLATILE_WRITE);
+            if (memoryOrder == MemoryOrderMode.VOLATILE) {
+                // Guarantee subsequent volatile loads cannot be executed before this
+                // instruction
+                emitMembar(MemoryBarriers.STORE_LOAD);
+            }
         }
     }
 
     static class DebugInfoPrinter {
-        private LLVMGenerator gen;
-        private LLVMIRBuilder builder;
-        private int debugLevel;
+        private final LLVMGenerator gen;
+        private final LLVMIRBuilder builder;
+        private final int debugLevel;
 
         private LLVMValueRef indentCounter;
         private LLVMValueRef spacesVector;
@@ -1868,7 +1713,7 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
             }
         }
 
-        void printBlock(Block block) {
+        void printBlock(HIRBlock block) {
             if (debugLevel >= DebugLevel.Block.level) {
                 emitPrintf("In block " + block.toString());
             }
@@ -1971,7 +1816,7 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
                     case Void:
                     case Illegal:
                     default:
-                        throw shouldNotReachHere();
+                        throw shouldNotReachHereUnexpectedValue(types[i]); // ExcludeFromJacocoGeneratedReport
                 }
 
                 printfArgs.add(values[i]);
@@ -1987,7 +1832,7 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
             Block(2),
             Node(3);
 
-            private int level;
+            private final int level;
 
             DebugLevel(int level) {
                 this.level = level;
@@ -1997,9 +1842,9 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
 
     @Override
     public void emitCacheWriteback(Value address) {
-        int cacheLineSize = getDataCacheLineFlushSize();
+        int cacheLineSize = Unsafe.getUnsafe().dataCacheLineFlushSize();
         if (cacheLineSize == 0) {
-            throw shouldNotReachHere("cache writeback with cache line size of 0");
+            throw shouldNotReachHere("cache writeback with cache line size of 0"); // ExcludeFromJacocoGeneratedReport
         }
         LLVMValueRef start = builder.buildBitcast(getVal(address), builder.rawPointerType());
         LLVMValueRef end = builder.buildGEP(start, builder.constantInt(cacheLineSize));
@@ -2008,35 +1853,6 @@ public class LLVMGenerator implements LIRGeneratorTool, SubstrateLIRGenerator {
 
     @Override
     public void emitCacheWritebackSync(boolean isPreSync) {
-        throw unimplemented("cache sync barrier (GR-30894)");
-    }
-
-    private static final int dataCacheLineFlushSize = initDataCacheLineFlushSize();
-
-    /**
-     * Gets the value of {@code jdk.internal.misc.UnsafeConstants.DATA_CACHE_LINE_FLUSH_SIZE} which
-     * was introduced in JDK 14 by JEP 352.
-     *
-     * This method uses reflection to be compatible with JDKs prior to 14.
-     */
-    private static int initDataCacheLineFlushSize() {
-        if (JavaVersionUtil.JAVA_SPEC >= 14) {
-            Class<?> c;
-            try {
-                // Checkstyle: stop
-                c = Class.forName("jdk.internal.misc.UnsafeConstants");
-                // Checkstyle: resume
-                Field f = c.getDeclaredField("DATA_CACHE_LINE_FLUSH_SIZE");
-                f.setAccessible(true);
-                return (int) f.get(null);
-            } catch (Exception e) {
-                throw new GraalError(e, "Expected UnsafeConstants.DATA_CACHE_LINE_FLUSH_SIZE to exist and be readable");
-            }
-        }
-        return 0;
-    }
-
-    private static int getDataCacheLineFlushSize() {
-        return dataCacheLineFlushSize;
+        throw unimplemented("cache sync barrier (GR-30894)"); // ExcludeFromJacocoGeneratedReport
     }
 }

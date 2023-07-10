@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2020, Oracle and/or its affiliates.
+ * Copyright (c) 2016, 2023, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -34,6 +34,7 @@ import com.oracle.truffle.api.dsl.NodeChild;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.dsl.TypeSystemReference;
 import com.oracle.truffle.llvm.runtime.LLVMIVarBit;
+import com.oracle.truffle.llvm.runtime.floating.LLVM128BitFloat;
 import com.oracle.truffle.llvm.runtime.floating.LLVM80BitFloat;
 import com.oracle.truffle.llvm.runtime.nodes.api.LLVMExpressionNode;
 import com.oracle.truffle.llvm.runtime.nodes.api.LLVMTypesLongPointer;
@@ -146,6 +147,12 @@ public abstract class LLVMCompareNode extends LLVMAbstractCompareNode {
         protected boolean slt(byte val1, byte val2) {
             return val1 < val2;
         }
+
+        @Specialization
+        protected boolean slt(boolean val1, boolean val2) {
+            // true < false, since true==-1 and false==0
+            return val1 && !val2;
+        }
     }
 
     public abstract static class LLVMSignedLeNode extends LLVMCompareNode {
@@ -172,6 +179,12 @@ public abstract class LLVMCompareNode extends LLVMAbstractCompareNode {
         @Specialization
         protected boolean sle(byte val1, byte val2) {
             return val1 <= val2;
+        }
+
+        @Specialization
+        protected boolean slt(boolean val1, boolean val2) {
+            // true <= false, since true==-1 and false==0
+            return val1 || !val2;
         }
     }
 
@@ -200,6 +213,12 @@ public abstract class LLVMCompareNode extends LLVMAbstractCompareNode {
         protected boolean ult(byte val1, byte val2) {
             return Integer.compareUnsigned(val1, val2) < 0;
         }
+
+        @Specialization
+        protected boolean ult(boolean val1, boolean val2) {
+            // false < true
+            return !val1 && val2;
+        }
     }
 
     public abstract static class LLVMUnsignedLeNode extends LLVMCompareNode {
@@ -227,12 +246,23 @@ public abstract class LLVMCompareNode extends LLVMAbstractCompareNode {
         protected boolean ule(byte val1, byte val2) {
             return Integer.compareUnsigned(val1, val2) <= 0;
         }
+
+        @Specialization
+        protected boolean ule(boolean val1, boolean val2) {
+            // false <= true
+            return !val1 || val2;
+        }
     }
 
     public abstract static class LLVMOrderedLtNode extends LLVMCompareNode {
         @Specialization
         protected boolean olt(LLVM80BitFloat val1, LLVM80BitFloat val2) {
             return LLVM80BitFloat.areOrdered(val1, val2) && LLVM80BitFloat.compare(val1, val2) < 0;
+        }
+
+        @Specialization
+        protected boolean olt(LLVM128BitFloat val1, LLVM128BitFloat val2) {
+            return LLVM128BitFloat.areOrdered(val1, val2) && LLVM128BitFloat.compare(val1, val2) < 0;
         }
 
         @Specialization
@@ -262,6 +292,11 @@ public abstract class LLVMCompareNode extends LLVMAbstractCompareNode {
         }
 
         @Specialization
+        protected boolean ogt(LLVM128BitFloat val1, LLVM128BitFloat val2) {
+            return LLVM128BitFloat.areOrdered(val1, val2) && LLVM128BitFloat.compare(val1, val2) > 0;
+        }
+
+        @Specialization
         protected boolean ogt(double val1, double val2) {
             return doubleCompare(val1, val2);
         }
@@ -285,6 +320,11 @@ public abstract class LLVMCompareNode extends LLVMAbstractCompareNode {
         @Specialization
         protected boolean oge(LLVM80BitFloat val1, LLVM80BitFloat val2) {
             return LLVM80BitFloat.areOrdered(val1, val2) && LLVM80BitFloat.compare(val1, val2) >= 0;
+        }
+
+        @Specialization
+        protected boolean oge(LLVM128BitFloat val1, LLVM128BitFloat val2) {
+            return LLVM128BitFloat.areOrdered(val1, val2) && LLVM128BitFloat.compare(val1, val2) >= 0;
         }
 
         @Specialization
@@ -314,6 +354,11 @@ public abstract class LLVMCompareNode extends LLVMAbstractCompareNode {
         }
 
         @Specialization
+        protected boolean ole(LLVM128BitFloat val1, LLVM128BitFloat val2) {
+            return LLVM128BitFloat.areOrdered(val1, val2) && LLVM128BitFloat.compare(val1, val2) <= 0;
+        }
+
+        @Specialization
         protected boolean oleDouble(double val1, double val2) {
             return doubleCompare(val1, val2);
         }
@@ -340,6 +385,11 @@ public abstract class LLVMCompareNode extends LLVMAbstractCompareNode {
         }
 
         @Specialization
+        protected boolean oeq(LLVM128BitFloat val1, LLVM128BitFloat val2) {
+            return LLVM128BitFloat.areOrdered(val1, val2) && LLVM128BitFloat.compare(val1, val2) == 0;
+        }
+
+        @Specialization
         protected boolean oeq(double val1, double val2) {
             return doubleCompare(val1, val2);
         }
@@ -363,6 +413,11 @@ public abstract class LLVMCompareNode extends LLVMAbstractCompareNode {
         @Specialization
         protected boolean one(LLVM80BitFloat val1, LLVM80BitFloat val2) {
             return LLVM80BitFloat.areOrdered(val1, val2) && LLVM80BitFloat.compare(val1, val2) != 0;
+        }
+
+        @Specialization
+        protected boolean one(LLVM128BitFloat val1, LLVM128BitFloat val2) {
+            return LLVM128BitFloat.areOrdered(val1, val2) && LLVM128BitFloat.compare(val1, val2) != 0;
         }
 
         @Specialization
@@ -399,6 +454,11 @@ public abstract class LLVMCompareNode extends LLVMAbstractCompareNode {
         }
 
         @Specialization
+        protected boolean ord(LLVM128BitFloat val1, LLVM128BitFloat val2) {
+            return LLVM128BitFloat.areOrdered(val1, val2);
+        }
+
+        @Specialization
         protected boolean ord(double val1, double val2) {
             return areOrdered(val1, val2);
         }
@@ -413,6 +473,11 @@ public abstract class LLVMCompareNode extends LLVMAbstractCompareNode {
         @Specialization
         protected boolean ult(LLVM80BitFloat val1, LLVM80BitFloat val2) {
             return !LLVM80BitFloat.areOrdered(val1, val2) || LLVM80BitFloat.compare(val1, val2) < 0;
+        }
+
+        @Specialization
+        protected boolean ult(LLVM128BitFloat val1, LLVM128BitFloat val2) {
+            return !LLVM128BitFloat.areOrdered(val1, val2) || LLVM128BitFloat.compare(val1, val2) < 0;
         }
 
         @Specialization
@@ -433,6 +498,11 @@ public abstract class LLVMCompareNode extends LLVMAbstractCompareNode {
         }
 
         @Specialization
+        protected boolean ule(LLVM128BitFloat val1, LLVM128BitFloat val2) {
+            return !LLVM128BitFloat.areOrdered(val1, val2) || LLVM128BitFloat.compare(val1, val2) <= 0;
+        }
+
+        @Specialization
         protected boolean ule(double val1, double val2) {
             return !(val1 > val2);
         }
@@ -447,6 +517,11 @@ public abstract class LLVMCompareNode extends LLVMAbstractCompareNode {
         @Specialization
         protected boolean ugt(LLVM80BitFloat val1, LLVM80BitFloat val2) {
             return !LLVM80BitFloat.areOrdered(val1, val2) || LLVM80BitFloat.compare(val1, val2) > 0;
+        }
+
+        @Specialization
+        protected boolean ugt(LLVM128BitFloat val1, LLVM128BitFloat val2) {
+            return !LLVM128BitFloat.areOrdered(val1, val2) || LLVM128BitFloat.compare(val1, val2) > 0;
         }
 
         @Specialization
@@ -467,6 +542,11 @@ public abstract class LLVMCompareNode extends LLVMAbstractCompareNode {
         }
 
         @Specialization
+        protected boolean uge(LLVM128BitFloat val1, LLVM128BitFloat val2) {
+            return !LLVM128BitFloat.areOrdered(val1, val2) || LLVM128BitFloat.compare(val1, val2) >= 0;
+        }
+
+        @Specialization
         protected boolean uge(double val1, double val2) {
             return !(val1 < val2);
         }
@@ -484,6 +564,11 @@ public abstract class LLVMCompareNode extends LLVMAbstractCompareNode {
         }
 
         @Specialization
+        protected boolean ueq(LLVM128BitFloat val1, LLVM128BitFloat val2) {
+            return !LLVM128BitFloat.areOrdered(val1, val2) || LLVM128BitFloat.compare(val1, val2) == 0;
+        }
+
+        @Specialization
         protected boolean ueq(double val1, double val2) {
             return !areOrdered(val1, val2) || val1 == val2;
         }
@@ -498,6 +583,11 @@ public abstract class LLVMCompareNode extends LLVMAbstractCompareNode {
         @Specialization
         protected boolean une(LLVM80BitFloat val1, LLVM80BitFloat val2) {
             return !LLVM80BitFloat.areOrdered(val1, val2) || LLVM80BitFloat.compare(val1, val2) != 0;
+        }
+
+        @Specialization
+        protected boolean une(LLVM128BitFloat val1, LLVM128BitFloat val2) {
+            return !LLVM128BitFloat.areOrdered(val1, val2) || LLVM128BitFloat.compare(val1, val2) != 0;
         }
 
         @Specialization
@@ -523,6 +613,11 @@ public abstract class LLVMCompareNode extends LLVMAbstractCompareNode {
         @Specialization
         protected boolean uno(LLVM80BitFloat val1, LLVM80BitFloat val2) {
             return !LLVM80BitFloat.areOrdered(val1, val2);
+        }
+
+        @Specialization
+        protected boolean uno(LLVM128BitFloat val1, LLVM128BitFloat val2) {
+            return !LLVM128BitFloat.areOrdered(val1, val2);
         }
 
         @Specialization

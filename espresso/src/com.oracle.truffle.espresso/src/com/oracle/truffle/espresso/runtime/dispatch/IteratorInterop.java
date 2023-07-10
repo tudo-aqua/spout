@@ -39,6 +39,7 @@ import com.oracle.truffle.espresso.runtime.StaticObject;
 import com.oracle.truffle.espresso.vm.InterpreterToVM;
 
 @ExportLibrary(value = InteropLibrary.class, receiverType = StaticObject.class)
+@SuppressWarnings("truffle-abstract-export") // TODO GR-44080 Adopt BigInteger Interop
 public class IteratorInterop extends EspressoInterop {
     @ExportMessage
     public static boolean isIterator(@SuppressWarnings("unused") StaticObject receiver) {
@@ -85,7 +86,7 @@ public class IteratorInterop extends EspressoInterop {
             try {
                 return callNode.call(receiver);
             } catch (EspressoException e) {
-                if (InterpreterToVM.instanceOf(e.getExceptionObject(), cachedKlass.getMeta().java_util_NoSuchElementException)) {
+                if (InterpreterToVM.instanceOf(e.getGuestException(), cachedKlass.getMeta().java_util_NoSuchElementException)) {
                     throw StopIterationException.create(e);
                 }
                 throw e;
@@ -99,7 +100,7 @@ public class IteratorInterop extends EspressoInterop {
             try {
                 return invoke.call(next.getCallTarget(), receiver);
             } catch (EspressoException e) {
-                if (InterpreterToVM.instanceOf(e.getExceptionObject(), receiver.getKlass().getMeta().java_util_NoSuchElementException)) {
+                if (InterpreterToVM.instanceOf(e.getGuestException(), receiver.getKlass().getMeta().java_util_NoSuchElementException)) {
                     throw StopIterationException.create(e);
                 }
                 throw e;

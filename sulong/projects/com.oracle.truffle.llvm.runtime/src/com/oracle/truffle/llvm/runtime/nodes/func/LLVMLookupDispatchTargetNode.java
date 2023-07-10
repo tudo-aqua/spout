@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2017, 2023, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -44,8 +44,8 @@ import com.oracle.truffle.llvm.runtime.except.LLVMIllegalSymbolIndexException;
 import com.oracle.truffle.llvm.runtime.library.internal.LLVMAsForeignLibrary;
 import com.oracle.truffle.llvm.runtime.nodes.api.LLVMExpressionNode;
 import com.oracle.truffle.llvm.runtime.nodes.memory.load.LLVMDerefHandleGetReceiverNode;
-import com.oracle.truffle.llvm.runtime.nodes.others.LLVMAccessSymbolNode;
-import com.oracle.truffle.llvm.runtime.nodes.others.LLVMAccessSymbolNodeGen;
+import com.oracle.truffle.llvm.runtime.nodes.others.LLVMAccessGlobalSymbolNode;
+import com.oracle.truffle.llvm.runtime.nodes.others.LLVMAccessGlobalSymbolNodeGen;
 import com.oracle.truffle.llvm.runtime.pointer.LLVMManagedPointer;
 import com.oracle.truffle.llvm.runtime.pointer.LLVMNativePointer;
 import com.oracle.truffle.llvm.runtime.pointer.LLVMPointer;
@@ -56,7 +56,7 @@ public abstract class LLVMLookupDispatchTargetNode extends LLVMExpressionNode {
     protected static final int INLINE_CACHE_SIZE = 5;
 
     @Specialization(limit = "INLINE_CACHE_SIZE", guards = {"isSameObject(pointer.getObject(), cachedDescriptor)", "cachedDescriptor != null",
-                    "pointer.getOffset() == 0"}, assumptions = "singleContextAssumption()")
+                    "pointer.getOffset() == 0", "isSingleContext($node)"})
     protected static LLVMFunctionDescriptor doDirectCached(@SuppressWarnings("unused") LLVMManagedPointer pointer,
                     @Cached("asFunctionDescriptor(pointer.getObject())") LLVMFunctionDescriptor cachedDescriptor) {
         return cachedDescriptor;
@@ -75,7 +75,7 @@ public abstract class LLVMLookupDispatchTargetNode extends LLVMExpressionNode {
     }
 
     @Specialization(limit = "INLINE_CACHE_SIZE", guards = {"pointer.asNative() == cachedAddress", "!isAutoDerefHandle(cachedAddress)",
-                    "cachedDescriptor != null"}, assumptions = "singleContextAssumption()")
+                    "cachedDescriptor != null", "isSingleContext($node)"})
     protected static LLVMFunctionDescriptor doHandleCached(@SuppressWarnings("unused") LLVMNativePointer pointer,
                     @Cached("pointer.asNative()") @SuppressWarnings("unused") long cachedAddress,
                     @Cached("lookupFunction(pointer)") LLVMFunctionDescriptor cachedDescriptor) {
@@ -83,7 +83,7 @@ public abstract class LLVMLookupDispatchTargetNode extends LLVMExpressionNode {
     }
 
     @Specialization(limit = "INLINE_CACHE_SIZE", guards = {"pointer.asNative() == cachedAddress", "!isAutoDerefHandle(cachedAddress)",
-                    "cachedDescriptor == null"}, assumptions = "singleContextAssumption()")
+                    "cachedDescriptor == null", "isSingleContext($node)"})
     protected static LLVMNativePointer doNativeFunctionCached(LLVMNativePointer pointer,
                     @Cached("pointer.asNative()") @SuppressWarnings("unused") long cachedAddress,
                     @Cached("lookupFunction(pointer)") @SuppressWarnings("unused") LLVMFunctionDescriptor cachedDescriptor) {
@@ -97,7 +97,7 @@ public abstract class LLVMLookupDispatchTargetNode extends LLVMExpressionNode {
     @Specialization(guards = {"!isAutoDerefHandle(pointer.asNative())", "cachedSymbol != null"}, replaces = {"doHandleCached",
                     "doNativeFunctionCached"}, rewriteOn = LLVMIllegalSymbolIndexException.class)
     protected Object doLookupNativeFunctionCachedSymbol(VirtualFrame frame, LLVMNativePointer pointer,
-                    @Cached("lookupFunctionSymbol(pointer)") LLVMAccessSymbolNode cachedSymbol) {
+                    @Cached("lookupFunctionSymbol(pointer)") LLVMAccessGlobalSymbolNode cachedSymbol) {
         /*
          * The cache will be invalidated if the symbol cannot be found in the symbol table. In which
          * case the entire specialisation will be rewritten when the context throws an
@@ -141,16 +141,16 @@ public abstract class LLVMLookupDispatchTargetNode extends LLVMExpressionNode {
         return getContext().getFunctionDescriptor(function);
     }
 
-    protected LLVMAccessSymbolNode lookupFunctionSymbol(LLVMNativePointer function) {
+    protected LLVMAccessGlobalSymbolNode lookupFunctionSymbol(LLVMNativePointer function) {
         CompilerAsserts.neverPartOfCompilation();
         LLVMContext context = getContext();
         LLVMFunctionDescriptor descriptor = context.getFunctionDescriptor(function);
-        return descriptor == null || descriptor.getLLVMFunction() == null ? null : LLVMAccessSymbolNodeGen.create(descriptor.getLLVMFunction());
+        return descriptor == null || descriptor.getLLVMFunction() == null ? null : LLVMAccessGlobalSymbolNodeGen.create(descriptor.getLLVMFunction());
     }
 
     public static LLVMExpressionNode createOptimized(LLVMExpressionNode function) {
-        if (function instanceof LLVMAccessSymbolNode) {
-            LLVMAccessSymbolNode node = (LLVMAccessSymbolNode) function;
+        if (function instanceof LLVMAccessGlobalSymbolNode) {
+            LLVMAccessGlobalSymbolNode node = (LLVMAccessGlobalSymbolNode) function;
             if (node.getSymbol() instanceof LLVMFunction) {
                 return LLVMLookupDispatchTargetSymbolNodeGen.create((LLVMFunction) node.getSymbol());
             }

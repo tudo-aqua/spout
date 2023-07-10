@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -41,11 +41,9 @@
 package com.oracle.truffle.object;
 
 import static com.oracle.truffle.object.LayoutImpl.ACCESS;
-import static com.oracle.truffle.object.LocationImpl.alwaysValidAssumption;
 import static com.oracle.truffle.object.LocationImpl.expectDouble;
 import static com.oracle.truffle.object.LocationImpl.expectInteger;
 import static com.oracle.truffle.object.LocationImpl.expectLong;
-import static com.oracle.truffle.object.LocationImpl.neverValidAssumption;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -62,9 +60,13 @@ import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Cached.Shared;
+import com.oracle.truffle.api.dsl.GenerateCached;
+import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
+import com.oracle.truffle.api.dsl.NeverDefault;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
@@ -233,10 +235,12 @@ abstract class DynamicObjectLibraryImpl {
     }
 
     @ExportMessage
-    public static boolean setDynamicType(DynamicObject object, @SuppressWarnings("unused") Object objectType,
+    @SuppressWarnings("unused")
+    public static boolean setDynamicType(DynamicObject object, Object objectType,
+                    @Bind("$node") Node node,
                     @Shared("cachedShape") @Cached(value = "object.getShape()", allowUncached = true) Shape cachedShape,
                     @Cached SetDynamicTypeNode setCache) {
-        return setCache.execute(object, cachedShape, objectType);
+        return setCache.execute(node, object, cachedShape, objectType);
     }
 
     @ExportMessage
@@ -247,9 +251,10 @@ abstract class DynamicObjectLibraryImpl {
 
     @ExportMessage
     public static boolean setShapeFlags(DynamicObject object, @SuppressWarnings("unused") int flags,
+                    @Bind("$node") Node node,
                     @Shared("cachedShape") @Cached(value = "object.getShape()", allowUncached = true) Shape cachedShape,
                     @Cached SetFlagsNode setCache) {
-        return setCache.execute(object, cachedShape, flags);
+        return setCache.execute(node, object, cachedShape, flags);
     }
 
     @ExportMessage
@@ -260,9 +265,10 @@ abstract class DynamicObjectLibraryImpl {
 
     @ExportMessage
     public static void markShared(DynamicObject object,
+                    @Bind("$node") Node node,
                     @Shared("cachedShape") @Cached(value = "object.getShape()", allowUncached = true) Shape cachedShape,
                     @Cached MakeSharedNode setCache) {
-        setCache.execute(object, cachedShape);
+        setCache.execute(node, object, cachedShape);
     }
 
     @ExportMessage
@@ -282,9 +288,10 @@ abstract class DynamicObjectLibraryImpl {
 
     @ExportMessage
     public static boolean resetShape(DynamicObject object, Shape otherShape,
+                    @Bind("$node") Node node,
                     @Shared("cachedShape") @Cached(value = "object.getShape()", allowUncached = true) Shape cachedShape,
                     @Cached ResetShapeNode setCache) {
-        return setCache.execute(object, cachedShape, otherShape);
+        return setCache.execute(node, object, cachedShape, otherShape);
     }
 
     @ExportMessage
@@ -310,7 +317,7 @@ abstract class DynamicObjectLibraryImpl {
         if (existingProperty == null && Flags.isSetExisting(putFlags)) {
             return false;
         }
-        if (existingProperty != null && !Flags.isUpdateFlags(putFlags) && existingProperty.getLocation().canSet(value)) {
+        if (existingProperty != null && !Flags.isUpdateFlags(putFlags) && existingProperty.getLocation().canStore(value)) {
             getLocation(existingProperty).setSafe(object, value, false, false);
             return true;
         } else {
@@ -341,7 +348,7 @@ abstract class DynamicObjectLibraryImpl {
                 newShape = strategy.defineProperty(oldShape, key, value, Flags.getPropertyFlags(putFlags), null, existingProperty, putFlags);
                 property = newShape.getProperty(key);
             } else {
-                if (existingProperty.getLocation().canSet(value)) {
+                if (existingProperty.getLocation().canStore(value)) {
                     newShape = oldShape;
                     property = existingProperty;
                 } else {
@@ -542,6 +549,7 @@ abstract class DynamicObjectLibraryImpl {
             return false;
         }
 
+        @NeverDefault
         static KeyCacheNode create(Shape cachedShape, Object key) {
             if (key == null) {
                 return getUncached();
@@ -549,6 +557,7 @@ abstract class DynamicObjectLibraryImpl {
             return AnyKey.create(key, cachedShape);
         }
 
+        @NeverDefault
         static KeyCacheEntry getUncached() {
             return Generic.instance();
         }
@@ -1444,7 +1453,7 @@ abstract class DynamicObjectLibraryImpl {
                     newProperty = property;
                 } else {
                     newProperty = newShape.getProperty(cachedKey);
-                    assert newProperty.getLocation().canSet(value);
+                    assert newProperty.getLocation().canStore(value);
                 }
 
                 Assumption newShapeValid = getShapeValidAssumption(oldShape, newShape);
@@ -1475,7 +1484,7 @@ abstract class DynamicObjectLibraryImpl {
             }
 
             Location location = property.getLocation();
-            if (!location.isDeclared() && !location.canSet(value)) {
+            if (!location.isDeclared() && !location.canStore(value)) {
                 // generalize
                 assert oldShape == ACCESS.getShape(object);
                 LayoutStrategy strategy = oldShape.getLayoutStrategy();
@@ -1488,7 +1497,7 @@ abstract class DynamicObjectLibraryImpl {
                 return strategy.defineProperty(oldShape, cachedKey, value, property.getFlags(), null, putFlags);
             } else {
                 // set existing
-                assert location.canSet(value);
+                assert location.canStore(value);
                 return oldShape;
             }
         }
@@ -1628,9 +1637,9 @@ abstract class DynamicObjectLibraryImpl {
 
         private static Assumption getShapeValidAssumption(Shape oldShape, Shape newShape) {
             if (oldShape == newShape) {
-                return alwaysValidAssumption();
+                return Assumption.ALWAYS_VALID;
             }
-            return newShape.isValid() ? newShape.getValidAssumption() : neverValidAssumption();
+            return newShape.isValid() ? newShape.getValidAssumption() : Assumption.NEVER_VALID;
         }
     }
 
@@ -1679,11 +1688,11 @@ abstract class DynamicObjectLibraryImpl {
         @Override
         protected boolean isValid() {
             Assumption newShapeValid = newShapeValidAssumption;
-            return newShapeValid == neverValidAssumption() || newShapeValid == alwaysValidAssumption() || newShapeValid.isValid();
+            return newShapeValid == Assumption.NEVER_VALID || newShapeValid == Assumption.ALWAYS_VALID || newShapeValid.isValid();
         }
 
         protected void maybeUpdateShape(DynamicObject store) {
-            if (newShapeValidAssumption == neverValidAssumption()) {
+            if (newShapeValidAssumption == Assumption.NEVER_VALID) {
                 updateShapeImpl(store);
             }
         }
@@ -1742,8 +1751,10 @@ abstract class DynamicObjectLibraryImpl {
     }
 
     @GenerateUncached
+    @GenerateInline
+    @GenerateCached(false)
     abstract static class SetFlagsNode extends Node {
-        abstract boolean execute(DynamicObject object, Shape cachedShape, int flags);
+        abstract boolean execute(Node node, DynamicObject object, Shape cachedShape, int flags);
 
         @Specialization(guards = {"flags == newFlags"}, limit = "3")
         static boolean doCached(DynamicObject object, Shape cachedShape, @SuppressWarnings("unused") int flags,
@@ -1774,8 +1785,10 @@ abstract class DynamicObjectLibraryImpl {
     }
 
     @GenerateUncached
+    @GenerateInline
+    @GenerateCached(false)
     abstract static class SetDynamicTypeNode extends Node {
-        abstract boolean execute(DynamicObject object, Shape cachedShape, Object objectType);
+        abstract boolean execute(Node node, DynamicObject object, Shape cachedShape, Object objectType);
 
         @Specialization(guards = {"objectType == newObjectType"}, limit = "3")
         static boolean doCached(DynamicObject object, Shape cachedShape, @SuppressWarnings("unused") Object objectType,
@@ -1806,24 +1819,32 @@ abstract class DynamicObjectLibraryImpl {
     }
 
     @GenerateUncached
+    @GenerateInline
+    @GenerateCached(false)
     abstract static class MakeSharedNode extends Node {
-        abstract void execute(DynamicObject object, Shape cachedShape);
+        abstract void execute(Node node, DynamicObject object, Shape cachedShape);
 
         @Specialization
         static void doCached(DynamicObject object, Shape cachedShape,
-                        @Cached(value = "cachedShape.makeSharedShape()", allowUncached = true) Shape newShape) {
+                        @Cached(value = "makeSharedShape(cachedShape)", allowUncached = true, neverDefault = true) Shape newShape) {
             assert newShape != cachedShape &&
                             ((ShapeImpl) cachedShape).getObjectArrayCapacity() == ((ShapeImpl) newShape).getObjectArrayCapacity() &&
                             ((ShapeImpl) cachedShape).getPrimitiveArrayCapacity() == ((ShapeImpl) newShape).getPrimitiveArrayCapacity();
             ACCESS.setShape(object, newShape);
         }
+
+        static Shape makeSharedShape(Shape inputShape) {
+            return ((ShapeImpl) inputShape).makeSharedShape();
+        }
     }
 
     @GenerateUncached
+    @GenerateInline
+    @GenerateCached(false)
     abstract static class ResetShapeNode extends Node {
-        abstract boolean execute(DynamicObject object, Shape cachedShape, Shape newShape);
+        abstract boolean execute(Node node, DynamicObject object, Shape cachedShape, Shape newShape);
 
-        @Specialization(guards = "otherShape == cachedOtherShape")
+        @Specialization(guards = "otherShape == cachedOtherShape", limit = "3")
         static boolean doCached(DynamicObject object, Shape cachedShape, @SuppressWarnings("unused") Shape otherShape,
                         @Cached(value = "verifyResetShape(cachedShape, otherShape)", allowUncached = true) Shape cachedOtherShape) {
             if (cachedShape == cachedOtherShape) {

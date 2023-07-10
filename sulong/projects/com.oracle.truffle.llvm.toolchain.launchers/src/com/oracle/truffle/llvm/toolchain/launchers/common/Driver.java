@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2019, 2023, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -54,11 +54,6 @@ public class Driver {
         this(exe, true);
     }
 
-    public Driver() {
-        this.exe = null;
-        this.isBundledTool = false;
-    }
-
     public enum OS {
 
         WINDOWS,
@@ -88,20 +83,43 @@ public class Driver {
         }
     }
 
-    private static final boolean hasJreDir = System.getProperty("java.specification.version").startsWith("1.");
+    public enum Arch {
+
+        X86_64,
+        AARCH_64;
+
+        private static Arch findCurrent() {
+            final String name = System.getProperty("os.arch");
+            if (name.equals("amd64")) {
+                return X86_64;
+            }
+            if (name.equals("x86_64")) {
+                return X86_64;
+            }
+            if (name.equals("aarch64")) {
+                return AARCH_64;
+            }
+            throw new IllegalArgumentException("unknown architecture: " + name);
+        }
+
+        private static final class Lazy {
+            private static final Arch current = findCurrent();
+        }
+
+        public static Arch getCurrent() {
+            return Lazy.current;
+        }
+    }
 
     private static Path getRuntimeDir() {
         Path runtimeDir = HomeFinder.getInstance().getHomeFolder();
         if (runtimeDir == null) {
             throw new IllegalStateException("Could not find GraalVM home");
         }
-        if (hasJreDir) {
-            runtimeDir = runtimeDir.resolve("jre");
-        }
         return runtimeDir;
     }
 
-    public Path getLLVMBinDir() {
+    public static Path getLLVMBinDir() {
         final String property = System.getProperty("llvm.bin.dir");
         if (property != null) {
             return Paths.get(property);
@@ -116,7 +134,7 @@ public class Driver {
         return getRuntimeDir().resolve("lib").resolve("llvm").resolve("bin");
     }
 
-    public Path getSulongHome() {
+    public static Path getSulongHome() {
         final Path sulongHome = HomeFinder.getInstance().getLanguageHomes().get("llvm");
         if (sulongHome != null) {
             return sulongHome;
@@ -208,7 +226,7 @@ public class Driver {
         return pb.inheritIO();
     }
 
-    public void printMissingToolMessage() {
+    public static void printMissingToolMessage() {
         System.err.println("Tool execution failed. Are you sure the toolchain is available at " + getLLVMBinDir().getParent());
         System.err.println("You can install it via GraalVM updater: `gu install llvm-toolchain`");
         System.err.println();
@@ -244,7 +262,7 @@ public class Driver {
         return Paths.get(exe).getFileName();
     }
 
-    public Path getLLVMExecutable(String tool) {
+    public static Path getLLVMExecutable(String tool) {
         return getLLVMBinDir().resolve(tool);
     }
 }

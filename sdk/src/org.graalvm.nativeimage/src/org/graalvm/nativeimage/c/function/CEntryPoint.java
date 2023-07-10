@@ -111,7 +111,7 @@ public @interface CEntryPoint {
      *
      * @since 19.0
      */
-    Class<?> exceptionHandler() default FatalExceptionHandler.class;
+    Class<? extends ExceptionHandler> exceptionHandler() default FatalExceptionHandler.class;
 
     /**
      * Special placeholder value for {@link #exceptionHandler()} to print the caught exception and
@@ -119,7 +119,7 @@ public @interface CEntryPoint {
      *
      * @since 19.0
      */
-    final class FatalExceptionHandler {
+    final class FatalExceptionHandler implements ExceptionHandler {
         private FatalExceptionHandler() {
         }
     }
@@ -189,6 +189,32 @@ public @interface CEntryPoint {
             return false;
         }
     }
+
+    /**
+     * @since 22.0
+     */
+    enum Publish {
+        /**
+         * Do not publish the entry point method.
+         */
+        NotPublished,
+        /**
+         * Create a symbol for the entry point method in the native image.
+         */
+        SymbolOnly,
+        /**
+         * Create a symbol for the entry point method in the native image, and if building a shared
+         * library image, also include a C declaration in the generated C header file.
+         */
+        SymbolAndHeader,
+    }
+
+    /**
+     * Whether the entry point is part of the symbols and header files produced by Native Image.
+     *
+     * @since 22.0
+     */
+    Publish publishAs() default Publish.SymbolAndHeader;
 
     /**
      * The built-in methods which can be {@linkplain #builtin() aliased}.
@@ -283,5 +309,13 @@ public @interface CEntryPoint {
     @Retention(RetentionPolicy.RUNTIME)
     @Target(ElementType.PARAMETER)
     @interface IsolateContext {
+    }
+
+    /**
+     * Marker interface for all {@link CEntryPoint#exceptionHandler() exception handler} classes.
+     *
+     * @since 22.0
+     */
+    interface ExceptionHandler {
     }
 }

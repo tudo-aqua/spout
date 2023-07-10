@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -43,12 +43,14 @@ package com.oracle.truffle.api.test.host;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.HostAccess;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.oracle.truffle.api.CompilerDirectives;
@@ -64,10 +66,20 @@ import com.oracle.truffle.api.library.ExportMessage;
 import com.oracle.truffle.api.test.examples.TargetMappings;
 import com.oracle.truffle.api.test.polyglot.AbstractPolyglotTest;
 import com.oracle.truffle.api.test.polyglot.ProxyLanguage;
+import com.oracle.truffle.tck.tests.TruffleTestAssumptions;
 
 public class JavaStringCoercionTest extends AbstractPolyglotTest {
 
     private static final InteropLibrary INTEROP = InteropLibrary.getFactory().getUncached();
+
+    @BeforeClass
+    public static void runWithWeakEncapsulationOnly() {
+        TruffleTestAssumptions.assumeWeakEncapsulation();
+    }
+
+    public JavaStringCoercionTest() {
+        needsLanguageEnv = true;
+    }
 
     @Before
     public void before() {
@@ -75,21 +87,6 @@ public class JavaStringCoercionTest extends AbstractPolyglotTest {
         setupEnv(Context.newBuilder().allowHostAccess(access).allowAllAccess(true).build(),
                         ProxyLanguage.setDelegate(new ProxyLanguage() {
 
-                            @Override
-                            protected boolean isObjectOfLanguage(Object object) {
-                                if (object instanceof UnboxableArrayObject) {
-                                    return true;
-                                }
-                                return super.isObjectOfLanguage(object);
-                            }
-
-                            @Override
-                            protected String toString(LanguageContext c, Object value) {
-                                if (value instanceof UnboxableArrayObject) {
-                                    return "UnboxableArray";
-                                }
-                                return super.toString(c, value);
-                            }
                         }));
     }
 
@@ -340,6 +337,11 @@ public class JavaStringCoercionTest extends AbstractPolyglotTest {
         }
 
         @ExportMessage
+        boolean fitsInBigInteger(@CachedLibrary("this.value") InteropLibrary delegate) {
+            return delegate.fitsInBigInteger(value);
+        }
+
+        @ExportMessage
         boolean fitsInFloat(@CachedLibrary("this.value") InteropLibrary delegate) {
             return delegate.fitsInFloat(value);
         }
@@ -367,6 +369,11 @@ public class JavaStringCoercionTest extends AbstractPolyglotTest {
         @ExportMessage
         long asLong(@CachedLibrary("this.value") InteropLibrary delegate) throws UnsupportedMessageException {
             return delegate.asLong(value);
+        }
+
+        @ExportMessage
+        BigInteger asBigInteger(@CachedLibrary("this.value") InteropLibrary delegate) throws UnsupportedMessageException {
+            return delegate.asBigInteger(value);
         }
 
         @ExportMessage

@@ -35,10 +35,12 @@ import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.WordFactory;
 
 import com.oracle.svm.core.SubstrateUtil;
-import com.oracle.svm.core.annotate.Uninterruptible;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.c.NonmovableArray;
 import com.oracle.svm.core.c.NonmovableArrays;
+import com.oracle.svm.core.code.CodeInfoAccess.HasInstalledCode;
 import com.oracle.svm.core.code.RuntimeCodeCache.CodeInfoVisitor;
+import com.oracle.svm.core.deopt.SubstrateInstalledCode;
 import com.oracle.svm.core.heap.Heap;
 import com.oracle.svm.core.log.Log;
 import com.oracle.svm.core.thread.VMOperation;
@@ -56,6 +58,8 @@ import com.oracle.svm.core.util.VMError;
  * races between the application and the GC otherwise.
  */
 public class RuntimeCodeInfoMemory {
+    private static final int MAX_CODE_INFO_ENTRIES_TO_PRINT = 500_000;
+
     @Fold
     public static RuntimeCodeInfoMemory singleton() {
         return ImageSingletons.lookup(RuntimeCodeInfoMemory.class);
@@ -65,9 +69,131 @@ public class RuntimeCodeInfoMemory {
     private NonmovableArray<UntetheredCodeInfo> table;
     private int count;
 
+    private UnsignedWord codeSize;
+    private UnsignedWord codeAndDataMemorySize;
+    private UnsignedWord nativeMetadataSize;
+    private UnsignedWord totalSize;
+
+    private UnsignedWord peakCodeSize;
+    private UnsignedWord peakCodeAndDataMemorySize;
+    private UnsignedWord peakNativeMetadataSize;
+    private UnsignedWord peakTotalSize;
+
+    public static final class SizeCounters {
+        private UnsignedWord codeSize;
+        private UnsignedWord codeAndDataMemorySize;
+        private UnsignedWord nativeMetadataSize;
+        private UnsignedWord totalSize;
+
+        public UnsignedWord codeSize() {
+            return codeSize;
+        }
+
+        public UnsignedWord codeAndDataMemorySize() {
+            return codeAndDataMemorySize;
+        }
+
+        public UnsignedWord nativeMetadataSize() {
+            return nativeMetadataSize;
+        }
+
+        public UnsignedWord totalSize() {
+            return totalSize;
+        }
+    }
+
     @Platforms(Platform.HOSTED_ONLY.class)
     RuntimeCodeInfoMemory() {
         lock = new ReentrantLock();
+    }
+
+    public void clearPeakCodeAndDataCounters() {
+        peakCodeAndDataMemorySize = WordFactory.zero();
+    }
+
+    public void clearPeakNativeMetadataCounters() {
+        peakNativeMetadataSize = WordFactory.zero();
+    }
+
+    @Uninterruptible(reason = "Manipulate the counters atomically with regard to GC.")
+    private void addToSizeCounters(CodeInfo codeInfo) {
+        // must be done under this.lock
+        UnsignedWord code = CodeInfoAccess.getCodeSize(codeInfo);
+        UnsignedWord codeAndDataMemory = CodeInfoAccess.getCodeAndDataMemorySize(codeInfo);
+        UnsignedWord nativeMetadata = CodeInfoAccess.getNativeMetadataSize(codeInfo);
+        codeSize = codeSize.add(code);
+        codeAndDataMemorySize = codeAndDataMemorySize.add(codeAndDataMemory);
+        nativeMetadataSize = nativeMetadataSize.add(nativeMetadata);
+        totalSize = totalSize.add(codeAndDataMemory).add(nativeMetadata);
+        if (codeSize.aboveThan(peakCodeSize)) {
+            peakCodeSize = codeSize;
+        }
+        if (codeAndDataMemorySize.aboveThan(peakCodeAndDataMemorySize)) {
+            peakCodeAndDataMemorySize = codeAndDataMemorySize;
+        }
+        if (nativeMetadataSize.aboveThan(peakNativeMetadataSize)) {
+            peakNativeMetadataSize = nativeMetadataSize;
+        }
+        if (totalSize.aboveThan(peakTotalSize)) {
+            peakTotalSize = totalSize;
+        }
+    }
+
+    @Uninterruptible(reason = "Manipulate the counters atomically with regard to GC.")
+    private void subtractToSizeCounters(CodeInfo codeInfo) {
+        // This is done when the code info is removed the table
+        // code and data might actually have been released earlier in
+        // RuntimeCodeInfoAccess.freePartially
+        UnsignedWord code = CodeInfoAccess.getCodeSize(codeInfo);
+        UnsignedWord codeAndDataMemory = CodeInfoAccess.getCodeAndDataMemorySize(codeInfo);
+        UnsignedWord nativeMetadata = CodeInfoAccess.getNativeMetadataSize(codeInfo);
+        codeSize = codeSize.subtract(code);
+        codeAndDataMemorySize = codeAndDataMemorySize.subtract(codeAndDataMemory);
+        nativeMetadataSize = nativeMetadataSize.subtract(nativeMetadata);
+        totalSize = totalSize.subtract(codeAndDataMemory).subtract(nativeMetadata);
+        assert codeSize.aboveOrEqual(0);
+        assert codeAndDataMemorySize.aboveOrEqual(0);
+        assert nativeMetadataSize.aboveOrEqual(0);
+        assert totalSize.aboveOrEqual(0);
+    }
+
+    public SizeCounters getSizeCounters() {
+        lock.lock();
+        try {
+            SizeCounters counters = new SizeCounters();
+            fillSizeCounters(counters);
+            return counters;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Uninterruptible(reason = "Read the counters atomically with regard to GC.")
+    private void fillSizeCounters(SizeCounters counters) {
+        counters.codeSize = codeSize;
+        counters.codeAndDataMemorySize = codeAndDataMemorySize;
+        counters.nativeMetadataSize = nativeMetadataSize;
+        counters.totalSize = totalSize;
+    }
+
+    public SizeCounters getPeakSizeCounters() {
+        lock.lock();
+        try {
+            SizeCounters counters = new SizeCounters();
+            fillPeakSizeCounters(counters);
+            return counters;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Uninterruptible(reason = "Read the counters atomically with regard to GC.")
+    private void fillPeakSizeCounters(SizeCounters counters) {
+        counters.codeSize = peakCodeSize;
+        counters.codeAndDataMemorySize = peakCodeAndDataMemorySize;
+        counters.nativeMetadataSize = peakNativeMetadataSize;
+        counters.totalSize = peakTotalSize;
+
     }
 
     public int getCount() {
@@ -104,8 +230,9 @@ public class RuntimeCodeInfoMemory {
         return remove0(info);
     }
 
-    @Uninterruptible(reason = "Manipulate walkers list atomically with regard to GC.")
+    @Uninterruptible(reason = "Manipulate hashtable atomically with regard to GC.")
     private void add0(CodeInfo info) {
+        addToSizeCounters(info);
         if (table.isNull()) {
             table = NonmovableArrays.createWordArray(32);
         }
@@ -130,7 +257,7 @@ public class RuntimeCodeInfoMemory {
         assert count > 0 : "invalid counter value";
     }
 
-    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    @Uninterruptible(reason = "Manipulate hashtable atomically with regard to GC.")
     private boolean resize(int newLength) {
         assert SubstrateUtil.isPowerOf2(newLength);
         final int maxLength = 1 << 30;
@@ -159,7 +286,7 @@ public class RuntimeCodeInfoMemory {
         return true;
     }
 
-    @Uninterruptible(reason = "Manipulate walkers list atomically with regard to GC.")
+    @Uninterruptible(reason = "Manipulate hashtable atomically with regard to GC.")
     private boolean remove0(CodeInfo info) {
         int length = NonmovableArrays.lengthOf(table);
         int index = hashIndex(info, length);
@@ -170,6 +297,7 @@ public class RuntimeCodeInfoMemory {
                 count--;
                 assert count >= 0 : "invalid counter value";
                 rehashAfterUnregisterAt(index);
+                subtractToSizeCounters(info);
                 return true;
             }
             index = nextIndex(index, length);
@@ -179,7 +307,7 @@ public class RuntimeCodeInfoMemory {
     }
 
     /** Rehashes possibly-colliding entries after deletion to preserve collision properties. */
-    @Uninterruptible(reason = "Called from uninterruptible code.")
+    @Uninterruptible(reason = "Manipulate hashtable atomically with regard to GC.")
     private void rehashAfterUnregisterAt(int index) { // from IdentityHashMap: Knuth 6.4 Algorithm R
         int length = NonmovableArrays.lengthOf(table);
         int d = index;
@@ -197,40 +325,53 @@ public class RuntimeCodeInfoMemory {
         }
     }
 
-    public boolean walkRuntimeMethodsDuringGC(CodeInfoVisitor visitor) {
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public void walkRuntimeMethodsDuringGC(CodeInfoVisitor visitor) {
         assert VMOperation.isGCInProgress() : "otherwise, we would need to make sure that the CodeInfo is not freeded by the GC";
         if (table.isNonNull()) {
             int length = NonmovableArrays.lengthOf(table);
             for (int i = 0; i < length;) {
-                UntetheredCodeInfo info = NonmovableArrays.getWord(table, i);
-                if (info.isNonNull()) {
-                    visitor.visitCode(CodeInfoAccess.convert(info));
+                UntetheredCodeInfo untetheredInfo = NonmovableArrays.getWord(table, i);
+                if (untetheredInfo.isNonNull()) {
+                    CodeInfo info = CodeInfoAccess.convert(untetheredInfo);
+                    callVisitor(visitor, info);
                 }
 
-                // If the visitor removed the current entry from the table, then it is necessary to
-                // visit the now updated entry one more time. However, this could have the effect
-                // that some entries are visited more than once.
-                if (info == NonmovableArrays.getWord(table, i)) {
+                /*
+                 * If the visitor removed the current entry from the table, then it is necessary to
+                 * visit the now updated entry one more time. However, this could have the effect
+                 * that some entries are visited more than once.
+                 */
+                if (untetheredInfo == NonmovableArrays.getWord(table, i)) {
                     i++;
                 }
             }
         }
-        return true;
     }
 
-    @Uninterruptible(reason = "Must prevent the GC from freeing the CodeInfo object.")
-    public boolean walkRuntimeMethodsUninterruptibly(CodeInfoVisitor visitor) {
+    @Uninterruptible(reason = "Prevent the GC from freeing the CodeInfo object until it is tethered.")
+    public void walkRuntimeMethods(CodeInfoVisitor visitor) {
         if (table.isNonNull()) {
             int length = NonmovableArrays.lengthOf(table);
-            for (int i = 0; i < length;) {
-                UntetheredCodeInfo info = NonmovableArrays.getWord(table, i);
-                if (info.isNonNull()) {
-                    visitor.visitCode(CodeInfoAccess.convert(info));
+            for (int i = 0; i < length; i++) {
+                UntetheredCodeInfo untetheredInfo = NonmovableArrays.getWord(table, i);
+                if (untetheredInfo.isNonNull()) {
+                    Object tether = CodeInfoAccess.acquireTether(untetheredInfo);
+                    try {
+                        CodeInfo info = CodeInfoAccess.convert(untetheredInfo, tether);
+                        callVisitor(visitor, info);
+                    } finally {
+                        CodeInfoAccess.releaseTether(untetheredInfo, tether);
+                    }
+                    assert untetheredInfo == NonmovableArrays.getWord(table, i);
                 }
-                assert info == NonmovableArrays.getWord(table, i);
             }
         }
-        return true;
+    }
+
+    @Uninterruptible(reason = "Bridge between uninterruptible and potentially interruptible code.", mayBeInlined = true, calleeMustBe = false)
+    private static void callVisitor(CodeInfoVisitor visitor, CodeInfo info) {
+        visitor.visitCode(info);
     }
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
@@ -250,8 +391,16 @@ public class RuntimeCodeInfoMemory {
             // If we are not at a safepoint, then the table could be freed at any time.
             log.string("RuntimeCodeInfoMemory contains ").signed(count).string(" methods:").indent(true);
             if (table.isNonNull()) {
+                int printed = 0;
                 for (int i = 0; i < NonmovableArrays.lengthOf(table); i++) {
-                    printCodeInfo(log, i, allowJavaHeapAccess);
+                    if (printed >= MAX_CODE_INFO_ENTRIES_TO_PRINT) {
+                        log.string("... (truncated)").newline();
+                        break;
+                    }
+
+                    if (printCodeInfo(log, i, allowJavaHeapAccess)) {
+                        printed++;
+                    }
                 }
             }
             log.indent(false);
@@ -259,7 +408,7 @@ public class RuntimeCodeInfoMemory {
     }
 
     @Uninterruptible(reason = "Must prevent the GC from freeing the CodeInfo object.")
-    private void printCodeInfo(Log log, int i, boolean allowJavaHeapAccess) {
+    private boolean printCodeInfo(Log log, int i, boolean allowJavaHeapAccess) {
         UntetheredCodeInfo info = NonmovableArrays.getWord(table, i);
         if (info.isNonNull()) {
             /*
@@ -268,14 +417,26 @@ public class RuntimeCodeInfoMemory {
              * uninterruptible code and pass those values to interruptible code that does the
              * printing.
              */
-            String name = allowJavaHeapAccess ? UntetheredCodeInfoAccess.getName(info) : null;
-            printCodeInfo0(log, info, UntetheredCodeInfoAccess.getState(info), name, UntetheredCodeInfoAccess.getCodeStart(info), UntetheredCodeInfoAccess.getCodeEnd(info));
+            String name = null;
+            SubstrateInstalledCode installedCode = null;
+            HasInstalledCode hasInstalledCode = HasInstalledCode.Unknown;
+            if (allowJavaHeapAccess) {
+                name = UntetheredCodeInfoAccess.getName(info);
+                installedCode = UntetheredCodeInfoAccess.getInstalledCode(info);
+                hasInstalledCode = (installedCode != null) ? HasInstalledCode.Yes : HasInstalledCode.No;
+            }
+            printCodeInfo0(log, info, UntetheredCodeInfoAccess.getState(info), name, UntetheredCodeInfoAccess.getCodeStart(info), UntetheredCodeInfoAccess.getCodeEnd(info), hasInstalledCode,
+                            installedCode);
+            return true;
         }
+        return false;
     }
 
     @Uninterruptible(reason = "CodeInfo no longer needs to be protected from the GC.", calleeMustBe = false)
-    private static void printCodeInfo0(Log log, UntetheredCodeInfo codeInfo, int state, String name, CodePointer codeStart, CodePointer codeEnd) {
-        CodeInfoAccess.printCodeInfo(log, codeInfo, state, name, codeStart, codeEnd);
+    private static void printCodeInfo0(Log log, UntetheredCodeInfo codeInfo, int state, String name, CodePointer codeStart, CodePointer codeEnd, HasInstalledCode hasInstalledCode,
+                    SubstrateInstalledCode installedCode) {
+        CodeInfoAccess.printCodeInfo(log, codeInfo, state, name, codeStart, codeEnd, hasInstalledCode, installedCode);
+        log.newline();
     }
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
@@ -313,7 +474,7 @@ public class RuntimeCodeInfoMemory {
                             return true;
                         }
 
-                        UnsignedWord codeInfoEnd = ((UnsignedWord) info).add(RuntimeCodeInfoAccess.getSizeOfCodeInfo());
+                        UnsignedWord codeInfoEnd = ((UnsignedWord) info).add(CodeInfoAccess.getSizeOfCodeInfo());
                         if (value.aboveOrEqual((UnsignedWord) info) && value.belowThan(codeInfoEnd)) {
                             String name = allowJavaHeapAccess ? UntetheredCodeInfoAccess.getName(info) : null;
                             printInsideCodeInfo(log, info, name);

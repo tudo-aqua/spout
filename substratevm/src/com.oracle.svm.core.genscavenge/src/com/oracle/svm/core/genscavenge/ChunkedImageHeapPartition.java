@@ -36,6 +36,7 @@ import java.util.TreeMap;
 import com.oracle.svm.core.config.ConfigurationValues;
 import com.oracle.svm.core.genscavenge.AbstractImageHeapLayouter.AbstractImageHeapPartition;
 import com.oracle.svm.core.image.ImageHeapObject;
+import com.oracle.svm.core.meta.SubstrateObjectConstant;
 
 /**
  * An unstructured image heap partition that just contains a linear sequence of image heap objects.
@@ -56,7 +57,7 @@ public class ChunkedImageHeapPartition extends AbstractImageHeapPartition {
         this.hugeObjects = hugeObjects;
 
         /* Cache to prevent frequent lookups of the object layout from ImageSingletons. */
-        minimumObjectSize = ConfigurationValues.getObjectLayout().getMinimumObjectSize();
+        this.minimumObjectSize = ConfigurationValues.getObjectLayout().getMinImageHeapObjectSize();
     }
 
     boolean usesUnalignedObjects() {
@@ -133,7 +134,7 @@ public class ChunkedImageHeapPartition extends AbstractImageHeapPartition {
         for (ImageHeapObject obj : sorted) {
             long objSize = obj.getSize();
             if (objSize != currentObjectsSize) {
-                assert objSize > currentObjectsSize && objSize >= ConfigurationValues.getObjectLayout().getMinimumObjectSize();
+                assert objSize > currentObjectsSize && objSize >= ConfigurationValues.getObjectLayout().getMinImageHeapObjectSize();
                 currentObjectsSize = objSize;
                 currentQueue = new ArrayDeque<>();
                 map.put(currentObjectsSize, currentQueue);
@@ -145,13 +146,28 @@ public class ChunkedImageHeapPartition extends AbstractImageHeapPartition {
 
     private void appendAllocatedObject(ImageHeapObject info, long allocationOffset) {
         if (firstObject == null) {
-            firstObject = info.getObject();
+            firstObject = extractObject(info);
         }
         assert info.getPartition() == this;
         long offsetInPartition = allocationOffset - startOffset;
         assert ConfigurationValues.getObjectLayout().isAligned(offsetInPartition) : "start: " + offsetInPartition + " must be aligned.";
         info.setOffsetInPartition(offsetInPartition);
-        lastObject = info.getObject();
+        lastObject = extractObject(info);
+    }
+
+    private static Object extractObject(ImageHeapObject info) {
+        if (info.getConstant() instanceof SubstrateObjectConstant) {
+            return info.getObject();
+        } else {
+            /*
+             * The info wraps an ImageHeapObject, i.e., a build time representation of an object
+             * that is not backed by a raw hosted object. We set the partition limit to the actual
+             * constant. The constant reflection provider knows that this is a build time value, and
+             * it will not wrap it in a JavaConstant when reading it. This case is not different
+             * from normal objects referencing simulated objects.
+             */
+            return info.getConstant();
+        }
     }
 
     @Override

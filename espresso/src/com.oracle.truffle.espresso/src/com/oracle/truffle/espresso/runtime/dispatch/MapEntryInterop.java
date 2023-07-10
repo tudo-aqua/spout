@@ -25,6 +25,7 @@ package com.oracle.truffle.espresso.runtime.dispatch;
 
 import static com.oracle.truffle.espresso.runtime.StaticObject.EMPTY_ARRAY;
 
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.interop.ArityException;
 import com.oracle.truffle.api.interop.InteropLibrary;
@@ -40,6 +41,7 @@ import com.oracle.truffle.espresso.nodes.interop.InvokeEspressoNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 
 @ExportLibrary(value = InteropLibrary.class, receiverType = StaticObject.class)
+@SuppressWarnings("truffle-abstract-export") // TODO GR-44080 Adopt BigInteger Interop
 public class MapEntryInterop extends EspressoInterop {
     @ExportMessage
     static boolean hasArrayElements(@SuppressWarnings("unused") StaticObject receiver) {
@@ -72,6 +74,7 @@ public class MapEntryInterop extends EspressoInterop {
         try {
             invoke.execute(m, receiver, new Object[]{value});
         } catch (ArityException | UnsupportedTypeException e) {
+            CompilerDirectives.transferToInterpreterAndInvalidate();
             throw EspressoError.shouldNotReachHere(e);
         }
     }
@@ -91,6 +94,7 @@ public class MapEntryInterop extends EspressoInterop {
         try {
             return invoke.execute(m, receiver, EMPTY_ARRAY);
         } catch (ArityException | UnsupportedTypeException e) {
+            CompilerDirectives.transferToInterpreterAndInvalidate();
             throw EspressoError.shouldNotReachHere(e);
         }
     }

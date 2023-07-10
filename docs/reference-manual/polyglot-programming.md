@@ -3,6 +3,7 @@ layout: docs
 toc_group: reference-manual
 link_title: Polyglot Programming
 permalink: /reference-manual/polyglot-programming/
+redirect_from: /$version/docs/polyglot-programming/
 ---
 
 # Polyglot Programming
@@ -17,7 +18,7 @@ permalink: /reference-manual/polyglot-programming/
 GraalVM allows users to write polyglot applications that seamlessly pass values from one language to another by means of the [Truffle language implementation framework](../../truffle/docs/README.md) (henceforth "Truffle").
 
 Truffle is a Java library for building programming languages implementations as interpreters for self-modifying Abstract Syntax Trees.
-When writing a language interpreter with Truffle, it will automatically use the GraalVM compiler as a just-in-time compiler for the language.
+When writing a language interpreter with Truffle, it will automatically use the Graal compiler as a just-in-time compiler for the language.
 By having access to this framework, a Ruby application, for example, can run on the same JVM as a Java application.
 Also, a host JVM-based language and a guest language can directly interoperate with each other and pass data back and forth in the same memory space.
 
@@ -41,12 +42,9 @@ The below examples work:
   It might be required to [rebuild images](graalvm-updater.md#rebuild-images) to access languages installed with `gu`.
 * with native executables (e.g., `native-image --language:js`).
 
-For native launchers and native executables using Java as a Target Language
-and accessing classes other than Java arrays, it is required to recompile the image and provide
-a [reflection configuration file](native-image/Reflection.md).
+For native launchers and native executables using Java as a Target Language and accessing classes other than Java arrays, it is required to recompile the image and provide a [reflection configuration file](native-image/Reflection.md).
 
-Note: To start an application with LLVM as a Target Language, make sure
-to precompile the _polyglot.c_ file provided below.
+Note: To start an application with LLVM as a Target Language, make sure to precompile the _polyglot.c_ file provided below.
 
 ### Start from JavaScript / Node.js
 
@@ -127,10 +125,9 @@ tab5type="python" tab5id="python_to_llvm" tab5name="LLVM" tab5path="polyglot_ref
 Run:
 
 ```shell
-graalpython --polyglot --jvm polyglot.py
+graalpy --polyglot --jvm polyglot.py
 42
 ```
-
 
 ### Start Language Java
 
@@ -166,9 +163,8 @@ tab4type="c" tab4id="c_to_python" tab4name="Python" tab4path="polyglot_ref/c_to_
 tab5type="c" tab5id="c_to_java" tab5name="Java" tab5path="polyglot_ref/c_to_java.c"
 %}
 
-The example C code has to be compiled to LLVM bitcode using the LLVM frontend
-such as `clang`. A user can use `clang` shipped with GraalVM by installing a
-pre-built LLVM toolchain support:
+The example C code has to be compiled to LLVM bitcode using the LLVM frontend such as `clang`.
+A user can use `clang` shipped with GraalVM by installing a pre-built LLVM toolchain support:
 
 ```shell
 gu install llvm-toolchain
@@ -184,12 +180,10 @@ lli --polyglot polyglot
 
 ## Polyglot Launcher
 
-With polyglot applications it is often impossible to decide what the primary
-language of an application is. Therefore, an experimental new
-launcher, called `polyglot`, has been added to GraalVM. For the moment, this launcher runs code
-for JavaScript, Ruby, and R without requiring the selection of a primary
-language. The polyglot launcher does not require the `--polyglot` option; it is
-enabled by default.
+With polyglot applications it is often impossible to decide what the primary language of an application is.
+Therefore, an experimental new launcher, called `polyglot`, has been added to GraalVM.
+For the moment, this launcher runs code for JavaScript, Ruby, and R without requiring the selection of a primary language.
+The polyglot launcher does not require the `--polyglot` option; it is enabled by default.
 
 This is how you can run a polyglot application by using the examples from above:
 
@@ -207,20 +201,20 @@ polyglot --jvm --shell
 
 If you have installed all optional languages packs to the core GraalVM installation, then the Polyglot Shell will look like:
 ```shell
-GraalVM MultiLanguage Shell 21.2.0
+GraalVM MultiLanguage Shell 22.2.0
 Copyright (c) 2013-2021, Oracle and/or its affiliates
-Java version 1.8|11
-JavaScript version  21.2.0
-Python version 3.8.5
-R version 4.0.3
-Ruby version 2.7.3
+  Java version 22.2.0
+  JavaScript version 22.2.0
+  Python version 3.8.5
+  R version 4.0.3
+  Ruby version 3.0.3
 Usage:
   Use Ctrl+n to switch language and Ctrl+d to exit.
   Enter -usage to get a list of available commands.
 js>
 ```
 
-Note: The `polyglot` launcher and the _Polyglot Shell_ are experimental features in GraalVM.
+> Note: The `polyglot` launcher and the _Polyglot Shell_ are experimental features in GraalVM.
 
 ## Polyglot Options
 
@@ -240,8 +234,7 @@ You can configure a language engine for better throughput or startup.
 ## Passing Options for Language Launchers
 
 Every language launcher has been extended with a set of so called _polyglot options_.
-Polyglot options allow users of any language launcher to access the
-options of other languages supported by GraalVM (implemented with the Truffle language implementation framework).
+Polyglot options allow users of any language launcher to access the options of other languages supported by GraalVM (implemented with the Truffle language implementation framework).
 The format is: `--<languageID>.<property>=<value>`.
 For example, the `R` launcher also supports the `--js.atomics=true` JavaScript option.
 
@@ -291,8 +284,7 @@ javac OptionsTest.java
 java OptionsTest
 ```
 
-Note: Tools options can be passed in the same way.
-Options cannot be modified after the context was created.
+> Note: Tools options can be passed in the same way. Options cannot be modified after the context was created.
 
 ## Passing Options Using JVM Arguments
 
@@ -324,4 +316,4 @@ javac SystemPropertiesTest.java
 java -Dpolyglot.js.strict=true SystemPropertiesTest
 ```
 
-Note: System properties are read once when the polyglot context is created. Subsequent changes have no effect.
+> Note: System properties are read once when the polyglot context is created. Subsequent changes have no effect.

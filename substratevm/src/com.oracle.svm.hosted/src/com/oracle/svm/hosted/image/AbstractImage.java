@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2007, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,6 +26,7 @@ package com.oracle.svm.hosted.image;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.ForkJoinPool;
 
 import org.graalvm.compiler.debug.DebugContext;
 
@@ -46,7 +47,8 @@ public abstract class AbstractImage {
     protected final ClassLoader imageClassLoader;
     protected final NativeImageCodeCache codeCache;
     protected final List<HostedMethod> entryPoints;
-    protected int resultingImageSize; // for statistical output
+    protected int imageFileSize = -1; // for build output reporting
+    protected int debugInfoSize = -1; // for build output reporting
 
     public enum NativeImageKind {
         SHARED_LIBRARY(false) {
@@ -60,13 +62,8 @@ public abstract class AbstractImage {
                     case PECOFF:
                         return ".dll";
                     default:
-                        throw new AssertionError("unreachable");
+                        throw new AssertionError("Unreachable");
                 }
-            }
-
-            @Override
-            public String getFilenamePrefix() {
-                return ObjectFile.getNativeFormat() == ObjectFile.Format.PECOFF ? "" : "lib";
             }
         },
         EXECUTABLE(true),
@@ -82,14 +79,6 @@ public abstract class AbstractImage {
 
         public String getFilenameSuffix() {
             return ObjectFile.getNativeFormat() == ObjectFile.Format.PECOFF ? ".exe" : "";
-        }
-
-        public String getFilenamePrefix() {
-            return "";
-        }
-
-        public String getFilename(String basename) {
-            return getFilenamePrefix() + basename + getFilenameSuffix();
         }
     }
 
@@ -111,8 +100,14 @@ public abstract class AbstractImage {
         return imageKind;
     }
 
-    public int getImageSize() {
-        return resultingImageSize;
+    public int getImageFileSize() {
+        assert imageFileSize > 0 : "imageFileSize read before being set; cannot be zero";
+        return imageFileSize;
+    }
+
+    public int getDebugInfoSize() {
+        assert debugInfoSize >= 0 : "debugInfoSize read before being set";
+        return debugInfoSize;
     }
 
     public NativeLibraries getNativeLibs() {
@@ -126,17 +121,9 @@ public abstract class AbstractImage {
     public abstract void build(String imageName, DebugContext debug);
 
     /**
-     * Write the image to the named file. This also writes debug information -- either to the same
-     * or a different file, as decided by the implementation of {@link #getOrCreateDebugObjectFile}.
-     * If {@link #getOrCreateDebugObjectFile} is not called, no debug information is written.
+     * Write the image to the named file.
      */
-    public abstract LinkerInvocation write(DebugContext debug, Path outputDirectory, Path tempDirectory, String imageName, BeforeImageWriteAccessImpl config);
-
-    /**
-     * Returns the ObjectFile.Section within the image, if any, whose vaddr defines the image's base
-     * vaddr.
-     */
-    public abstract ObjectFile.Section getTextSection();
+    public abstract LinkerInvocation write(DebugContext debug, Path outputDirectory, Path tempDirectory, String imageName, BeforeImageWriteAccessImpl config, ForkJoinPool forkJoinPool);
 
     // factory method
     public static AbstractImage create(NativeImageKind k, HostedUniverse universe, HostedMetaAccess metaAccess, NativeLibraries nativeLibs, NativeImageHeap heap,
@@ -159,9 +146,7 @@ public abstract class AbstractImage {
         return heap;
     }
 
-    public abstract ObjectFile getOrCreateDebugObjectFile();
+    public abstract long getImageHeapSize();
 
-    public boolean requiresCustomDebugRelocation() {
-        return false;
-    }
+    public abstract ObjectFile getObjectFile();
 }

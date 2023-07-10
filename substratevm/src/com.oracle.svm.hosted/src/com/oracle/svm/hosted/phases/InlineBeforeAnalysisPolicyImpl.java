@@ -24,36 +24,16 @@
  */
 package com.oracle.svm.hosted.phases;
 
-import org.graalvm.compiler.api.replacements.Fold;
-import org.graalvm.compiler.graph.Node;
-import org.graalvm.compiler.graph.Node.NodeIntrinsic;
-import org.graalvm.compiler.nodes.AbstractBeginNode;
-import org.graalvm.compiler.nodes.AbstractEndNode;
-import org.graalvm.compiler.nodes.CallTargetNode;
-import org.graalvm.compiler.nodes.ConstantNode;
-import org.graalvm.compiler.nodes.FrameState;
-import org.graalvm.compiler.nodes.FullInfopointNode;
-import org.graalvm.compiler.nodes.Invoke;
-import org.graalvm.compiler.nodes.LogicConstantNode;
-import org.graalvm.compiler.nodes.ParameterNode;
-import org.graalvm.compiler.nodes.ReturnNode;
-import org.graalvm.compiler.nodes.StartNode;
-import org.graalvm.compiler.nodes.UnwindNode;
+import org.graalvm.compiler.nodes.FixedWithNextNode;
 import org.graalvm.compiler.nodes.ValueNode;
 import org.graalvm.compiler.nodes.graphbuilderconf.GraphBuilderContext;
-import org.graalvm.compiler.nodes.java.AbstractNewObjectNode;
-import org.graalvm.compiler.nodes.java.NewArrayNode;
-import org.graalvm.compiler.nodes.spi.ValueProxy;
-import org.graalvm.compiler.options.Option;
-import org.graalvm.util.GuardedAnnotationAccess;
+import org.graalvm.compiler.nodes.graphbuilderconf.InlineInvokePlugin.InlineInfo;
+import org.graalvm.compiler.nodes.graphbuilderconf.NodePlugin;
 
-import com.oracle.graal.pointsto.meta.AnalysisMethod;
+import com.oracle.graal.pointsto.meta.AnalysisMetaAccess;
 import com.oracle.graal.pointsto.phases.InlineBeforeAnalysisPolicy;
-import com.oracle.svm.core.annotate.NeverInlineTrivial;
-import com.oracle.svm.core.annotate.RestrictHeapAccess;
-import com.oracle.svm.core.annotate.Uninterruptible;
-import com.oracle.svm.core.option.HostedOptionKey;
-import com.oracle.svm.core.util.VMError;
+import com.oracle.svm.core.ParsingReason;
+import com.oracle.svm.hosted.SVMHost;
 
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 
@@ -65,49 +45,31 @@ import jdk.vm.ci.meta.ResolvedJavaMethod;
  * method above the limit. On the other hand, the inlining depth is generous because we do do not
  * need to limit it. Note that more experimentation is necessary to come up with the optimal
  * configuration.
- * 
+ *
  * Important: the implementation details of this class are publicly observable API. Since
  * {@link java.lang.reflect.Method} constants can be produced by inlining lookup methods with
  * constant arguments, reducing inlining can break customer code. This means we can never reduce the
  * amount of inlining in a future version without breaking compatibility. This also means that we
  * must be conservative and only inline what is necessary for known use cases.
  */
-public final class InlineBeforeAnalysisPolicyImpl extends InlineBeforeAnalysisPolicy<InlineBeforeAnalysisPolicyImpl.CountersScope> {
+public class InlineBeforeAnalysisPolicyImpl extends InlineBeforeAnalysisPolicy {
+    private final int maxInliningDepth = InlineBeforeAnalysisPolicyUtils.Options.InlineBeforeAnalysisAllowedDepth.getValue();
 
-    public static class Options {
-        @Option(help = "Maximum number of computation nodes for method inlined before static analysis")//
-        public static final HostedOptionKey<Integer> InlineBeforeAnalysisAllowedNodes = new HostedOptionKey<>(1);
+    private final SVMHost hostVM;
+    private final InlineBeforeAnalysisPolicyUtils inliningUtils;
 
-        @Option(help = "Maximum number of invokes for method inlined before static analysis")//
-        public static final HostedOptionKey<Integer> InlineBeforeAnalysisAllowedInvokes = new HostedOptionKey<>(1);
-
-        @Option(help = "Maximum number of invokes for method inlined before static analysis")//
-        public static final HostedOptionKey<Integer> InlineBeforeAnalysisAllowedDepth = new HostedOptionKey<>(20);
-    }
-
-    private final int allowedNodes = Options.InlineBeforeAnalysisAllowedNodes.getValue();
-    private final int allowedInvokes = Options.InlineBeforeAnalysisAllowedInvokes.getValue();
-    private final int allowedDepth = Options.InlineBeforeAnalysisAllowedDepth.getValue();
-
-    static final class CountersScope implements InlineBeforeAnalysisPolicy.Scope {
-        final CountersScope accumulated;
-
-        int numNodes;
-        int numInvokes;
-
-        CountersScope(CountersScope accumulated) {
-            this.accumulated = accumulated;
-        }
-
-        @Override
-        public String toString() {
-            return numNodes + "/" + numInvokes + " (" + accumulated.numNodes + "/" + accumulated.numInvokes + ")";
-        }
+    public InlineBeforeAnalysisPolicyImpl(SVMHost hostVM, InlineBeforeAnalysisPolicyUtils inliningUtils) {
+        super(new NodePlugin[]{new ConstantFoldLoadFieldPlugin(ParsingReason.PointsToAnalysis)});
+        this.hostVM = hostVM;
+        this.inliningUtils = inliningUtils;
     }
 
     @Override
     protected boolean shouldInlineInvoke(GraphBuilderContext b, ResolvedJavaMethod method, ValueNode[] args) {
-        if (b.getDepth() > allowedDepth) {
+        if (inliningUtils.alwaysInlineInvoke((AnalysisMetaAccess) b.getMetaAccess(), method)) {
+            return true;
+        }
+        if (b.getDepth() > maxInliningDepth) {
             return false;
         }
         if (b.recursiveInliningDepth(method) > 0) {
@@ -115,119 +77,42 @@ public final class InlineBeforeAnalysisPolicyImpl extends InlineBeforeAnalysisPo
             return false;
         }
 
-        AnalysisMethod caller = (AnalysisMethod) b.getMethod();
-        AnalysisMethod callee = (AnalysisMethod) method;
-        if (!callee.canBeInlined()) {
-            return false;
-        }
-        if (GuardedAnnotationAccess.isAnnotationPresent(callee, NeverInlineTrivial.class)) {
-            return false;
-        }
-        if (GuardedAnnotationAccess.isAnnotationPresent(callee, Fold.class) || GuardedAnnotationAccess.isAnnotationPresent(callee, NodeIntrinsic.class)) {
-            /*
-             * We should never see a call to such a method. But if we do, do not inline them
-             * otherwise we miss the opportunity later to report it as an error.
-             */
-            return false;
-        }
-        if (GuardedAnnotationAccess.isAnnotationPresent(callee, RestrictHeapAccess.class)) {
-            /*
-             * This is conservative. We do not know the caller's heap restriction state yet because
-             * that can only be computed after static analysis (it relies on the call graph produced
-             * by the static analysis).
-             */
-            return false;
-        }
-        if (!Uninterruptible.Utils.inliningAllowed(caller, callee)) {
-            return false;
-        }
+        return InlineBeforeAnalysisPolicyUtils.inliningAllowed(hostVM, b, method);
+    }
+
+    @Override
+    protected InlineInfo createInvokeInfo(ResolvedJavaMethod method) {
+        return InlineInfo.createStandardInlineInfo(method);
+    }
+
+    @Override
+    protected boolean needsExplicitExceptions() {
         return true;
     }
 
     @Override
-    protected CountersScope createTopScope() {
-        CountersScope accumulated = new CountersScope(null);
-        return new CountersScope(accumulated);
-    }
-
-    @Override
-    protected CountersScope openCalleeScope(CountersScope outer) {
-        return new CountersScope(outer.accumulated);
-    }
-
-    @Override
-    protected void commitCalleeScope(CountersScope outer, CountersScope callee) {
-        assert outer.accumulated == callee.accumulated;
-        outer.numNodes += callee.numNodes;
-        outer.numInvokes += callee.numInvokes;
-    }
-
-    @Override
-    protected void abortCalleeScope(CountersScope outer, CountersScope callee) {
-        assert outer.accumulated == callee.accumulated;
-        outer.accumulated.numNodes -= callee.numNodes;
-        outer.accumulated.numInvokes -= callee.numInvokes;
-    }
-
-    @Override
-    protected boolean processNode(CountersScope scope, Node node) {
-        if (node instanceof StartNode || node instanceof ParameterNode || node instanceof ReturnNode || node instanceof UnwindNode) {
-            /* Infrastructure nodes that are not even visible to the policy. */
-            throw VMError.shouldNotReachHere("Node must not be visible to policy: " + node.getClass().getTypeName());
-        }
-        if (node instanceof FullInfopointNode || node instanceof ValueProxy || node instanceof FrameState || node instanceof AbstractBeginNode || node instanceof AbstractEndNode) {
-            /*
-             * Infrastructure nodes that are never counted. We could look at the NodeSize annotation
-             * of a node, but that is a bit unreliable. For example, FrameState and
-             * ExceptionObjectNode have size != 0 but we do not want to count them; CallTargetNode
-             * has size 0 but we need to count it.
-             */
-            return true;
-        }
-
-        if (node instanceof ConstantNode || node instanceof LogicConstantNode) {
-            /* An unlimited number of constants is allowed. We like constants. */
-            return true;
-        }
-
-        if (node instanceof AbstractNewObjectNode) {
-            /*
-             * We never allow to inline any kind of allocations, because the machine code size is
-             * large.
-             * 
-             * With one important exception: we allow (and do not even count) arrays allocated with
-             * length 0. Such allocations occur when a method has a Java vararg parameter but the
-             * caller does not provide any vararg. Without this exception, important vararg usages
-             * like Class.getDeclaredConstructor would not be considered for inlining.
-             * 
-             * Note that we are during graph decoding, so usages of the node are not decoded yet. So
-             * we cannot base the decision on a certain usage pattern of the allocation.
-             */
-            if (node instanceof NewArrayNode) {
-                ValueNode newArrayLength = ((NewArrayNode) node).length();
-                if (newArrayLength.isJavaConstant() && newArrayLength.asJavaConstant().asInt() == 0) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        if (node instanceof Invoke) {
-            throw VMError.shouldNotReachHere("Node must not visible to policy: " + node.getClass().getTypeName());
-        } else if (node instanceof CallTargetNode) {
-            if (scope.accumulated.numInvokes >= allowedInvokes) {
-                return false;
-            }
-            scope.numInvokes++;
-            scope.accumulated.numInvokes++;
-        }
-
-        if (scope.accumulated.numNodes >= allowedNodes) {
-            return false;
-        }
-        scope.numNodes++;
-        scope.accumulated.numNodes++;
-
+    protected boolean tryInvocationPlugins() {
+        /*
+         * We conditionally allow the invocation plugin to be triggered during graph decoding to see
+         * what happens.
+         */
         return true;
+    }
+
+    @Override
+    protected AbstractPolicyScope createRootScope() {
+        /* We do not need a scope for the root method. */
+        return null;
+    }
+
+    @Override
+    protected AbstractPolicyScope openCalleeScope(ResolvedJavaMethod method, AbstractPolicyScope outer) {
+        return InlineBeforeAnalysisPolicyUtils.createAccumulativeInlineScope((InlineBeforeAnalysisPolicyUtils.AccumulativeInlineScope) outer, inliningUtils);
+    }
+
+    @Override
+    protected FixedWithNextNode processInvokeArgs(ResolvedJavaMethod targetMethod, FixedWithNextNode insertionPoint, ValueNode[] arguments) {
+        // No action is needed
+        return insertionPoint;
     }
 }

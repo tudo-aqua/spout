@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -44,26 +44,37 @@ import java.lang.reflect.Type;
 import java.util.function.Predicate;
 
 import org.graalvm.polyglot.HostAccess;
+import org.graalvm.polyglot.HostAccess.MutableTargetMapping;
 import org.graalvm.polyglot.impl.AbstractPolyglotImpl;
-import org.graalvm.polyglot.impl.AbstractPolyglotImpl.AbstractHostService;
+import org.graalvm.polyglot.impl.AbstractPolyglotImpl.APIAccess;
+import org.graalvm.polyglot.impl.AbstractPolyglotImpl.AbstractHostLanguageService;
 import org.graalvm.polyglot.proxy.Proxy;
 
+import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.TruffleFile;
 import com.oracle.truffle.api.TruffleOptions;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.TruffleObject;
+import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.host.HostAdapterFactory.AdapterResult;
+import com.oracle.truffle.host.HostLanguage.HostLanguageException;
 import com.oracle.truffle.host.HostMethodDesc.SingleMethod;
 import com.oracle.truffle.host.HostMethodScope.ScopedObject;
 import com.oracle.truffle.host.HostObject.GuestToHostCalls;
 
-public class HostLanguageService extends AbstractHostService {
+public class HostLanguageService extends AbstractHostLanguageService {
 
     final HostLanguage language;
+    private final APIAccess api;
 
     HostLanguageService(AbstractPolyglotImpl polyglot, HostLanguage language) {
         super(polyglot);
+        api = polyglot.getAPIAccess();
         this.language = language;
+    }
+
+    @Override
+    public void release() {
     }
 
     @Override
@@ -74,7 +85,7 @@ public class HostLanguageService extends AbstractHostService {
             useCl = TruffleOptions.AOT ? null : Thread.currentThread().getContextClassLoader();
         }
         language.initializeHostAccess(hostAccess, useCl);
-        context.initialize(internalContext, useCl, clFilter, hostCLAllowed, hostLookupAllowed);
+        context.initialize(internalContext, useCl, clFilter, hostCLAllowed, hostLookupAllowed, hostAccess != null ? api.getMutableTargetMappings(hostAccess) : new MutableTargetMapping[0]);
     }
 
     @Override
@@ -94,6 +105,11 @@ public class HostLanguageService extends AbstractHostService {
     }
 
     @Override
+    public void throwHostLanguageException(String message) {
+        throw new HostLanguageException(message);
+    }
+
+    @Override
     public Object findStaticClass(Object receiver, String classValue) {
         HostContext context = (HostContext) receiver;
         Class<?> found = context.findClass(classValue);
@@ -103,20 +119,15 @@ public class HostLanguageService extends AbstractHostService {
         return HostObject.forStaticClass(found, context);
     }
 
-    @Override
-    public Object createToHostTypeNode() {
-        return HostToTypeNodeGen.create();
-    }
-
     @SuppressWarnings("unchecked")
     @Override
-    public <T> T toHostType(Object hostNode, Object hostContext, Object value, Class<T> targetType, Type genericType) {
+    public <T> T toHostType(Object hostNode, Object targetNode, Object hostContext, Object value, Class<T> targetType, Type genericType) {
         HostContext context = (HostContext) hostContext;
         HostToTypeNode node = (HostToTypeNode) hostNode;
         if (node == null) {
             node = HostToTypeNodeGen.getUncached();
         }
-        return (T) node.execute(context, value, targetType, genericType, true);
+        return (T) node.execute((Node) targetNode, context, value, targetType, genericType, true);
     }
 
     @Override
@@ -189,7 +200,7 @@ public class HostLanguageService extends AbstractHostService {
     }
 
     @Override
-    public boolean isHostException(Throwable exception) {
+    public boolean isHostException(Object exception) {
         return exception instanceof HostException;
     }
 
@@ -218,9 +229,22 @@ public class HostLanguageService extends AbstractHostService {
     }
 
     @Override
-    public Object createHostAdapter(Object context, Class<?>[] types, Object classOverrides) {
+    public Object createHostAdapter(Object context, Object[] hostTypes, Object classOverrides) {
+        CompilerAsserts.neverPartOfCompilation();
         HostContext hostContext = (HostContext) context;
-        AdapterResult adapter = HostAdapterFactory.getAdapterClassFor(hostContext, types, classOverrides);
+        Class<?>[] javaTypes = new Class<?>[hostTypes.length];
+        for (int i = 0; i < hostTypes.length; i++) {
+            Object type = hostTypes[i];
+            if (type instanceof HostObject) {
+                HostObject hostType = (HostObject) type;
+                if (hostType.isDefaultClass()) {
+                    javaTypes[i] = hostType.asClass();
+                    continue;
+                }
+            }
+            throw HostEngineException.illegalArgument(hostContext.getHostClassCache().polyglotHostAccess, "Types must be host symbols or host classes.");
+        }
+        AdapterResult adapter = HostAdapterFactory.getAdapterClassFor(hostContext, javaTypes, classOverrides);
         if (!adapter.isSuccess()) {
             throw adapter.throwException();
         }
@@ -230,7 +254,7 @@ public class HostLanguageService extends AbstractHostService {
     @Override
     public RuntimeException toHostException(Object context, Throwable exception) {
         HostContext hostContext = (HostContext) context;
-        return new HostException(exception, hostContext);
+        return HostException.wrap(exception, hostContext);
     }
 
     @Override
@@ -285,6 +309,16 @@ public class HostLanguageService extends AbstractHostService {
     @Override
     public void pin(Object receiver) {
         HostMethodScope.pin(receiver);
+    }
+
+    @Override
+    public void hostExit(int exitCode) {
+        System.exit(exitCode);
+    }
+
+    @Override
+    public boolean allowsPublicAccess() {
+        return api.allowsPublicAccess(language.hostClassCache.hostAccess);
     }
 
     private static boolean isGuestToHostCallFromHostInterop(StackTraceElement element) {

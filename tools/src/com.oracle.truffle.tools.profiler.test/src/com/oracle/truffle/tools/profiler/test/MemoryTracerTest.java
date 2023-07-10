@@ -310,19 +310,15 @@ public class MemoryTracerTest extends AbstractProfilerTest {
 
         static final String ID = "AllocatesDuringReportingAllocation";
 
+        public AllocatesDuringReportingAllocation() {
+            wrapper = false;
+        }
+
         @Override
         protected CallTarget parse(ParsingRequest request) {
             final ADRARootNode rootNode = new ADRARootNode(this);
             rootNode.setSection(request.getSource().createSection(1));
             return rootNode.getCallTarget();
-        }
-
-        @Override
-        protected String toString(LanguageContext context, Object value) {
-            final AllocationReporter allocationReporter = CONTEXT_REF.get(null).getEnv().lookup(AllocationReporter.class);
-            allocationReporter.onEnter(null, 0, AllocationReporter.SIZE_UNKNOWN);
-            allocationReporter.onReturnValue("", 0, AllocationReporter.SIZE_UNKNOWN);
-            return "";
         }
 
         static final ContextReference<LanguageContext> CONTEXT_REF = ContextReference.create(AllocatesDuringReportingAllocation.class);

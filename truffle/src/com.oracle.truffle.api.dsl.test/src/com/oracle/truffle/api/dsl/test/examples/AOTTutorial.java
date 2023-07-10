@@ -61,6 +61,7 @@ import com.oracle.truffle.api.TruffleLanguage.Registration;
 import com.oracle.truffle.api.dsl.AOTSupport;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.GenerateAOT;
+import com.oracle.truffle.api.dsl.Idempotent;
 import com.oracle.truffle.api.dsl.NodeChild;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.dsl.test.examples.AOTTutorialFactory.AddNodeGen;
@@ -218,7 +219,7 @@ public class AOTTutorial {
         @TruffleBoundary
         @SuppressWarnings("unused")
         protected static double doDouble(double left, double right,
-                        @Cached("getASTLanguage()") AOTTestLanguage language) {
+                        @Cached(value = "getASTLanguage()", neverDefault = true) AOTTestLanguage language) {
             return left + right;
         }
 
@@ -237,6 +238,7 @@ public class AOTTutorial {
             return addLib.add(left, right);
         }
 
+        @Idempotent
         static boolean useLibrary() {
             /*
              * This library is not really useful and only here to show-case how to use libraries
@@ -372,7 +374,7 @@ public class AOTTutorial {
             // immediately compiled at parse time without prior execution.
             Value v = context.parse("AOTTestLanguage", "sample");
             String beforeExecute = log.toString();
-            assertTrue(beforeExecute, beforeExecute.contains("[engine] opt done     sample"));
+            assertTrue(beforeExecute, beforeExecute.contains("[engine] opt done") && beforeExecute.contains("sample"));
 
             // we can compile the function and it is executed compiled immediately.
             // note that if we would use any other types than the ones used during AOT

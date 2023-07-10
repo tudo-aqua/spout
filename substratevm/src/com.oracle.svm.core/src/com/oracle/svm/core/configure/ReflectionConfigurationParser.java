@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,22 +24,20 @@
  */
 package com.oracle.svm.core.configure;
 
-import java.io.IOException;
-import java.io.Reader;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.graalvm.collections.EconomicMap;
+import org.graalvm.collections.MapCursor;
 import org.graalvm.nativeimage.impl.ConfigurationCondition;
+import org.graalvm.util.json.JSONParserException;
 
 import com.oracle.svm.core.TypeResult;
-import com.oracle.svm.core.util.json.JSONParser;
-import com.oracle.svm.core.util.json.JSONParserException;
-
-// Checkstyle: allow reflection
+import com.oracle.svm.util.LogUtils;
 
 /**
  * Parses JSON describing classes, methods and fields and delegates their registration to a
@@ -49,26 +47,23 @@ public final class ReflectionConfigurationParser<T> extends ConfigurationParser 
     private static final String CONSTRUCTOR_NAME = "<init>";
 
     private final ReflectionConfigurationParserDelegate<T> delegate;
-    private final boolean allowIncompleteClasspath;
     private static final List<String> OPTIONAL_REFLECT_CONFIG_OBJECT_ATTRS = Arrays.asList("allDeclaredConstructors", "allPublicConstructors",
                     "allDeclaredMethods", "allPublicMethods", "allDeclaredFields", "allPublicFields",
-                    "allDeclaredClasses", "allPublicClasses", "methods", "queriedMethods", "fields", CONDITIONAL_KEY,
-                    "queryAllDeclaredConstructors", "queryAllPublicConstructors", "queryAllDeclaredMethods", "queryAllPublicMethods");
+                    "allDeclaredClasses", "allRecordComponents", "allPermittedSubclasses", "allNestMembers", "allSigners",
+                    "allPublicClasses", "methods", "queriedMethods", "fields", CONDITIONAL_KEY,
+                    "queryAllDeclaredConstructors", "queryAllPublicConstructors", "queryAllDeclaredMethods", "queryAllPublicMethods", "unsafeAllocated");
 
     public ReflectionConfigurationParser(ReflectionConfigurationParserDelegate<T> delegate) {
-        this(delegate, false, true);
+        this(delegate, true);
     }
 
-    public ReflectionConfigurationParser(ReflectionConfigurationParserDelegate<T> delegate, boolean allowIncompleteClasspath, boolean strictConfiguration) {
+    public ReflectionConfigurationParser(ReflectionConfigurationParserDelegate<T> delegate, boolean strictConfiguration) {
         super(strictConfiguration);
         this.delegate = delegate;
-        this.allowIncompleteClasspath = allowIncompleteClasspath;
     }
 
     @Override
-    public void parseAndRegister(Reader reader) throws IOException {
-        JSONParser parser = new JSONParser(reader);
-        Object json = parser.parse();
+    public void parseAndRegister(Object json, URI origin) {
         parseClassArray(asList(json, "first level of document must be an array of class descriptors"));
     }
 
@@ -78,7 +73,7 @@ public final class ReflectionConfigurationParser<T> extends ConfigurationParser 
         }
     }
 
-    private void parseClass(Map<String, Object> data) {
+    private void parseClass(EconomicMap<String, Object> data) {
         checkAttributes(data, "reflection class descriptor object", Collections.singleton("name"), OPTIONAL_REFLECT_CONFIG_OBJECT_ATTRS);
 
         Object classObject = data.get("name");
@@ -86,22 +81,26 @@ public final class ReflectionConfigurationParser<T> extends ConfigurationParser 
 
         TypeResult<ConfigurationCondition> conditionResult = delegate.resolveCondition(parseCondition(data).getTypeName());
         if (!conditionResult.isPresent()) {
-            handleError("Could not resolve condition " + parseCondition(data).getTypeName() + " for reflection.", conditionResult.getException());
             return;
         }
         ConfigurationCondition condition = conditionResult.get();
 
-        TypeResult<T> result = delegate.resolveType(condition, className);
+        /*
+         * Even if primitives cannot be queried through Class.forName, they can be registered to
+         * allow getDeclaredMethods() and similar bulk queries at run time.
+         */
+        TypeResult<T> result = delegate.resolveType(condition, className, true);
         if (!result.isPresent()) {
-            handleError("Could not resolve " + className + " for reflection configuration.", result.getException());
+            handleError("Could not resolve class " + className + " for reflection configuration.", result.getException());
             return;
         }
         T clazz = result.get();
         delegate.registerType(clazz);
 
-        for (Map.Entry<String, Object> entry : data.entrySet()) {
-            String name = entry.getKey();
-            Object value = entry.getValue();
+        MapCursor<String, Object> cursor = data.getEntries();
+        while (cursor.advance()) {
+            String name = cursor.getKey();
+            Object value = cursor.getValue();
             try {
                 switch (name) {
                     case "allDeclaredConstructors":
@@ -139,6 +138,26 @@ public final class ReflectionConfigurationParser<T> extends ConfigurationParser 
                             delegate.registerDeclaredClasses(clazz);
                         }
                         break;
+                    case "allRecordComponents":
+                        if (asBoolean(value, "allRecordComponents")) {
+                            delegate.registerRecordComponents(clazz);
+                        }
+                        break;
+                    case "allPermittedSubclasses":
+                        if (asBoolean(value, "allPermittedSubclasses")) {
+                            delegate.registerPermittedSubclasses(clazz);
+                        }
+                        break;
+                    case "allNestMembers":
+                        if (asBoolean(value, "allNestMembers")) {
+                            delegate.registerNestMembers(clazz);
+                        }
+                        break;
+                    case "allSigners":
+                        if (asBoolean(value, "allSigners")) {
+                            delegate.registerSigners(clazz);
+                        }
+                        break;
                     case "allPublicClasses":
                         if (asBoolean(value, "allPublicClasses")) {
                             delegate.registerPublicClasses(clazz);
@@ -164,6 +183,11 @@ public final class ReflectionConfigurationParser<T> extends ConfigurationParser 
                             delegate.registerPublicMethods(true, clazz);
                         }
                         break;
+                    case "unsafeAllocated":
+                        if (asBoolean(value, "unsafeAllocated")) {
+                            delegate.registerUnsafeAllocated(clazz);
+                        }
+                        break;
                     case "methods":
                         parseMethods(false, asList(value, "Attribute 'methods' must be an array of method descriptors"), clazz);
                         break;
@@ -186,7 +210,7 @@ public final class ReflectionConfigurationParser<T> extends ConfigurationParser 
         }
     }
 
-    private void parseField(Map<String, Object> data, T clazz) {
+    private void parseField(EconomicMap<String, Object> data, T clazz) {
         checkAttributes(data, "reflection field descriptor object", Collections.singleton("name"), Arrays.asList("allowWrite", "allowUnsafeAccess"));
         String fieldName = asString(data.get("name"), "name");
         boolean allowWrite = data.containsKey("allowWrite") && asBoolean(data.get("allowWrite"), "allowWrite");
@@ -206,7 +230,7 @@ public final class ReflectionConfigurationParser<T> extends ConfigurationParser 
         }
     }
 
-    private void parseMethod(boolean queriedOnly, Map<String, Object> data, T clazz) {
+    private void parseMethod(boolean queriedOnly, EconomicMap<String, Object> data, T clazz) {
         checkAttributes(data, "reflection method descriptor object", Collections.singleton("name"), Collections.singleton("parameterTypes"));
         String methodName = asString(data.get("name"), "name");
         List<T> methodParameterTypes = null;
@@ -252,7 +276,7 @@ public final class ReflectionConfigurationParser<T> extends ConfigurationParser 
         List<T> result = new ArrayList<>();
         for (Object type : types) {
             String typeName = asString(type, "types");
-            TypeResult<T> typeResult = delegate.resolveType(ConfigurationCondition.alwaysTrue(), typeName);
+            TypeResult<T> typeResult = delegate.resolveType(ConfigurationCondition.alwaysTrue(), typeName, true);
             if (!typeResult.isPresent()) {
                 handleError("Could not register method " + formatMethod(clazz, methodName) + " for reflection.", typeResult.getException());
                 return null;
@@ -279,21 +303,15 @@ public final class ReflectionConfigurationParser<T> extends ConfigurationParser 
         return delegate.getTypeName(clazz) + '.' + methodName + '(' + parameterTypeNames + ')';
     }
 
-    private void handleError(String message) {
+    private static void handleError(String message) {
         handleError(message, null);
     }
 
-    private void handleError(String msg, Throwable cause) {
-        // Checkstyle: stop
+    private static void handleError(String msg, Throwable cause) {
         String message = msg;
         if (cause != null) {
             message += " Reason: " + formatError(cause) + '.';
         }
-        if (allowIncompleteClasspath) {
-            System.err.println("Warning: " + message);
-        } else {
-            throw new JSONParserException(message + " To allow unresolvable reflection configuration, use option --allow-incomplete-classpath");
-        }
-        // Checkstyle: resume
+        LogUtils.warning(message);
     }
 }

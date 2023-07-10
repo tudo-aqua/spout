@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -40,10 +40,16 @@
  */
 package com.oracle.truffle.nfi.backend.libffi;
 
+import java.lang.ref.Reference;
+
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.GenerateAOT;
+import com.oracle.truffle.api.dsl.GenerateCached;
+import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.ImportStatic;
+import com.oracle.truffle.api.dsl.NeverDefault;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.interop.ArityException;
@@ -57,22 +63,31 @@ import com.oracle.truffle.nfi.backend.libffi.LibFFISignature.CachedSignatureInfo
 import com.oracle.truffle.nfi.backend.libffi.LibFFIType.CachedTypeInfo;
 
 @GenerateUncached
+@GenerateCached(false)
+@GenerateInline(true)
 @ImportStatic(LibFFILanguage.class)
+@GenerateAOT
 abstract class FunctionExecuteNode extends Node {
 
-    public abstract Object execute(long receiver, LibFFISignature signature, Object[] args) throws ArityException, UnsupportedTypeException;
+    public abstract Object execute(Node node, long receiver, LibFFISignature signature, Object[] args) throws ArityException, UnsupportedTypeException;
 
-    @Specialization(guards = "signature.signatureInfo == cachedInfo")
+    @Specialization(guards = "signature.signatureInfo == cachedInfo", limit = "3")
+    @GenerateAOT.Exclude
     protected Object cachedSignature(long receiver, LibFFISignature signature, Object[] args,
                     @Cached("signature.signatureInfo") @SuppressWarnings("unused") CachedSignatureInfo cachedInfo,
                     @Cached("createCachedSignatureCall(cachedInfo)") DirectCallNode execute) {
         try {
             return execute.call(receiver, args, signature);
         } finally {
-            assert keepAlive(args);
+            /*
+             * Ensure that the GC can not free the objects as long as they might still be in use by
+             * the native code (maybe indirectly via an embedded native pointer).
+             */
+            Reference.reachabilityFence(args);
         }
     }
 
+    @NeverDefault
     protected static DirectCallNode createCachedSignatureCall(CachedSignatureInfo signature) {
         DirectCallNode callNode = DirectCallNode.create(signature.callTarget);
         callNode.forceInlining();
@@ -81,27 +96,31 @@ abstract class FunctionExecuteNode extends Node {
 
     @Specialization(replaces = "cachedSignature")
     static Object genericExecute(long receiver, LibFFISignature signature, Object[] args,
-                    @Cached IndirectCallNode execute) {
+                    @Cached(inline = false) IndirectCallNode execute) {
         try {
             return execute.call(signature.signatureInfo.callTarget, receiver, args, signature);
         } finally {
-            assert keepAlive(args);
+            /*
+             * Ensure that the GC can not free the objects as long as they might still be in use by
+             * the native code (maybe indirectly via an embedded native pointer).
+             */
+            Reference.reachabilityFence(args);
         }
     }
 
     static final class SignatureExecuteNode extends RootNode {
 
         final CachedSignatureInfo signatureInfo;
-        @Children NativeArgumentLibrary[] argLibs;
+        @Children SerializeArgumentNode[] argNodes;
 
         SignatureExecuteNode(LibFFILanguage language, CachedSignatureInfo signatureInfo) {
             super(language);
             this.signatureInfo = signatureInfo;
 
             CachedTypeInfo[] argTypes = signatureInfo.getArgTypes();
-            this.argLibs = new NativeArgumentLibrary[argTypes.length];
+            this.argNodes = new SerializeArgumentNode[argTypes.length];
             for (int i = 0; i < argTypes.length; i++) {
-                argLibs[i] = NativeArgumentLibrary.getFactory().create(argTypes[i]);
+                argNodes[i] = argTypes[i].createSerializeArgumentNode();
             }
         }
 
@@ -112,17 +131,17 @@ abstract class FunctionExecuteNode extends Node {
             Object[] args = (Object[]) frame.getArguments()[1];
             LibFFISignature signature = (LibFFISignature) frame.getArguments()[2];
 
-            if (args.length != argLibs.length) {
-                throw silenceException(RuntimeException.class, ArityException.create(argLibs.length, argLibs.length, args.length));
+            if (args.length != argNodes.length) {
+                throw silenceException(RuntimeException.class, ArityException.create(argNodes.length, argNodes.length, args.length));
             }
 
             NativeArgumentBuffer.Array buffer = signatureInfo.prepareBuffer();
             try {
                 CachedTypeInfo[] types = signatureInfo.getArgTypes();
-                assert argLibs.length == types.length;
+                assert argNodes.length == types.length;
 
-                for (int i = 0; i < argLibs.length; i++) {
-                    argLibs[i].serialize(types[i], buffer, args[i]);
+                for (int i = 0; i < argNodes.length; i++) {
+                    argNodes[i].serialize(args[i], buffer);
                 }
             } catch (UnsupportedTypeException ex) {
                 throw silenceException(RuntimeException.class, ex);
@@ -136,15 +155,5 @@ abstract class FunctionExecuteNode extends Node {
         static <E extends Exception> RuntimeException silenceException(Class<E> type, Exception ex) throws E {
             throw (E) ex;
         }
-    }
-
-    /**
-     * Helper method to keep the argument array alive. The method itself does nothing, but it keeps
-     * the value alive in a FrameState. That way, the GC can not free the objects as long as they
-     * might still be in use by the native code (maybe indirectly via an embedded native pointer),
-     * but the escape analysis can still virtualize the objects if the allocation is visible.
-     */
-    private static boolean keepAlive(@SuppressWarnings("unused") Object args) {
-        return true;
     }
 }

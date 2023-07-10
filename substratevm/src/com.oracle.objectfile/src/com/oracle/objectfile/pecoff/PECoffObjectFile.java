@@ -72,6 +72,7 @@ public class PECoffObjectFile extends ObjectFile {
     private PECoffDirectiveSection directives;
     private boolean runtimeDebugInfoGeneration;
 
+    @SuppressWarnings("this-escape")
     private PECoffObjectFile(int pageSize, boolean runtimeDebugInfoGeneration) {
         super(pageSize);
         this.runtimeDebugInfoGeneration = runtimeDebugInfoGeneration;
@@ -86,6 +87,7 @@ public class PECoffObjectFile extends ObjectFile {
         directives = new PECoffDirectiveSection(".drectve", 1);
     }
 
+    @SuppressWarnings("this-escape")
     public PECoffObjectFile(int pageSize) {
         this(pageSize, false);
     }
@@ -662,15 +664,15 @@ public class PECoffObjectFile extends ObjectFile {
         return machine;
     }
 
-    public PECoffRelocationTable getOrCreateRelocSection(PECoffSymtab syms, boolean withExplicitAddends) {
+    public PECoffRelocationTable getOrCreateRelocSection(PECoffSymtab syms) {
         Element el = elementForName(".reloctab");
         PECoffRelocationTable rs;
         if (el == null) {
-            rs = new PECoffRelocationTable(this, ".reloctab", syms, withExplicitAddends);
+            rs = new PECoffRelocationTable(this, ".reloctab", syms);
         } else if (el instanceof PECoffRelocationTable) {
             rs = (PECoffRelocationTable) el;
         } else {
-            throw new IllegalStateException("section exists but is not an PECoffRelocationTable");
+            throw new IllegalStateException("Section exists but is not an PECoffRelocationTable");
         }
         return rs;
     }
@@ -700,7 +702,7 @@ public class PECoffObjectFile extends ObjectFile {
 
     @Override
     public void installDebugInfo(DebugInfoProvider debugInfoProvider) {
-        CVDebugInfo cvDebugInfo = new CVDebugInfo(getByteOrder());
+        CVDebugInfo cvDebugInfo = new CVDebugInfo(getMachine(), getByteOrder());
 
         // we need an implementation for each section
         CVSymbolSectionImpl cvSymbolSectionImpl = cvDebugInfo.getCVSymbolSection();
@@ -719,8 +721,8 @@ public class PECoffObjectFile extends ObjectFile {
         // layout constraints included in the layout decision set and causes
         // an NPE during reloc section write. so we need to create the relevant
         // reloc sections here in advance
-        cvSymbolSectionImpl.getOrCreateRelocationElement(false);
-        cvTypeSectionImpl.getOrCreateRelocationElement(false);
+        cvSymbolSectionImpl.getOrCreateRelocationElement(0);
+        cvTypeSectionImpl.getOrCreateRelocationElement(0);
 
         // ok now we can populate the implementations
         cvDebugInfo.installDebugInfo(debugInfoProvider);

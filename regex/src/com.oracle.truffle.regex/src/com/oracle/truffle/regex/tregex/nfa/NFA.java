@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -48,7 +48,6 @@ import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.regex.result.PreCalculatedResultFactory;
 import com.oracle.truffle.regex.tregex.automaton.StateIndex;
 import com.oracle.truffle.regex.tregex.parser.Counter;
-import com.oracle.truffle.regex.tregex.parser.ast.GroupBoundaries;
 import com.oracle.truffle.regex.tregex.parser.ast.RegexAST;
 import com.oracle.truffle.regex.tregex.util.json.Json;
 import com.oracle.truffle.regex.tregex.util.json.JsonArray;
@@ -78,6 +77,7 @@ public final class NFA implements StateIndex<NFAState>, JsonConvertible {
                     Collection<NFAState> states,
                     Counter.ThresholdCounter stateIDCounter,
                     Counter.ThresholdCounter transitionIDCounter,
+                    NFAStateTransition initialLoopBack,
                     PreCalculatedResultFactory[] preCalculatedResults) {
         this.ast = ast;
         this.dummyInitialState = dummyInitialState;
@@ -85,21 +85,11 @@ public final class NFA implements StateIndex<NFAState>, JsonConvertible {
         this.unAnchoredEntry = unAnchoredEntry;
         this.reverseAnchoredEntry = reverseAnchoredEntry;
         this.reverseUnAnchoredEntry = reverseUnAnchoredEntry;
+        this.initialLoopBack = initialLoopBack;
         this.preCalculatedResults = preCalculatedResults;
         this.states = new NFAState[stateIDCounter.getCount()];
         // reserve last slot for loopBack matcher
         this.transitions = new NFAStateTransition[transitionIDCounter.getCount() + 1];
-        if (isTraceFinderNFA()) {
-            this.initialLoopBack = null;
-        } else {
-            this.initialLoopBack = new NFAStateTransition(
-                            (short) transitionIDCounter.inc(),
-                            getUnAnchoredInitialState(),
-                            getUnAnchoredInitialState(),
-                            ast.getEncoding().getFullSet(),
-                            GroupBoundaries.getEmptyInstance(ast.getLanguage()));
-            this.transitions[initialLoopBack.getId()] = initialLoopBack;
-        }
         for (NFAState s : states) {
             assert this.states[s.getId()] == null;
             this.states[s.getId()] = s;
@@ -117,14 +107,18 @@ public final class NFA implements StateIndex<NFAState>, JsonConvertible {
                 }
             }
         }
+        if (initialLoopBack != null) {
+            assert this.transitions[initialLoopBack.getId()] == null;
+            this.transitions[initialLoopBack.getId()] = initialLoopBack;
+        }
     }
 
     public NFAState getUnAnchoredInitialState() {
-        return unAnchoredEntry[0].getTarget();
+        return unAnchoredEntry[0] == null ? null : unAnchoredEntry[0].getTarget();
     }
 
     public NFAState getAnchoredInitialState() {
-        return anchoredEntry[0].getTarget();
+        return anchoredEntry[0] == null ? null : anchoredEntry[0].getTarget();
     }
 
     public boolean hasReverseUnAnchoredEntry() {
@@ -235,21 +229,108 @@ public final class NFA implements StateIndex<NFAState>, JsonConvertible {
     }
 
     public boolean isDead() {
-        return anchoredEntry != null ? getAnchoredInitialState().isDead(true) : (reverseAnchoredEntry.getSource().isDead(false) && reverseUnAnchoredEntry.getSource().isDead(false));
+        return anchoredEntry != null ? allDead(anchoredEntry) : (reverseAnchoredEntry.getSource().isDead(false) && reverseUnAnchoredEntry.getSource().isDead(false));
+    }
+
+    private static boolean allDead(NFAStateTransition[] entries) {
+        if (entries == null) {
+            return true;
+        }
+        for (NFAStateTransition t : entries) {
+            if (t != null) {
+                assert !t.getTarget().isDead(true);
+                return false;
+            }
+        }
+        return true;
     }
 
     public void setInitialLoopBack(boolean enable) {
-        if (getUnAnchoredInitialState().getSuccessors().length == 0) {
+        if (getUnAnchoredInitialState() == null || initialLoopBack == null) {
             return;
         }
-        NFAStateTransition lastInitTransition = getUnAnchoredInitialState().getSuccessors()[getUnAnchoredInitialState().getSuccessors().length - 1];
+        NFAState loopbackState = initialLoopBack.getSource();
+        NFAStateTransition lastInitTransition = loopbackState.getSuccessors()[loopbackState.getSuccessors().length - 1];
         if (enable) {
             if (lastInitTransition != initialLoopBack) {
-                getUnAnchoredInitialState().addLoopBackNext(initialLoopBack);
+                loopbackState.addLoopBackNext(initialLoopBack);
             }
         } else {
             if (lastInitTransition == initialLoopBack) {
-                getUnAnchoredInitialState().removeLoopBackNext();
+                loopbackState.removeLoopBackNext();
+            }
+        }
+    }
+
+    public boolean isFixedCodePointWidth() {
+        boolean fixedCodePointWidth = true;
+        for (NFAState state : states) {
+            if (state != null && !ast.getEncoding().isFixedCodePointWidth(state.getCharSet())) {
+                fixedCodePointWidth = false;
+                break;
+            }
+        }
+        return fixedCodePointWidth;
+    }
+
+    /**
+     * Creates a deep copy of the {@code original} NFA. The copy is deep insofar as the network of
+     * {@link NFAState} and {@link NFAStateTransition} instances. Any annotations on the states,
+     * transitions or the NFA are shared with the original NFA.
+     */
+    public NFA(NFA original) {
+        this.ast = original.ast;
+        this.preCalculatedResults = original.preCalculatedResults;
+        this.states = new NFAState[original.states.length];
+        for (NFAState state : original.states) {
+            if (state != null) {
+                this.states[state.getId()] = new NFAState(state);
+            }
+        }
+        this.transitions = new NFAStateTransition[original.transitions.length];
+        for (NFAStateTransition transition : original.transitions) {
+            if (transition != null) {
+                this.transitions[transition.getId()] = new NFAStateTransition(transition);
+            }
+        }
+        if (original.anchoredEntry == null) {
+            this.anchoredEntry = null;
+        } else {
+            this.anchoredEntry = new NFAStateTransition[original.anchoredEntry.length];
+            for (int i = 0; i < original.anchoredEntry.length; i++) {
+                this.anchoredEntry[i] = original.anchoredEntry[i] == null ? null : this.transitions[original.anchoredEntry[i].getId()];
+            }
+        }
+        if (original.unAnchoredEntry == null) {
+            this.unAnchoredEntry = null;
+        } else {
+            this.unAnchoredEntry = new NFAStateTransition[original.unAnchoredEntry.length];
+            for (int i = 0; i < original.unAnchoredEntry.length; i++) {
+                this.unAnchoredEntry[i] = original.unAnchoredEntry[i] == null ? null : this.transitions[original.unAnchoredEntry[i].getId()];
+            }
+        }
+        this.dummyInitialState = this.states[original.dummyInitialState.getId()];
+        this.reverseAnchoredEntry = this.transitions[original.reverseAnchoredEntry.getId()];
+        this.reverseUnAnchoredEntry = this.transitions[original.reverseUnAnchoredEntry.getId()];
+        this.initialLoopBack = original.initialLoopBack == null ? null : this.transitions[original.initialLoopBack.getId()];
+
+        for (NFAState state : this.states) {
+            if (state != null) {
+                NFAStateTransition[] successors = state.getSuccessors();
+                for (int i = 0; i < successors.length; i++) {
+                    successors[i] = this.transitions[successors[i].getId()];
+                }
+                NFAStateTransition[] predecessors = state.getPredecessors();
+                for (int i = 0; i < predecessors.length; i++) {
+                    predecessors[i] = this.transitions[predecessors[i].getId()];
+                }
+            }
+        }
+
+        for (NFAStateTransition transition : this.transitions) {
+            if (transition != null) {
+                transition.setSource(this.states[transition.getSource().getId()]);
+                transition.setTarget(this.states[transition.getTarget().getId()]);
             }
         }
     }

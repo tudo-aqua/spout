@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,13 +23,11 @@
 
 package com.oracle.truffle.espresso.substitutions;
 
-import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.helper.TypeCheckNode;
-import com.oracle.truffle.espresso.runtime.EspressoContext;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 
 /**
@@ -40,8 +38,6 @@ import com.oracle.truffle.espresso.runtime.StaticObject;
  */
 @EspressoSubstitutions
 public final class Target_java_lang_Class {
-    // region perf substitutions
-
     /**
      * Determines if the specified {@code Object} is assignment-compatible with the object
      * represented by this {@code Class}. This method is the dynamic equivalent of the Java language
@@ -75,9 +71,8 @@ public final class Target_java_lang_Class {
 
         @Specialization(guards = "!isNull(obj)")
         public boolean doInstanceOf(@JavaType(Class.class) StaticObject self, @JavaType(Object.class) StaticObject obj,
-                        @Cached TypeCheckNode typeCheckNode,
-                        @Bind("getContext()") EspressoContext context) {
-            return typeCheckNode.executeTypeCheck(self.getMirrorKlass(context.getMeta()), obj.getKlass());
+                        @Cached TypeCheckNode typeCheckNode) {
+            return typeCheckNode.executeTypeCheck(self.getMirrorKlass(getMeta()), obj.getKlass());
         }
 
         protected static boolean isNull(StaticObject obj) {
@@ -91,16 +86,15 @@ public final class Target_java_lang_Class {
 
         @Specialization(guards = "isNull(cls)")
         @SuppressWarnings("unused")
-        public boolean nullCase(@JavaType(Class.class) StaticObject self, @JavaType(Object.class) StaticObject cls,
-                        @Bind("getContext()") EspressoContext context) {
-            throw context.getMeta().throwNullPointerException();
+        public boolean nullCase(@JavaType(Class.class) StaticObject self, @JavaType(Object.class) StaticObject cls) {
+            throw getMeta().throwNullPointerException();
         }
 
         @Specialization(guards = "!isNull(cls)")
         public boolean doInstanceOf(@JavaType(Class.class) StaticObject self, @JavaType(Object.class) StaticObject cls,
-                        @Cached TypeCheckNode typeCheckNode,
-                        @Bind("getContext()") EspressoContext context) {
-            return typeCheckNode.executeTypeCheck(self.getMirrorKlass(context.getMeta()), cls.getMirrorKlass(context.getMeta()));
+                        @Cached TypeCheckNode typeCheckNode) {
+            Meta meta = getMeta();
+            return typeCheckNode.executeTypeCheck(self.getMirrorKlass(meta), cls.getMirrorKlass(meta));
         }
 
         protected static boolean isNull(StaticObject obj) {

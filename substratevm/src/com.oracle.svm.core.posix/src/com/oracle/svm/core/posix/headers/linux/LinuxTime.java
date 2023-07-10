@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -39,11 +39,16 @@ import com.oracle.svm.core.posix.headers.Time;
  */
 @CContext(PosixDirectives.class)
 public class LinuxTime extends Time {
-
     @CConstant
     public static native int CLOCK_MONOTONIC();
 
-    @CFunction(transition = CFunction.Transition.NO_TRANSITION)
-    @CLibrary("rt")
-    public static native int clock_gettime(int clock_id, timespec tp);
+    @CConstant
+    public static native int CLOCK_THREAD_CPUTIME_ID();
+
+    public static class NoTransitions {
+        /* We still need to support glibc 2.12, where clock_gettime is located in librt. */
+        @CFunction(transition = CFunction.Transition.NO_TRANSITION)
+        @CLibrary("rt")
+        public static native int clock_gettime(int clock_id, timespec tp);
+    }
 }

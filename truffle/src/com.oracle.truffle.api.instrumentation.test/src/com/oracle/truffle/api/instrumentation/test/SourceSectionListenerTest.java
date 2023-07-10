@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -74,6 +74,10 @@ import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.test.polyglot.ProxyLanguage;
 
 public class SourceSectionListenerTest extends AbstractInstrumentationTest {
+
+    public SourceSectionListenerTest() {
+        needsInstrumentEnv = true;
+    }
 
     @Test
     public void testLoadSourceSection1() throws IOException {
@@ -153,7 +157,7 @@ public class SourceSectionListenerTest extends AbstractInstrumentationTest {
         assertEvents(impl.onlyExpressions, sourceSections3[2], sourceSections3[3], sourceSections3[4]);
     }
 
-    private SourceSection[] sections(String code, String... match) {
+    protected SourceSection[] sections(String code, String... match) {
         Source source = Source.newBuilder(InstrumentationTestLanguage.ID, code, "sourceSectionTest").buildLiteral();
 
         List<SourceSection> sections = new ArrayList<>();
@@ -182,7 +186,7 @@ public class SourceSectionListenerTest extends AbstractInstrumentationTest {
         return newArray;
     }
 
-    private static void assertEvents(List<LoadSourceSectionEvent> actualEvents, SourceSection... expectedSourceSections) {
+    protected static void assertEvents(List<LoadSourceSectionEvent> actualEvents, SourceSection... expectedSourceSections) {
         Assert.assertEquals(expectedSourceSections.length, actualEvents.size());
         for (int i = 0; i < expectedSourceSections.length; i++) {
             LoadSourceSectionEvent actualEvent = actualEvents.get(i);

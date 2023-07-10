@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -49,12 +49,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.oracle.truffle.api.interop.InteropException;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.TruffleObject;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
+import com.oracle.truffle.tck.tests.TruffleTestAssumptions;
 
 public class OverloadedTest extends ProxyLanguageEnvTest {
 
@@ -110,6 +112,11 @@ public class OverloadedTest extends ProxyLanguageEnvTest {
             this.x = value;
             this.parameter = "float";
         }
+    }
+
+    @BeforeClass
+    public static void runWithWeakEncapsulationOnly() {
+        TruffleTestAssumptions.assumeWeakEncapsulation();
     }
 
     private Object obj;
@@ -172,6 +179,8 @@ public class OverloadedTest extends ProxyLanguageEnvTest {
         INTEROP.invokeMember(numobj, "x", asTruffleObject(new AtomicInteger(22)));
         assertEquals("Number", num.parameter);
         INTEROP.invokeMember(numobj, "x", asTruffleObject(BigInteger.TEN));
+        assertEquals("int", num.parameter);
+        INTEROP.invokeMember(numobj, "x", asTruffleObject(BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE)));
         assertEquals("BigInteger", num.parameter);
     }
 

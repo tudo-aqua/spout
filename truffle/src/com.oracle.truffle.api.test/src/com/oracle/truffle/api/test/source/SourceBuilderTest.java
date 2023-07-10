@@ -78,7 +78,10 @@ import java.util.zip.ZipEntry;
 
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.io.ByteSequence;
+import org.graalvm.polyglot.io.IOAccess;
 import org.junit.Assert;
+import org.junit.Assume;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.oracle.truffle.api.TruffleFile;
@@ -91,9 +94,18 @@ import com.oracle.truffle.api.test.OSUtils;
 import com.oracle.truffle.api.test.polyglot.AbstractPolyglotTest;
 import com.oracle.truffle.api.test.polyglot.MemoryFileSystem;
 import com.oracle.truffle.api.test.polyglot.ProxyLanguage;
-import org.junit.Assume;
+import com.oracle.truffle.tck.tests.TruffleTestAssumptions;
 
 public class SourceBuilderTest extends AbstractPolyglotTest {
+
+    @BeforeClass
+    public static void runWithWeakEncapsulationOnly() {
+        TruffleTestAssumptions.assumeWeakEncapsulation();
+    }
+
+    public SourceBuilderTest() {
+        needsLanguageEnv = true;
+    }
 
     @Test
     public void testBinarySourcesUnavailableSourceSection() {
@@ -515,6 +527,7 @@ public class SourceBuilderTest extends AbstractPolyglotTest {
         assertEquals("File sources with different content have the same URI", source1.getURI(), source2.getURI());
     }
 
+    @SuppressWarnings("deprecation")
     @Test
     public void jarURLGetsAName() throws IOException {
         setupEnv();
@@ -539,6 +552,7 @@ public class SourceBuilderTest extends AbstractPolyglotTest {
         sample.delete();
     }
 
+    @SuppressWarnings("deprecation")
     @Test
     public void testHttpURL() throws IOException, URISyntaxException {
         setupEnv();
@@ -600,6 +614,7 @@ public class SourceBuilderTest extends AbstractPolyglotTest {
         assertNewSourceChanged(source1);
     }
 
+    @SuppressWarnings("deprecation")
     @Test
     public void testBuiltFromSourceURL() throws IOException, URISyntaxException {
         setupEnv();
@@ -907,6 +922,7 @@ public class SourceBuilderTest extends AbstractPolyglotTest {
         }
     }
 
+    @SuppressWarnings("deprecation")
     @Test
     public void throwsErrorIfLangIsNull3() throws MalformedURLException {
         try {
@@ -1000,7 +1016,8 @@ public class SourceBuilderTest extends AbstractPolyglotTest {
             text = "// Test";
             out.write(text.getBytes());
         }
-        setupEnv(Context.newBuilder().allowIO(true).fileSystem(fs).build());
+        IOAccess ioAccess = IOAccess.newBuilder().fileSystem(fs).build();
+        setupEnv(Context.newBuilder().allowIO(ioAccess).build());
         try {
             Source.newBuilder("TestJava", queryURL(path.toUri())).build();
             fail("Expected SecurityException");
@@ -1085,6 +1102,7 @@ public class SourceBuilderTest extends AbstractPolyglotTest {
         }
     }
 
+    @SuppressWarnings("deprecation")
     @Test
     public void testNotCanonicalizedNotExistingSourcePath() throws IOException {
         Assume.assumeFalse("Link creation requires a special privilege on Windows", OSUtils.isWindows());
@@ -1109,6 +1127,7 @@ public class SourceBuilderTest extends AbstractPolyglotTest {
         }
     }
 
+    @SuppressWarnings("deprecation")
     private static URL queryURL(URI uri) throws MalformedURLException {
         return new URL(uri.toString() + "?query");
     }

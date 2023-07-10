@@ -41,6 +41,7 @@
 package com.oracle.truffle.polyglot;
 
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.ImportStatic;
 import com.oracle.truffle.api.dsl.Specialization;
@@ -55,7 +56,7 @@ import com.oracle.truffle.api.library.ReflectionLibrary;
 import com.oracle.truffle.api.nodes.ExplodeLoop;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
-import com.oracle.truffle.api.profiles.BranchProfile;
+import com.oracle.truffle.api.profiles.InlinedBranchProfile;
 
 /**
  * A guest TruffleObject that has been passed from one context to another.
@@ -81,101 +82,100 @@ final class OtherContextGuestObject implements TruffleObject {
 
     static final int CACHE_LIMIT = 5;
 
-    static boolean canCache(PolyglotEngineImpl cachedEngine, PolyglotContextImpl context0, PolyglotContextImpl context1) {
+    static boolean canCache(PolyglotSharingLayer cachedLayer, PolyglotContextImpl context0, PolyglotContextImpl context1) {
         /*
-         * We can only cache if both engines are identical and they themselve match the engine of
-         * the parent cached receiverLibrary. Otherwise we might cause invalid sharing across
-         * engines as compilation effects from one engine in another.
+         * We can only cache if both layers are identical. Otherwise we might cause invalid sharing
+         * across layers.
          */
-        return cachedEngine == context0.engine && cachedEngine == context1.engine;
+        return cachedLayer != null && cachedLayer.isClaimed() && cachedLayer.shared == context0.layer.shared && cachedLayer.shared == context1.layer.shared;
     }
 
-    static PolyglotEngineImpl getCachedEngine(Node library) {
+    static PolyglotSharingLayer getCachedLayer(Node library) {
         RootNode root = library.getRootNode();
         if (root == null) {
             // cannot cache if not adopted
             return null;
         }
-        return (PolyglotEngineImpl) EngineAccessor.NODES.getPolyglotEngine(root);
+        return ((PolyglotSharingLayer) EngineAccessor.NODES.getSharingLayer(root));
     }
 
     @ExportMessage
     @ImportStatic(OtherContextGuestObject.class)
     static class Send {
 
-        @Specialization(guards = "canCache(cachedEngine, receiver.receiverContext, receiver.delegateContext)", limit = "1")
+        @Specialization(guards = "canCache(cachedLayer, receiver.receiverContext, receiver.delegateContext)", limit = "1")
         static Object doCached(OtherContextGuestObject receiver, Message message, Object[] args,
+                        @Bind("this") Node node,
                         @SuppressWarnings("unused") @CachedLibrary("receiver") ReflectionLibrary receiverLibrary,
-                        @Cached("getCachedEngine(receiverLibrary)") PolyglotEngineImpl cachedEngine,
+                        @Cached(value = "getCachedLayer(receiverLibrary)") PolyglotSharingLayer cachedLayer,
                         @CachedLibrary(limit = "CACHE_LIMIT") ReflectionLibrary delegateLibrary,
-                        @Cached BranchProfile seenOther,
-                        @Cached BranchProfile seenError) throws Exception {
-            return sendImpl(cachedEngine, receiver.delegate, message, args, receiver.receiverContext, receiver.delegateContext, delegateLibrary, seenOther, seenError);
+                        @Cached InlinedBranchProfile seenOther,
+                        @Cached InlinedBranchProfile seenError) throws Exception {
+            assert cachedLayer != null;
+            return sendImpl(node, cachedLayer, receiver.delegate, message, args, receiver.receiverContext, receiver.delegateContext, delegateLibrary, seenOther, seenError);
         }
 
         @TruffleBoundary
         @Specialization(replaces = "doCached")
-        static Object doSlowPath(OtherContextGuestObject receiver, Message message, Object[] args) throws Exception {
-            return sendImpl(receiver.receiverContext.engine, receiver.delegate, message, args, receiver.receiverContext,
+        static Object doSlowPath(OtherContextGuestObject receiver, Message message, Object[] args, @Bind("this") Node node) throws Exception {
+            return sendImpl(node, receiver.receiverContext.layer, receiver.delegate, message, args, receiver.receiverContext,
                             receiver.delegateContext,
                             ReflectionLibrary.getUncached(receiver.delegate),
-                            BranchProfile.getUncached(), BranchProfile.getUncached());
+                            InlinedBranchProfile.getUncached(), InlinedBranchProfile.getUncached());
         }
 
     }
 
     private static final Message IDENTICAL = Message.resolve(InteropLibrary.class, "isIdentical");
 
-    static Object sendImpl(PolyglotEngineImpl engine, Object receiver, Message message, Object[] args, PolyglotContextImpl receiverContext,
+    static Object sendImpl(Node node, PolyglotSharingLayer layer, Object receiver, Message message, Object[] args, PolyglotContextImpl receiverContext,
                     PolyglotContextImpl delegateContext,
                     ReflectionLibrary delegateLibrary,
-                    BranchProfile seenOther,
-                    BranchProfile seenError) throws Exception {
+                    InlinedBranchProfile seenOther,
+                    InlinedBranchProfile seenError) throws Exception {
         if (message.getLibraryClass() == InteropLibrary.class) {
-            Object[] prev;
             try {
-                prev = engine.enter(delegateContext);
-            } catch (Throwable e) {
-                throw toHostException(receiverContext, e);
-            }
-            try {
-                Object returnValue;
-                Object[] migratedArgs = migrateArgs(message, args, receiverContext, delegateContext);
-                if ((message == IDENTICAL) && migratedArgs[0] instanceof OtherContextGuestObject) {
-                    OtherContextGuestObject foreignCompare = (OtherContextGuestObject) migratedArgs[0];
-                    /*
-                     * It is guaranteed at this point that host foreign values with the same context
-                     * are already unboxed.
-                     */
-                    assert foreignCompare.delegateContext != delegateContext;
-                    /*
-                     * If two values of different contexts are compared with each other we end up in
-                     * an endless recursion as each invocation performs argument boxing to hosted
-                     * values which in turn will call isIdenticalOrUndefined of the other value.
-                     */
-                    returnValue = Boolean.FALSE;
-                } else {
-                    returnValue = delegateLibrary.send(receiver, message, migratedArgs);
-                }
-                return migrateReturn(returnValue, receiverContext, delegateContext);
-            } catch (Exception e) {
-                seenError.enter();
-                throw migrateException(receiverContext, e, delegateContext);
-            } finally {
+                Object[] prev = layer.engine.enter(delegateContext);
                 try {
-                    engine.leave(prev, delegateContext);
+                    Object returnValue;
+                    Object[] migratedArgs = migrateArgs(message, args, receiverContext, delegateContext);
+                    if ((message == IDENTICAL) && migratedArgs[0] instanceof OtherContextGuestObject) {
+                        OtherContextGuestObject foreignCompare = (OtherContextGuestObject) migratedArgs[0];
+                        /*
+                         * It is guaranteed at this point that host foreign values with the same
+                         * context are already unboxed.
+                         */
+                        assert foreignCompare.delegateContext != delegateContext;
+                        /*
+                         * If two values of different contexts are compared with each other we end
+                         * up in an endless recursion as each invocation performs argument boxing to
+                         * hosted values which in turn will call isIdenticalOrUndefined of the other
+                         * value.
+                         */
+                        returnValue = Boolean.FALSE;
+                    } else {
+                        returnValue = delegateLibrary.send(receiver, message, migratedArgs);
+                    }
+                    return migrateReturn(returnValue, receiverContext, delegateContext);
                 } catch (Throwable e) {
-                    throw toHostException(receiverContext, e);
+                    seenError.enter(node);
+                    throw migrateException(receiverContext, e, delegateContext);
+                } finally {
+                    layer.engine.leave(prev, delegateContext);
                 }
+            } catch (Throwable t) {
+                seenError.enter(node);
+                throw toHostOrInnerContextBoundaryException(receiverContext, t, delegateContext);
             }
         } else {
-            seenOther.enter();
+            seenOther.enter(node);
             return fallbackSend(message, args);
         }
     }
 
+    @SuppressWarnings("unchecked")
     @TruffleBoundary
-    static <T extends Exception> RuntimeException migrateException(PolyglotContextImpl receiverContext, T e, PolyglotContextImpl valueContext) throws T {
+    static <T extends Throwable> RuntimeException migrateException(PolyglotContextImpl receiverContext, Throwable e, PolyglotContextImpl valueContext) throws T {
         if (e instanceof OtherContextException) {
             OtherContextException other = (OtherContextException) e;
             if (other.receiverContext == receiverContext && other.delegateContext == valueContext) {
@@ -187,18 +187,68 @@ final class OtherContextGuestObject implements TruffleObject {
             if (e instanceof AbstractTruffleException) {
                 throw new OtherContextException(receiverContext, (AbstractTruffleException) e, valueContext);
             } else {
-                throw new OtherContextException(receiverContext, e, valueContext);
+                throw new OtherContextException(receiverContext, (Exception) e, valueContext);
             }
         } else {
-            throw e;
+            throw (T) e;
         }
     }
 
-    private static RuntimeException toHostException(PolyglotContextImpl context, Throwable e) {
-        try {
-            throw PolyglotImpl.engineToLanguageException(e);
-        } catch (Throwable ex) {
-            throw context.engine.host.toHostException(context.getHostContextImpl(), ex);
+    @SuppressWarnings("unchecked")
+    @TruffleBoundary
+    static <T extends Throwable> RuntimeException toHostOrInnerContextBoundaryException(PolyglotContextImpl receiverContext, Throwable e, PolyglotContextImpl delegateContext) throws T {
+        if (e instanceof PolyglotEngineException || e instanceof PolyglotEngineImpl.CancelExecution || e instanceof PolyglotContextImpl.ExitException) {
+            try {
+                if (e instanceof PolyglotEngineImpl.CancelExecution) {
+                    if (delegateContext.parent != null) {
+                        PolyglotContextImpl.State receiverContextState = receiverContext.state;
+                        if (!receiverContextState.isCancelling() && receiverContextState != PolyglotContextImpl.State.CLOSED_CANCELLED) {
+                            delegateContext.runOnCancelled();
+                            throw new IllegalStateException("Context cancel exception of inner context leaks outside to a non-cancelled context!");
+                        }
+                        throw (PolyglotEngineImpl.CancelExecution) e;
+                    } else {
+                        throw PolyglotImpl.guestToHostException(delegateContext.getHostContext(), e, false);
+                    }
+                } else if (e instanceof PolyglotContextImpl.ExitException) {
+                    if (delegateContext.parent != null) {
+                        PolyglotContextImpl.State receiverContextState = receiverContext.state;
+                        if (!receiverContextState.isExiting() && receiverContextState != PolyglotContextImpl.State.CLOSED_EXITED) {
+                            delegateContext.runOnExited(((PolyglotContextImpl.ExitException) e).getExitCode());
+                            throw new IllegalStateException("Context exit exception of inner context leaks outside to a non-exited context!");
+                        }
+                        throw (PolyglotContextImpl.ExitException) e;
+                    } else {
+                        throw PolyglotImpl.guestToHostException(delegateContext.getHostContext(), e, false);
+                    }
+                } else {
+                    if (delegateContext.parent != null && e instanceof PolyglotEngineException && ((PolyglotEngineException) e).closedException) {
+                        PolyglotContextImpl.State enclosingState = receiverContext != null ? receiverContext.state : PolyglotContextImpl.State.DEFAULT;
+                        boolean enclosingDisposing = receiverContext != null && receiverContext.disposing;
+                        if (enclosingState != PolyglotContextImpl.State.CLOSED && !enclosingDisposing) {
+                            delegateContext.runOnClosed();
+                            throw new IllegalStateException("Context close exception of inner context leaks outside to a non-closed context!");
+                        }
+                    }
+                    // [GR-35549] Truffle isolate enters the guest context as result of
+                    // delegateLibrary#send(). Exceptions thrown by enter are wrapped as
+                    // PolyglotEngineException. We need to unwrap them and throw as host exception.
+                    throw PolyglotImpl.engineToLanguageException(e);
+                }
+            } catch (Throwable ex) {
+                if (delegateContext.parent != null) {
+                    /*
+                     * Note that the parent context might be different from the receiverContext. In
+                     * any case, if the delegateContext has parent, we don't wrap the resulting
+                     * exception with HostException.
+                     */
+                    throw ex;
+                } else {
+                    throw receiverContext.engine.host.toHostException(receiverContext.getHostContextImpl(), ex);
+                }
+            }
+        } else {
+            throw (T) e;
         }
     }
 
@@ -296,23 +346,26 @@ final class OtherContextGuestObject implements TruffleObject {
         @ImportStatic(OtherContextGuestObject.class)
         static class Send {
 
-            @Specialization(guards = "canCache(cachedEngine, receiver.receiverContext, receiver.delegateContext)", limit = "1")
+            @Specialization(guards = "canCache(cachedLayer, receiver.receiverContext, receiver.delegateContext)", limit = "1")
             static Object doCached(OtherContextException receiver, Message message, Object[] args,
+                            @Bind("this") Node node,
                             @SuppressWarnings("unused") @CachedLibrary("receiver") ReflectionLibrary receiverLibrary,
-                            @Cached("getCachedEngine(receiverLibrary)") PolyglotEngineImpl cachedEngine,
+                            @Cached(value = "getCachedLayer(receiverLibrary)") PolyglotSharingLayer cachedLayer,
                             @CachedLibrary(limit = "CACHE_LIMIT") ReflectionLibrary delegateLibrary,
-                            @Cached BranchProfile seenOther,
-                            @Cached BranchProfile seenError) throws Exception {
-                return sendImpl(cachedEngine, receiver.delegate, message, args, receiver.receiverContext, receiver.delegateContext, delegateLibrary, seenOther, seenError);
+                            @Cached InlinedBranchProfile seenOther,
+                            @Cached InlinedBranchProfile seenError) throws Exception {
+                assert cachedLayer != null;
+                return sendImpl(node, cachedLayer, receiver.delegate, message, args, receiver.receiverContext, receiver.delegateContext, delegateLibrary, seenOther, seenError);
             }
 
             @TruffleBoundary
             @Specialization(replaces = "doCached")
-            static Object doSlowPath(OtherContextException receiver, Message message, Object[] args) throws Exception {
-                return sendImpl(receiver.receiverContext.engine, receiver.delegate, message, args, receiver.receiverContext,
+            static Object doSlowPath(OtherContextException receiver, Message message, Object[] args,
+                            @Bind("this") Node node) throws Exception {
+                return sendImpl(node, receiver.receiverContext.layer, receiver.delegate, message, args, receiver.receiverContext,
                                 receiver.delegateContext,
                                 ReflectionLibrary.getUncached(receiver.delegate),
-                                BranchProfile.getUncached(), BranchProfile.getUncached());
+                                InlinedBranchProfile.getUncached(), InlinedBranchProfile.getUncached());
             }
 
         }

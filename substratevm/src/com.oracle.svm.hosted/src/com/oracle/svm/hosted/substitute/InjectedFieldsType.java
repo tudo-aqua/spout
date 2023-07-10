@@ -24,11 +24,13 @@
  */
 package com.oracle.svm.hosted.substitute;
 
-import java.lang.annotation.Annotation;
+import java.lang.reflect.AnnotatedElement;
 import java.util.Arrays;
 
 import com.oracle.graal.pointsto.infrastructure.OriginalClassProvider;
-import com.oracle.svm.hosted.c.GraalAccess;
+import com.oracle.svm.core.annotate.Inject;
+import com.oracle.svm.core.util.VMError;
+import com.oracle.svm.hosted.annotation.AnnotationWrapper;
 
 import jdk.vm.ci.common.JVMCIError;
 import jdk.vm.ci.meta.Assumptions.AssumptionResult;
@@ -38,7 +40,13 @@ import jdk.vm.ci.meta.ResolvedJavaField;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 import jdk.vm.ci.meta.ResolvedJavaType;
 
-public class InjectedFieldsType implements ResolvedJavaType, OriginalClassProvider {
+/**
+ * Type which {@linkplain Inject injects} individual members into its original type (and can alias
+ * or delete other members).
+ *
+ * @see SubstitutionType
+ */
+public class InjectedFieldsType implements ResolvedJavaType, OriginalClassProvider, AnnotationWrapper {
 
     private final ResolvedJavaType original;
 
@@ -198,18 +206,8 @@ public class InjectedFieldsType implements ResolvedJavaType, OriginalClassProvid
     }
 
     @Override
-    public Annotation[] getAnnotations() {
-        return original.getAnnotations();
-    }
-
-    @Override
-    public Annotation[] getDeclaredAnnotations() {
-        return original.getDeclaredAnnotations();
-    }
-
-    @Override
-    public <T extends Annotation> T getAnnotation(Class<T> annotationClass) {
-        return original.getAnnotation(annotationClass);
+    public AnnotatedElement getAnnotationRoot() {
+        return original;
     }
 
     @Override
@@ -239,12 +237,24 @@ public class InjectedFieldsType implements ResolvedJavaType, OriginalClassProvid
 
     @Override
     public ResolvedJavaMethod[] getDeclaredConstructors() {
-        return original.getDeclaredConstructors();
+        return getDeclaredConstructors(true);
+    }
+
+    @Override
+    public ResolvedJavaMethod[] getDeclaredConstructors(boolean forceLink) {
+        VMError.guarantee(forceLink == false, "only use getDeclaredConstructors without forcing to link, because linking can throw LinkageError");
+        return original.getDeclaredConstructors(forceLink);
     }
 
     @Override
     public ResolvedJavaMethod[] getDeclaredMethods() {
-        return original.getDeclaredMethods();
+        return getDeclaredMethods(true);
+    }
+
+    @Override
+    public ResolvedJavaMethod[] getDeclaredMethods(boolean forceLink) {
+        VMError.guarantee(forceLink == false, "only use getDeclaredMethods without forcing to link, because linking can throw LinkageError");
+        return original.getDeclaredMethods(forceLink);
     }
 
     @Override
@@ -285,7 +295,7 @@ public class InjectedFieldsType implements ResolvedJavaType, OriginalClassProvid
 
     @Override
     public Class<?> getJavaClass() {
-        return OriginalClassProvider.getJavaClass(GraalAccess.getOriginalSnippetReflection(), original);
+        return OriginalClassProvider.getJavaClass(original);
     }
 
     @Override

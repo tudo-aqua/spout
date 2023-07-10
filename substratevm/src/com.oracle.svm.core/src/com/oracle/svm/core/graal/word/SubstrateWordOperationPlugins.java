@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,28 +25,31 @@
 package com.oracle.svm.core.graal.word;
 
 import org.graalvm.compiler.api.replacements.SnippetReflectionProvider;
+import org.graalvm.compiler.core.common.memory.BarrierType;
+import org.graalvm.compiler.core.common.memory.MemoryOrderMode;
 import org.graalvm.compiler.core.common.type.StampFactory;
 import org.graalvm.compiler.debug.GraalError;
 import org.graalvm.compiler.nodes.ConstantNode;
 import org.graalvm.compiler.nodes.ValueNode;
 import org.graalvm.compiler.nodes.extended.GuardingNode;
+import org.graalvm.compiler.nodes.gc.BarrierSet;
 import org.graalvm.compiler.nodes.graphbuilderconf.GraphBuilderContext;
 import org.graalvm.compiler.nodes.memory.FixedAccessNode;
-import org.graalvm.compiler.nodes.memory.OnHeapMemoryAccess.BarrierType;
 import org.graalvm.compiler.nodes.memory.ReadNode;
 import org.graalvm.compiler.nodes.memory.address.AddressNode;
 import org.graalvm.compiler.word.WordOperationPlugin;
 import org.graalvm.compiler.word.WordTypes;
-import org.graalvm.util.GuardedAnnotationAccess;
+import org.graalvm.nativeimage.AnnotationAccess;
 import org.graalvm.word.LocationIdentity;
 
+import jdk.vm.ci.meta.ConstantReflectionProvider;
 import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 
 public class SubstrateWordOperationPlugins extends WordOperationPlugin {
 
-    public SubstrateWordOperationPlugins(SnippetReflectionProvider snippetReflection, WordTypes wordTypes) {
-        super(snippetReflection, wordTypes);
+    public SubstrateWordOperationPlugins(SnippetReflectionProvider snippetReflection, ConstantReflectionProvider constantReflection, WordTypes wordTypes, BarrierSet barrierSet) {
+        super(snippetReflection, constantReflection, wordTypes, barrierSet);
     }
 
     @Override
@@ -57,7 +60,7 @@ public class SubstrateWordOperationPlugins extends WordOperationPlugin {
             }
         }
 
-        SubstrateOperation operation = GuardedAnnotationAccess.getAnnotation(method, SubstrateOperation.class);
+        SubstrateOperation operation = AnnotationAccess.getAnnotation(method, SubstrateOperation.class);
         if (operation == null) {
             processWordOperation(b, args, wordTypes.getWordOperation(method, b.getMethod().getDeclaringClass()));
             return true;
@@ -77,7 +80,7 @@ public class SubstrateWordOperationPlugins extends WordOperationPlugin {
                 assert args[2].isConstant() : args[2];
                 location = snippetReflection.asObject(LocationIdentity.class, args[2].asJavaConstant());
                 assert location != null : snippetReflection.asObject(Object.class, args[2].asJavaConstant());
-                FixedAccessNode read = b.add(new ReadNode(address, location, StampFactory.forKind(readKind), BarrierType.NONE));
+                FixedAccessNode read = b.add(new ReadNode(address, location, StampFactory.forKind(readKind), BarrierType.NONE, MemoryOrderMode.PLAIN));
                 if (!(args[3] instanceof ConstantNode)) {
                     // guard can be the null constant
                     read.setGuard((GuardingNode) args[3]);
@@ -85,7 +88,7 @@ public class SubstrateWordOperationPlugins extends WordOperationPlugin {
                 b.push(returnKind, read);
                 break;
             default:
-                throw GraalError.shouldNotReachHere("Unkown operation " + operation);
+                throw GraalError.shouldNotReachHere("Unknown operation " + operation); // ExcludeFromJacocoGeneratedReport
         }
     }
 }

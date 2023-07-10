@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,6 +25,7 @@
 package com.oracle.graal.pointsto.util;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
@@ -36,7 +37,6 @@ import java.util.concurrent.atomic.LongAdder;
 
 import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.debug.DebugContext.Activation;
-import org.graalvm.compiler.debug.DebugContext.Builder;
 import org.graalvm.compiler.debug.DebugContext.Description;
 import org.graalvm.compiler.debug.DebugContext.Scope;
 import org.graalvm.compiler.debug.DebugHandlersFactory;
@@ -61,7 +61,7 @@ public class CompletionExecutor {
     private final AtomicReference<State> state;
     private final LongAdder postedOperations;
     private final LongAdder completedOperations;
-    private final List<DebugContextRunnable> postedBeforeStart;
+    private List<DebugContextRunnable> postedBeforeStart;
     private final CopyOnWriteArrayList<Throwable> exceptions = new CopyOnWriteArrayList<>();
 
     private ExecutorService executorService;
@@ -70,7 +70,6 @@ public class CompletionExecutor {
     private final BigBang bb;
     private Timing timing;
     private Object vmConfig;
-    private final Thread startingThread;
 
     public interface Timing {
         long getPrintIntervalNanos();
@@ -91,8 +90,6 @@ public class CompletionExecutor {
         state = new AtomicReference<>(State.UNUSED);
         postedOperations = new LongAdder();
         completedOperations = new LongAdder();
-        postedBeforeStart = new ArrayList<>();
-        startingThread = Thread.currentThread();
     }
 
     public void init() {
@@ -104,7 +101,7 @@ public class CompletionExecutor {
         setState(State.BEFORE_START);
         postedOperations.reset();
         completedOperations.reset();
-        postedBeforeStart.clear();
+        postedBeforeStart = Collections.synchronizedList(new ArrayList<>());
         vmConfig = bb.getHostVM().getConfiguration();
     }
 
@@ -125,11 +122,11 @@ public class CompletionExecutor {
         /**
          * Gets a {@link DebugContext} the executor will use for this task.
          *
-         * A task can override this and return {@link DebugContext#disabled} to avoid the cost of
-         * creating a {@link DebugContext} if one is not needed.
+         * {@link DebugContext#disabled} is used by default to avoid the cost of creating a
+         * {@link DebugContext}, so the task should override this if one is needed.
          */
-        default DebugContext getDebug(OptionValues options, List<DebugHandlersFactory> factories) {
-            return new Builder(options, factories).description(getDescription()).build();
+        default DebugContext getDebug(@SuppressWarnings("unused") OptionValues options, @SuppressWarnings("unused") List<DebugHandlersFactory> factories) {
+            return DebugContext.disabled(null);
         }
     }
 
@@ -144,11 +141,6 @@ public class CompletionExecutor {
             case UNUSED:
                 throw JVMCIError.shouldNotReachHere();
             case BEFORE_START:
-                /*
-                 * The postedBeforeStart list is not thread safe. Make sure that it is only updated
-                 * from the same thread that created the executor.
-                 */
-                assert Thread.currentThread() == startingThread;
                 postedBeforeStart.add(command);
                 break;
             case STARTED:
@@ -214,7 +206,7 @@ public class CompletionExecutor {
 
         setState(State.STARTED);
         postedBeforeStart.forEach(this::execute);
-        postedBeforeStart.clear();
+        postedBeforeStart = null;
     }
 
     private void setState(State newState) {
@@ -272,7 +264,7 @@ public class CompletionExecutor {
     }
 
     public long getPostedOperations() {
-        return postedOperations.sum() + postedBeforeStart.size();
+        return postedOperations.sum() + (postedBeforeStart == null ? 0 : postedBeforeStart.size());
     }
 
     public boolean isSequential() {
@@ -292,13 +284,6 @@ public class CompletionExecutor {
     public int parallelism() {
         if (executorService instanceof ForkJoinPool) {
             return ((ForkJoinPool) executorService).getParallelism();
-        }
-        return 1;
-    }
-
-    public int poolSize() {
-        if (executorService instanceof ForkJoinPool) {
-            return ((ForkJoinPool) executorService).getPoolSize();
         }
         return 1;
     }

@@ -24,7 +24,7 @@
  */
 package com.oracle.svm.graal.isolated;
 
-import com.oracle.svm.core.annotate.Uninterruptible;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.c.NonmovableArray;
 import com.oracle.svm.core.c.NonmovableArrays;
 import com.oracle.svm.core.code.CodeInfo;
@@ -48,14 +48,14 @@ final class IsolatedRuntimeMethodInfoAccess {
 
     private static final RuntimeCodeInfoAccess.NonmovableArrayAction TRACK_ACTION = new RuntimeCodeInfoAccess.NonmovableArrayAction() {
         @Override
-        @Uninterruptible(reason = "Called from uninterruptible code", mayBeInlined = true)
+        @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
         public void apply(NonmovableArray<?> array) {
             NonmovableArrays.trackUnmanagedArray(array);
         }
     };
     private static final RuntimeCodeInfoAccess.NonmovableArrayAction UNTRACK_ACTION = new RuntimeCodeInfoAccess.NonmovableArrayAction() {
         @Override
-        @Uninterruptible(reason = "Called from uninterruptible code", mayBeInlined = true)
+        @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
         public void apply(NonmovableArray<?> array) {
             NonmovableArrays.untrackUnmanagedArray(array);
         }

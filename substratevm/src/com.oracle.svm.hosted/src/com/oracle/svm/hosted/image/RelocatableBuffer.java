@@ -36,7 +36,12 @@ import java.util.TreeMap;
 import org.graalvm.compiler.core.common.NumUtil;
 import org.graalvm.nativeimage.c.function.RelocatedPointer;
 
+import com.oracle.graal.pointsto.heap.ImageHeapConstant;
 import com.oracle.objectfile.ObjectFile;
+import com.oracle.svm.core.meta.MethodPointer;
+import com.oracle.svm.core.meta.SubstrateObjectConstant;
+
+import jdk.vm.ci.code.site.Reference;
 
 /**
  * Offers a {@link ByteBuffer} with additional support for marking relocation sites within the
@@ -53,11 +58,11 @@ public final class RelocatableBuffer {
     }
 
     public void addRelocationWithoutAddend(int key, ObjectFile.RelocationKind relocationKind, Object targetObject) {
-        relocations.put(key, new Info(relocationKind, null, targetObject));
+        relocations.put(key, new Info(relocationKind, 0L, targetObject));
     }
 
-    public void addRelocationWithAddend(int key, ObjectFile.RelocationKind relocationKind, Long explicitAddend, Object targetObject) {
-        relocations.put(key, new Info(relocationKind, explicitAddend, targetObject));
+    public void addRelocationWithAddend(int key, ObjectFile.RelocationKind relocationKind, long addend, Object targetObject) {
+        relocations.put(key, new Info(relocationKind, addend, targetObject));
     }
 
     public boolean hasRelocations() {
@@ -76,9 +81,9 @@ public final class RelocatableBuffer {
         return byteBuffer;
     }
 
-    static final class Info {
+    public static final class Info {
         private final ObjectFile.RelocationKind relocationKind;
-        private final Long explicitAddend;
+        private final long addend;
         /**
          * The referenced object on the heap. If this is an instance of a {@link RelocatedPointer},
          * than the relocation is not treated as a data relocation but has a special meaning, e.g. a
@@ -86,10 +91,14 @@ public final class RelocatableBuffer {
          */
         private final Object targetObject;
 
-        Info(ObjectFile.RelocationKind kind, Long explicitAddend, Object targetObject) {
+        Info(ObjectFile.RelocationKind kind, long addend, Object targetObject) {
             this.relocationKind = kind;
-            this.explicitAddend = explicitAddend;
+            this.addend = addend;
             this.targetObject = targetObject;
+
+            /* Sanity check for allowed groups of target objects. */
+            assert targetObject instanceof Reference || targetObject instanceof MethodPointer ||
+                            targetObject instanceof SubstrateObjectConstant || targetObject instanceof ImageHeapConstant : targetObject;
         }
 
         public int getRelocationSize() {
@@ -100,12 +109,8 @@ public final class RelocatableBuffer {
             return relocationKind;
         }
 
-        public boolean hasExplicitAddend() {
-            return (explicitAddend != null);
-        }
-
-        public Long getExplicitAddend() {
-            return explicitAddend;
+        public long getAddend() {
+            return addend;
         }
 
         public Object getTargetObject() {
@@ -114,7 +119,7 @@ public final class RelocatableBuffer {
 
         @Override
         public String toString() {
-            return "RelocatableBuffer.Info(targetObject=" + targetObject + " relocationKind=" + relocationKind + " explicitAddend=" + explicitAddend + ")";
+            return "RelocatableBuffer.Info(targetObject=" + targetObject + " relocationKind=" + relocationKind + " addend=" + addend + ")";
         }
     }
 }

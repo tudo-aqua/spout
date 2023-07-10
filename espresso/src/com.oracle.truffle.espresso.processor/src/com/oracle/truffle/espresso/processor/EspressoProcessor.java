@@ -22,12 +22,12 @@
  */
 package com.oracle.truffle.espresso.processor;
 
-import static com.oracle.truffle.espresso.processor.ProcessorUtils.imports;
-
 import java.io.IOException;
 import java.io.Writer;
-import java.time.Year;
+import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
@@ -46,8 +46,17 @@ import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import javax.tools.JavaFileObject;
+
+import com.oracle.truffle.espresso.processor.builders.ClassBuilder;
+import com.oracle.truffle.espresso.processor.builders.ClassFileBuilder;
+import com.oracle.truffle.espresso.processor.builders.FieldBuilder;
+import com.oracle.truffle.espresso.processor.builders.JavadocBuilder;
+import com.oracle.truffle.espresso.processor.builders.MethodBuilder;
+import com.oracle.truffle.espresso.processor.builders.ModifierBuilder;
+import com.oracle.truffle.espresso.processor.builders.SignatureBuilder;
 
 /**
  * Helper class for creating all kinds of Substitution processor in Espresso. A processor need only
@@ -87,7 +96,6 @@ public abstract class EspressoProcessor extends BaseProcessor {
      *
      * package com.oracle.truffle.espresso.substitutions;
      *
-     * import com.oracle.truffle.espresso.meta.Meta;
      * import com.oracle.truffle.espresso.substitutions.Collect;
      *
      * import com.oracle.truffle.espresso.substitutions.JavaSubstitution;
@@ -115,15 +123,15 @@ public abstract class EspressoProcessor extends BaseProcessor {
      *         }
      *
      *         @Override
-     *         public final JavaSubstitution create(Meta meta) {
-     *             return new Target_java_lang_invoke_MethodHandleNatives_Resolve_2(meta);
+     *         public final JavaSubstitution create() {
+     *             return new Target_java_lang_invoke_MethodHandleNatives_Resolve_2();
      *         }
      *     }
      *
      *     private @Child Resolve node;
      *
      *     @SuppressWarnings("unused")
-     *     private Target_java_lang_invoke_MethodHandleNatives_Resolve_2(Meta meta) {
+     *     private Target_java_lang_invoke_MethodHandleNatives_Resolve_2() {
      *         this.node = com.oracle.truffle.espresso.substitutions.Target_java_lang_invoke_MethodHandleNativesFactory.ResolveNodeGen.create();
      *     }
      *
@@ -162,15 +170,30 @@ public abstract class EspressoProcessor extends BaseProcessor {
     abstract List<String> expectedImports(String className, String targetMethodName, List<String> parameterTypeName, SubstitutionHelper helper);
 
     /**
-     * Generates the string corresponding to the Constructor for the current substitutor. In
+     * Generates the builder corresponding to the Constructor for the current substitutor. In
      * particular, it should call its super class substitutor's constructor.
      *
      * @see EspressoProcessor#substitutor
      */
-    abstract String generateFactoryConstructorAndBody(String className, String targetMethodName, List<String> parameterTypeName, SubstitutionHelper helper);
+    abstract ClassBuilder generateFactoryConstructor(ClassBuilder factoryBuilder, String className, String targetMethodName, List<String> parameterTypeName, SubstitutionHelper helper);
 
     /**
-     * Generates the string that corresponds to the code of the invoke method for the current
+     * Additional hook called after
+     * {@link #generateFactoryConstructor(ClassBuilder, String, String, List, SubstitutionHelper)},
+     * which allows processors to add additional methods to the generated factory.
+     * <p>
+     * By default, adds the {@code isTrivial} method.
+     */
+    @SuppressWarnings("unused")
+    protected ClassBuilder generateAdditionalFactoryMethods(ClassBuilder factoryBuilder, String className, String targetMethodName, List<String> parameterTypeName, SubstitutionHelper helper) {
+        if (isTrivial(helper.getTarget(), helper.getImplAnnotation())) {
+            factoryBuilder.withMethod(generateIsTrivial(helper));
+        }
+        return factoryBuilder;
+    }
+
+    /**
+     * Generates the builder that corresponds to the code of the invoke method for the current
      * substitutor. Care must be taken to correctly unwrap and cast the given arguments (given in an
      * Object[]) so that they correspond to the substituted method's signature. Furthermore, all
      * TruffleObject nulls must be replaced with Espresso nulls (Null check can be done through
@@ -180,7 +203,7 @@ public abstract class EspressoProcessor extends BaseProcessor {
      * @see EspressoProcessor#IMPORT_INTEROP_LIBRARY
      * @see EspressoProcessor#STATIC_OBJECT_NULL
      */
-    abstract String generateInvoke(String className, String targetMethodName, List<String> parameterTypeName, SubstitutionHelper helper);
+    abstract ClassBuilder generateInvoke(ClassBuilder classBuilder, String className, String targetMethodName, List<String> parameterTypeName, SubstitutionHelper helper);
 
     EspressoProcessor(String substitutionPackage, String substitutor) {
         this.substitutorPackage = substitutionPackage;
@@ -198,6 +221,9 @@ public abstract class EspressoProcessor extends BaseProcessor {
     TypeElement inject;
     private static final String INJECT = "com.oracle.truffle.espresso.substitutions.Inject";
 
+    TypeElement noSafepoint;
+    private static final String NO_SAFEPOINT = "com.oracle.truffle.espresso.jni.NoSafepoint";
+
     TypeElement substitutionProfiler;
     private static final String SUBSTITUTION_PROFILER = "com.oracle.truffle.espresso.substitutions.SubstitutionProfiler";
 
@@ -206,6 +232,9 @@ public abstract class EspressoProcessor extends BaseProcessor {
 
     TypeElement javaType;
     private static final String JAVA_TYPE = "com.oracle.truffle.espresso.substitutions.JavaType";
+
+    TypeElement espressoLanguage;
+    private static final String ESPRESSO_LANGUAGE = "com.oracle.truffle.espresso.EspressoLanguage";
 
     TypeElement meta;
     private static final String META = "com.oracle.truffle.espresso.meta.Meta";
@@ -217,77 +246,54 @@ public abstract class EspressoProcessor extends BaseProcessor {
     private static final String TRUFFLE_NODE = "com.oracle.truffle.api.nodes.Node";
 
     // Global constants
-    private static final String FACTORY = "Factory";
+    protected static final String FACTORY = "Factory";
 
-    static final String COPYRIGHT = "/* Copyright (c) " + Year.now() + " Oracle and/or its affiliates. All rights reserved.\n" +
-                    " * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.\n" +
-                    " *\n" +
-                    " * This code is free software; you can redistribute it and/or modify it\n" +
-                    " * under the terms of the GNU General Public License version 2 only, as\n" +
-                    " * published by the Free Software Foundation.\n" +
-                    " *\n" +
-                    " * This code is distributed in the hope that it will be useful, but WITHOUT\n" +
-                    " * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or\n" +
-                    " * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License\n" +
-                    " * version 2 for more details (a copy is included in the LICENSE file that\n" +
-                    " * accompanied this code).\n" +
-                    " *\n" +
-                    " * You should have received a copy of the GNU General Public License version\n" +
-                    " * 2 along with this work; if not, write to the Free Software Foundation,\n" +
-                    " * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.\n" +
-                    " *\n" +
-                    " * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA\n" +
-                    " * or visit www.oracle.com if you need additional information or have any\n" +
-                    " * questions.\n" +
-                    " */\n\n";
-
-    static final String GENERATED_BY = "Generated by: ";
-    static final String AT_LINK = "@link ";
-    private static final String PRIVATE = "private";
-    static final String PUBLIC_STATIC_FINAL_CLASS = "public static final class ";
-    static final String PUBLIC_FINAL_CLASS = "public final class ";
     static final String SUPPRESS_UNUSED = "@SuppressWarnings(\"unused\")";
 
-    static final String PUBLIC_FINAL = "public final";
-    static final String PRIVATE_FINAL = "private final";
-    static final String OVERRIDE = "@Override";
     static final String IS_TRIVIAL = "isTrivial";
+    static final String GUARD = "guard";
 
     static final String STATIC_OBJECT_NULL = "StaticObject.NULL";
 
     static final String IMPORT_INTEROP_LIBRARY = "com.oracle.truffle.api.interop.InteropLibrary";
     static final String IMPORT_STATIC_OBJECT = "com.oracle.truffle.espresso.runtime.StaticObject";
     static final String IMPORT_TRUFFLE_OBJECT = "com.oracle.truffle.api.interop.TruffleObject";
+    static final String IMPORT_ESPRESSO_LANGUAGE = "com.oracle.truffle.espresso.EspressoLanguage";
     static final String IMPORT_META = "com.oracle.truffle.espresso.meta.Meta";
     static final String IMPORT_ESPRESSO_CONTEXT = "com.oracle.truffle.espresso.runtime.EspressoContext";
     static final String IMPORT_PROFILE = "com.oracle.truffle.espresso.substitutions.SubstitutionProfiler";
     static final String IMPORT_COLLECT = "com.oracle.truffle.espresso.substitutions.Collect";
 
-    static final String META_CLASS = "Meta ";
-    static final String META_VAR = "meta";
-    static final String META_ARG = META_CLASS + META_VAR;
-    static final String META_ARG_CALL = "meta";
-    private static final String SET_META = "this." + META_VAR + " = " + META_VAR + ";";
+    static final String ESPRESSO_LANGUAGE_SIMPLE_NAME = "EspressoLanguage";
+    static final String ESPRESSO_CONTEX_SIMPLE_NAME = "EspressoContext";
+    static final String META_SIMPLE_NAME = "Meta";
 
-    static final String PROFILE_CLASS = "SubstitutionProfiler ";
+    static final String ESPRESSO_CONTEXT_VAR = "context";
+    static final String ESPRESSO_CONTEXT_SETTER = String.format("%s %s = getContext();", ESPRESSO_CONTEX_SIMPLE_NAME, ESPRESSO_CONTEXT_VAR);
+
+    static final String GET_ESPRESSO_LANGUAGE = "getLanguage()";
+    static final String META_FROM_ESPRESSO_CONTEXT = String.format("%s.getMeta()", ESPRESSO_CONTEXT_VAR);
+
+    static final String PROFILE_CLASS = "SubstitutionProfiler";
     static final String PROFILE_ARG_CALL = "this";
-
-    static final String ESPRESSO_CONTEXT_CLASS = "EspressoContext ";
-    static final String ESPRESSO_CONTEXT_ARG_CALL = "meta.getContext()";
 
     static final String CREATE = "create";
 
-    static final String SHOULD_SPLIT = "shouldSplit";
     static final String SPLIT = "split";
 
-    static final String PUBLIC_BOOLEAN = "public boolean ";
-    static final String PUBLIC_FINAL_OBJECT = "public final Object ";
     static final String ARGS_NAME = "args";
     static final String ARG_NAME = "arg";
-    static final String TAB_1 = "    ";
-    static final String TAB_2 = TAB_1 + TAB_1;
-    static final String TAB_3 = TAB_2 + TAB_1;
-    static final String TAB_4 = TAB_3 + TAB_1;
+
+    static final String SAFEPOINT_POLL = "com.oracle.truffle.api.TruffleSafepoint.poll(this);";
+
+    enum InjectableType {
+        LANGUAGE,
+        META,
+        CONTEXT,
+        PROFILE
+    }
+
+    private final Map<InjectableType, TypeMirror> injectableTypeMirrors = new IdentityHashMap<>();
 
     public static NativeType classToType(TypeKind typeKind) {
         // @formatter:off
@@ -343,12 +349,20 @@ public abstract class EspressoProcessor extends BaseProcessor {
             return false;
         }
         inject = getTypeElement(INJECT);
+        noSafepoint = getTypeElement(NO_SAFEPOINT);
         staticObject = getTypeElement(STATIC_OBJECT);
         javaType = getTypeElement(JAVA_TYPE);
+        espressoLanguage = getTypeElement(ESPRESSO_LANGUAGE);
         meta = getTypeElement(META);
         espressoContext = getTypeElement(ESPRESSO_CONTEXT);
         substitutionProfiler = getTypeElement(SUBSTITUTION_PROFILER);
         truffleNode = getTypeElement(TRUFFLE_NODE);
+
+        injectableTypeMirrors.put(InjectableType.LANGUAGE, espressoLanguage.asType());
+        injectableTypeMirrors.put(InjectableType.META, meta.asType());
+        injectableTypeMirrors.put(InjectableType.CONTEXT, espressoContext.asType());
+        injectableTypeMirrors.put(InjectableType.PROFILE, substitutionProfiler.asType());
+
         processImpl(roundEnv);
         done = true;
         return false;
@@ -410,28 +424,25 @@ public abstract class EspressoProcessor extends BaseProcessor {
         return executeMethod;
     }
 
-    boolean hasInjectedParameter(ExecutableElement method, TypeMirror supportedType) {
+    List<InjectableType> getInjectedTypes(ExecutableElement method) {
+        List<InjectableType> injectedTypes = new ArrayList<>();
         List<? extends VariableElement> params = method.getParameters();
+        Types typeUtils = env().getTypeUtils();
         for (VariableElement e : params) {
-            if (getAnnotation(e.asType(), inject) != null) {
-                if (env().getTypeUtils().isSameType(e.asType(), supportedType)) {
-                    return true;
+            TypeMirror eType = e.asType();
+            if (getAnnotation(eType, inject) != null) {
+                for (InjectableType injectableType : InjectableType.values()) {
+                    if (typeUtils.isSameType(eType, injectableTypeMirrors.get(injectableType))) {
+                        injectedTypes.add(injectableType);
+                    }
                 }
             }
         }
-        return false;
+        return injectedTypes;
     }
 
-    boolean hasProfileInjection(ExecutableElement method) {
-        return hasInjectedParameter(method, substitutionProfiler.asType());
-    }
-
-    boolean hasMetaInjection(ExecutableElement method) {
-        return hasInjectedParameter(method, meta.asType());
-    }
-
-    boolean hasContextInjection(ExecutableElement method) {
-        return hasInjectedParameter(method, espressoContext.asType());
+    boolean skipsSafepoint(Element target) {
+        return getAnnotation(target, noSafepoint) != null;
     }
 
     boolean isActualParameter(VariableElement param) {
@@ -506,19 +517,32 @@ public abstract class EspressoProcessor extends BaseProcessor {
         return result;
     }
 
+    static void setEspressoContextVar(MethodBuilder methodBuilder, SubstitutionHelper helper) {
+        if (helper.needsContextInjection()) {
+            methodBuilder.addBodyLine(EspressoProcessor.ESPRESSO_CONTEXT_SETTER);
+        }
+    }
+
     /**
      * Injects the meta information in the substitution call.
      */
     static boolean appendInvocationMetaInformation(StringBuilder str, boolean first, SubstitutionHelper helper) {
         boolean f = first;
-        if (helper.hasMetaInjection) {
-            f = injectMeta(str, f);
-        }
-        if (helper.hasProfileInjection) {
-            f = injectProfile(str, f);
-        }
-        if (helper.hasContextInjection) {
-            f = injectContext(str, f);
+        for (InjectableType injectedType : helper.injectedTypes) {
+            switch (injectedType) {
+                case LANGUAGE:
+                    f = injectLanguage(str, f);
+                    break;
+                case META:
+                    f = injectMeta(str, f);
+                    break;
+                case CONTEXT:
+                    f = injectContext(str, f);
+                    break;
+                case PROFILE:
+                    f = injectProfile(str, f);
+                    break;
+            }
         }
         return f;
     }
@@ -536,44 +560,46 @@ public abstract class EspressoProcessor extends BaseProcessor {
         }
     }
 
-    @SuppressWarnings("unused")
-    private static String generateGeneratedBy(String className, String targetMethodName, List<String> parameterTypes, SubstitutionHelper helper) {
-        StringBuilder str = new StringBuilder();
+    private static JavadocBuilder generateGeneratedBy(String className, List<String> parameterTypes, SubstitutionHelper helper) {
+        JavadocBuilder javadocBuilder = new JavadocBuilder();
+
         if (helper.isNodeTarget()) {
-            str.append("/**\n * ").append(GENERATED_BY).append("{").append(AT_LINK).append(helper.getNodeTarget().getQualifiedName()).append("}\n */");
-            return str.toString();
-        } else {
-            str.append("/**\n * ").append(GENERATED_BY).append("{").append(AT_LINK).append(className).append("#").append(helper.getMethodTarget().getSimpleName()).append("(");
+            javadocBuilder.addGeneratedByLine(helper.getNodeTarget().getQualifiedName());
+            return javadocBuilder;
         }
-        boolean first = true;
+
+        SignatureBuilder linkSignature = new SignatureBuilder(className + "#" + helper.getMethodTarget().getSimpleName());
+
         for (String param : parameterTypes) {
-            first = checkFirst(str, first);
-            str.append(param);
+            linkSignature.addParam(param);
         }
-        if (helper.hasMetaInjection) {
-            first = checkFirst(str, first);
-            str.append(META_CLASS);
+        for (InjectableType injectedType : helper.injectedTypes) {
+            switch (injectedType) {
+                case LANGUAGE:
+                    linkSignature.addParam(ESPRESSO_LANGUAGE_SIMPLE_NAME);
+                    break;
+                case META:
+                    linkSignature.addParam(META_SIMPLE_NAME);
+                    break;
+                case CONTEXT:
+                    linkSignature.addParam(ESPRESSO_CONTEX_SIMPLE_NAME);
+                    break;
+                case PROFILE:
+                    linkSignature.addParam(PROFILE_CLASS);
+                    break;
+            }
         }
-        if (helper.hasProfileInjection) {
-            first = checkFirst(str, first);
-            str.append(PROFILE_CLASS);
-        }
-        if (helper.hasContextInjection) {
-            first = checkFirst(str, first);
-            str.append(ESPRESSO_CONTEXT_CLASS);
-        }
-        str.append(")}\n */");
-        return str.toString();
+
+        javadocBuilder.addGeneratedByLine(linkSignature);
+        return javadocBuilder;
     }
 
-    static String generateNativeSignature(NativeType[] signature) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("NativeSignature.create(NativeType.").append(signature[0]);
-        for (int i = 1; i < signature.length; ++i) {
-            sb.append(", NativeType.").append(signature[i]);
+    static SignatureBuilder generateNativeSignature(NativeType[] signature) {
+        SignatureBuilder sb = new SignatureBuilder("NativeSignature.create");
+        for (NativeType t : signature) {
+            sb.addParam("NativeType." + t);
         }
-        sb.append(")");
-        return sb.toString();
+        return sb;
     }
 
     // @formatter:off
@@ -595,64 +621,51 @@ public abstract class EspressoProcessor extends BaseProcessor {
      *     }
      *     @Override
      *     public final SUBSTITUTOR create() {
-     *         return new className();
+     *         return new substitutorName();
      *     }
      * }
      */
     // @formatter:on
-    private String generateFactory(String className, String targetMethodName, List<String> parameterTypeName, SubstitutionHelper helper) {
-        StringBuilder str = new StringBuilder();
-        str.append("\n");
-        str.append(TAB_1).append("@Collect(").append(helper.getImplAnnotation().getQualifiedName()).append(".class").append(")\n");
-        str.append(TAB_1).append(PUBLIC_STATIC_FINAL_CLASS).append(FACTORY).append(" extends ").append(substitutor).append(".").append(FACTORY).append(" {\n");
-        str.append(TAB_2).append("public ").append(FACTORY).append("() {\n");
-        str.append(generateFactoryConstructorAndBody(className, targetMethodName, parameterTypeName, helper)).append("\n");
-        str.append(TAB_2).append(OVERRIDE).append("\n");
-        str.append(TAB_2).append(PUBLIC_FINAL).append(" ").append(substitutor).append(" ").append(CREATE).append("(");
-        str.append(META_CLASS).append(META_VAR).append(") {\n");
-        str.append(TAB_3).append("return new ").append(className).append("(").append(META_VAR).append(");\n");
-        str.append(TAB_2).append("}\n");
-        str.append(TAB_1).append("}\n");
-        return str.toString();
+    private ClassBuilder generateFactory(String className, String substitutorName, String targetMethodName, List<String> parameterTypeName, SubstitutionHelper helper) {
+        ClassBuilder factory = new ClassBuilder(FACTORY) //
+                        .withAnnotation("@Collect(", helper.getImplAnnotation().getQualifiedName().toString(), ".class)") //
+                        .withQualifiers(new ModifierBuilder().asPublic().asStatic().asFinal()) //
+                        .withSuperClass(substitutor + "." + FACTORY);
+        generateFactoryConstructor(factory, substitutorName, targetMethodName, parameterTypeName, helper);
+        generateAdditionalFactoryMethods(factory, className, targetMethodName, parameterTypeName, helper);
+        factory.withMethod(new MethodBuilder(CREATE) //
+                        .withOverrideAnnotation() //
+                        .withModifiers(new ModifierBuilder().asPublic().asFinal()) //
+                        .withReturnType(substitutor) //
+                        .addBodyLine("return new ", substitutorName, "();"));
+        return factory;
     }
 
-    /**
-     * Injects meta data in the substitutor's field, so the Meta be passed along during substitution
-     * invocation.
-     */
-    private static String generateInstanceFields(SubstitutionHelper helper) {
-        if (!helper.isNodeTarget() && !helper.hasMetaInjection && !helper.hasProfileInjection && !helper.hasContextInjection) {
-            return "";
-        }
-        StringBuilder str = new StringBuilder();
-        if (helper.hasMetaInjection || helper.hasProfileInjection || helper.hasContextInjection) {
-            str.append(TAB_1).append(PRIVATE_FINAL).append(" ").append(META_ARG).append(";\n");
-        }
+    private static void generateChildInstanceField(ClassBuilder cb, SubstitutionHelper helper) {
         if (helper.isNodeTarget()) {
-            str.append(TAB_1).append(PRIVATE).append(" @Child ").append(helper.getNodeTarget().getSimpleName()).append(" ").append("node").append(";\n");
+            FieldBuilder field = new FieldBuilder(helper.getNodeTarget().getSimpleName(), "node") //
+                            .withAnnotation("@Child") //
+                            .withQualifiers(new ModifierBuilder().asPrivate());
+            cb.withField(field);
         }
-        str.append('\n');
-        return str.toString();
     }
 
     /**
      * Generates the constructor for the substitutor.
      */
-    private static String generateConstructor(String substitutorName, SubstitutionHelper helper) {
-        StringBuilder str = new StringBuilder();
-        str.append(TAB_1).append("private ").append(substitutorName).append("(").append(META_ARG).append(") {\n");
-        if (helper.hasMetaInjection || helper.hasProfileInjection || helper.hasContextInjection) {
-            str.append(TAB_2).append(SET_META).append("\n");
-        }
+    private static MethodBuilder generateConstructor(String substitutorName, SubstitutionHelper helper) {
+        MethodBuilder constructor = new MethodBuilder(substitutorName) //
+                        .asConstructor() //
+                        .withModifiers(new ModifierBuilder().asPrivate());
+
         if (helper.isNodeTarget()) {
             TypeElement enclosing = (TypeElement) helper.getNodeTarget().getEnclosingElement();
-            str.append(TAB_2).append("this.node = " + enclosing.getQualifiedName() + "Factory." + helper.getNodeTarget().getSimpleName() + "NodeGen" + ".create();").append("\n");
+            constructor.addBodyLine("this.node = ", enclosing.getQualifiedName(), "Factory.", helper.getNodeTarget().getSimpleName(), "NodeGen", ".create();");
         }
-        str.append(TAB_1).append("}\n");
-        return str.toString();
+        return constructor;
     }
 
-    private static boolean isTrivial(Element element, TypeElement implAnnotation) {
+    protected static boolean isTrivial(Element element, TypeElement implAnnotation) {
         AnnotationMirror mirror = getAnnotation(element, implAnnotation);
         try {
             Boolean value = getAnnotationValue(mirror, "isTrivial", Boolean.class);
@@ -665,18 +678,24 @@ public abstract class EspressoProcessor extends BaseProcessor {
     /**
      * Generates isTrivial getter.
      */
-    private static String generateIsTrivial(SubstitutionHelper helper) {
-        StringBuilder str = new StringBuilder();
-        str.append(TAB_1).append(OVERRIDE).append("\n");
-        str.append(TAB_1).append(PUBLIC_BOOLEAN).append(IS_TRIVIAL).append("() {\n");
-        str.append(TAB_2).append("return ").append(isTrivial(helper.getTarget(), helper.getImplAnnotation())).append(";\n");
-        str.append(TAB_1).append("}\n");
-        return str.toString();
+    private static MethodBuilder generateIsTrivial(SubstitutionHelper helper) {
+        MethodBuilder isTrivialMethod = new MethodBuilder(IS_TRIVIAL) //
+                        .withOverrideAnnotation() //
+                        .withModifiers(new ModifierBuilder().asPublic()) //
+                        .withReturnType("boolean") //
+                        .addBodyLine("return ", isTrivial(helper.getTarget(), helper.getImplAnnotation()), ';');
+        return isTrivialMethod;
+    }
+
+    static boolean injectLanguage(StringBuilder str, boolean first) {
+        checkFirst(str, first);
+        str.append(GET_ESPRESSO_LANGUAGE);
+        return false;
     }
 
     static boolean injectMeta(StringBuilder str, boolean first) {
         checkFirst(str, first);
-        str.append(META_ARG_CALL);
+        str.append(META_FROM_ESPRESSO_CONTEXT);
         return false;
     }
 
@@ -688,7 +707,7 @@ public abstract class EspressoProcessor extends BaseProcessor {
 
     static boolean injectContext(StringBuilder str, boolean first) {
         checkFirst(str, first);
-        str.append(ESPRESSO_CONTEXT_ARG_CALL);
+        str.append(ESPRESSO_CONTEXT_VAR);
         return false;
     }
 
@@ -702,95 +721,70 @@ public abstract class EspressoProcessor extends BaseProcessor {
      * @return The string forming the substitutor.
      */
     String spawnSubstitutor(String substitutorName, String targetPackage, String className, String targetMethodName, List<String> parameterTypeName, SubstitutionHelper helper) {
-        StringBuilder classFile = new StringBuilder();
-        // Header
-        classFile.append(COPYRIGHT);
-        classFile.append("package " + targetPackage + ";\n\n");
+        ClassFileBuilder substitutorFile = new ClassFileBuilder() //
+                        .withCopyright() //
+                        .inPackage(targetPackage);
 
         // Prepare imports
         List<String> expectedImports = expectedImports(substitutorName, targetMethodName, parameterTypeName, helper);
-        expectedImports.add(IMPORT_META);
-        if (helper.hasContextInjection) {
+
+        if (helper.needsContextInjection()) {
             expectedImports.add(IMPORT_ESPRESSO_CONTEXT);
         }
+        if (!helper.isNodeTarget()) {
+            if (helper.hasLanguageInjection) {
+                expectedImports.add(IMPORT_ESPRESSO_LANGUAGE);
+            }
+            if (helper.hasMetaInjection) {
+                expectedImports.add(IMPORT_META);
+            }
+        }
         expectedImports.add(IMPORT_COLLECT);
+
         // Add imports (filter useless import)
         for (String toImport : expectedImports) {
             String maybePackage = toImport.substring(0, toImport.lastIndexOf('.'));
             if (!targetPackage.equals(maybePackage)) {
-                classFile.append(imports(toImport));
+                substitutorFile.withImport(toImport);
             }
         }
 
-        // Class
-        classFile.append(generateGeneratedBy(className, targetMethodName, parameterTypeName, helper)).append("\n");
-        classFile.append(PUBLIC_FINAL_CLASS).append(substitutorName).append(" extends " + substitutor + " {\n");
+        ClassBuilder substitutorClass = new ClassBuilder(substitutorName) //
+                        .withSuperClass(substitutor) //
+                        .withJavaDoc(generateGeneratedBy(className, parameterTypeName, helper)) //
+                        .withQualifiers(new ModifierBuilder().asPublic().asFinal()) //
+                        .withInnerClass(generateFactory(className, substitutorName, targetMethodName, parameterTypeName, helper));
 
-        // Instance Provider
-        classFile.append(generateFactory(substitutorName, targetMethodName, parameterTypeName, helper)).append("\n");
-
-        // Instance variables
-        classFile.append(generateInstanceFields(helper));
-
-        // Constructor
-        classFile.append(TAB_1).append(SUPPRESS_UNUSED).append("\n");
-        classFile.append(generateConstructor(substitutorName, helper)).append("\n");
-
-        classFile.append(generateSplittingInformation(helper));
-
-        // Override the isTrivial() getter (returns false by default).
-        if (isTrivial(helper.getTarget(), helper.getImplAnnotation())) {
-            classFile.append(generateIsTrivial(helper));
+        if (helper.isNodeTarget() || helper.hasLanguageInjection || helper.hasMetaInjection || helper.hasProfileInjection || helper.hasContextInjection) {
+            generateChildInstanceField(substitutorClass, helper);
         }
 
-        classFile.append('\n');
+        MethodBuilder constructor = generateConstructor(substitutorName, helper) //
+                        .withAnnotation(SUPPRESS_UNUSED);
+        substitutorClass.withMethod(constructor);
 
-        // Invoke method
-        classFile.append(TAB_1).append(OVERRIDE).append("\n");
-        classFile.append(generateInvoke(className, targetMethodName, parameterTypeName, helper));
-        classFile.append("}");
+        substitutorClass.withMethod(generateSplit());
 
-        // End
-        return classFile.toString();
+        if (isTrivial(helper.getTarget(), helper.getImplAnnotation())) {
+            substitutorClass.withMethod(generateIsTrivial(helper));
+        }
+
+        generateInvoke(substitutorClass, className, targetMethodName, parameterTypeName, helper);
+
+        substitutorFile.withClass(substitutorClass);
+        return substitutorFile.build();
     }
 
     /**
-     * Injects overrides of 'shouldSplit()' and 'split()' methods.
+     * Injects override of 'split()' methods.
      */
-    private String generateSplittingInformation(SubstitutionHelper helper) {
-        if (helper.hasProfileInjection) {
-            StringBuilder str = new StringBuilder();
-            // Splitting logic
-            str.append('\n');
-            str.append(TAB_1).append(OVERRIDE).append("\n");
-            str.append(generateShouldSplit());
-
-            str.append('\n');
-            str.append(TAB_1).append(OVERRIDE).append("\n");
-            str.append(generateSplit());
-            return str.toString();
-        }
-        return "";
-    }
-
-    private static String generateShouldSplit() {
-        StringBuilder str = new StringBuilder();
-
-        str.append(TAB_1).append(PUBLIC_FINAL).append(" boolean ").append(SHOULD_SPLIT).append("() {\n");
-        str.append(TAB_2).append("return true;\n");
-        str.append(TAB_1).append("}\n");
-
-        return str.toString();
-    }
-
-    private String generateSplit() {
-        StringBuilder str = new StringBuilder();
-
-        str.append(TAB_1).append(PUBLIC_FINAL).append(" ").append(substitutor).append(" ").append(SPLIT).append("() {\n");
-        str.append(TAB_2).append("return new ").append(FACTORY).append("()").append(".").append(CREATE).append("(").append(META_VAR).append(");\n");
-        str.append(TAB_1).append("}\n");
-
-        return str.toString();
+    private MethodBuilder generateSplit() {
+        MethodBuilder method = new MethodBuilder(SPLIT) //
+                        .withOverrideAnnotation() //
+                        .withModifiers(new ModifierBuilder().asPublic().asFinal()) //
+                        .withReturnType(substitutor) //
+                        .addBodyLine("return new ", FACTORY, "().", CREATE, "();");
+        return method;
     }
 
     public Messager getMessager() {

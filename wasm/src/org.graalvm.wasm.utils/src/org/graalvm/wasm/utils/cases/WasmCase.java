@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -91,6 +91,7 @@ public abstract class WasmCase {
         ArrayList<Source> sources = new ArrayList<>();
         for (Map.Entry<String, byte[]> entry : createBinaries().entrySet()) {
             Source.Builder sourceBuilder = Source.newBuilder(WasmLanguage.ID, ByteSequence.create(entry.getValue()), entry.getKey());
+            sourceBuilder.cached(false);
             Source source = sourceBuilder.build();
             sources.add(source);
         }
@@ -117,7 +118,7 @@ public abstract class WasmCase {
 
             // When an output is expected, we also check that the main function returns is 0 if it
             // returns a number.
-            if (result.isNumber()) {
+            if (result != null && result.isNumber()) {
                 Assert.assertEquals("Failure: exit code:", 0, result.asInt());
             }
         });
@@ -137,6 +138,14 @@ public abstract class WasmCase {
 
     public static WasmCaseData expectedThrows(String expectedErrorMessage, WasmCaseData.ErrorType phase) {
         return new WasmCaseData(expectedErrorMessage.trim(), phase);
+    }
+
+    public static WasmCaseData expectedMultiValue(Object[] expectedValues) {
+        return new WasmCaseData((Value result, String output) -> {
+            for (int i = 0; i < expectedValues.length; i++) {
+                Assert.assertEquals("Failure: result: ", expectedValues[i], result.getArrayElement(i).as(Object.class));
+            }
+        });
     }
 
     public static Collection<WasmCase> collectFileCases(String type, String resource) throws IOException {
@@ -205,6 +214,27 @@ public abstract class WasmCase {
                 break;
             case "double":
                 caseData = WasmCase.expected(Double.parseDouble(resultValue.trim()));
+                break;
+            case "multi-value":
+                String[] values = resultValue.split("\\s+");
+                Object[] expectedValues = new Object[values.length / 2];
+                for (int i = 0; i < values.length; i += 2) {
+                    switch (values[i]) {
+                        case "int":
+                            expectedValues[i / 2] = Integer.parseInt(values[i + 1]);
+                            break;
+                        case "long":
+                            expectedValues[i / 2] = Long.parseLong(values[i + 1]);
+                            break;
+                        case "float":
+                            expectedValues[i / 2] = Float.parseFloat(values[i + 1]);
+                            break;
+                        case "double":
+                            expectedValues[i / 2] = Double.parseDouble(values[i + 1]);
+                            break;
+                    }
+                }
+                caseData = WasmCase.expectedMultiValue(expectedValues);
                 break;
             case "validation":
                 caseData = WasmCase.expectedThrows(resultValue, WasmCaseData.ErrorType.Validation);

@@ -54,7 +54,7 @@ import jdk.vm.ci.meta.ConstantReflectionProvider;
  * variable (and stack) accesses across deoptimization points.
  * <p>
  * This is needed to ensure that the values, which are set by the {@link Deoptimizer} at the
- * deoptimization point, are really read from their locations (and not hold in a temporary register,
+ * deoptimization point, are really read from their locations (and not held in a temporary register,
  * etc.)
  */
 @NodeInfo(cycles = NodeCycles.CYCLES_0, size = NodeSize.SIZE_0)
@@ -122,6 +122,10 @@ public final class DeoptProxyNode extends FloatingNode implements LimitedValuePr
 
     public boolean hasProxyPoint() {
         return proxyPoint != null;
+    }
+
+    public ValueNode getProxyPoint() {
+        return proxyPoint;
     }
 
     @Override

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -42,6 +42,7 @@ package com.oracle.truffle.host;
 
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.TruffleLanguage;
+import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Fallback;
 import com.oracle.truffle.api.dsl.Specialization;
@@ -51,6 +52,7 @@ import com.oracle.truffle.api.interop.TruffleObject;
 import com.oracle.truffle.api.interop.UnsupportedTypeException;
 import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
+import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.utilities.TriState;
 
 @ExportLibrary(InteropLibrary.class)
@@ -81,8 +83,10 @@ final class HostFunction implements TruffleObject {
     }
 
     @ExportMessage
-    Object execute(Object[] args, @Cached HostExecuteNode execute) throws UnsupportedTypeException, ArityException {
-        return execute.execute(method, obj, args, context);
+    Object execute(Object[] args,
+                    @Bind("$node") Node node,
+                    @Cached HostExecuteNode execute) throws UnsupportedTypeException, ArityException {
+        return execute.execute(node, method, obj, args, context);
     }
 
     @SuppressWarnings("static-method")
@@ -103,8 +107,11 @@ final class HostFunction implements TruffleObject {
         if (obj == null) {
             return "null";
         }
-        String typeName = obj.getClass().getTypeName();
-        return typeName + "." + method.getName();
+        String declaringClassName = method.getDeclaringClassName();
+        if (declaringClassName == null) {
+            declaringClassName = obj.getClass().getName();
+        }
+        return declaringClassName + "." + method.getName();
     }
 
     @ExportMessage

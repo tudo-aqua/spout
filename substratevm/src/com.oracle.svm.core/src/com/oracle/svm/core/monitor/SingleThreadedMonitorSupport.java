@@ -24,21 +24,20 @@
  */
 package com.oracle.svm.core.monitor;
 
-import com.oracle.svm.core.annotate.Uninterruptible;
-import org.graalvm.nativeimage.IsolateThread;
+import com.oracle.svm.core.Uninterruptible;
+import com.oracle.svm.core.thread.ThreadStatus;
 
 /**
  * Without support for threads, there is no need for any monitor operations.
  */
 public class SingleThreadedMonitorSupport extends MonitorSupport {
-
     @Override
-    public void monitorEnter(Object obj) {
+    public void monitorEnter(Object obj, MonitorInflationCause cause) {
         /* Synchronization is a no-op in single threaded mode. */
     }
 
     @Override
-    public void monitorExit(Object obj) {
+    public void monitorExit(Object obj, MonitorInflationCause cause) {
         /* Synchronization is a no-op in single threaded mode. */
     }
 
@@ -69,15 +68,6 @@ public class SingleThreadedMonitorSupport extends MonitorSupport {
     }
 
     @Override
-    public int countThreadLock(IsolateThread vmThread) {
-        /*
-         * Callers of currentThreadHaveLock want to know if it's safe to preempt a continuation
-         * which will not happen in single-threaded programs. It's safe to return any value.
-         */
-        return 0;
-    }
-
-    @Override
     protected void doWait(Object obj, long timeoutMillis) throws InterruptedException {
         /*
          * There is no other thread that can interrupt waiting, so it is just sleeping. It is
@@ -94,7 +84,7 @@ public class SingleThreadedMonitorSupport extends MonitorSupport {
     }
 
     @Override
-    public int maybeAdjustNewParkStatus(int status) {
-        return status;
+    public int getParkedThreadStatus(Thread thread, boolean timed) {
+        return timed ? ThreadStatus.PARKED_TIMED : ThreadStatus.PARKED;
     }
 }

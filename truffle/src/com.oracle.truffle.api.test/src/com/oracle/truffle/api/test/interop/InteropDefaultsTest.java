@@ -40,30 +40,28 @@
  */
 package com.oracle.truffle.api.test.interop;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.junit.Test;
+
 import com.oracle.truffle.api.exception.AbstractTruffleException;
-import com.oracle.truffle.api.interop.InvalidArrayIndexException;
 import com.oracle.truffle.api.interop.ExceptionType;
 import com.oracle.truffle.api.interop.InteropException;
 import com.oracle.truffle.api.interop.InteropLibrary;
-import com.oracle.truffle.api.interop.TruffleObject;
+import com.oracle.truffle.api.interop.InvalidArrayIndexException;
 import com.oracle.truffle.api.interop.StopIterationException;
+import com.oracle.truffle.api.interop.TruffleObject;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
-import com.oracle.truffle.api.nodes.Node;
-import com.oracle.truffle.api.source.Source;
 import com.oracle.truffle.api.source.SourceSection;
-import com.oracle.truffle.api.test.polyglot.ProxyLanguage;
-import org.graalvm.polyglot.Context;
-import org.junit.Test;
-import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertTrue;
-
-@SuppressWarnings("deprecation")
 public class InteropDefaultsTest extends InteropLibraryBaseTest {
 
     public static class TestInterop1 {
@@ -104,111 +102,250 @@ public class InteropDefaultsTest extends InteropLibraryBaseTest {
 
     @Test
     public void testByteDefault() throws InteropException {
-        assertNumber(Byte.MIN_VALUE, true, true, true, true, true, true);
-        assertNumber((byte) 0, true, true, true, true, true, true);
-        assertNumber(Byte.MAX_VALUE, true, true, true, true, true, true);
+        assertNumber(Byte.MIN_VALUE, true, true, true, true, true, true, true);
+        assertNumber((byte) 0, true, true, true, true, true, true, true);
+        assertNumber(Byte.MAX_VALUE, true, true, true, true, true, true, true);
     }
 
     @Test
     public void testShortDefault() throws InteropException {
-        assertNumber(Short.MIN_VALUE, false, true, true, true, true, true);
-        assertNumber((short) (Byte.MIN_VALUE - 1), false, true, true, true, true, true);
-        assertNumber((short) Byte.MIN_VALUE, true, true, true, true, true, true);
-        assertNumber((short) 0, true, true, true, true, true, true);
-        assertNumber((short) Byte.MAX_VALUE, true, true, true, true, true, true);
-        assertNumber((short) (Byte.MAX_VALUE + 1), false, true, true, true, true, true);
-        assertNumber(Short.MAX_VALUE, false, true, true, true, true, true);
+        assertNumber(Short.MIN_VALUE, false, true, true, true, true, true, true);
+        assertNumber((short) (Byte.MIN_VALUE - 1), false, true, true, true, true, true, true);
+        assertNumber((short) Byte.MIN_VALUE, true, true, true, true, true, true, true);
+        assertNumber((short) 0, true, true, true, true, true, true, true);
+        assertNumber((short) Byte.MAX_VALUE, true, true, true, true, true, true, true);
+        assertNumber((short) (Byte.MAX_VALUE + 1), false, true, true, true, true, true, true);
+        assertNumber(Short.MAX_VALUE, false, true, true, true, true, true, true);
     }
 
     @Test
     public void testIntDefault() throws InteropException {
-        assertNumber(Integer.MIN_VALUE, false, false, true, true, true, true);
-        assertNumber(Short.MIN_VALUE - 1, false, false, true, true, true, true);
-        assertNumber((int) Short.MIN_VALUE, false, true, true, true, true, true);
-        assertNumber(Byte.MIN_VALUE - 1, false, true, true, true, true, true);
-        assertNumber((int) Byte.MIN_VALUE, true, true, true, true, true, true);
-        assertNumber(0, true, true, true, true, true, true);
-        assertNumber((int) Byte.MAX_VALUE, true, true, true, true, true, true);
-        assertNumber(Byte.MAX_VALUE + 1, false, true, true, true, true, true);
-        assertNumber((int) Short.MAX_VALUE, false, true, true, true, true, true);
-        assertNumber(Short.MAX_VALUE + 1, false, false, true, true, true, true);
-        assertNumber(1 << 24, false, false, true, true, true, true);
-        assertNumber((1 << 24) + 1, false, false, true, true, false, true);
-        assertNumber(1 << 25, false, false, true, true, true, true);
-        assertNumber(Integer.MAX_VALUE, false, false, true, true, true, true);
+        assertNumber(Integer.MIN_VALUE, false, false, true, true, true, true, true);
+        assertNumber(Short.MIN_VALUE - 1, false, false, true, true, true, true, true);
+        assertNumber((int) Short.MIN_VALUE, false, true, true, true, true, true, true);
+        assertNumber(Byte.MIN_VALUE - 1, false, true, true, true, true, true, true);
+        assertNumber((int) Byte.MIN_VALUE, true, true, true, true, true, true, true);
+        assertNumber(0, true, true, true, true, true, true, true);
+        assertNumber((int) Byte.MAX_VALUE, true, true, true, true, true, true, true);
+        assertNumber(Byte.MAX_VALUE + 1, false, true, true, true, true, true, true);
+        assertNumber((int) Short.MAX_VALUE, false, true, true, true, true, true, true);
+        assertNumber(Short.MAX_VALUE + 1, false, false, true, true, true, true, true);
+        assertNumber(1 << 24, false, false, true, true, true, true, true);
+        assertNumber((1 << 24) + 1, false, false, true, true, true, false, true);
+        assertNumber(1 << 25, false, false, true, true, true, true, true);
+        assertNumber(Integer.MAX_VALUE, false, false, true, true, true, false, true);
     }
 
     @Test
     public void testLongDefault() throws InteropException {
-        assertNumber(Long.MIN_VALUE, false, false, false, true, true, true);
-        assertNumber((long) Integer.MIN_VALUE - 1, false, false, false, true, false, true);
-        assertNumber((long) Integer.MIN_VALUE, false, false, true, true, true, true);
-        assertNumber((long) Short.MIN_VALUE - 1, false, false, true, true, true, true);
-        assertNumber((long) Short.MIN_VALUE, false, true, true, true, true, true);
-        assertNumber((long) Byte.MIN_VALUE - 1, false, true, true, true, true, true);
-        assertNumber((long) Byte.MIN_VALUE, true, true, true, true, true, true);
-        assertNumber(0L, true, true, true, true, true, true);
-        assertNumber((long) Byte.MAX_VALUE, true, true, true, true, true, true);
-        assertNumber((long) Byte.MAX_VALUE + 1, false, true, true, true, true, true);
-        assertNumber((long) Short.MAX_VALUE, false, true, true, true, true, true);
-        assertNumber((long) Short.MAX_VALUE + 1, false, false, true, true, true, true);
-        assertNumber((long) Integer.MAX_VALUE, false, false, true, true, false, true);
-        assertNumber(1L << 24, false, false, true, true, true, true);
-        assertNumber((1L << 24) + 1, false, false, true, true, false, true);
-        assertNumber(1L << 25, false, false, true, true, true, true);
-        assertNumber((1L << 53) + 1, false, false, false, true, false, false);
-        assertNumber(1L << 54, false, false, false, true, true, true);
-        assertNumber(Long.MAX_VALUE, false, false, false, true, true, true);
+        assertNumber(Long.MIN_VALUE, false, false, false, true, true, true, true);
+        assertNumber((long) Integer.MIN_VALUE - 1, false, false, false, true, true, false, true);
+        assertNumber((long) Integer.MIN_VALUE, false, false, true, true, true, true, true);
+        assertNumber((long) Short.MIN_VALUE - 1, false, false, true, true, true, true, true);
+        assertNumber((long) Short.MIN_VALUE, false, true, true, true, true, true, true);
+        assertNumber((long) Byte.MIN_VALUE - 1, false, true, true, true, true, true, true);
+        assertNumber((long) Byte.MIN_VALUE, true, true, true, true, true, true, true);
+        assertNumber(0L, true, true, true, true, true, true, true);
+        assertNumber((long) Byte.MAX_VALUE, true, true, true, true, true, true, true);
+        assertNumber((long) Byte.MAX_VALUE + 1, false, true, true, true, true, true, true);
+        assertNumber((long) Short.MAX_VALUE, false, true, true, true, true, true, true);
+        assertNumber((long) Short.MAX_VALUE + 1, false, false, true, true, true, true, true);
+        assertNumber((long) Integer.MAX_VALUE, false, false, true, true, true, false, true);
+        assertNumber(1L << 24, false, false, true, true, true, true, true);
+        assertNumber((1L << 24) + 1, false, false, true, true, true, false, true);
+        assertNumber(1L << 25, false, false, true, true, true, true, true);
+        assertNumber((1L << 53) + 1, false, false, false, true, true, false, false);
+        assertNumber(1L << 54, false, false, false, true, true, true, true);
+        assertNumber(Long.MAX_VALUE, false, false, false, true, true, false, false);
     }
 
     @Test
     public void testFloatDefault() throws InteropException {
-        assertNumber(Float.NEGATIVE_INFINITY, false, false, false, false, true, true);
-        assertNumber((float) Long.MIN_VALUE, false, false, false, false, true, true);
-        assertNumber((float) Integer.MIN_VALUE - 1, false, false, false, false, true, true);
-        assertNumber((float) Integer.MIN_VALUE, false, false, false, false, true, true);
-        assertNumber((float) Short.MIN_VALUE - 1, false, false, true, true, true, true);
-        assertNumber((float) Short.MIN_VALUE, false, true, true, true, true, true);
-        assertNumber((float) Byte.MIN_VALUE - 1, false, true, true, true, true, true);
-        assertNumber((float) Byte.MIN_VALUE, true, true, true, true, true, true);
-        assertNumber(-0.0f, false, false, false, false, true, true);
-        assertNumber(0.0f, true, true, true, true, true, true);
-        assertNumber((float) Byte.MAX_VALUE, true, true, true, true, true, true);
-        assertNumber((float) Byte.MAX_VALUE + 1, false, true, true, true, true, true);
-        assertNumber((float) Short.MAX_VALUE, false, true, true, true, true, true);
-        assertNumber((float) Short.MAX_VALUE + 1, false, false, true, true, true, true);
-        assertNumber((float) Integer.MAX_VALUE, false, false, false, false, true, true);
-        assertNumber((float) Long.MAX_VALUE, false, false, false, false, true, true);
-        assertNumber(Float.POSITIVE_INFINITY, false, false, false, false, true, true);
-        assertNumber(Float.NaN, false, false, false, false, true, true);
-        assertNumber(Float.MIN_VALUE, false, false, false, false, true, true);
-        assertNumber(Float.MIN_NORMAL, false, false, false, false, true, true);
-        assertNumber(Float.MAX_VALUE, false, false, false, false, true, true);
+        assertNumber(Float.NEGATIVE_INFINITY, false, false, false, false, false, true, true);
+        assertNumber((float) Long.MIN_VALUE, false, false, false, true, true, true, true);
+        assertNumber((float) Integer.MIN_VALUE, false, false, true, true, true, true, true);
+        assertNumber((float) Short.MIN_VALUE - 1, false, false, true, true, true, true, true);
+        assertNumber((float) Short.MIN_VALUE, false, true, true, true, true, true, true);
+        assertNumber((float) Byte.MIN_VALUE - 1, false, true, true, true, true, true, true);
+        assertNumber((float) Byte.MIN_VALUE, true, true, true, true, true, true, true);
+        assertNumber(-0.0f, false, false, false, false, false, true, true);
+        assertNumber(0.0f, true, true, true, true, true, true, true);
+        assertNumber((float) Byte.MAX_VALUE, true, true, true, true, true, true, true);
+        assertNumber((float) Byte.MAX_VALUE + 1, false, true, true, true, true, true, true);
+        assertNumber((float) Short.MAX_VALUE, false, true, true, true, true, true, true);
+        assertNumber((float) Short.MAX_VALUE + 1, false, false, true, true, true, true, true);
+        assertNumber((float) Integer.MAX_VALUE, false, false, false, true, true, true, true);
+        assertNumber((float) Long.MAX_VALUE, false, false, false, false, true, true, true);
+        assertNumber(Float.POSITIVE_INFINITY, false, false, false, false, false, true, true);
+        assertNumber(Float.NaN, false, false, false, false, false, true, true);
+        assertNumber(Float.MIN_VALUE, false, false, false, false, false, true, true);
+        assertNumber(Float.MIN_NORMAL, false, false, false, false, false, true, true);
+        assertNumber(Float.MAX_VALUE, false, false, false, false, true, true, true);
     }
 
     @Test
     public void testDoubleDefault() throws InteropException {
-        assertNumber(Double.NEGATIVE_INFINITY, false, false, false, false, true, true);
-        assertNumber((double) Long.MIN_VALUE, false, false, false, false, true, true);
-        assertNumber((double) Integer.MIN_VALUE - 1, false, false, false, true, false, true);
-        assertNumber((double) Integer.MIN_VALUE, false, false, true, true, true, true);
-        assertNumber((double) Short.MIN_VALUE - 1, false, false, true, true, true, true);
-        assertNumber((double) Short.MIN_VALUE, false, true, true, true, true, true);
-        assertNumber((double) Byte.MIN_VALUE - 1, false, true, true, true, true, true);
-        assertNumber((double) Byte.MIN_VALUE, true, true, true, true, true, true);
-        assertNumber(-0.0d, false, false, false, false, true, true);
-        assertNumber(0.0d, true, true, true, true, true, true);
-        assertNumber((double) Byte.MAX_VALUE, true, true, true, true, true, true);
-        assertNumber((double) Byte.MAX_VALUE + 1, false, true, true, true, true, true);
-        assertNumber((double) Short.MAX_VALUE, false, true, true, true, true, true);
-        assertNumber((double) Short.MAX_VALUE + 1, false, false, true, true, true, true);
-        assertNumber((double) Integer.MAX_VALUE, false, false, true, true, false, true);
-        assertNumber((double) Long.MAX_VALUE, false, false, false, false, true, true);
-        assertNumber(Double.POSITIVE_INFINITY, false, false, false, false, true, true);
-        assertNumber(Double.NaN, false, false, false, false, true, true);
-        assertNumber(Double.MIN_VALUE, false, false, false, false, false, true);
-        assertNumber(Double.MIN_NORMAL, false, false, false, false, false, true);
-        assertNumber(Double.MAX_VALUE, false, false, false, false, false, true);
+        assertNumber(Double.NEGATIVE_INFINITY, false, false, false, false, false, true, true);
+        assertNumber((double) Long.MIN_VALUE, false, false, false, true, true, true, true);
+        assertNumber((double) Integer.MIN_VALUE - 1, false, false, false, true, true, false, true);
+        assertNumber((double) Integer.MIN_VALUE, false, false, true, true, true, true, true);
+        assertNumber((double) Short.MIN_VALUE - 1, false, false, true, true, true, true, true);
+        assertNumber((double) Short.MIN_VALUE, false, true, true, true, true, true, true);
+        assertNumber((double) Byte.MIN_VALUE - 1, false, true, true, true, true, true, true);
+        assertNumber((double) Byte.MIN_VALUE, true, true, true, true, true, true, true);
+        assertNumber(-0.0d, false, false, false, false, false, true, true);
+        assertNumber(0.0d, true, true, true, true, true, true, true);
+        assertNumber((double) Byte.MAX_VALUE, true, true, true, true, true, true, true);
+        assertNumber((double) Byte.MAX_VALUE + 1, false, true, true, true, true, true, true);
+        assertNumber((double) Short.MAX_VALUE, false, true, true, true, true, true, true);
+        assertNumber((double) Short.MAX_VALUE + 1, false, false, true, true, true, true, true);
+        assertNumber((double) Integer.MAX_VALUE, false, false, true, true, true, false, true);
+        assertNumber((double) Long.MAX_VALUE, false, false, false, false, true, true, true);
+        assertNumber(Double.POSITIVE_INFINITY, false, false, false, false, false, true, true);
+        assertNumber(Double.NaN, false, false, false, false, false, true, true);
+        assertNumber(Double.MIN_VALUE, false, false, false, false, false, false, true);
+        assertNumber(Double.MIN_NORMAL, false, false, false, false, false, false, true);
+        assertNumber(Double.MAX_VALUE, false, false, false, false, true, false, true);
+    }
+
+    @ExportLibrary(InteropLibrary.class)
+    @SuppressWarnings({"static-method", "truffle-abstract-export"})
+    static class LongOrDouble implements TruffleObject {
+
+        private final Long longValue;
+        private final Double doubleValue;
+
+        LongOrDouble(long longValue) {
+            this.longValue = longValue;
+            this.doubleValue = longFitsInDouble(longValue) ? (double) longValue : null;
+        }
+
+        LongOrDouble(double doubleValue) {
+            this.doubleValue = doubleValue;
+            this.longValue = doubleFitsInLong(doubleValue) ? (long) doubleValue : null;
+        }
+
+        static boolean longFitsInDouble(long l) {
+            double d = l;
+            return l != Long.MAX_VALUE && (long) d == l;
+        }
+
+        static boolean isNegativeZero(double d) {
+            return Double.doubleToRawLongBits(d) == Double.doubleToRawLongBits(-0d);
+        }
+
+        static boolean doubleFitsInLong(double d) {
+            if (isNegativeZero(d)) {
+                long l = (long) d;
+                if (l != Long.MAX_VALUE && l == d) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        @ExportMessage
+        boolean isNumber() {
+            return true;
+        }
+
+        @ExportMessage
+        boolean fitsInByte() {
+            return longValue != null && longValue == (byte) (long) longValue;
+        }
+
+        @ExportMessage
+        boolean fitsInShort() {
+            return longValue != null && longValue == (short) (long) longValue;
+        }
+
+        @ExportMessage
+        boolean fitsInInt() {
+            return longValue != null && longValue == (int) (long) longValue;
+        }
+
+        @ExportMessage
+        boolean fitsInLong() {
+            return longValue != null;
+        }
+
+        @ExportMessage
+        boolean fitsInFloat() {
+            return doubleValue != null && !Double.isFinite(doubleValue) || (float) (double) doubleValue == doubleValue;
+        }
+
+        @ExportMessage
+        boolean fitsInDouble() {
+            return doubleValue != null;
+        }
+
+        @ExportMessage
+        byte asByte() throws UnsupportedMessageException {
+            if (fitsInByte()) {
+                return (byte) (long) longValue;
+            }
+            throw UnsupportedMessageException.create();
+        }
+
+        @ExportMessage
+        short asShort() throws UnsupportedMessageException {
+            if (fitsInShort()) {
+                return (short) (long) longValue;
+            }
+            throw UnsupportedMessageException.create();
+        }
+
+        @ExportMessage
+        int asInt() throws UnsupportedMessageException {
+            if (fitsInInt()) {
+                return (int) (long) longValue;
+            }
+            throw UnsupportedMessageException.create();
+        }
+
+        @ExportMessage
+        long asLong() throws UnsupportedMessageException {
+            if (fitsInLong()) {
+                return longValue;
+            }
+            throw UnsupportedMessageException.create();
+        }
+
+        @ExportMessage
+        float asFloat() throws UnsupportedMessageException {
+            if (fitsInFloat()) {
+                return (float) (double) doubleValue;
+            }
+            throw UnsupportedMessageException.create();
+        }
+
+        @ExportMessage
+        double asDouble() throws UnsupportedMessageException {
+            if (fitsInDouble()) {
+                return doubleValue;
+            }
+            throw UnsupportedMessageException.create();
+        }
+    }
+
+    @Test
+    public void testBigIntegerMessagesNotExportedDefaults() throws UnsupportedMessageException {
+        LongOrDouble maxLong = new LongOrDouble(Long.MAX_VALUE);
+        InteropLibrary maxLongLibrary = createLibrary(InteropLibrary.class, maxLong);
+        LongOrDouble minLong = new LongOrDouble(Long.MIN_VALUE);
+        InteropLibrary minLongLibrary = createLibrary(InteropLibrary.class, minLong);
+        LongOrDouble maxDouble = new LongOrDouble(Double.MAX_VALUE);
+        InteropLibrary maxDoubleLibrary = createLibrary(InteropLibrary.class, maxDouble);
+        LongOrDouble minusMaxDouble = new LongOrDouble(-Double.MAX_VALUE);
+        InteropLibrary minusMaxDoubleLibrary = createLibrary(InteropLibrary.class, minusMaxDouble);
+        assertTrue(maxLongLibrary.fitsInBigInteger(maxLong));
+        assertTrue(minLongLibrary.fitsInBigInteger(minLong));
+        assertTrue(maxDoubleLibrary.fitsInBigInteger(maxDouble));
+        assertTrue(minusMaxDoubleLibrary.fitsInBigInteger(minusMaxDouble));
+        assertEquals(BigInteger.valueOf(Long.MAX_VALUE), maxLongLibrary.asBigInteger(maxLong));
+        assertEquals(BigInteger.valueOf(Long.MIN_VALUE), minLongLibrary.asBigInteger(minLong));
+        assertEquals(new BigDecimal(Double.MAX_VALUE).toBigIntegerExact(), maxDoubleLibrary.asBigInteger(maxDouble));
+        assertEquals(new BigDecimal(-Double.MAX_VALUE).toBigIntegerExact(), minusMaxDoubleLibrary.asBigInteger(minusMaxDouble));
     }
 
     @Test
@@ -250,7 +387,7 @@ public class InteropDefaultsTest extends InteropLibraryBaseTest {
     }
 
     private void assertNumber(Object v, boolean supportsByte, boolean supportsShort,
-                    boolean supportsInt, boolean supportsLong, boolean supportsFloat, boolean supportsDouble) throws InteropException {
+                    boolean supportsInt, boolean supportsLong, boolean supportsBigInteger, boolean supportsFloat, boolean supportsDouble) throws InteropException {
 
         Object expectedValue = v;
 
@@ -261,6 +398,7 @@ public class InteropDefaultsTest extends InteropLibraryBaseTest {
         assertEquals(supportsShort, l.fitsInShort(v));
         assertEquals(supportsInt, l.fitsInInt(v));
         assertEquals(supportsLong, l.fitsInLong(v));
+        assertEquals(supportsBigInteger, l.fitsInBigInteger(v));
         assertEquals(supportsFloat, l.fitsInFloat(v));
         assertEquals(supportsDouble, l.fitsInDouble(v));
 
@@ -283,6 +421,17 @@ public class InteropDefaultsTest extends InteropLibraryBaseTest {
             assertEquals(((Number) expectedValue).longValue(), l.asLong(v));
         } else {
             assertUnsupported(() -> l.asLong(v));
+        }
+        if (supportsBigInteger) {
+            if (expectedValue instanceof Float || expectedValue instanceof Double) {
+                assertEquals(new BigDecimal(((Number) expectedValue).doubleValue()).toBigIntegerExact(), l.asBigInteger(v));
+            } else if (expectedValue instanceof BigInteger) {
+                assertEquals(expectedValue, l.asBigInteger(v));
+            } else {
+                assertEquals(BigInteger.valueOf(((Number) expectedValue).longValue()), l.asBigInteger(v));
+            }
+        } else {
+            assertUnsupported(() -> l.asBigInteger(v));
         }
         if (supportsFloat) {
             assertEquals(((Number) expectedValue).floatValue(), l.asFloat(v), 0);
@@ -333,7 +482,7 @@ public class InteropDefaultsTest extends InteropLibraryBaseTest {
         String expectedToString = v.toString();
         toStringInvoked.set(false);
         assertEquals(expectedToString, l.toDisplayString(v));
-        assertFalse(toStringInvoked.get());
+        assertTrue(toStringInvoked.get());
         assertNoTypes(v);
     }
 
@@ -354,106 +503,6 @@ public class InteropDefaultsTest extends InteropLibraryBaseTest {
         MetaDataLegacyOnlyLangauge() {
         }
 
-    }
-
-    @Test
-    public void testMetaDataLegacyBehavior() throws InteropException {
-        setupEnv(Context.create(), new ProxyLanguage() {
-            @Override
-            protected boolean isObjectOfLanguage(Object object) {
-                return object instanceof MetaDataLegacyObject || object instanceof MetaDataLegacyOnlyLangauge;
-            }
-
-            @Override
-            protected SourceSection findSourceLocation(LanguageContext c, Object value) {
-                if (value instanceof MetaDataLegacyObject) {
-                    return ((MetaDataLegacyObject) value).section;
-                }
-                return null;
-            }
-
-            @Override
-            protected Object findMetaObject(LanguageContext c, Object value) {
-                if (value instanceof MetaDataLegacyObject) {
-                    return ((MetaDataLegacyObject) value).metaObject;
-                }
-                return null;
-            }
-
-            @Override
-            protected String toString(LanguageContext c, Object value) {
-                if (value instanceof MetaDataLegacyObject) {
-                    return "MetaDataLegacyObject";
-                }
-                return super.toString(c, value);
-            }
-
-        });
-        SourceSection section = Source.newBuilder(ProxyLanguage.ID, "", "").build().createUnavailableSection();
-        Object v1 = new MetaDataLegacyObject(section, "meta-object");
-        InteropLibrary libV1 = createLibrary(InteropLibrary.class, v1);
-
-        assertTrue(libV1.hasLanguage(v1));
-        assertSame(ProxyLanguage.class, libV1.getLanguage(v1));
-        assertTrue(libV1.hasMetaObject(v1));
-        Object metaObject = libV1.getMetaObject(v1);
-        InteropLibrary metaObjectInterop = createLibrary(InteropLibrary.class, metaObject);
-        assertTrue(metaObjectInterop.isMetaObject(metaObject));
-        assertTrue(metaObjectInterop.isMetaInstance(metaObject, v1));
-        assertEquals("meta-object", metaObjectInterop.toDisplayString(metaObject));
-        assertEquals("meta-object", metaObjectInterop.getMetaSimpleName(metaObject));
-        assertEquals("meta-object", metaObjectInterop.getMetaQualifiedName(metaObject));
-        assertTrue(libV1.hasSourceLocation(v1));
-        assertSame(section, libV1.getSourceLocation(v1));
-        assertEquals("MetaDataLegacyObject", libV1.toDisplayString(v1));
-
-        assertNoBoolean(v1);
-        assertNotNull(v1);
-        assertNoObject(v1);
-        assertNoArray(v1);
-        assertNoBuffer(v1);
-        assertNoString(v1);
-        assertNoNumber(v1);
-        assertNoNative(v1);
-        assertNotExecutable(v1);
-        assertNotInstantiable(v1);
-        assertNoMetaObject(v1);
-        // has meta-object
-        assertNoDate(v1);
-        assertNoTime(v1);
-        assertNoTimeZone(v1);
-        assertNoDuration(v1);
-        // has source section
-        // has language
-
-        Object v2 = new MetaDataLegacyOnlyLangauge();
-        InteropLibrary libV2 = createLibrary(InteropLibrary.class, v2);
-        assertTrue(libV2.hasLanguage(v2));
-        assertSame(ProxyLanguage.class, libV2.getLanguage(v2));
-        assertFalse(libV2.hasMetaObject(v2));
-        assertFails(() -> libV2.getMetaObject(v2), UnsupportedMessageException.class);
-        assertFalse(libV2.hasSourceLocation(v2));
-        assertFails(() -> libV2.getSourceLocation(v2), UnsupportedMessageException.class);
-        assertEquals(v2.toString(), libV2.toDisplayString(v2));
-
-        assertNoBoolean(v2);
-        assertNotNull(v2);
-        assertNoObject(v2);
-        assertNoArray(v2);
-        assertNoBuffer(v2);
-        assertNoString(v2);
-        assertNoNumber(v2);
-        assertNoNative(v2);
-        assertNotExecutable(v2);
-        assertNotInstantiable(v2);
-        assertNoMetaObject(v2);
-        assertHasNoMetaObject(v2);
-        assertNoDate(v2);
-        assertNoTime(v2);
-        assertNoTimeZone(v2);
-        assertNoDuration(v2);
-        assertNoSourceLocation(v2);
-        // has language
     }
 
     private void assertNoTypes(Object v) {
@@ -518,45 +567,6 @@ public class InteropDefaultsTest extends InteropLibraryBaseTest {
         assertFalse(exceptionLib.isExceptionIncompleteSource(exception));
         assertFails(() -> exceptionLib.getExceptionExitStatus(exception), UnsupportedMessageException.class);
         exceptionLib.getExceptionStackTrace(exception);
-
-        LegacyCatchableException legacyCatchableException = new LegacyCatchableException(message);
-        InteropLibrary legacyCatchableExceptionLib = createLibrary(InteropLibrary.class, legacyCatchableException);
-        assertTrue(legacyCatchableExceptionLib.isException(legacyCatchableException));
-        assertFalse(legacyCatchableExceptionLib.hasExceptionCause(legacyCatchableException));
-        assertTrue(legacyCatchableExceptionLib.hasExceptionMessage(legacyCatchableException));
-        assertTrue(legacyCatchableExceptionLib.hasExceptionStackTrace(legacyCatchableException));
-        assertFails(() -> legacyCatchableExceptionLib.getExceptionCause(legacyCatchableException), UnsupportedMessageException.class);
-        assertEquals(message, legacyCatchableExceptionLib.getExceptionMessage(legacyCatchableException));
-        assertEquals(ExceptionType.RUNTIME_ERROR, legacyCatchableExceptionLib.getExceptionType(legacyCatchableException));
-        assertFails(() -> legacyCatchableExceptionLib.getExceptionExitStatus(legacyCatchableException), UnsupportedMessageException.class);
-        assertFalse(legacyCatchableExceptionLib.isExceptionIncompleteSource(legacyCatchableException));
-        legacyCatchableExceptionLib.getExceptionStackTrace(legacyCatchableException);
-
-        LegacyUncatchableException legacyUncatchableException = new LegacyUncatchableException();
-        InteropLibrary legacyUncatchableExceptionLib = createLibrary(InteropLibrary.class, legacyUncatchableException);
-        assertFalse(legacyUncatchableExceptionLib.isException(legacyUncatchableException));
-        assertFalse(legacyUncatchableExceptionLib.hasExceptionCause(legacyUncatchableException));
-        assertFalse(legacyUncatchableExceptionLib.hasExceptionMessage(legacyUncatchableException));
-        assertFalse(legacyUncatchableExceptionLib.hasExceptionStackTrace(legacyUncatchableException));
-        assertFails(() -> legacyUncatchableExceptionLib.getExceptionCause(legacyUncatchableException), UnsupportedMessageException.class);
-        assertFails(() -> legacyUncatchableExceptionLib.getExceptionMessage(legacyUncatchableException), UnsupportedMessageException.class);
-        assertFails(() -> legacyUncatchableExceptionLib.getExceptionType(legacyUncatchableException), UnsupportedMessageException.class);
-        assertFails(() -> legacyUncatchableExceptionLib.getExceptionExitStatus(legacyUncatchableException), UnsupportedMessageException.class);
-        assertFails(() -> legacyUncatchableExceptionLib.isExceptionIncompleteSource(legacyUncatchableException), UnsupportedMessageException.class);
-        assertFails(() -> legacyUncatchableExceptionLib.getExceptionStackTrace(legacyUncatchableException), UnsupportedMessageException.class);
-
-        LegacyInternalError legacyInternalError = new LegacyInternalError(message);
-        InteropLibrary legacyInternalErrorLib = createLibrary(InteropLibrary.class, legacyInternalError);
-        assertFalse(legacyInternalErrorLib.isException(legacyInternalError));
-        assertFalse(legacyInternalErrorLib.hasExceptionCause(legacyInternalError));
-        assertFalse(legacyInternalErrorLib.hasExceptionMessage(legacyInternalError));
-        assertFalse(legacyInternalErrorLib.hasExceptionStackTrace(legacyInternalError));
-        assertFails(() -> legacyInternalErrorLib.getExceptionCause(legacyInternalError), UnsupportedMessageException.class);
-        assertFails(() -> legacyInternalErrorLib.getExceptionMessage(legacyInternalError), UnsupportedMessageException.class);
-        assertFails(() -> legacyInternalErrorLib.getExceptionType(legacyInternalError), UnsupportedMessageException.class);
-        assertFails(() -> legacyInternalErrorLib.getExceptionExitStatus(legacyInternalError), UnsupportedMessageException.class);
-        assertFails(() -> legacyInternalErrorLib.isExceptionIncompleteSource(legacyInternalError), UnsupportedMessageException.class);
-        assertFails(() -> legacyInternalErrorLib.getExceptionStackTrace(legacyInternalError), UnsupportedMessageException.class);
     }
 
     @SuppressWarnings("serial")
@@ -568,49 +578,6 @@ public class InteropDefaultsTest extends InteropLibraryBaseTest {
 
         Exception(String message, Throwable cause) {
             super(message, cause, UNLIMITED_STACK_TRACE, null);
-        }
-    }
-
-    @SuppressWarnings({"serial", "deprecation"})
-    private static final class LegacyCatchableException extends RuntimeException implements com.oracle.truffle.api.TruffleException {
-
-        LegacyCatchableException(String message) {
-            super(message);
-        }
-
-        @Override
-        public Node getLocation() {
-            return null;
-        }
-    }
-
-    @SuppressWarnings({"serial", "deprecation"})
-    private static final class LegacyUncatchableException extends ThreadDeath implements com.oracle.truffle.api.TruffleException {
-
-        LegacyUncatchableException() {
-        }
-
-        @Override
-        public Node getLocation() {
-            return null;
-        }
-    }
-
-    @SuppressWarnings({"serial", "deprecation"})
-    private static final class LegacyInternalError extends RuntimeException implements com.oracle.truffle.api.TruffleException {
-
-        LegacyInternalError(String message) {
-            super(message);
-        }
-
-        @Override
-        public Node getLocation() {
-            return null;
-        }
-
-        @Override
-        public boolean isInternalError() {
-            return true;
         }
     }
 

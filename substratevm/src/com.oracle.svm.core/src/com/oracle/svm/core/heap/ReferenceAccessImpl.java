@@ -30,29 +30,25 @@ import org.graalvm.compiler.word.BarrieredAccess;
 import org.graalvm.compiler.word.ObjectAccess;
 import org.graalvm.compiler.word.Word;
 import org.graalvm.nativeimage.ImageSingletons;
-import org.graalvm.nativeimage.hosted.Feature;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.WordFactory;
 
+import com.oracle.svm.core.AlwaysInline;
 import com.oracle.svm.core.SubstrateOptions;
-import com.oracle.svm.core.annotate.AlwaysInline;
-import com.oracle.svm.core.annotate.AutomaticFeature;
-import com.oracle.svm.core.annotate.Uninterruptible;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.config.ConfigurationValues;
-import com.oracle.svm.core.util.UnsignedUtils;
+import com.oracle.svm.core.feature.AutomaticallyRegisteredImageSingleton;
 
+@AutomaticallyRegisteredImageSingleton(ReferenceAccess.class)
 public final class ReferenceAccessImpl implements ReferenceAccess {
-    static void initialize() {
-        ImageSingletons.add(ReferenceAccess.class, new ReferenceAccessImpl());
-    }
 
-    private ReferenceAccessImpl() {
+    ReferenceAccessImpl() {
     }
 
     @Override
     @AlwaysInline("Performance")
-    @Uninterruptible(reason = "for uninterruptible callers", mayBeInlined = true)
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public Word readObjectAsUntrackedPointer(Pointer p, boolean compressed) {
         Object obj = readObjectAt(p, compressed);
         return Word.objectToUntrackedPointer(obj);
@@ -60,7 +56,7 @@ public final class ReferenceAccessImpl implements ReferenceAccess {
 
     @Override
     @AlwaysInline("Performance")
-    @Uninterruptible(reason = "for uninterruptible callers", mayBeInlined = true)
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public Object readObjectAt(Pointer p, boolean compressed) {
         Word w = (Word) p;
         if (compressed) {
@@ -72,7 +68,7 @@ public final class ReferenceAccessImpl implements ReferenceAccess {
 
     @Override
     @AlwaysInline("Performance")
-    @Uninterruptible(reason = "for uninterruptible callers", mayBeInlined = true)
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public void writeObjectAt(Pointer p, Object value, boolean compressed) {
         Word w = (Word) p;
         if (compressed) {
@@ -85,7 +81,7 @@ public final class ReferenceAccessImpl implements ReferenceAccess {
 
     @Override
     @AlwaysInline("Performance")
-    @Uninterruptible(reason = "for uninterruptible callers", mayBeInlined = true)
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public void writeObjectBarrieredAt(Object object, UnsignedWord offsetInObject, Object value, boolean compressed) {
         assert compressed : "Heap object must contain only compressed references";
         BarrieredAccess.writeObject(object, offsetInObject, value);
@@ -105,7 +101,7 @@ public final class ReferenceAccessImpl implements ReferenceAccess {
 
     @Override
     @AlwaysInline("Performance")
-    @Uninterruptible(reason = "for uninterruptible callers", mayBeInlined = true)
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public CompressEncoding getCompressEncoding() {
         return ImageSingletons.lookup(CompressEncoding.class);
     }
@@ -118,14 +114,7 @@ public final class ReferenceAccessImpl implements ReferenceAccess {
             int referenceSize = ConfigurationValues.getObjectLayout().getReferenceSize();
             return WordFactory.unsigned(1L << (referenceSize * Byte.SIZE)).shiftLeft(compressionShift);
         }
-        return UnsignedUtils.MAX_VALUE;
-    }
-}
-
-@AutomaticFeature
-class ReferenceAccessFeature implements Feature {
-    @Override
-    public void afterRegistration(AfterRegistrationAccess access) {
-        ReferenceAccessImpl.initialize();
+        // Assume that 48 bit is the maximum address space that can be used.
+        return WordFactory.unsigned((1L << 48) - 1);
     }
 }

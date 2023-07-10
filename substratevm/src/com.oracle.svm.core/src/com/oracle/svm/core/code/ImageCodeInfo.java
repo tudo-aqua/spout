@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -33,13 +33,14 @@ import org.graalvm.nativeimage.c.struct.SizeOf;
 import org.graalvm.word.ComparableWord;
 import org.graalvm.word.UnsignedWord;
 
+import com.oracle.svm.core.BuildPhaseProvider.AfterCompilation;
 import com.oracle.svm.core.MemoryWalker;
-import com.oracle.svm.core.annotate.Uninterruptible;
-import com.oracle.svm.core.annotate.UnknownObjectField;
-import com.oracle.svm.core.annotate.UnknownPrimitiveField;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.c.NonmovableArray;
 import com.oracle.svm.core.c.NonmovableArrays;
 import com.oracle.svm.core.c.NonmovableObjectArray;
+import com.oracle.svm.core.heap.UnknownObjectField;
+import com.oracle.svm.core.heap.UnknownPrimitiveField;
 import com.oracle.svm.core.util.VMError;
 
 public class ImageCodeInfo {
@@ -51,21 +52,21 @@ public class ImageCodeInfo {
     @Platforms(Platform.HOSTED_ONLY.class) //
     private final HostedImageCodeInfo hostedImageCodeInfo = new HostedImageCodeInfo();
 
-    @UnknownPrimitiveField private CodePointer codeStart;
-    @UnknownPrimitiveField private UnsignedWord codeSize;
-    @UnknownPrimitiveField private UnsignedWord dataOffset;
-    @UnknownPrimitiveField private UnsignedWord dataSize;
-    @UnknownPrimitiveField private UnsignedWord codeAndDataMemorySize;
+    @UnknownPrimitiveField(availability = AfterCompilation.class) private CodePointer codeStart;
+    @UnknownPrimitiveField(availability = AfterCompilation.class) private UnsignedWord entryPointOffset;
+    @UnknownPrimitiveField(availability = AfterCompilation.class) private UnsignedWord codeSize;
+    @UnknownPrimitiveField(availability = AfterCompilation.class) private UnsignedWord dataOffset;
+    @UnknownPrimitiveField(availability = AfterCompilation.class) private UnsignedWord dataSize;
+    @UnknownPrimitiveField(availability = AfterCompilation.class) private UnsignedWord codeAndDataMemorySize;
 
     private final Object[] objectFields;
-    @UnknownObjectField(types = {byte[].class}) byte[] codeInfoIndex;
-    @UnknownObjectField(types = {byte[].class}) byte[] codeInfoEncodings;
-    @UnknownObjectField(types = {byte[].class}) byte[] referenceMapEncoding;
-    @UnknownObjectField(types = {byte[].class}) byte[] frameInfoEncodings;
-    @UnknownObjectField(types = {Object[].class}) Object[] frameInfoObjectConstants;
-    @UnknownObjectField(types = {Class[].class}) Class<?>[] frameInfoSourceClasses;
-    @UnknownObjectField(types = {String[].class}) String[] frameInfoSourceMethodNames;
-    @UnknownObjectField(types = {String[].class}) String[] frameInfoNames;
+    @UnknownObjectField(availability = AfterCompilation.class) byte[] codeInfoIndex;
+    @UnknownObjectField(availability = AfterCompilation.class) byte[] codeInfoEncodings;
+    @UnknownObjectField(availability = AfterCompilation.class) byte[] referenceMapEncoding;
+    @UnknownObjectField(availability = AfterCompilation.class) byte[] frameInfoEncodings;
+    @UnknownObjectField(availability = AfterCompilation.class) Object[] frameInfoObjectConstants;
+    @UnknownObjectField(availability = AfterCompilation.class) Class<?>[] frameInfoSourceClasses;
+    @UnknownObjectField(availability = AfterCompilation.class) String[] frameInfoSourceMethodNames;
 
     @Platforms(Platform.HOSTED_ONLY.class)
     ImageCodeInfo() {
@@ -98,9 +99,28 @@ public class ImageCodeInfo {
         info.setFrameInfoObjectConstants(NonmovableArrays.fromImageHeap(frameInfoObjectConstants));
         info.setFrameInfoSourceClasses(NonmovableArrays.fromImageHeap(frameInfoSourceClasses));
         info.setFrameInfoSourceMethodNames(NonmovableArrays.fromImageHeap(frameInfoSourceMethodNames));
-        info.setFrameInfoNames(NonmovableArrays.fromImageHeap(frameInfoNames));
 
         return info;
+    }
+
+    /**
+     * Use {@link CodeInfoTable#getImageCodeInfo()} and {@link CodeInfoAccess#getCodeStart} instead.
+     * This method is intended only for the early stages of VM initialization when
+     * {@link #prepareCodeInfo()} has not yet run.
+     */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public CodePointer getCodeStart() {
+        return codeStart;
+    }
+
+    /**
+     * Use {@link CodeInfoTable#getImageCodeInfo()} and
+     * {@link CodeInfoAccess#getStackReferenceMapEncoding} instead. This method is intended only for
+     * the early stages of VM initialization when {@link #prepareCodeInfo()} has not yet run.
+     */
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public NonmovableArray<Byte> getStackReferenceMapEncoding() {
+        return NonmovableArrays.fromImageHeap(referenceMapEncoding);
     }
 
     public boolean walkImageCode(MemoryWalker.Visitor visitor) {
@@ -109,6 +129,10 @@ public class ImageCodeInfo {
 
     public HostedImageCodeInfo getHostedImageCodeInfo() {
         return hostedImageCodeInfo;
+    }
+
+    public long getTotalByteArraySize() {
+        return codeInfoIndex.length + codeInfoEncodings.length + referenceMapEncoding.length + frameInfoEncodings.length;
     }
 
     /**
@@ -153,8 +177,18 @@ public class ImageCodeInfo {
         }
 
         @Override
+        public UnsignedWord getCodeEntryPointOffset() {
+            return entryPointOffset;
+        }
+
+        @Override
         public void setCodeSize(UnsignedWord value) {
             codeSize = value;
+        }
+
+        @Override
+        public void setCodeEntryPointOffset(UnsignedWord offset) {
+            entryPointOffset = offset;
         }
 
         @Override
@@ -235,16 +269,6 @@ public class ImageCodeInfo {
         @Override
         public void setFrameInfoSourceMethodNames(NonmovableObjectArray<String> array) {
             frameInfoSourceMethodNames = NonmovableArrays.getHostedArray(array);
-        }
-
-        @Override
-        public NonmovableObjectArray<String> getFrameInfoNames() {
-            return NonmovableArrays.fromImageHeap(frameInfoNames);
-        }
-
-        @Override
-        public void setFrameInfoNames(NonmovableObjectArray<String> array) {
-            frameInfoNames = NonmovableArrays.getHostedArray(array);
         }
 
         @Override

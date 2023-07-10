@@ -30,7 +30,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
-import com.oracle.svm.core.annotate.UnknownObjectField;
+import com.oracle.svm.core.BuildPhaseProvider.AfterHeapLayout;
+import com.oracle.svm.core.heap.UnknownObjectField;
 
 public final class StringInternSupport {
 
@@ -47,7 +48,7 @@ public final class StringInternSupport {
      * The field is set late during image generation, so the value is not available during static
      * analysis and compilation.
      */
-    @UnknownObjectField(types = {String[].class}) private String[] imageInternedStrings;
+    @UnknownObjectField(availability = AfterHeapLayout.class) private String[] imageInternedStrings;
 
     @Platforms(Platform.HOSTED_ONLY.class)
     public StringInternSupport() {

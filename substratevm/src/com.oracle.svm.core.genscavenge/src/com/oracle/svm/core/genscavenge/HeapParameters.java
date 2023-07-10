@@ -24,12 +24,7 @@
  */
 package com.oracle.svm.core.genscavenge;
 
-import org.graalvm.collections.EconomicMap;
-import org.graalvm.collections.UnmodifiableEconomicMap;
 import org.graalvm.compiler.api.replacements.Fold;
-import org.graalvm.compiler.options.Option;
-import org.graalvm.compiler.options.OptionKey;
-import org.graalvm.compiler.options.OptionValues;
 import org.graalvm.compiler.word.Word;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
@@ -38,98 +33,28 @@ import org.graalvm.word.WordFactory;
 
 import com.oracle.svm.core.SubstrateGCOptions;
 import com.oracle.svm.core.SubstrateUtil;
-import com.oracle.svm.core.annotate.Uninterruptible;
-import com.oracle.svm.core.heap.Heap;
-import com.oracle.svm.core.option.HostedOptionKey;
-import com.oracle.svm.core.option.RuntimeOptionKey;
-import com.oracle.svm.core.option.RuntimeOptionValues;
+import com.oracle.svm.core.Uninterruptible;
+import com.oracle.svm.core.genscavenge.remset.RememberedSet;
 import com.oracle.svm.core.util.UserError;
 import com.oracle.svm.core.util.VMError;
 
 /** Constants and variables for the size and layout of the heap and behavior of the collector. */
 public final class HeapParameters {
-    public static final class Options {
-        static final class HeapSizeOptionKey<T> extends RuntimeOptionKey<T> {
-            HeapSizeOptionKey(T defaultValue) {
-                super(defaultValue);
-            }
-
-            @Override
-            protected void onValueUpdate(EconomicMap<OptionKey<?>, Object> values, T oldValue, T newValue) {
-                if (!SubstrateUtil.HOSTED) {
-                    Heap.getHeap().updateSizeParameters();
-                }
-            }
-        }
-
-        @Option(help = "The maximum heap size as percent of physical memory") //
-        public static final RuntimeOptionKey<Integer> MaximumHeapSizePercent = new HeapSizeOptionKey<>(80);
-
-        @Option(help = "The maximum size of the young generation as a percentage of the maximum heap size") //
-        public static final RuntimeOptionKey<Integer> MaximumYoungGenerationSizePercent = new HeapSizeOptionKey<>(10);
-
-        @Option(help = "The size of an aligned chunk.") //
-        public static final HostedOptionKey<Long> AlignedHeapChunkSize = new HostedOptionKey<Long>(1L * 1024L * 1024L) {
-            @Override
-            protected void onValueUpdate(EconomicMap<OptionKey<?>, Object> values, Long oldValue, Long newValue) {
-                int multiple = 4096;
-                UserError.guarantee(newValue > 0 && newValue % multiple == 0, "%s value must be a multiple of %d.", getName(), multiple);
-            }
-        };
-
-        /*
-         * This should be a fraction of the size of an aligned chunk, else large small arrays will
-         * not fit in an aligned chunk.
-         */
-        @Option(help = "The size at or above which an array will be allocated in its own unaligned chunk.  0 implies (AlignedHeapChunkSize / 8).") //
-        public static final HostedOptionKey<Long> LargeArrayThreshold = new HostedOptionKey<>(LARGE_ARRAY_THRESHOLD_SENTINEL_VALUE);
-
-        @Option(help = "Fill unused memory chunks with a sentinel value.") //
-        public static final HostedOptionKey<Boolean> ZapChunks = new HostedOptionKey<>(false);
-
-        @Option(help = "Before use, fill memory chunks with a sentinel value.") //
-        public static final HostedOptionKey<Boolean> ZapProducedHeapChunks = new HostedOptionKey<>(false);
-
-        @Option(help = "After use, Fill memory chunks with a sentinel value.") //
-        public static final HostedOptionKey<Boolean> ZapConsumedHeapChunks = new HostedOptionKey<>(false);
-
-        @Option(help = "Trace heap chunks during collections, if +VerboseGC and +PrintHeapShape.") //
-        public static final RuntimeOptionKey<Boolean> TraceHeapChunks = new RuntimeOptionKey<>(false);
-
-        @Option(help = "Maximum number of survivor spaces.") //
-        public static final HostedOptionKey<Integer> MaxSurvivorSpaces = new HostedOptionKey<Integer>(null) {
-            @Override
-            public Integer getValueOrDefault(UnmodifiableEconomicMap<OptionKey<?>, Object> values) {
-                Integer value = (Integer) values.get(this);
-                UserError.guarantee(value == null || value >= 0, "%s value must be greater than or equal to 0", getName());
-                return CollectionPolicy.getMaxSurvivorSpaces(value);
-            }
-
-            @Override
-            public Integer getValue(OptionValues values) {
-                assert checkDescriptorExists();
-                return getValueOrDefault(values.getMap());
-            }
-        };
-
-        @Option(help = "Determines if a full GC collects the young generation separately or together with the old generation.") //
-        public static final RuntimeOptionKey<Boolean> CollectYoungGenerationSeparately = new RuntimeOptionKey<>(null);
-
-        private Options() {
-        }
-    }
-
-    private static final long LARGE_ARRAY_THRESHOLD_SENTINEL_VALUE = 0;
-    private static final int ALIGNED_HEAP_CHUNK_FRACTION_FOR_LARGE_ARRAY_THRESHOLD = 8;
-
     @Platforms(Platform.HOSTED_ONLY.class)
     static void initialize() {
-        if (!SubstrateUtil.isPowerOf2(getAlignedHeapChunkSize().rawValue())) {
-            throw UserError.abort("AlignedHeapChunkSize (%d) should be a power of 2.", getAlignedHeapChunkSize().rawValue());
+        long alignedChunkSize = getAlignedHeapChunkSize().rawValue();
+        if (!SubstrateUtil.isPowerOf2(alignedChunkSize)) {
+            throw UserError.abort("AlignedHeapChunkSize (%d) should be a power of 2.", alignedChunkSize);
         }
-        if (!getLargeArrayThreshold().belowOrEqual(getAlignedHeapChunkSize())) {
-            throw UserError.abort("LargeArrayThreshold (%d) should be below or equal to AlignedHeapChunkSize (%d).",
-                            getLargeArrayThreshold().rawValue(), getAlignedHeapChunkSize().rawValue());
+        long maxLargeArrayThreshold = alignedChunkSize - RememberedSet.get().getHeaderSizeOfAlignedChunk().rawValue() + 1;
+        if (SerialAndEpsilonGCOptions.AlignedHeapChunkSize.hasBeenSet() && !SerialAndEpsilonGCOptions.LargeArrayThreshold.hasBeenSet()) {
+            throw UserError.abort("When setting AlignedHeapChunkSize, LargeArrayThreshold should be explicitly set to a value between 1 " +
+                            "and the usable size of an aligned chunk + 1 (currently %d).", maxLargeArrayThreshold);
+        }
+        long largeArrayThreshold = getLargeArrayThreshold().rawValue();
+        if (largeArrayThreshold <= 0 || largeArrayThreshold > maxLargeArrayThreshold) {
+            throw UserError.abort("LargeArrayThreshold (set to %d) should be between 1 and the usable size of an aligned chunk + 1 (currently %d).",
+                            largeArrayThreshold, maxLargeArrayThreshold);
         }
     }
 
@@ -155,7 +80,7 @@ public final class HeapParameters {
 
     @Fold
     public static int getMaxSurvivorSpaces() {
-        return Options.MaxSurvivorSpaces.getValue();
+        return SerialGCOptions.MaxSurvivorSpaces.getValue();
     }
 
     /*
@@ -163,32 +88,40 @@ public final class HeapParameters {
      */
 
     public static void setMaximumHeapSize(UnsignedWord value) {
-        RuntimeOptionValues.singleton().update(SubstrateGCOptions.MaxHeapSize, value.rawValue());
+        SubstrateGCOptions.MaxHeapSize.update(value.rawValue());
     }
 
     public static void setMinimumHeapSize(UnsignedWord value) {
-        RuntimeOptionValues.singleton().update(SubstrateGCOptions.MinHeapSize, value.rawValue());
+        SubstrateGCOptions.MinHeapSize.update(value.rawValue());
     }
 
     public static void setMaximumHeapFree(UnsignedWord bytes) {
-        RuntimeOptionValues.singleton().update(SubstrateGCOptions.MaxHeapFree, bytes.rawValue());
+        SerialGCOptions.MaxHeapFree.update(bytes.rawValue());
+    }
+
+    public static UnsignedWord getMaximumHeapFree() {
+        return WordFactory.unsigned(SerialGCOptions.MaxHeapFree.getValue());
+    }
+
+    public static int getHeapChunkHeaderPadding() {
+        return SerialAndEpsilonGCOptions.HeapChunkHeaderPadding.getValue();
     }
 
     static int getMaximumYoungGenerationSizePercent() {
-        int result = Options.MaximumYoungGenerationSizePercent.getValue();
+        int result = SerialAndEpsilonGCOptions.MaximumYoungGenerationSizePercent.getValue();
         VMError.guarantee((result >= 0) && (result <= 100), "MaximumYoungGenerationSizePercent should be in [0 ..100]");
         return result;
     }
 
     static int getMaximumHeapSizePercent() {
-        int result = Options.MaximumHeapSizePercent.getValue();
+        int result = SerialAndEpsilonGCOptions.MaximumHeapSizePercent.getValue();
         VMError.guarantee((result >= 0) && (result <= 100), "MaximumHeapSizePercent should be in [0 ..100]");
         return result;
     }
 
     @Fold
     public static UnsignedWord getAlignedHeapChunkSize() {
-        return WordFactory.unsigned(Options.AlignedHeapChunkSize.getValue());
+        return WordFactory.unsigned(SerialAndEpsilonGCOptions.AlignedHeapChunkSize.getValue());
     }
 
     @Fold
@@ -198,24 +131,20 @@ public final class HeapParameters {
 
     @Fold
     public static UnsignedWord getLargeArrayThreshold() {
-        long largeArrayThreshold = Options.LargeArrayThreshold.getValue();
-        if (LARGE_ARRAY_THRESHOLD_SENTINEL_VALUE == largeArrayThreshold) {
-            return getAlignedHeapChunkSize().unsignedDivide(ALIGNED_HEAP_CHUNK_FRACTION_FOR_LARGE_ARRAY_THRESHOLD);
-        } else {
-            return WordFactory.unsigned(Options.LargeArrayThreshold.getValue());
-        }
+        return WordFactory.unsigned(SerialAndEpsilonGCOptions.LargeArrayThreshold.getValue());
     }
 
     /*
      * Zapping
      */
 
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static boolean getZapProducedHeapChunks() {
-        return Options.ZapChunks.getValue() || Options.ZapProducedHeapChunks.getValue();
+        return SerialAndEpsilonGCOptions.ZapChunks.getValue() || SerialAndEpsilonGCOptions.ZapProducedHeapChunks.getValue();
     }
 
     public static boolean getZapConsumedHeapChunks() {
-        return Options.ZapChunks.getValue() || Options.ZapConsumedHeapChunks.getValue();
+        return SerialAndEpsilonGCOptions.ZapChunks.getValue() || SerialAndEpsilonGCOptions.ZapConsumedHeapChunks.getValue();
     }
 
     static {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -44,7 +44,8 @@ import java.util.Objects;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
-import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.dsl.InlineSupport.InlineTarget;
+import com.oracle.truffle.api.dsl.NeverDefault;
 
 /**
  * <p>
@@ -110,12 +111,38 @@ public abstract class ValueProfile extends Profile {
      * @see ValueProfile usage example
      * @since 0.10
      */
+    @NeverDefault
     public static ValueProfile createClassProfile() {
         if (Profile.isProfilingEnabled()) {
             return ExactClass.create();
         } else {
             return Disabled.INSTANCE;
         }
+    }
+
+    /**
+     * <p>
+     * Returns a value profile that profiles the exact class of a value. It will check the class of
+     * the profiled value and provide additional information to the compiler if only non-null values
+     * of exactly one concrete Java class are passed as a parameter to the
+     * {@link ValueProfile#profile} method. This can be beneficial if subsequent code can take
+     * advantage of knowing the concrete class of the value. The profile will degrade to the generic
+     * case if a null value or if at least two instances of two different Java classes are
+     * registered.
+     * </p>
+     *
+     * <p>
+     * <b>Compilation notes:</b> Value profiles require a runtime check in their initialized state
+     * to verify their profiled class. If two classes have been seen on a single profile instance
+     * then this profile will transition to a generic state with no overhead.
+     * </P>
+     *
+     * @see ValueProfile usage example
+     * @since 23.0
+     */
+    @NeverDefault
+    public static ValueProfile create() {
+        return createClassProfile();
     }
 
     /**
@@ -132,26 +159,10 @@ public abstract class ValueProfile extends Profile {
      *
      * @since 0.10
      */
+    @NeverDefault
     public static ValueProfile createIdentityProfile() {
         if (Profile.isProfilingEnabled()) {
-            return Identity.create();
-        } else {
-            return Disabled.INSTANCE;
-        }
-    }
-
-    /**
-     * @since 0.10
-     * @deprecated {@link Object#equals(Object)} cannot safely be used on compiled code paths. Use
-     *             The Truffle Specialization DSL instead to implement caches with equality
-     *             semantics. Making {@link Object#equals(Object)} reachable as runtime compiled
-     *             method will mark too many equals implementations reachable for runtime
-     *             compilation in a native image.
-     */
-    @Deprecated
-    public static ValueProfile createEqualityProfile() {
-        if (Profile.isProfilingEnabled()) {
-            return Equality.create();
+            return Identity.create0();
         } else {
             return Disabled.INSTANCE;
         }
@@ -164,6 +175,16 @@ public abstract class ValueProfile extends Profile {
      */
     public static ValueProfile getUncached() {
         return Disabled.INSTANCE;
+    }
+
+    /**
+     * Returns an inlined version of the profile. This version is automatically used by Truffle DSL
+     * node inlining.
+     *
+     * @since 23.0
+     */
+    public static InlinedExactClassProfile inline(InlineTarget target) {
+        return InlinedExactClassProfile.inline(target);
     }
 
     static final class Disabled extends ValueProfile {
@@ -182,76 +203,7 @@ public abstract class ValueProfile extends Profile {
 
         @Override
         public String toString() {
-            return toStringDisabled(ValueProfile.class);
-        }
-
-    }
-
-    static final class Equality extends ValueProfile {
-
-        private static final Object GENERIC = new Object();
-
-        @CompilationFinal protected Object cachedValue = null;
-
-        Equality() {
-        }
-
-        @Override
-        @SuppressWarnings("unchecked")
-        public <T> T profile(T newValue) {
-            // Field needs to be cached in local variable for thread safety and startup speed.
-            Object cached = this.cachedValue;
-            if (cached != GENERIC) {
-                if (cached != null && boundaryEquals(newValue, cached)) {
-                    return (T) cached;
-                } else {
-                    CompilerDirectives.transferToInterpreterAndInvalidate();
-                    if (cached == null && newValue != null) {
-                        cachedValue = newValue;
-                    } else {
-                        cachedValue = GENERIC;
-                    }
-                }
-            }
-            return newValue;
-        }
-
-        @TruffleBoundary
-        private static boolean boundaryEquals(Object newValue, Object cached) {
-            return cached.equals(newValue);
-        }
-
-        public boolean isGeneric() {
-            return getCachedValue() == GENERIC;
-        }
-
-        public boolean isUninitialized() {
-            return getCachedValue() == null;
-        }
-
-        public Object getCachedValue() {
-            return cachedValue;
-        }
-
-        @Override
-        public void disable() {
-            cachedValue = GENERIC;
-        }
-
-        @Override
-        public void reset() {
-            cachedValue = null;
-        }
-
-        @Override
-        public String toString() {
-            return toString(ValueProfile.class, isUninitialized(), isGeneric(),
-                            String.format("value == %s@%x", cachedValue != null ? cachedValue.getClass().getSimpleName() : "null", Objects.hash(cachedValue)));
-        }
-
-        /* Needed for lazy class loading. */
-        static ValueProfile create() {
-            return new Equality();
+            return toStringDisabled();
         }
 
     }
@@ -315,7 +267,7 @@ public abstract class ValueProfile extends Profile {
         }
 
         /* Needed for lazy class loading. */
-        static ValueProfile create() {
+        static ValueProfile create0() {
             return new Identity();
         }
 
@@ -374,7 +326,7 @@ public abstract class ValueProfile extends Profile {
             cachedClass = null;
         }
 
-        Class<?> getCachedClass() {
+        Class<?> getCachedValue() {
             return cachedClass;
         }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -34,13 +34,21 @@ public interface ReflectionConfigurationParserDelegate<T> {
 
     TypeResult<ConfigurationCondition> resolveCondition(String typeName);
 
-    TypeResult<T> resolveType(ConfigurationCondition condition, String typeName);
+    TypeResult<T> resolveType(ConfigurationCondition condition, String typeName, boolean allowPrimitives);
 
     void registerType(T type);
 
     void registerPublicClasses(T type);
 
     void registerDeclaredClasses(T type);
+
+    void registerRecordComponents(T type);
+
+    void registerPermittedSubclasses(T type);
+
+    void registerNestMembers(T type);
+
+    void registerSigners(T type);
 
     void registerPublicFields(T type);
 
@@ -63,6 +71,8 @@ public interface ReflectionConfigurationParserDelegate<T> {
     void registerConstructor(boolean queriedOnly, T type, List<T> methodParameterTypes) throws NoSuchMethodException;
 
     boolean registerAllConstructors(boolean queriedOnly, T type);
+
+    void registerUnsafeAllocated(T clazz);
 
     String getTypeName(T type);
 

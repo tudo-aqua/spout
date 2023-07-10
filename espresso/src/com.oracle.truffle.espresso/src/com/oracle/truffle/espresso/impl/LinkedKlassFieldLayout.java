@@ -27,7 +27,8 @@ import java.util.Set;
 
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.staticobject.StaticShape;
-import com.oracle.truffle.espresso.EspressoLanguage;
+import com.oracle.truffle.api.staticobject.StaticShape.Builder;
+import com.oracle.truffle.espresso.classfile.Constants;
 import com.oracle.truffle.espresso.descriptors.Symbol;
 import com.oracle.truffle.espresso.descriptors.Symbol.Name;
 import com.oracle.truffle.espresso.descriptors.Symbol.Type;
@@ -49,39 +50,36 @@ final class LinkedKlassFieldLayout {
 
     final int fieldTableLength;
 
-    LinkedKlassFieldLayout(EspressoLanguage language, JavaVersion version, ParserKlass parserKlass, LinkedKlass superKlass) {
-        StaticShape.Builder instanceBuilder = StaticShape.newBuilder(language);
-        StaticShape.Builder staticBuilder = StaticShape.newBuilder(language);
+    LinkedKlassFieldLayout(ContextDescription description, ParserKlass parserKlass, LinkedKlass superKlass) {
+        StaticShape.Builder instanceBuilder = StaticShape.newBuilder(description.language);
+        StaticShape.Builder staticBuilder = StaticShape.newBuilder(description.language);
 
-        FieldCounter fieldCounter = new FieldCounter(parserKlass, version);
+        FieldCounter fieldCounter = new FieldCounter(parserKlass, description.javaVersion);
         int nextInstanceFieldIndex = 0;
         int nextStaticFieldIndex = 0;
         int nextInstanceFieldSlot = superKlass == null ? 0 : superKlass.getFieldTableLength();
         int nextStaticFieldSlot = 0;
-        instanceFields = new LinkedField[fieldCounter.instanceFields];
+
         staticFields = new LinkedField[fieldCounter.staticFields];
+        instanceFields = new LinkedField[fieldCounter.instanceFields];
 
         LinkedField.IdMode idMode = getIdMode(parserKlass);
 
         for (ParserField parserField : parserKlass.getFields()) {
             if (parserField.isStatic()) {
-                LinkedField field = new LinkedField(parserField, nextStaticFieldSlot++, idMode);
-                staticBuilder.property(field, parserField.getPropertyType(), storeAsFinal(parserKlass, parserField));
-                staticFields[nextStaticFieldIndex++] = field;
+                createAndRegisterLinkedField(parserKlass, parserField, nextStaticFieldSlot++, nextStaticFieldIndex++, idMode, staticBuilder, staticFields);
             } else {
-                LinkedField field = new LinkedField(parserField, nextInstanceFieldSlot++, idMode);
-                instanceBuilder.property(field, parserField.getPropertyType(), storeAsFinal(parserKlass, parserField));
-                instanceFields[nextInstanceFieldIndex++] = field;
+                createAndRegisterLinkedField(parserKlass, parserField, nextInstanceFieldSlot++, nextInstanceFieldIndex++, idMode, instanceBuilder, instanceFields);
             }
         }
+
         for (HiddenField hiddenField : fieldCounter.hiddenFieldNames) {
-            if (hiddenField.versionRange.contains(version)) {
-                ParserField hiddenParserField = new ParserField(ParserField.HIDDEN, hiddenField.name, hiddenField.type, null);
-                LinkedField field = new LinkedField(hiddenParserField, nextInstanceFieldSlot++, idMode);
-                instanceBuilder.property(field, hiddenParserField.getPropertyType(), storeAsFinal(parserKlass, hiddenParserField));
-                instanceFields[nextInstanceFieldIndex++] = field;
+            if (hiddenField.versionRange.contains(description.javaVersion)) {
+                ParserField hiddenParserField = new ParserField(ParserField.HIDDEN | hiddenField.additionalFlags, hiddenField.name, hiddenField.type, null);
+                createAndRegisterLinkedField(parserKlass, hiddenParserField, nextInstanceFieldSlot++, nextInstanceFieldIndex++, idMode, instanceBuilder, instanceFields);
             }
         }
+
         if (superKlass == null) {
             instanceShape = instanceBuilder.build(StaticObject.class, StaticObjectFactory.class);
         } else {
@@ -94,7 +92,7 @@ final class LinkedKlassFieldLayout {
     /**
      * Makes sure that the field IDs passed to the shape builder are all unique.
      */
-    private static LinkedField.IdMode getIdMode(ParserKlass parserKlass) {
+    static LinkedField.IdMode getIdMode(ParserKlass parserKlass) {
         ParserField[] parserFields = parserKlass.getFields();
 
         boolean noDup = true;
@@ -120,6 +118,12 @@ final class LinkedKlassFieldLayout {
         }
         // All fields have unique {name, type} pairs, use the concatenation of both for the ID.
         return LinkedField.IdMode.WITH_TYPE;
+    }
+
+    private static void createAndRegisterLinkedField(ParserKlass parserKlass, ParserField parserField, int slot, int index, LinkedField.IdMode idMode, Builder builder, LinkedField[] linkedFields) {
+        LinkedField field = new LinkedField(parserField, slot, idMode);
+        builder.property(field, parserField.getPropertyType(), storeAsFinal(parserKlass, parserField));
+        linkedFields[index] = field;
     }
 
     private static boolean storeAsFinal(ParserKlass klass, ParserField field) {
@@ -161,18 +165,26 @@ final class LinkedKlassFieldLayout {
 
     private static class HiddenField {
 
+        private static final int NO_ADDITIONAL_FLAGS = 0;
+
         private final Symbol<Name> name;
         private final Symbol<Type> type;
         private final VersionRange versionRange;
+        private final int additionalFlags;
 
         HiddenField(Symbol<Name> name) {
-            this(name, Type.java_lang_Object, VersionRange.ALL);
+            this(name, Type.java_lang_Object, VersionRange.ALL, NO_ADDITIONAL_FLAGS);
         }
 
-        HiddenField(Symbol<Name> name, Symbol<Type> type, VersionRange versionRange) {
+        HiddenField(Symbol<Name> name, int additionalFlags) {
+            this(name, Type.java_lang_Object, VersionRange.ALL, additionalFlags);
+        }
+
+        HiddenField(Symbol<Name> name, Symbol<Type> type, VersionRange versionRange, int additionalFlags) {
             this.name = name;
             this.type = type;
             this.versionRange = versionRange;
+            this.additionalFlags = additionalFlags;
         }
 
         private boolean appliesTo(JavaVersion version) {
@@ -246,11 +258,12 @@ final class LinkedKlassFieldLayout {
             }
             if (holder == Type.java_lang_Thread) {
                 return new HiddenField[]{
-                                new HiddenField(Name.HIDDEN_INTERRUPTED, Type._boolean, VersionRange.lower(13)),
+                                new HiddenField(Name.HIDDEN_INTERRUPTED, Type._boolean, VersionRange.lower(13), NO_ADDITIONAL_FLAGS),
                                 new HiddenField(Name.HIDDEN_HOST_THREAD),
-                                new HiddenField(Name.HIDDEN_DEATH),
-                                new HiddenField(Name.HIDDEN_DEATH_THROWABLE),
-                                new HiddenField(Name.HIDDEN_SUSPEND_LOCK),
+                                new HiddenField(Name.HIDDEN_ESPRESSO_MANAGED, Type._boolean, VersionRange.ALL, NO_ADDITIONAL_FLAGS),
+                                new HiddenField(Name.HIDDEN_DEPRECATION_SUPPORT),
+                                new HiddenField(Name.HIDDEN_THREAD_UNPARK_SIGNALS, Type._int, VersionRange.ALL, Constants.ACC_VOLATILE),
+                                new HiddenField(Name.HIDDEN_THREAD_PARK_LOCK, Type.java_lang_Object, VersionRange.ALL, Constants.ACC_FINAL),
 
                                 // Only used for j.l.management bookkeeping.
                                 new HiddenField(Name.HIDDEN_THREAD_BLOCKED_OBJECT),
@@ -261,7 +274,7 @@ final class LinkedKlassFieldLayout {
             if (holder == Type.java_lang_Class) {
                 return new HiddenField[]{
                                 new HiddenField(Name.HIDDEN_SIGNERS),
-                                new HiddenField(Name.HIDDEN_MIRROR_KLASS),
+                                new HiddenField(Name.HIDDEN_MIRROR_KLASS, Constants.ACC_FINAL),
                                 new HiddenField(Name.HIDDEN_PROTECTION_DOMAIN)
                 };
             }

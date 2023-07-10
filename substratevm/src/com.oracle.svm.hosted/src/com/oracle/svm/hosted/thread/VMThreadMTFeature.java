@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -28,24 +28,24 @@ import java.util.List;
 
 import org.graalvm.compiler.api.replacements.SnippetReflectionProvider;
 import org.graalvm.compiler.core.common.NumUtil;
+import org.graalvm.compiler.core.common.memory.BarrierType;
+import org.graalvm.compiler.core.common.memory.MemoryOrderMode;
 import org.graalvm.compiler.nodes.ValueNode;
-import org.graalvm.compiler.nodes.extended.MembarNode;
 import org.graalvm.compiler.nodes.graphbuilderconf.GraphBuilderConfiguration.Plugins;
 import org.graalvm.compiler.nodes.graphbuilderconf.GraphBuilderContext;
-import org.graalvm.compiler.nodes.graphbuilderconf.InvocationPlugin;
 import org.graalvm.compiler.nodes.graphbuilderconf.InvocationPlugin.Receiver;
+import org.graalvm.compiler.nodes.graphbuilderconf.InvocationPlugin.RequiredInvocationPlugin;
 import org.graalvm.compiler.nodes.graphbuilderconf.InvocationPlugins.Registration;
-import org.graalvm.compiler.nodes.memory.OnHeapMemoryAccess.BarrierType;
 import org.graalvm.compiler.phases.util.Providers;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.IsolateThread;
 
 import com.oracle.svm.core.ParsingReason;
 import com.oracle.svm.core.SubstrateOptions;
-import com.oracle.svm.core.annotate.AutomaticFeature;
 import com.oracle.svm.core.c.NonmovableArray;
 import com.oracle.svm.core.c.NonmovableArrays;
-import com.oracle.svm.core.graal.GraalFeature;
+import com.oracle.svm.core.feature.AutomaticallyRegisteredFeature;
+import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.graal.nodes.ReadReservedRegister;
 import com.oracle.svm.core.graal.thread.AddressOfVMThreadLocalNode;
 import com.oracle.svm.core.graal.thread.CompareAndSetVMThreadLocalNode;
@@ -61,15 +61,14 @@ import com.oracle.svm.core.threadlocal.VMThreadLocalInfos;
 import com.oracle.svm.core.threadlocal.VMThreadLocalMTSupport;
 import com.oracle.svm.core.util.VMError;
 
-import jdk.vm.ci.code.MemoryBarriers;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 
 /**
  * Collects all VM thread local variables during native image generation and assigns them their
  * offset in the {@link IsolateThread} data structure.
  */
-@AutomaticFeature
-public class VMThreadMTFeature implements GraalFeature {
+@AutomaticallyRegisteredFeature
+public class VMThreadMTFeature implements InternalFeature {
 
     private final VMThreadLocalCollector threadLocalCollector = new VMThreadLocalCollector();
     private final VMThreadLocalMTSupport threadLocalSupport = new VMThreadLocalMTSupport();
@@ -104,22 +103,22 @@ public class VMThreadMTFeature implements GraalFeature {
         for (Class<? extends FastThreadLocal> threadLocalClass : VMThreadLocalInfo.THREAD_LOCAL_CLASSES) {
             Registration r = new Registration(plugins.getInvocationPlugins(), threadLocalClass);
             Class<?> valueClass = VMThreadLocalInfo.getValueClass(threadLocalClass);
-            registerAccessors(r, valueClass, false);
-            registerAccessors(r, valueClass, true);
+            registerAccessors(r, snippetReflection, valueClass, false);
+            registerAccessors(r, snippetReflection, valueClass, true);
 
             /* compareAndSet() method without the VMThread parameter. */
-            r.register3("compareAndSet", Receiver.class, valueClass, valueClass, new InvocationPlugin() {
+            r.register(new RequiredInvocationPlugin("compareAndSet", Receiver.class, valueClass, valueClass) {
                 @Override
                 public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode expect, ValueNode update) {
                     ValueNode threadNode = currentThread(b);
-                    return handleCompareAndSet(b, targetMethod, receiver, threadNode, expect, update);
+                    return handleCompareAndSet(b, snippetReflection, targetMethod, receiver, threadNode, expect, update);
                 }
             });
             /* get() method with the VMThread parameter. */
-            r.register4("compareAndSet", Receiver.class, IsolateThread.class, valueClass, valueClass, new InvocationPlugin() {
+            r.register(new RequiredInvocationPlugin("compareAndSet", Receiver.class, IsolateThread.class, valueClass, valueClass) {
                 @Override
                 public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode threadNode, ValueNode expect, ValueNode update) {
-                    return handleCompareAndSet(b, targetMethod, receiver, threadNode, expect, update);
+                    return handleCompareAndSet(b, snippetReflection, targetMethod, receiver, threadNode, expect, update);
                 }
             });
         }
@@ -128,54 +127,54 @@ public class VMThreadMTFeature implements GraalFeature {
         for (Class<?> type : typesWithGetAddress) {
             Registration r = new Registration(plugins.getInvocationPlugins(), type);
             /* getAddress() method without the VMThread parameter. */
-            r.register1("getAddress", Receiver.class, new InvocationPlugin() {
+            r.register(new RequiredInvocationPlugin("getAddress", Receiver.class) {
                 @Override
                 public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver) {
                     ValueNode threadNode = currentThread(b);
-                    return handleGetAddress(b, targetMethod, receiver, threadNode);
+                    return handleGetAddress(b, snippetReflection, targetMethod, receiver, threadNode);
                 }
             });
             /* getAddress() method with the VMThread parameter. */
-            r.register2("getAddress", Receiver.class, IsolateThread.class, new InvocationPlugin() {
+            r.register(new RequiredInvocationPlugin("getAddress", Receiver.class, IsolateThread.class) {
                 @Override
                 public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode threadNode) {
-                    return handleGetAddress(b, targetMethod, receiver, threadNode);
+                    return handleGetAddress(b, snippetReflection, targetMethod, receiver, threadNode);
                 }
             });
         }
     }
 
-    private void registerAccessors(Registration r, Class<?> valueClass, boolean isVolatile) {
+    private void registerAccessors(Registration r, SnippetReflectionProvider snippetReflection, Class<?> valueClass, boolean isVolatile) {
         String suffix = isVolatile ? "Volatile" : "";
 
         /* get() method without the VMThread parameter. */
-        r.register1("get" + suffix, Receiver.class, new InvocationPlugin() {
+        r.register(new RequiredInvocationPlugin("get" + suffix, Receiver.class) {
             @Override
             public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver) {
                 ValueNode threadNode = currentThread(b);
-                return handleGet(b, targetMethod, receiver, threadNode, isVolatile);
+                return handleGet(b, snippetReflection, targetMethod, receiver, threadNode, isVolatile);
             }
         });
         /* get() method with the VMThread parameter. */
-        r.register2("get" + suffix, Receiver.class, IsolateThread.class, new InvocationPlugin() {
+        r.register(new RequiredInvocationPlugin("get" + suffix, Receiver.class, IsolateThread.class) {
             @Override
             public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode threadNode) {
-                return handleGet(b, targetMethod, receiver, threadNode, isVolatile);
+                return handleGet(b, snippetReflection, targetMethod, receiver, threadNode, isVolatile);
             }
         });
         /* set() method without the VMThread parameter. */
-        r.register2("set" + suffix, Receiver.class, valueClass, new InvocationPlugin() {
+        r.register(new RequiredInvocationPlugin("set" + suffix, Receiver.class, valueClass) {
             @Override
             public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode valueNode) {
                 ValueNode threadNode = currentThread(b);
-                return handleSet(b, receiver, threadNode, valueNode, isVolatile);
+                return handleSet(b, snippetReflection, receiver, threadNode, valueNode, isVolatile);
             }
         });
         /* set() method with the VMThread parameter. */
-        r.register3("set" + suffix, Receiver.class, IsolateThread.class, valueClass, new InvocationPlugin() {
+        r.register(new RequiredInvocationPlugin("set" + suffix, Receiver.class, IsolateThread.class, valueClass) {
             @Override
             public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode threadNode, ValueNode valueNode) {
-                return handleSet(b, receiver, threadNode, valueNode, isVolatile);
+                return handleSet(b, snippetReflection, receiver, threadNode, valueNode, isVolatile);
             }
         });
     }
@@ -184,56 +183,36 @@ public class VMThreadMTFeature implements GraalFeature {
         return b.add(ReadReservedRegister.createReadIsolateThreadNode(b.getGraph()));
     }
 
-    private boolean handleGet(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode threadNode, boolean isVolatile) {
-        VMThreadLocalInfo threadLocalInfo = threadLocalCollector.findInfo(b, receiver.get());
-        if (isVolatile) {
-            b.add(new MembarNode(MemoryBarriers.JMM_PRE_VOLATILE_READ));
-        }
-        boolean allowFloatingReads = !isVolatile && threadLocalInfo.allowFloatingReads;
-        b.addPush(targetMethod.getSignature().getReturnKind(), new LoadVMThreadLocalNode(b.getMetaAccess(), threadLocalInfo, threadNode, BarrierType.NONE, allowFloatingReads));
-        if (isVolatile) {
-            b.add(new MembarNode(MemoryBarriers.JMM_POST_VOLATILE_READ));
-        }
+    private boolean handleGet(GraphBuilderContext b, SnippetReflectionProvider snippetReflection, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode threadNode, boolean isVolatile) {
+        VMThreadLocalInfo threadLocalInfo = threadLocalCollector.findInfo(b, snippetReflection, receiver.get());
+
+        LoadVMThreadLocalNode node = new LoadVMThreadLocalNode(b.getMetaAccess(), threadLocalInfo, threadNode, BarrierType.NONE, isVolatile ? MemoryOrderMode.VOLATILE : MemoryOrderMode.PLAIN);
+        b.addPush(targetMethod.getSignature().getReturnKind(), node);
+
         return true;
     }
 
-    private boolean handleSet(GraphBuilderContext b, Receiver receiver, ValueNode threadNode, ValueNode valueNode, boolean isVolatile) {
-        VMThreadLocalInfo threadLocalInfo = threadLocalCollector.findInfo(b, receiver.get());
-        if (isVolatile) {
-            b.add(new MembarNode(MemoryBarriers.JMM_PRE_VOLATILE_WRITE));
-        }
-        StoreVMThreadLocalNode store = new StoreVMThreadLocalNode(threadLocalInfo, threadNode, valueNode, BarrierType.NONE);
-        b.add(store);
+    private boolean handleSet(GraphBuilderContext b, SnippetReflectionProvider snippetReflection, Receiver receiver, ValueNode threadNode, ValueNode valueNode, boolean isVolatile) {
+        VMThreadLocalInfo threadLocalInfo = threadLocalCollector.findInfo(b, snippetReflection, receiver.get());
+
+        StoreVMThreadLocalNode store = b.add(new StoreVMThreadLocalNode(threadLocalInfo, threadNode, valueNode, BarrierType.NONE, isVolatile ? MemoryOrderMode.VOLATILE : MemoryOrderMode.PLAIN));
         assert store.stateAfter() != null : store + " has no state after with graph builder context " + b;
-        if (isVolatile) {
-            b.add(new MembarNode(MemoryBarriers.JMM_POST_VOLATILE_WRITE));
-        }
         return true;
     }
 
-    private boolean handleCompareAndSet(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode threadNode, ValueNode expect, ValueNode update) {
-        VMThreadLocalInfo threadLocalInfo = threadLocalCollector.findInfo(b, receiver.get());
+    private boolean handleCompareAndSet(GraphBuilderContext b, SnippetReflectionProvider snippetReflection, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode threadNode, ValueNode expect,
+                    ValueNode update) {
+        VMThreadLocalInfo threadLocalInfo = threadLocalCollector.findInfo(b, snippetReflection, receiver.get());
         CompareAndSetVMThreadLocalNode cas = new CompareAndSetVMThreadLocalNode(threadLocalInfo, threadNode, expect, update);
         b.addPush(targetMethod.getSignature().getReturnKind(), cas);
         assert cas.stateAfter() != null : cas + " has no state after with graph builder context " + b;
         return true;
     }
 
-    private boolean handleGetAddress(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode threadNode) {
-        VMThreadLocalInfo threadLocalInfo = threadLocalCollector.findInfo(b, receiver.get());
+    private boolean handleGetAddress(GraphBuilderContext b, SnippetReflectionProvider snippetReflection, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode threadNode) {
+        VMThreadLocalInfo threadLocalInfo = threadLocalCollector.findInfo(b, snippetReflection, receiver.get());
         b.addPush(targetMethod.getSignature().getReturnKind(), new AddressOfVMThreadLocalNode(threadLocalInfo, threadNode));
         return true;
-    }
-
-    @Override
-    public void duringAnalysis(DuringAnalysisAccess access) {
-        /*
-         * Update during analysis so that the static analysis sees all infos. After analysis only
-         * the order is going to change.
-         */
-        if (VMThreadLocalInfos.setInfos(threadLocalCollector.threadLocals.values())) {
-            access.requireAnalysisIteration();
-        }
     }
 
     @Override

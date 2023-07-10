@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2016, 2023, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -29,17 +29,14 @@
  */
 package com.oracle.truffle.llvm.runtime;
 
-import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Cached.Exclusive;
+import com.oracle.truffle.api.dsl.ImportStatic;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.interop.InteropLibrary;
-import com.oracle.truffle.api.interop.InvalidArrayIndexException;
-import com.oracle.truffle.api.interop.TruffleObject;
-import com.oracle.truffle.api.interop.UnknownIdentifierException;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.library.CachedLibrary;
 import com.oracle.truffle.api.library.ExportLibrary;
@@ -62,7 +59,7 @@ import com.oracle.truffle.llvm.runtime.pointer.LLVMNativePointer;
  * {@link LLVMFunctionDescriptor}s.
  */
 @ExportLibrary(InteropLibrary.class)
-@ExportLibrary(value = LLVMNativeLibrary.class, useForAOT = true, useForAOTPriority = 1)
+@ExportLibrary(value = LLVMNativeLibrary.class, useForAOT = false)
 @ExportLibrary(value = LLVMAsForeignLibrary.class, useForAOT = true, useForAOTPriority = 2)
 @SuppressWarnings("static-method")
 public final class LLVMFunctionDescriptor extends LLVMInternalTruffleObject implements Comparable<LLVMFunctionDescriptor> {
@@ -121,7 +118,7 @@ public final class LLVMFunctionDescriptor extends LLVMInternalTruffleObject impl
     }
 
     @ExportMessage
-    long asPointer(@Cached @Exclusive BranchProfile exception) throws UnsupportedMessageException {
+    public long asPointer(@Cached @Exclusive BranchProfile exception) throws UnsupportedMessageException {
         if (isPointer()) {
             return nativePointer;
         }
@@ -130,7 +127,7 @@ public final class LLVMFunctionDescriptor extends LLVMInternalTruffleObject impl
     }
 
     @ExportMessage
-    boolean isPointer() {
+    public boolean isPointer() {
         return nativeWrapper != null;
     }
 
@@ -154,15 +151,19 @@ public final class LLVMFunctionDescriptor extends LLVMInternalTruffleObject impl
     @ExportMessage
     public LLVMNativePointer toNativePointer(@CachedLibrary("this") LLVMNativeLibrary self,
                     @Cached @Exclusive BranchProfile exceptionProfile) {
-        if (!isPointer()) {
-            toNative();
-        }
         try {
-            return LLVMNativePointer.create(asPointer(exceptionProfile));
+            return asNativePointer(exceptionProfile);
         } catch (UnsupportedMessageException e) {
             exceptionProfile.enter();
             throw new LLVMPolyglotException(self, "Cannot convert %s to native pointer.", this);
         }
+    }
+
+    public LLVMNativePointer asNativePointer(BranchProfile exceptionProfile) throws UnsupportedMessageException {
+        if (!isPointer()) {
+            toNative();
+        }
+        return LLVMNativePointer.create(asPointer(exceptionProfile));
     }
 
     @ExportMessage
@@ -171,9 +172,10 @@ public final class LLVMFunctionDescriptor extends LLVMInternalTruffleObject impl
     }
 
     @ExportMessage
+    @ImportStatic(LLVMLanguage.class)
     static class Execute {
 
-        @Specialization(limit = "5", guards = "self == cachedSelf", assumptions = "singleContextAssumption()")
+        @Specialization(limit = "5", guards = {"self == cachedSelf", "isSingleContext($node)"})
         static Object doDescriptor(@SuppressWarnings("unused") LLVMFunctionDescriptor self, Object[] args,
                         @Cached("self") @SuppressWarnings("unused") LLVMFunctionDescriptor cachedSelf,
                         @Cached("createCall(cachedSelf)") DirectCallNode call) {
@@ -199,63 +201,6 @@ public final class LLVMFunctionDescriptor extends LLVMInternalTruffleObject impl
             return callNode;
         }
 
-        protected static Assumption singleContextAssumption() {
-            return LLVMLanguage.get(null).singleContextAssumption;
-        }
-
-    }
-
-    @ExportMessage
-    boolean hasMembers() {
-        return true;
-    }
-
-    @ExportLibrary(InteropLibrary.class)
-    static final class FunctionMembers implements TruffleObject {
-
-        @ExportMessage
-        boolean hasArrayElements() {
-            return true;
-        }
-
-        @ExportMessage
-        long getArraySize() {
-            return 1;
-        }
-
-        @ExportMessage
-        boolean isArrayElementReadable(long index) {
-            return index == 0;
-        }
-
-        @ExportMessage
-        Object readArrayElement(long index) throws InvalidArrayIndexException {
-            if (index == 0) {
-                return "bind";
-            } else {
-                throw InvalidArrayIndexException.create(index);
-            }
-        }
-    }
-
-    @ExportMessage
-    Object getMembers(@SuppressWarnings("unused") boolean includeInternal) {
-        return new FunctionMembers();
-    }
-
-    @SuppressWarnings("static-method")
-    @ExportMessage
-    boolean isMemberInvocable(String member) {
-        return "bind".equals(member);
-    }
-
-    @ExportMessage
-    Object invokeMember(String member, @SuppressWarnings("unused") Object[] args) throws UnknownIdentifierException {
-        if ("bind".equals(member)) {
-            return this;
-        } else {
-            throw UnknownIdentifierException.create(member);
-        }
     }
 
     @ExportMessage

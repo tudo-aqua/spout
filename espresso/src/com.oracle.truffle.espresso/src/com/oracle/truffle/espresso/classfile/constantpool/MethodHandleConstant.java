@@ -115,7 +115,7 @@ public interface MethodHandleConstant extends PoolConstant {
         @Override
         public ResolvedConstant resolve(RuntimeConstantPool pool, int thisIndex, Klass accessingKlass) {
             Meta meta = pool.getContext().getMeta();
-            if (meta.getContext().SpecCompliancyMode == EspressoOptions.SpecCompliancyMode.STRICT || meta.getJavaVersion().java9OrLater()) {
+            if (meta.getLanguage().getSpecComplianceMode() == EspressoOptions.SpecComplianceMode.STRICT || meta.getJavaVersion().java9OrLater()) {
                 return specCompliantResolution(pool, accessingKlass, meta);
             } else {
                 return hotspotResolutionBehavior(pool, accessingKlass, meta);
@@ -133,11 +133,18 @@ public interface MethodHandleConstant extends PoolConstant {
                 Symbol<Symbol.Type>[] parsed = target.getParsedSignature();
 
                 mtype = MethodTypeConstant.signatureToMethodType(parsed, accessingKlass, false, meta);
-                mklass = target.getDeclaringKlass();
+                MethodRefConstant ref = pool.methodAt(getRefIndex());
+                /*
+                 * we should use the klass from the method ref here rather than the declaring klass
+                 * of the target this is because the resolved target might come from a default
+                 * method and have an interface as declaring klass however if the refKind is
+                 * invokeVirtual, it would be illegal to use the interface type
+                 */
+                mklass = pool.resolvedKlassAt(accessingKlass, ((MemberRefConstant.Indexes) ref).classIndex);
                 refName = target.getName();
             } else {
                 assert refTag == Tag.FIELD_REF;
-                Field field = pool.resolvedFieldAt(accessingKlass, refIndex).getField();
+                Field field = pool.resolvedFieldAt(accessingKlass, refIndex);
                 mtype = meta.resolveSymbolAndAccessCheck(field.getType(), accessingKlass).mirror();
                 mklass = field.getDeclaringKlass();
                 refName = field.getName();

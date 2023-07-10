@@ -28,18 +28,24 @@ package com.oracle.svm.core.jdk.resources;
 import java.util.ArrayList;
 import java.util.List;
 
-public class ResourceStorageEntry {
+public final class ResourceStorageEntry {
 
     private final boolean isDirectory;
+    private final boolean fromJar;
     private final List<byte[]> data;
 
-    public ResourceStorageEntry(boolean isDirectory) {
+    public ResourceStorageEntry(boolean isDirectory, boolean fromJar) {
         this.isDirectory = isDirectory;
+        this.fromJar = fromJar;
         this.data = new ArrayList<>();
     }
 
     public boolean isDirectory() {
         return isDirectory;
+    }
+
+    public boolean isFromJar() {
+        return fromJar;
     }
 
     public List<byte[]> getData() {

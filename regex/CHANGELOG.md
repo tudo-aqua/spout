@@ -2,9 +2,39 @@
 
 This changelog summarizes major changes between TRegex versions relevant to language implementors integrating TRegex into their language. This document will focus on API changes relevant to integrators of TRegex.
 
+## Version 23.1.0
+
+* Added support for Unicode sets mode (`v` flag) in ECMAScript regular expressions.
+
+## Version 23.0.0
+
+* Updated Unicode data (case-folding, character properties) to version 15 of the Unicode standard.
+* Dropped `Flavor=PythonStr` and `Flavor=PythonBytes` in favor of `Flavor=Python,Encoding=UTF-32` and `Flavor=Python,Encoding=LATIN-1`.
+* Dropped support for the `execBytes(byte[] input, int fromIndex)` entrypoint.
+* Dropped support for `TruffleObject`s with characters/code points as array elements.
+* Added support for conditional back-references (e.g. `(foo)(?(1)bar|no_foo)`) in Python and Ruby regular expressions.
+* Added support for case-insensitive back-references in Python and Ruby regular expressions.
+* Added support for locale-sensitive Python regular expressions.
+* TRegex is no longer included by default in the GraalVM download and needs to be installed as a component using gu install regex.
+
+## Version 22.2.0
+
+* Added support for atomic groups and possessive quantifiers in Ruby regular expressions by using the backtracking.
+
+## Version 22.1.0
+
+* Added a `lastGroup` field to regex results. Its value is tracked when using the Python regex dialect and it indicates the last capture group to have been matched.
+* Added boolean matching mode (`execBoolean`), which allows omitting `RegexResult` objects in cases where capture groups are known to never be queried.
+* Added `MustAdvance` and `PythonMode` options for better Python support.
+* Support for named character escapes in Python regular expressions.
+* Limited support for \G anchors in Ruby regular expressions.
+* Dropped sticky flag from Python regular expressions.
+* Added support for non-recursive subexpression calls in Ruby regular expressions.
+
 ## Version 22.0.0
 
 * Added new `ASCII` encoding that callers can use when compiling a regex to limit the range of code point matches to [0x00, 0x7f].
+* Updated Unicode data (case-folding, character properties) to version 14 of the Unicode standard.
 
 ## Version 21.3.0
 

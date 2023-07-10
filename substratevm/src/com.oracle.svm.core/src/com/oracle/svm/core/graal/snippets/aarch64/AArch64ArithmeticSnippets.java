@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,9 +27,7 @@ package com.oracle.svm.core.graal.snippets.aarch64;
 import java.util.Map;
 
 import org.graalvm.compiler.api.replacements.Snippet;
-import org.graalvm.compiler.api.replacements.SnippetReflectionProvider;
 import org.graalvm.compiler.core.common.spi.ForeignCallDescriptor;
-import org.graalvm.compiler.debug.DebugHandlersFactory;
 import org.graalvm.compiler.graph.Node;
 import org.graalvm.compiler.graph.Node.ConstantNodeParameter;
 import org.graalvm.compiler.graph.Node.NodeIntrinsic;
@@ -46,9 +44,9 @@ import org.graalvm.compiler.replacements.SnippetTemplate.SnippetInfo;
 import org.graalvm.nativeimage.Platform.AARCH64;
 import org.graalvm.nativeimage.Platforms;
 
-import com.oracle.svm.core.annotate.AutomaticFeature;
-import com.oracle.svm.core.annotate.Uninterruptible;
-import com.oracle.svm.core.graal.GraalFeature;
+import com.oracle.svm.core.Uninterruptible;
+import com.oracle.svm.core.feature.AutomaticallyRegisteredFeature;
+import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.graal.meta.SubstrateForeignCallsProvider;
 import com.oracle.svm.core.graal.snippets.ArithmeticSnippets;
 import com.oracle.svm.core.graal.snippets.NodeLoweringProvider;
@@ -131,7 +129,8 @@ final class AArch64ArithmeticSnippets extends ArithmeticSnippets {
 
         /* purge off exception values */
         if ((hy | ly) == 0 || (hx >= 0x7ff00000) || /* y=0,or x not finite */
-                        ((hy | ((ly | -ly) >> 31)) > 0x7ff00000)) /* or y is NaN */ {
+                        /* or y is NaN */
+                        UninterruptibleUtils.Integer.compareUnsigned(hy | ((ly | -ly) >>> 31), 0x7ff00000) > 0) {
             return (x * y) / (x * y);
         }
         if (hx <= hy) {
@@ -275,18 +274,14 @@ final class AArch64ArithmeticSnippets extends ArithmeticSnippets {
     private final SnippetInfo frem;
 
     @SuppressWarnings("unused")
-    public static void registerLowerings(OptionValues options, Iterable<DebugHandlersFactory> factories, Providers providers,
-                    SnippetReflectionProvider snippetReflection, Map<Class<? extends Node>, NodeLoweringProvider<?>> lowerings) {
-
-        new AArch64ArithmeticSnippets(options, factories, providers, snippetReflection, lowerings);
+    public static void registerLowerings(OptionValues options, Providers providers, Map<Class<? extends Node>, NodeLoweringProvider<?>> lowerings) {
+        new AArch64ArithmeticSnippets(options, providers, lowerings);
     }
 
-    private AArch64ArithmeticSnippets(OptionValues options, Iterable<DebugHandlersFactory> factories, Providers providers,
-                    SnippetReflectionProvider snippetReflection, Map<Class<? extends Node>, NodeLoweringProvider<?>> lowerings) {
-
-        super(options, factories, providers, snippetReflection, lowerings);
-        frem = snippet(AArch64ArithmeticSnippets.class, "fremSnippet");
-        drem = snippet(AArch64ArithmeticSnippets.class, "dremSnippet");
+    private AArch64ArithmeticSnippets(OptionValues options, Providers providers, Map<Class<? extends Node>, NodeLoweringProvider<?>> lowerings) {
+        super(options, providers, lowerings, false);
+        frem = snippet(providers, AArch64ArithmeticSnippets.class, "fremSnippet");
+        drem = snippet(providers, AArch64ArithmeticSnippets.class, "dremSnippet");
 
         lowerings.put(RemNode.class, new AArch64RemLowering());
     }
@@ -301,14 +296,14 @@ final class AArch64ArithmeticSnippets extends ArithmeticSnippets {
             Arguments args = new Arguments(snippet, graph.getGuardsStage(), tool.getLoweringStage());
             args.add("x", node.getX());
             args.add("y", node.getY());
-            template(node, args).instantiate(providers.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, tool, args);
+            template(tool, node, args).instantiate(tool.getMetaAccess(), node, SnippetTemplate.DEFAULT_REPLACER, tool, args);
         }
     }
 }
 
-@AutomaticFeature
+@AutomaticallyRegisteredFeature
 @Platforms(AARCH64.class)
-final class AArch64ArithmeticForeignCallsFeature implements GraalFeature {
+final class AArch64ArithmeticForeignCallsFeature implements InternalFeature {
     @Override
     public void registerForeignCalls(SubstrateForeignCallsProvider foreignCalls) {
         AArch64ArithmeticSnippets.registerForeignCalls(foreignCalls);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -44,10 +44,11 @@ import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.NeverDefault;
+import com.oracle.truffle.api.dsl.Cached.Exclusive;
 import com.oracle.truffle.api.dsl.Cached.Shared;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.Frame;
-import com.oracle.truffle.api.frame.FrameSlot;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.InvalidArrayIndexException;
@@ -60,12 +61,14 @@ import com.oracle.truffle.api.library.ExportMessage;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.source.SourceSection;
+import com.oracle.truffle.api.strings.TruffleString;
 import com.oracle.truffle.sl.SLLanguage;
 import com.oracle.truffle.sl.nodes.SLExpressionNode;
 import com.oracle.truffle.sl.nodes.SLRootNode;
 import com.oracle.truffle.sl.nodes.controlflow.SLBlockNode;
 import com.oracle.truffle.sl.runtime.SLContext;
 import com.oracle.truffle.sl.runtime.SLNull;
+import com.oracle.truffle.sl.runtime.SLStrings;
 
 /**
  * The SL implementation of {@link NodeLibrary} provides fast access to local variables. It's used
@@ -125,11 +128,14 @@ public abstract class SLScopedNode extends Node {
      * context lookup via {@link SLContext#getCurrent(Node)}.
      */
     @ExportMessage
-    @TruffleBoundary
     final boolean hasRootInstance(@SuppressWarnings("unused") Frame frame) {
-        String functionName = getRootNode().getName();
+        return hasRootInstanceSlowPath();
+    }
+
+    @TruffleBoundary
+    private boolean hasRootInstanceSlowPath() {
         // The instance of the current RootNode is a function of the same name.
-        return SLContext.get(this).getFunctionRegistry().getFunction(functionName) != null;
+        return SLContext.get(this).getFunctionRegistry().getFunction(SLStrings.getSLRootName(getRootNode())) != null;
     }
 
     /**
@@ -137,11 +143,14 @@ public abstract class SLScopedNode extends Node {
      * context lookup via {@link SLContext#getCurrent(Node)}.
      */
     @ExportMessage
-    @TruffleBoundary
     final Object getRootInstance(@SuppressWarnings("unused") Frame frame) throws UnsupportedMessageException {
-        String functionName = getRootNode().getName();
+        return getRootInstanceSlowPath();
+    }
+
+    @TruffleBoundary
+    private Object getRootInstanceSlowPath() throws UnsupportedMessageException {
         // The instance of the current RootNode is a function of the same name.
-        Object function = SLContext.get(this).getFunctionRegistry().getFunction(functionName);
+        Object function = SLContext.get(this).getFunctionRegistry().getFunction(SLStrings.getSLRootName(getRootNode()));
         if (function != null) {
             return function;
         } else {
@@ -155,6 +164,7 @@ public abstract class SLScopedNode extends Node {
      *
      * @return the block node, always non-null. Either SLBlockNode, or SLRootNode.
      */
+    @NeverDefault
     public final Node findBlock() {
         Node parent = getParent();
         while (parent != null) {
@@ -261,7 +271,7 @@ public abstract class SLScopedNode extends Node {
          */
         @ExportMessage
         Object toDisplayString(@SuppressWarnings("unused") boolean allowSideEffects) {
-            return root.getName();
+            return root.getTSName();
         }
 
         /**
@@ -312,7 +322,7 @@ public abstract class SLScopedNode extends Node {
             @Specialization(limit = "LIMIT", guards = {"cachedMember.equals(member)"})
             @SuppressWarnings("unused")
             static boolean doCached(ArgumentsObject receiver, String member,
-                            @Cached("member") String cachedMember,
+                            @Exclusive @Cached("member") String cachedMember,
                             // We cache the member existence for fast-path access
                             @Cached("doGeneric(receiver, member)") boolean cachedResult) {
                 assert cachedResult == doGeneric(receiver, member);
@@ -338,7 +348,7 @@ public abstract class SLScopedNode extends Node {
             @Specialization(limit = "LIMIT", guards = {"cachedMember.equals(member)"})
             @SuppressWarnings("unused")
             static boolean doCached(ArgumentsObject receiver, String member,
-                            @Cached("member") String cachedMember,
+                            @Exclusive @Cached("member") String cachedMember,
                             // We cache the member existence for fast-path access
                             @Cached("receiver.hasArgumentIndex(member)") boolean cachedResult) {
                 return cachedResult && receiver.frame != null;
@@ -457,10 +467,11 @@ public abstract class SLScopedNode extends Node {
         }
 
         int findArgumentIndex(String member) {
+            TruffleString memberTS = SLStrings.fromJavaString(member);
             SLWriteLocalVariableNode[] writeNodes = root.getDeclaredArguments();
             for (int i = 0; i < writeNodes.length; i++) {
                 SLWriteLocalVariableNode writeNode = writeNodes[i];
-                if (member.equals(writeNode.getSlot().getIdentifier())) {
+                if (memberTS.equalsUncached(writeNode.getSlotName(), SLLanguage.STRING_ENCODING)) {
                     return i;
                 }
             }
@@ -483,7 +494,8 @@ public abstract class SLScopedNode extends Node {
         private final Frame frame;          // the current frame
         protected final SLScopedNode node;  // the current node
         final boolean nodeEnter;            // whether the node was entered or is about to be exited
-        protected final SLBlockNode block;  // the inner-most block of the current node
+        @NeverDefault protected final SLBlockNode block;  // the inner-most block of the current
+                                                          // node
 
         VariablesObject(Frame frame, SLScopedNode node, boolean nodeEnter, SLBlockNode blockNode) {
             this.frame = frame;
@@ -537,7 +549,7 @@ public abstract class SLScopedNode extends Node {
             if (parentBlock instanceof SLBlockNode) {
                 return "block";
             } else {
-                return ((SLRootNode) parentBlock).getName();
+                return ((SLRootNode) parentBlock).getTSName();
             }
         }
 
@@ -682,7 +694,7 @@ public abstract class SLScopedNode extends Node {
             static Object doCached(VariablesObject receiver, String member,
                             @Cached("member") String cachedMember,
                             // We cache the member's frame slot for fast-path access
-                            @Cached("receiver.findSlot(member)") FrameSlot slot) throws UnknownIdentifierException {
+                            @Cached("receiver.findSlot(member)") int slot) throws UnknownIdentifierException {
                 return doRead(receiver, cachedMember, slot);
             }
 
@@ -692,12 +704,12 @@ public abstract class SLScopedNode extends Node {
             @Specialization(replaces = "doCached")
             @TruffleBoundary
             static Object doGeneric(VariablesObject receiver, String member) throws UnknownIdentifierException {
-                FrameSlot slot = receiver.findSlot(member);
+                int slot = receiver.findSlot(member);
                 return doRead(receiver, member, slot);
             }
 
-            private static Object doRead(VariablesObject receiver, String member, FrameSlot slot) throws UnknownIdentifierException {
-                if (slot == null) {
+            private static Object doRead(VariablesObject receiver, String member, int slot) throws UnknownIdentifierException {
+                if (slot == -1) {
                     throw UnknownIdentifierException.create(member);
                 }
                 if (receiver.frame != null) {
@@ -755,9 +767,9 @@ public abstract class SLScopedNode extends Node {
         @ExportMessage
         @SuppressWarnings("static-method")
         Object getMembers(@SuppressWarnings("unused") boolean includeInternal,
-                        @Cached(value = "this.block.getDeclaredLocalVariables()", adopt = false, dimensions = 1, allowUncached = true) SLWriteLocalVariableNode[] writeNodes,
-                        @Cached(value = "this.getVisibleVariablesIndex()", allowUncached = true) int visibleVariablesIndex,
-                        @Cached(value = "this.block.getParentBlockIndex()", allowUncached = true) int parentBlockIndex) {
+                        @Cached(value = "this.block.getDeclaredLocalVariables()", adopt = false, neverDefault = false, dimensions = 1, allowUncached = true) SLWriteLocalVariableNode[] writeNodes,
+                        @Cached(value = "this.getVisibleVariablesIndex()", allowUncached = true, neverDefault = false) int visibleVariablesIndex,
+                        @Cached(value = "this.block.getParentBlockIndex()", allowUncached = true, neverDefault = false) int parentBlockIndex) {
             return new KeysArray(writeNodes, visibleVariablesIndex, parentBlockIndex);
         }
 
@@ -771,12 +783,12 @@ public abstract class SLScopedNode extends Node {
             return findWriteNode(member) != null;
         }
 
-        FrameSlot findSlot(String member) {
+        int findSlot(String member) {
             SLWriteLocalVariableNode writeNode = findWriteNode(member);
             if (writeNode != null) {
                 return writeNode.getSlot();
             } else {
-                return null;
+                return -1;
             }
         }
 
@@ -787,18 +799,19 @@ public abstract class SLScopedNode extends Node {
          * @param member the variable name
          */
         SLWriteLocalVariableNode findWriteNode(String member) {
+            TruffleString memberTS = SLStrings.fromJavaString(member);
             SLWriteLocalVariableNode[] writeNodes = block.getDeclaredLocalVariables();
             int parentBlockIndex = block.getParentBlockIndex();
             int index = getVisibleVariablesIndex();
             for (int i = 0; i < index; i++) {
                 SLWriteLocalVariableNode writeNode = writeNodes[i];
-                if (member.equals(writeNode.getSlot().getIdentifier())) {
+                if (memberTS.equalsUncached(writeNode.getSlotName(), SLLanguage.STRING_ENCODING)) {
                     return writeNode;
                 }
             }
             for (int i = parentBlockIndex; i < writeNodes.length; i++) {
                 SLWriteLocalVariableNode writeNode = writeNodes[i];
-                if (member.equals(writeNode.getSlot().getIdentifier())) {
+                if (memberTS.equalsUncached(writeNode.getSlotName(), SLLanguage.STRING_ENCODING)) {
                     return writeNode;
                 }
             }
@@ -892,8 +905,15 @@ public abstract class SLScopedNode extends Node {
         @ExportMessage
         @TruffleBoundary
         String asString() {
-            // FrameSlot's identifier object is not safe to convert to String on fast-path.
-            return writeNode.getSlot().getIdentifier().toString();
+            // frame slot's identifier object is not safe to convert to String on fast-path.
+            return writeNode.getSlotName().toJavaStringUncached();
+        }
+
+        @ExportMessage
+        @TruffleBoundary
+        TruffleString asTruffleString() {
+            // frame slot's identifier object is not safe to convert to String on fast-path.
+            return writeNode.getSlotName();
         }
 
         @ExportMessage

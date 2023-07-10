@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -51,11 +51,17 @@ import static org.junit.Assert.assertTrue;
 import java.io.File;
 import java.net.URI;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
+import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.Source;
+import org.graalvm.polyglot.Value;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -70,13 +76,8 @@ import com.oracle.truffle.api.debug.SuspendedEvent;
 import com.oracle.truffle.api.debug.SuspensionFilter;
 import com.oracle.truffle.api.instrumentation.test.InstrumentationTestLanguage;
 import com.oracle.truffle.api.source.SourceSection;
-import com.oracle.truffle.api.test.ReflectionUtils;
 import com.oracle.truffle.api.test.polyglot.ProxyLanguage;
 import com.oracle.truffle.tck.DebuggerTester;
-
-import org.graalvm.polyglot.Context;
-import org.graalvm.polyglot.Source;
-import org.graalvm.polyglot.Value;
 
 public class BreakpointTest extends AbstractDebugTest {
 
@@ -278,7 +279,7 @@ public class BreakpointTest extends AbstractDebugTest {
 
         try (DebuggerSession session = startSession()) {
             Breakpoint breakpoint = session.install(Breakpoint.newBuilder(getSourceImpl(testSource)).lineIs(3).build());
-            breakpoint.setCondition("ROOT(PRINT(OUT, Hi), CONSTANT(true))");
+            breakpoint.setCondition("ROOT(PRINT(OUT, CONSTANT(\"Hi\")), CONSTANT(true))");
             // Breakpoint only:
             startEval(testSource);
             expectSuspended((SuspendedEvent event) -> {
@@ -323,8 +324,8 @@ public class BreakpointTest extends AbstractDebugTest {
                         "    STATEMENT\n" +
                         "  )\n" +
                         ")\n");
-        String conditionTrue = "ROOT(PRINT(OUT, CT), CONSTANT(true))";
-        String conditionFalse = "ROOT(PRINT(OUT, CF), CONSTANT(false))";
+        String conditionTrue = "ROOT(PRINT(OUT, CONSTANT(\"CT\")), CONSTANT(true))";
+        String conditionFalse = "ROOT(PRINT(OUT, CONSTANT(\"CF\")), CONSTANT(false))";
         boolean isBefore = true;
         String prefix = "";
         do {
@@ -382,12 +383,12 @@ public class BreakpointTest extends AbstractDebugTest {
 
         try (DebuggerSession session1 = startSession()) {
             Breakpoint breakpoint1 = session1.install(Breakpoint.newBuilder(getSourceImpl(testSource)).lineIs(3).build());
-            breakpoint1.setCondition("ROOT(PRINT(OUT, Hi1), CONSTANT(true))");
+            breakpoint1.setCondition("ROOT(PRINT(OUT, CONSTANT(\"Hi1\")), CONSTANT(true))");
             try (DebuggerSession session2 = startSession()) {
                 session2.install(breakpoint1);
                 try (DebuggerSession session3 = startSession()) {
                     Breakpoint breakpoint3 = session3.install(Breakpoint.newBuilder(getSourceImpl(testSource)).lineIs(3).build());
-                    breakpoint3.setCondition("ROOT(PRINT(OUT, Hi3), CONSTANT(true))");
+                    breakpoint3.setCondition("ROOT(PRINT(OUT, CONSTANT(\"Hi3\")), CONSTANT(true))");
                     session3.suspendNextExecution();
                     startEval(testSource);
                     expectSuspended((SuspendedEvent event) -> {
@@ -975,6 +976,94 @@ public class BreakpointTest extends AbstractDebugTest {
 
     }
 
+    /**
+     * Runs repeated evaluations of the provided Source in a separate thread, until join() is
+     * called.
+     */
+    private static final class EvalLoop {
+
+        private final AtomicBoolean evaluating = new AtomicBoolean(true);
+        private final Thread evalLoop;
+        private final AtomicReference<Throwable> evalThrowable = new AtomicReference<>();
+
+        EvalLoop(DebuggerTester tester, Source source) {
+            evalLoop = new Thread(() -> {
+                while (evaluating.get()) {
+                    tester.startEval(source);
+                    boolean suspended;
+                    do {
+                        suspended = false;
+                        try {
+                            tester.expectDone();
+                        } catch (AssertionError ae) {
+                            if (ae.getCause() != null && ae.getCause().getMessage().startsWith("Expected done but got event Suspended at")) {
+                                // We've hit the breakpoint. We'll resume automatically.
+                                suspended = true;
+                            } else {
+                                throw ae;
+                            }
+                        }
+                    } while (suspended);
+                }
+            });
+            evalLoop.setUncaughtExceptionHandler((thread, thrwbl) -> evalThrowable.set(thrwbl));
+            evalLoop.start();
+        }
+
+        void join() throws InterruptedException, ExecutionException {
+            evaluating.set(false);
+            evalLoop.join();
+            if (evalThrowable.get() != null) {
+                throw new ExecutionException(evalThrowable.get());
+            }
+        }
+    }
+
+    @Test
+    public void testBreakpointInstallDuringDispose() throws InterruptedException, ExecutionException {
+        final Source source = testSource("ROOT(\n" +
+                        "  LOOP(1000,\n" +
+                        "    STATEMENT)\n" + // break here
+                        ")\n");
+        try (DebuggerSession session = startSession()) {
+            EvalLoop evalLoop = new EvalLoop(tester, source);
+            ExecutorService exec = Executors.newSingleThreadExecutor();
+            for (int repeatCount = 0; repeatCount <= 1000; repeatCount++) {
+                Breakpoint breakpoint = Breakpoint.newBuilder(getSourceImpl(source)).lineIs(3).build();
+                breakpoint.setEnabled(false);
+                session.install(breakpoint);
+                Future<?> installation = exec.submit(() -> {
+                    breakpoint.setEnabled(true);
+                });
+                Thread.sleep(0, repeatCount % 100);
+                breakpoint.dispose();
+                installation.get();
+            }
+            exec.shutdown();
+            // We want the test infrastructure to interrupt this to see the full thread dump.
+            exec.awaitTermination(1, TimeUnit.DAYS);
+            evalLoop.join();
+        }
+    }
+
+    @Test
+    public void testBreakpointParallelInstallDispose() throws InterruptedException, ExecutionException {
+        // Install and dispose of breakpoints parallel with the execution.
+        final Source source = testSource("ROOT(\n" +
+                        "  LOOP(1000,\n" +
+                        "    STATEMENT)\n" + // break here
+                        ")\n");
+        try (DebuggerSession session = startSession()) {
+            EvalLoop evalLoop = new EvalLoop(tester, source);
+            for (int repeatCount = 0; repeatCount <= 100; repeatCount++) {
+                Breakpoint breakpoint = Breakpoint.newBuilder(getSourceImpl(source)).lineIs(3).build();
+                session.install(breakpoint);
+                breakpoint.dispose();
+            }
+            evalLoop.join();
+        }
+    }
+
     @Test
     public void testResolveListener() {
         final Source source = testSource("ROOT(\n" +
@@ -1070,18 +1159,18 @@ public class BreakpointTest extends AbstractDebugTest {
     public void testMisplacedLineBreakpoints() throws Exception {
         final String source = "ROOT(\n" +
                         "  DEFINE(foo,\n" +
-                        "    R3_STATEMENT,\n" +
+                        "    R2-3_STATEMENT,\n" +
                         "    EXPRESSION,\n" +
                         "    DEFINE(fooinner,\n" +
                         "      VARIABLE(n, 10),\n" +
                         "      \n" +
-                        "      R6-9_STATEMENT\n" +
+                        "      R5-9_STATEMENT\n" +
                         "    ),\n" +
-                        "    R4-5_R10-12_STATEMENT(EXPRESSION),\n" +
+                        "    R4_R10-12_STATEMENT(EXPRESSION),\n" +
                         "    CALL(fooinner)\n" +
                         "  ),\n" +
                         "  \n" +
-                        "  R1-2_R13-16_STATEMENT,\n" +
+                        "  R1_R13-16_STATEMENT,\n" +
                         "  CALL(foo)\n" +
                         ")\n";
         tester.assertLineBreakpointsResolution(source, "R", InstrumentationTestLanguage.ID);
@@ -1172,9 +1261,9 @@ public class BreakpointTest extends AbstractDebugTest {
     @Test
     public void testMisplacedBreakpointPositions() throws Exception {
         String source = " B1_{} R1-2_{S B2_}B3_\n" +
-                        "R3_[SFB ]\n" +
-                        "{F{B\n" +
-                        "  B4_{I B5_ } R4-5_[SFIB B6_ R6-7_{S}B7_] B8_\n" +
+                        "R3_[SFR ]\n" +
+                        "{F{R\n" +
+                        "  B4_{I B5_ } R4-5_[SFIR B6_ R6-7_{S}B7_] B8_\n" +
                         "  {}\n" +
                         "  R8-11_{S}\n" +
                         "B9_}B10_}B11_\n";
@@ -1190,6 +1279,18 @@ public class BreakpointTest extends AbstractDebugTest {
         tester.assertColumnBreakpointsResolution(source, "B", "R", InstrumentablePositionsTestLanguage.ID);
         tester.close();
         tester = new DebuggerTester(org.graalvm.polyglot.Context.newBuilder().allowExperimentalOptions(true).option(InstrumentablePositionsTestLanguage.ID + ".PreMaterialize", "2"));
+        tester.assertColumnBreakpointsResolution(source, "B", "R", InstrumentablePositionsTestLanguage.ID);
+        // Source without content, with a relative source path
+        tester = new DebuggerTester(org.graalvm.polyglot.Context.newBuilder().allowExperimentalOptions(true).option(InstrumentablePositionsTestLanguage.ID + ".SourceRoot", "a_relative/path"));
+        tester.assertColumnBreakpointsResolution(source, "B", "R", InstrumentablePositionsTestLanguage.ID, URI.create("a_relative/path"));
+    }
+
+    @Test
+    public void testOutOfRootBreakpointPositions() {
+        String source = "  \n" +
+                        " B1_     < {F R1_[SRB]\n" +
+                        "B2_R2_{S}  } \n" +
+                        "\n";
         tester.assertColumnBreakpointsResolution(source, "B", "R", InstrumentablePositionsTestLanguage.ID);
     }
 
@@ -1488,6 +1589,14 @@ public class BreakpointTest extends AbstractDebugTest {
         expectDone();
     }
 
+    private static boolean checkBreakpointsResolved(Breakpoint[] breakpoints, boolean resolved) {
+        for (Breakpoint breakpoint : breakpoints) {
+            assert breakpoint.isResolved() == resolved : breakpoint.toString();
+            return false;
+        }
+        return true;
+    }
+
     @Test
     public void testLazyParsingBreak() throws Exception {
         ProxyLanguage.setDelegate(new TestLazyParsingLanguage());
@@ -1502,7 +1611,6 @@ public class BreakpointTest extends AbstractDebugTest {
         final Breakpoint[] breakpoints = new Breakpoint[lineCount];
         final int[] resolvedLines = new int[lineCount];
         try (DebuggerSession session = tester.startSession()) {
-            assertTrue((Boolean) ReflectionUtils.getField(session, "breakpointsUnresolvedEmpty"));
             for (int l = 1; l <= lineCount; l++) {
                 final int line = l;
                 Breakpoint breakpoint = Breakpoint.newBuilder(getSourceImpl(source)).lineIs(line).resolveListener((Breakpoint b, SourceSection section) -> {
@@ -1511,14 +1619,16 @@ public class BreakpointTest extends AbstractDebugTest {
                 breakpoints[line - 1] = breakpoint;
                 session.install(breakpoint);
             }
-            assertFalse((Boolean) ReflectionUtils.getField(session, "breakpointsUnresolvedEmpty"));
+            checkBreakpointsResolved(breakpoints, false);
             tester.startEval(source);
             for (int l = 1; l <= lineCount; l += 2) {
                 final int line = l;
                 expectSuspended((SuspendedEvent event) -> {
                     assertEquals(line, event.getSourceSection().getStartLine());
-                    assertTrue("Breakpoint at line " + line, breakpoints[line - 1] == event.getBreakpoints().get(0) || breakpoints[line - 1] == event.getBreakpoints().get(1));
-                    assertTrue("Breakpoint at line " + (line + 1), breakpoints[line] == event.getBreakpoints().get(0) || breakpoints[line] == event.getBreakpoints().get(1));
+                    List<Breakpoint> hitBreakpoints = event.getBreakpoints();
+                    assertEquals("Hit breakpoints at line " + line, 2, event.getBreakpoints().size());
+                    assertTrue("Breakpoint at line " + line, hitBreakpoints.contains(breakpoints[line - 1]));
+                    assertTrue("Breakpoint at line " + (line + 1), hitBreakpoints.contains(breakpoints[line]));
                     // This and the next breakpoints are both resolved to this line
                     assertEquals(line, resolvedLines[line - 1]);
                     assertEquals(line, resolvedLines[line]);
@@ -1530,7 +1640,7 @@ public class BreakpointTest extends AbstractDebugTest {
                     event.prepareContinue();
                 });
             }
-            assertTrue((Boolean) ReflectionUtils.getField(session, "breakpointsUnresolvedEmpty"));
+            checkBreakpointsResolved(breakpoints, true);
         }
         expectDone();
     }

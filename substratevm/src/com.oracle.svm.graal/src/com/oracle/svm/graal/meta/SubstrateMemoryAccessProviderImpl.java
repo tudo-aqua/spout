@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -120,11 +120,11 @@ public final class SubstrateMemoryAccessProviderImpl implements SubstrateMemoryA
             /* Some other kind of object, for example a primitive array. */
             return null;
         }
-        return readObjectUnchecked(baseObject, displacement, compressedEncoding != null);
+        return readObjectUnchecked(baseObject, displacement, compressedEncoding != null, false);
     }
 
-    static JavaConstant readObjectUnchecked(Object baseObject, long displacement, boolean createCompressedConstant) {
-        Object rawValue = BarrieredAccess.readObject(baseObject, WordFactory.signed(displacement));
+    static JavaConstant readObjectUnchecked(Object baseObject, long displacement, boolean createCompressedConstant, boolean isVolatile) {
+        Object rawValue = isVolatile ? BarrieredAccess.readObjectVolatile(baseObject, WordFactory.signed(displacement)) : BarrieredAccess.readObject(baseObject, WordFactory.signed(displacement));
         return SubstrateObjectConstant.forObject(rawValue, createCompressedConstant);
     }
 
@@ -150,31 +150,31 @@ public final class SubstrateMemoryAccessProviderImpl implements SubstrateMemoryA
         } else if (displacement <= 0) {
             /* Trying to read before the object, or the hub. No need to look into the object. */
             return null;
-        } else if (WordFactory.unsigned(displacement + bits / 8).aboveThan(LayoutEncoding.getSizeFromObject(baseObject))) {
+        } else if (WordFactory.unsigned(displacement + bits / 8).aboveThan(LayoutEncoding.getMomentarySizeFromObject(baseObject))) {
             /* Trying to read after the end of the object. */
             return null;
         }
-        return readPrimitiveUnchecked(kind, baseObject, displacement, bits);
+        return readPrimitiveUnchecked(kind, baseObject, displacement, bits, false);
     }
 
-    static JavaConstant readPrimitiveUnchecked(JavaKind kind, Object baseObject, long displacement, int bits) {
+    static JavaConstant readPrimitiveUnchecked(JavaKind kind, Object baseObject, long displacement, int bits, boolean isVolatile) {
         SignedWord offset = WordFactory.signed(displacement);
         long rawValue;
         switch (bits) {
             case Byte.SIZE:
-                rawValue = BarrieredAccess.readByte(baseObject, offset);
+                rawValue = isVolatile ? BarrieredAccess.readByteVolatile(baseObject, offset) : BarrieredAccess.readByte(baseObject, offset);
                 break;
             case Short.SIZE:
-                rawValue = BarrieredAccess.readShort(baseObject, offset);
+                rawValue = isVolatile ? BarrieredAccess.readShortVolatile(baseObject, offset) : BarrieredAccess.readShort(baseObject, offset);
                 break;
             case Integer.SIZE:
-                rawValue = BarrieredAccess.readInt(baseObject, offset);
+                rawValue = isVolatile ? BarrieredAccess.readIntVolatile(baseObject, offset) : BarrieredAccess.readInt(baseObject, offset);
                 break;
             case Long.SIZE:
-                rawValue = BarrieredAccess.readLong(baseObject, offset);
+                rawValue = isVolatile ? BarrieredAccess.readLongVolatile(baseObject, offset) : BarrieredAccess.readLong(baseObject, offset);
                 break;
             default:
-                throw VMError.shouldNotReachHere();
+                throw VMError.shouldNotReachHereUnexpectedInput(bits); // ExcludeFromJacocoGeneratedReport
         }
         return toConstant(kind, rawValue);
     }
@@ -198,7 +198,7 @@ public final class SubstrateMemoryAccessProviderImpl implements SubstrateMemoryA
             case Double:
                 return JavaConstant.forDouble(Double.longBitsToDouble(rawValue));
             default:
-                throw VMError.shouldNotReachHere();
+                throw VMError.shouldNotReachHereUnexpectedInput(kind); // ExcludeFromJacocoGeneratedReport
         }
     }
 }

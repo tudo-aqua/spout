@@ -43,7 +43,7 @@ location="$( cd -P "$( dirname "$source" )" && pwd )"
 graalvm_home="${location}/../../.."
 
 function usage_and_exit() {
-    echo "Usage: $0 [--verbose] polyglot|libpolyglot|js|llvm|python|ruby|R... [custom native-image args]..."
+    echo "Usage: $0 [--verbose] polyglot|libpolyglot|espresso|js|llvm|python|ruby|R|wasm... [custom native-image args]..."
     exit 1
 }
 
@@ -52,7 +52,7 @@ custom_args=()
 
 for opt in "${@:1}"; do
     case "$opt" in
-        polyglot|libpolyglot|js|llvm|python|ruby|R)
+        polyglot|libpolyglot|espresso|js|llvm|python|ruby|R|wasm)
            to_build+=("${opt}")
             ;;
         --help|-h)
@@ -100,6 +100,12 @@ function launcher() {
     fi
 }
 
+function library() {
+    common
+    local launcher="$1"
+    cmd_line+=("--macro:${launcher}-library")
+}
+
 for binary in "${to_build[@]}"; do
     cmd_line=()
     case "${binary}" in
@@ -110,19 +116,25 @@ for binary in "${to_build[@]}"; do
             libpolyglot
             ;;
         js)
-            launcher js
+            library jsvm
             ;;
         llvm)
-            launcher lli
+            library llvmvm
             ;;
         python)
-            launcher graalpython
+            library pythonvm
             ;;
         ruby)
-            launcher truffleruby
+            library rubyvm
             ;;
         R)
             launcher RMain
+            ;;
+        wasm)
+            launcher wasm
+            ;;
+        espresso)
+            library javavm
             ;;
         *)
             echo "shouldNotReachHere()"

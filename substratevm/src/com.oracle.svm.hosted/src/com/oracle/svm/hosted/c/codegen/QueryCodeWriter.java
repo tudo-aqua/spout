@@ -24,7 +24,7 @@
  */
 package com.oracle.svm.hosted.c.codegen;
 
-import static com.oracle.svm.core.util.VMError.shouldNotReachHere;
+import static com.oracle.svm.core.util.VMError.shouldNotReachHereUnexpectedInput;
 import static com.oracle.svm.hosted.c.query.QueryResultFormat.DELIMINATOR;
 
 import java.nio.file.Path;
@@ -32,7 +32,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import com.oracle.svm.hosted.c.info.RawPointerToInfo;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.c.CContext;
 
@@ -43,6 +42,7 @@ import com.oracle.svm.hosted.c.info.EnumConstantInfo;
 import com.oracle.svm.hosted.c.info.InfoTreeVisitor;
 import com.oracle.svm.hosted.c.info.NativeCodeInfo;
 import com.oracle.svm.hosted.c.info.PointerToInfo;
+import com.oracle.svm.hosted.c.info.RawPointerToInfo;
 import com.oracle.svm.hosted.c.info.RawStructureInfo;
 import com.oracle.svm.hosted.c.info.SizableInfo.ElementKind;
 import com.oracle.svm.hosted.c.info.SizableInfo.SignednessValue;
@@ -188,7 +188,7 @@ public class QueryCodeWriter extends InfoTreeVisitor {
                 printString(constantInfo.getValueInfo(), constantInfo.getName());
                 break;
             default:
-                throw shouldNotReachHere();
+                throw shouldNotReachHereUnexpectedInput(constantInfo.getKind()); // ExcludeFromJacocoGeneratedReport
         }
     }
 

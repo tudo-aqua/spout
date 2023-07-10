@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2020, Oracle and/or its affiliates.
+ * Copyright (c) 2016, 2023, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -33,8 +33,10 @@ import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.llvm.runtime.LLVMFunctionDescriptor;
 import com.oracle.truffle.llvm.runtime.LLVMIVarBit;
+import com.oracle.truffle.llvm.runtime.floating.LLVM128BitFloat;
 import com.oracle.truffle.llvm.runtime.floating.LLVM80BitFloat;
 import com.oracle.truffle.llvm.runtime.nodes.api.LLVMExpressionNode;
+import com.oracle.truffle.llvm.runtime.nodes.literals.LLVMSimpleLiteralNodeFactory.LLVMManagedPointerLiteralNodeGen;
 import com.oracle.truffle.llvm.runtime.pointer.LLVMManagedPointer;
 import com.oracle.truffle.llvm.runtime.pointer.LLVMNativePointer;
 
@@ -165,19 +167,33 @@ public abstract class LLVMSimpleLiteralNode extends LLVMExpressionNode {
 
     public abstract static class LLVM80BitFloatLiteralNode extends LLVMSimpleLiteralNode {
 
-        private final boolean sign;
-        private final int exponent;
+        private final short expSign;
         private final long fraction;
 
         public LLVM80BitFloatLiteralNode(LLVM80BitFloat literal) {
-            this.sign = literal.getSign();
-            this.exponent = literal.getExponent();
+            this.expSign = literal.getExpSign();
             this.fraction = literal.getFraction();
         }
 
         @Specialization
         public LLVM80BitFloat do80BitFloat() {
-            return new LLVM80BitFloat(sign, exponent, fraction);
+            return new LLVM80BitFloat(expSign, fraction);
+        }
+    }
+
+    public abstract static class LLVM128BitFloatLiteralNode extends LLVMSimpleLiteralNode {
+
+        private final long expSignFraction;
+        private final long fraction;
+
+        public LLVM128BitFloatLiteralNode(LLVM128BitFloat literal) {
+            this.expSignFraction = literal.getExpSignFractionPart();
+            this.fraction = literal.getSecondFractionPart();
+        }
+
+        @Specialization
+        public LLVM128BitFloat do80BitFloat() {
+            return new LLVM128BitFloat(expSignFraction, fraction);
         }
     }
 
@@ -203,6 +219,10 @@ public abstract class LLVMSimpleLiteralNode extends LLVMExpressionNode {
         @Specialization
         public LLVMManagedPointer doManagedPointer() {
             return address.copy();
+        }
+
+        public static LLVMManagedPointerLiteralNode create(LLVMManagedPointer pointer) {
+            return LLVMManagedPointerLiteralNodeGen.create(pointer);
         }
     }
 

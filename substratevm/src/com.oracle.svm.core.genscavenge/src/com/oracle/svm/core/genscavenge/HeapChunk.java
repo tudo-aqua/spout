@@ -26,7 +26,7 @@ package com.oracle.svm.core.genscavenge;
 
 import java.util.function.IntUnaryOperator;
 
-import org.graalvm.compiler.options.Option;
+import org.graalvm.compiler.api.directives.GraalDirectives;
 import org.graalvm.compiler.word.Word;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
@@ -34,20 +34,21 @@ import org.graalvm.nativeimage.c.struct.RawField;
 import org.graalvm.nativeimage.c.struct.RawStructure;
 import org.graalvm.nativeimage.c.struct.UniqueLocationIdentity;
 import org.graalvm.word.ComparableWord;
+import org.graalvm.word.LocationIdentity;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.PointerBase;
 import org.graalvm.word.SignedWord;
 import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.WordFactory;
 
+import com.oracle.svm.core.AlwaysInline;
 import com.oracle.svm.core.MemoryWalker;
-import com.oracle.svm.core.annotate.AlwaysInline;
-import com.oracle.svm.core.annotate.NeverInline;
-import com.oracle.svm.core.annotate.Uninterruptible;
+import com.oracle.svm.core.NeverInline;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.c.struct.PinnedObjectField;
 import com.oracle.svm.core.heap.ObjectVisitor;
 import com.oracle.svm.core.hub.LayoutEncoding;
-import com.oracle.svm.core.option.HostedOptionKey;
+import com.oracle.svm.core.identityhashcode.IdentityHashCodeSupport;
 
 /**
  * The common structure of the chunks of memory which make up the heap. HeapChunks are aggregated
@@ -82,16 +83,11 @@ public final class HeapChunk {
     private HeapChunk() { // all static
     }
 
-    static class Options {
-        @Option(help = "Number of bytes at the beginning of each heap chunk that are not used for payload data, i.e., can be freely used as metadata by the heap chunk provider.") //
-        public static final HostedOptionKey<Integer> HeapChunkHeaderPadding = new HostedOptionKey<>(0);
-    }
-
     static class HeaderPaddingSizeProvider implements IntUnaryOperator {
         @Override
         public int applyAsInt(int operand) {
             assert operand == 0 : "padding structure does not declare any fields";
-            return Options.HeapChunkHeaderPadding.getValue();
+            return SerialAndEpsilonGCOptions.HeapChunkHeaderPadding.getValue();
         }
     }
 
@@ -167,14 +163,28 @@ public final class HeapChunk {
         @RawField
         @UniqueLocationIdentity
         void setOffsetToNextChunk(SignedWord newNext);
+
+        @RawField
+        UnsignedWord getIdentityHashSalt(LocationIdentity identity);
+
+        @RawField
+        void setIdentityHashSalt(UnsignedWord value, LocationIdentity identity);
     }
 
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static void initialize(Header<?> chunk, Pointer objectsStart, UnsignedWord chunkSize) {
         HeapChunk.setEndOffset(chunk, chunkSize);
         HeapChunk.setTopPointer(chunk, objectsStart);
         HeapChunk.setSpace(chunk, null);
         HeapChunk.setNext(chunk, WordFactory.nullPointer());
         HeapChunk.setPrevious(chunk, WordFactory.nullPointer());
+
+        /*
+         * The epoch is obviously not random, but cheap to use, and we cannot use a random number
+         * generator object in all contexts where we are called from, particularly during GC.
+         * Together with a good bit mixer function, it seems sufficient.
+         */
+        HeapChunk.setIdentityHashSalt(chunk, GCImpl.getGCImpl().getCollectionEpoch());
     }
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
@@ -247,6 +257,16 @@ public final class HeapChunk {
         that.setOffsetToNextChunk(offsetFromPointer(that, newNext));
     }
 
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public static UnsignedWord getIdentityHashSalt(Header<?> that) {
+        return that.getIdentityHashSalt(IdentityHashCodeSupport.IDENTITY_HASHCODE_SALT_LOCATION);
+    }
+
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public static void setIdentityHashSalt(Header<?> that, UnsignedWord value) {
+        that.setIdentityHashSalt(value, IdentityHashCodeSupport.IDENTITY_HASHCODE_SALT_LOCATION);
+    }
+
     /**
      * Converts from an offset to a pointer, where a zero offset translates to {@code NULL}. This is
      * necessary for treating image heap chunks, where addresses at runtime are not yet known.
@@ -281,16 +301,22 @@ public final class HeapChunk {
     }
 
     @AlwaysInline("GC performance")
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static boolean walkObjectsFromInline(Header<?> that, Pointer startOffset, ObjectVisitor visitor) {
         Pointer offset = startOffset;
         while (offset.belowThan(getTopPointer(that))) { // crucial: top can move, so always re-read
             Object obj = offset.toObject();
-            if (!visitor.visitObjectInline(obj)) {
+            if (!callVisitor(visitor, obj)) {
                 return false;
             }
-            offset = offset.add(LayoutEncoding.getSizeFromObject(obj));
+            offset = offset.add(LayoutEncoding.getSizeFromObjectInlineInGC(obj));
         }
         return true;
+    }
+
+    @Uninterruptible(reason = "Bridge between uninterruptible and potentially interruptible code.", mayBeInlined = true, calleeMustBe = false)
+    private static boolean callVisitor(ObjectVisitor visitor, Object obj) {
+        return visitor.visitObjectInline(obj);
     }
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
@@ -303,13 +329,18 @@ public final class HeapChunk {
         return (Pointer) that;
     }
 
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static HeapChunk.Header<?> getEnclosingHeapChunk(Object obj) {
-        assert !HeapImpl.getHeapImpl().isInImageHeap(obj) || HeapImpl.usesImageHeapChunks() : "Must be checked before calling this method";
-        assert !ObjectHeaderImpl.isPointerToForwardedObject(Word.objectToUntrackedPointer(obj)) : "Forwarded objects must be a pointer and not an object";
+        if (!GraalDirectives.inIntrinsic()) {
+            assert !HeapImpl.getHeapImpl().isInImageHeap(obj) || HeapImpl.usesImageHeapChunks() : "Must be checked before calling this method";
+            assert !ObjectHeaderImpl.isPointerToForwardedObject(Word.objectToUntrackedPointer(obj)) : "Forwarded objects must be a pointer and not an object";
+        }
         if (ObjectHeaderImpl.isAlignedObject(obj)) {
             return AlignedHeapChunk.getEnclosingChunk(obj);
         } else {
-            assert ObjectHeaderImpl.isUnalignedObject(obj);
+            if (!GraalDirectives.inIntrinsic()) {
+                assert ObjectHeaderImpl.isUnalignedObject(obj);
+            }
             return UnalignedHeapChunk.getEnclosingChunk(obj);
         }
     }

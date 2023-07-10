@@ -36,9 +36,8 @@ import org.graalvm.compiler.replacements.SnippetIntegerHistogram;
 
 import com.oracle.svm.core.ParsingReason;
 import com.oracle.svm.core.SubstrateOptions;
-import com.oracle.svm.core.annotate.AutomaticFeature;
-import com.oracle.svm.core.graal.GraalFeature;
-import com.oracle.svm.core.meta.SubstrateObjectConstant;
+import com.oracle.svm.core.feature.AutomaticallyRegisteredFeature;
+import com.oracle.svm.core.feature.InternalFeature;
 
 import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.JavaKind;
@@ -58,11 +57,11 @@ final class DisableSnippetCountersPlugin implements NodePlugin {
             return true;
         }
         if (field.getType().getName().equals(snippetCounterName)) {
-            b.addPush(JavaKind.Object, ConstantNode.forConstant(SubstrateObjectConstant.forObject(SnippetCounter.DISABLED_COUNTER), b.getMetaAccess()));
+            b.addPush(JavaKind.Object, ConstantNode.forConstant(b.getSnippetReflection().forObject(SnippetCounter.DISABLED_COUNTER), b.getMetaAccess()));
             return true;
         }
         if (field.getType().getName().equals(snippetIntegerHistogramName)) {
-            b.addPush(JavaKind.Object, ConstantNode.forConstant(SubstrateObjectConstant.forObject(SnippetIntegerHistogram.DISABLED_COUNTER), b.getMetaAccess()));
+            b.addPush(JavaKind.Object, ConstantNode.forConstant(b.getSnippetReflection().forObject(SnippetIntegerHistogram.DISABLED_COUNTER), b.getMetaAccess()));
             return true;
         }
         return false;
@@ -73,8 +72,8 @@ final class DisableSnippetCountersPlugin implements NodePlugin {
  * Disables snippet counters because they need a {@link SnippetReflectionProvider} which is not
  * fully supported for cross-isolate compilations.
  */
-@AutomaticFeature
-final class DisableSnippetCountersFeature implements GraalFeature {
+@AutomaticallyRegisteredFeature
+final class DisableSnippetCountersFeature implements InternalFeature {
     @Override
     public boolean isInConfiguration(IsInConfigurationAccess access) {
         return SubstrateOptions.supportCompileInIsolates();

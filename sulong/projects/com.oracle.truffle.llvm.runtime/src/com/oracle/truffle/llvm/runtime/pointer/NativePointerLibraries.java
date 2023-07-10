@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2018, 2023, Oracle and/or its affiliates.
  *
  * All rights reserved.
  *
@@ -29,7 +29,7 @@
  */
 package com.oracle.truffle.llvm.runtime.pointer;
 
-import com.oracle.truffle.api.Assumption;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.ImportStatic;
 import com.oracle.truffle.api.dsl.Specialization;
@@ -73,11 +73,7 @@ abstract class NativePointerLibraries extends CommonPointerLibraries {
     @ImportStatic(LLVMLanguage.class)
     static class Execute {
 
-        static Assumption singleContextAssumption() {
-            return LLVMLanguage.get(null).singleContextAssumption;
-        }
-
-        @Specialization(limit = "5", guards = {"value.asNative() == cachedAddress", "cachedDescriptor != null"}, assumptions = "singleContextAssumption()")
+        @Specialization(limit = "5", guards = {"value.asNative() == cachedAddress", "cachedDescriptor != null", "isSingleContext($node)"})
         static Object doNativeCached(@SuppressWarnings("unused") LLVMPointerImpl value, Object[] args,
                         @Cached("value.asNative()") @SuppressWarnings("unused") long cachedAddress,
                         @Cached("getDescriptor(value)") LLVMFunctionDescriptor cachedDescriptor,
@@ -118,5 +114,15 @@ abstract class NativePointerLibraries extends CommonPointerLibraries {
     @ExportMessage
     static int identityHashCode(LLVMPointerImpl receiver) {
         return Long.hashCode(receiver.asNative());
+    }
+
+    @ExportMessage
+    static String toDisplayString(LLVMPointerImpl receiver, @SuppressWarnings("unused") boolean allowSideEffects) {
+        return formatNativePointer(receiver.asNative());
+    }
+
+    @TruffleBoundary
+    private static String formatNativePointer(long raw) {
+        return "0x" + Long.toHexString(raw);
     }
 }

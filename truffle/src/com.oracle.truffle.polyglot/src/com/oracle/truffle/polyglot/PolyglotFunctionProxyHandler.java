@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -53,6 +53,7 @@ import java.util.Objects;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.TruffleOptions;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.ImportStatic;
@@ -196,7 +197,7 @@ final class PolyglotFunctionProxyHandler implements InvocationHandler, PolyglotW
         assert declaringClass.isInterface() : declaringClass;
         MethodHandle mh;
         try {
-            EngineAccessor.JDKSERVICES.addReads(declaringClass);
+            Truffle.class.getModule().addReads(declaringClass.getModule());
             mh = MethodHandles.lookup().findSpecial(declaringClass, method.getName(), MethodType.methodType(method.getReturnType(), method.getParameterTypes()), declaringClass);
         } catch (IllegalAccessException e) {
             throw new UnsupportedOperationException(method.getName(), e);
@@ -210,7 +211,8 @@ final class PolyglotFunctionProxyHandler implements InvocationHandler, PolyglotW
         final Class<?> receiverClass;
         final Method method;
 
-        FunctionProxyNode(Class<?> receiverType, Method method) {
+        FunctionProxyNode(PolyglotLanguageInstance languageInstance, Class<?> receiverType, Method method) {
+            super(languageInstance);
             this.receiverClass = receiverType;
             this.method = method;
         }
@@ -252,7 +254,7 @@ final class PolyglotFunctionProxyHandler implements InvocationHandler, PolyglotW
         }
 
         static CallTarget lookup(PolyglotLanguageContext languageContext, Class<?> receiverClass, Method method) {
-            FunctionProxyNode node = FunctionProxyNodeGen.create(receiverClass, method);
+            FunctionProxyNode node = FunctionProxyNodeGen.create(languageContext.getLanguageInstance(), receiverClass, method);
             CallTarget target = lookupHostCodeCache(languageContext, node, CallTarget.class);
             if (target == null) {
                 target = installHostCodeCache(languageContext, node, node.getCallTarget(), CallTarget.class);

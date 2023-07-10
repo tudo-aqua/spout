@@ -64,32 +64,34 @@ import static com.oracle.truffle.api.impl.asm.Opcodes.RETURN;
 import static com.oracle.truffle.api.impl.asm.Opcodes.V1_8;
 
 final class FieldBasedShapeGenerator<T> extends ShapeGenerator<T> {
-    private final GeneratorClassLoader gcl;
+    private final GeneratorClassLoaders gcls;
     private final Class<?> storageSuperClass;
     private final Class<T> storageFactoryInterface;
 
-    private FieldBasedShapeGenerator(GeneratorClassLoader gcl, Class<?> storageSuperClass, Class<T> storageFactoryInterface) {
-        this.gcl = gcl;
+    private FieldBasedShapeGenerator(GeneratorClassLoaders gcls, Class<?> storageSuperClass, Class<T> storageFactoryInterface) {
+        this.gcls = gcls;
         this.storageSuperClass = storageSuperClass;
         this.storageFactoryInterface = storageFactoryInterface;
     }
 
     @SuppressWarnings("unchecked")
-    static <T> FieldBasedShapeGenerator<T> getShapeGenerator(GeneratorClassLoader gcl, Class<?> storageSuperClass, Class<T> storageFactoryInterface) {
-        return new FieldBasedShapeGenerator<>(gcl, storageSuperClass, storageFactoryInterface);
+    static <T> FieldBasedShapeGenerator<T> getShapeGenerator(GeneratorClassLoaders gcls, Class<?> storageSuperClass, Class<T> storageFactoryInterface) {
+        return new FieldBasedShapeGenerator<>(gcls, storageSuperClass, storageFactoryInterface);
     }
 
     @Override
-    StaticShape<T> generateShape(StaticShape<T> parentShape, Map<String, StaticProperty> staticProperties, boolean safetyChecks) {
-        Class<?> generatedStorageClass = generateStorage(gcl, storageSuperClass, staticProperties);
-        Class<? extends T> generatedFactoryClass = generateFactory(gcl, generatedStorageClass, storageFactoryInterface);
+    StaticShape<T> generateShape(StaticShape<T> parentShape, Map<String, StaticProperty> staticProperties, boolean safetyChecks, String storageClassName) {
+        Class<?> generatedStorageClass = generateStorage(gcls, storageSuperClass, staticProperties, storageClassName);
+        Class<? extends T> generatedFactoryClass = generateFactory(gcls, generatedStorageClass, storageFactoryInterface);
         for (Entry<String, StaticProperty> entry : staticProperties.entrySet()) {
+            // We need to resolve field types so that loads are stamped with the proper type
             int offset = getObjectFieldOffset(generatedStorageClass, entry.getKey());
             entry.getValue().initOffset(offset);
         }
         return FieldBasedStaticShape.create(generatedStorageClass, generatedFactoryClass, safetyChecks);
     }
 
+    @SuppressWarnings("deprecation"/* JDK-8277863 */)
     private static int getObjectFieldOffset(Class<?> c, String fieldName) {
         try {
             return Math.toIntExact(UNSAFE.objectFieldOffset(c.getField(fieldName)));
@@ -111,8 +113,10 @@ final class FieldBasedShapeGenerator<T> extends ShapeGenerator<T> {
             mv.visitVarInsn(ALOAD, 0);
             int var = 1;
             for (Class<?> constructorParameter : superConstructor.getParameterTypes()) {
-                int loadOpcode = Type.getType(constructorParameter).getOpcode(ILOAD);
-                mv.visitVarInsn(loadOpcode, var++);
+                Type parameterType = Type.getType(constructorParameter);
+                int loadOpcode = parameterType.getOpcode(ILOAD);
+                mv.visitVarInsn(loadOpcode, var);
+                var += parameterType.getSize();
             }
             mv.visitMethodInsn(INVOKESPECIAL, storageSuperName, "<init>", superConstructorDescriptor, false);
             mv.visitInsn(RETURN);
@@ -122,12 +126,12 @@ final class FieldBasedShapeGenerator<T> extends ShapeGenerator<T> {
     }
 
     private static void addFactoryConstructor(ClassVisitor cv) {
-        MethodVisitor mv = cv.visitMethod(ACC_PUBLIC, "<init>", "(II)V", null, null);
+        MethodVisitor mv = cv.visitMethod(ACC_PUBLIC, "<init>", "()V", null, null);
         mv.visitCode();
         mv.visitVarInsn(ALOAD, 0);
         mv.visitMethodInsn(INVOKESPECIAL, Type.getInternalName(Object.class), "<init>", "()V", false);
         mv.visitInsn(RETURN);
-        mv.visitMaxs(1, 3);
+        mv.visitMaxs(1, 1);
         mv.visitEnd();
     }
 
@@ -137,39 +141,41 @@ final class FieldBasedShapeGenerator<T> extends ShapeGenerator<T> {
             mv.visitCode();
             mv.visitTypeInsn(NEW, Type.getInternalName(storageClass));
             mv.visitInsn(DUP);
-            int maxStack = 2;
+            int maxStack = 2;  // DUP
+            int maxLocals = 1; // this
             StringBuilder constructorDescriptor = new StringBuilder();
             constructorDescriptor.append('(');
             Class<?>[] params = m.getParameterTypes();
-            for (int i = 0; i < params.length; i++) {
-                int loadOpcode = Type.getType(params[i]).getOpcode(ILOAD);
-                mv.visitVarInsn(loadOpcode, i + 1);
-                constructorDescriptor.append(Type.getDescriptor(params[i]));
-                maxStack++;
+            for (Class<?> param : params) {
+                Type paramType = Type.getType(param);
+                int loadOpcode = paramType.getOpcode(ILOAD);
+                mv.visitVarInsn(loadOpcode, maxLocals);
+                constructorDescriptor.append(Type.getDescriptor(param));
+                maxStack += paramType.getSize();
+                maxLocals += paramType.getSize();
             }
             constructorDescriptor.append(")V");
             String storageName = Type.getInternalName(storageClass);
             mv.visitMethodInsn(INVOKESPECIAL, storageName, "<init>", constructorDescriptor.toString(), false);
             mv.visitInsn(ARETURN);
-            mv.visitMaxs(maxStack, maxStack - 1);
+            mv.visitMaxs(maxStack, maxLocals);
             mv.visitEnd();
         }
     }
 
-    private static Class<?> generateStorage(GeneratorClassLoader gcl, Class<?> storageSuperClass, Map<String, StaticProperty> staticProperties) {
+    private static Class<?> generateStorage(GeneratorClassLoaders gcls, Class<?> storageSuperClass, Map<String, StaticProperty> staticProperties, String storageClassName) {
         String storageSuperName = Type.getInternalName(storageSuperClass);
-        String storageName = generateStorageName();
         ClassWriter storageWriter = new ClassWriter(0);
         int storageAccess = ACC_PUBLIC | ACC_SUPER | ACC_SYNTHETIC;
-        storageWriter.visit(V1_8, storageAccess, storageName, null, storageSuperName, null);
+        storageWriter.visit(V1_8, storageAccess, storageClassName, null, storageSuperName, null);
         addStorageConstructors(storageWriter, storageSuperClass, storageSuperName);
         addStorageFields(storageWriter, staticProperties);
         storageWriter.visitEnd();
-        return load(gcl, storageName, storageWriter.toByteArray());
+        return load(gcls, storageClassName, storageWriter.toByteArray(), true);
     }
 
     @SuppressWarnings("unchecked")
-    private static <T> Class<? extends T> generateFactory(GeneratorClassLoader gcl, Class<?> storageClass, Class<T> storageFactoryInterface) {
+    private static <T> Class<? extends T> generateFactory(GeneratorClassLoaders gcls, Class<?> storageClass, Class<T> storageFactoryInterface) {
         ClassWriter factoryWriter = new ClassWriter(0);
         int factoryAccess = ACC_PUBLIC | ACC_SUPER | ACC_SYNTHETIC | ACC_FINAL;
         String factoryName = generateFactoryName(storageClass);
@@ -177,6 +183,6 @@ final class FieldBasedShapeGenerator<T> extends ShapeGenerator<T> {
         addFactoryConstructor(factoryWriter);
         addFactoryMethods(factoryWriter, storageClass, storageFactoryInterface);
         factoryWriter.visitEnd();
-        return (Class<? extends T>) load(gcl, factoryName, factoryWriter.toByteArray());
+        return (Class<? extends T>) load(gcls, factoryName, factoryWriter.toByteArray(), false);
     }
 }
