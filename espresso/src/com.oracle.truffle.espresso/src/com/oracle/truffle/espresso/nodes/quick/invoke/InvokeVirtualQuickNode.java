@@ -31,6 +31,7 @@ import com.oracle.truffle.espresso.nodes.bytecodes.InvokeVirtual;
 import com.oracle.truffle.espresso.nodes.bytecodes.InvokeVirtualNodeGen;
 import com.oracle.truffle.espresso.nodes.quick.QuickNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.spout.SPouT;
 
 public final class InvokeVirtualQuickNode extends QuickNode {
 
@@ -56,6 +57,9 @@ public final class InvokeVirtualQuickNode extends QuickNode {
          */
         Object[] args = BytecodeNode.popArguments(frame, top, true, method.getMethod().getParsedSignature());
         nullCheck((StaticObject) args[0]);
+        if (method.getMethod().isPartOfAnalysis()) {
+            SPouT.log("### called analyzed method");
+        }
         Object result = invokeVirtual.execute(args);
         if (!returnsPrimitiveType) {
             getBytecodeNode().checkNoForeignObjectAssumption((StaticObject) result);

@@ -34,6 +34,7 @@ import com.oracle.truffle.espresso.nodes.bytecodes.InvokeStaticNodeGen;
 import com.oracle.truffle.espresso.nodes.quick.QuickNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import com.oracle.truffle.espresso.vm.VM;
+import tools.aqua.spout.SPouT;
 
 public final class InvokeStaticQuickNode extends QuickNode {
 
@@ -67,7 +68,13 @@ public final class InvokeStaticQuickNode extends QuickNode {
             }
         }
         Object[] args = BytecodeNode.popArguments(frame, top, false, method.getMethod().getParsedSignature());
+        if (method.getMethod().isPartOfAnalysis()) {
+            SPouT.log("### called analyzed method");
+        }
         Object result = invokeStatic.execute(args);
+        if (method.getMethod().isPartOfAnalysis()) {
+            result = SPouT.processReturnValue(result, method.getMethod());
+        }
         if (!returnsPrimitiveType) {
             getBytecodeNode().checkNoForeignObjectAssumption((StaticObject) result);
         }

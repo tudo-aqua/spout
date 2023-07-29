@@ -24,17 +24,25 @@
 
 package tools.aqua.spout;
 
+import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.concolic.ConcolicAnalysis;
 import tools.aqua.smt.Expression;
 import tools.aqua.smt.OperatorComparator;
 import tools.aqua.smt.Types;
 import tools.aqua.smt.Variable;
+import tools.aqua.taint.ColorUtil;
+import tools.aqua.taint.Taint;
 import tools.aqua.taint.TaintAnalysis;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 
 public class Config {
@@ -56,6 +64,37 @@ public class Config {
     private int taintIdx = 1;
 
     private int annotationLength = 2;
+
+    /**
+     * parameters of these methods become concolic
+     */
+    private List<String> analyzedMethodsConcolic = new LinkedList<>();
+
+    /**
+     * parameters of these methods get tainted
+     */
+    private Map<String, Taint> analyzedMethodsTaint = new TreeMap<>();
+
+    /**
+     * return values of these methods are tainted
+     */
+    private Map<String, Taint> sourceMethods = new TreeMap<>();
+
+    /**
+     * parameters of these methods get taint checked
+     */
+    private Map<String, Taint> sinkMethods = new TreeMap<>();
+
+    /**
+     * return values of these methods are cleaned from taint
+     */
+    private Map<String, Taint> sanitizingMethods = new TreeMap<>();
+
+    /**
+     * return values of these methods are concolic
+     */
+    private List<String> concolicMethods = new LinkedList<>();
+
 
     public Config(String config) {
         this.trace = new Trace();
@@ -97,6 +136,30 @@ public class Config {
         SPouT.log("Seeded Float Values: " + Arrays.toString(seedsFloatValues));
         SPouT.log("Seeded Double Values: " + Arrays.toString(seedsDoubleValues));
         SPouT.log("Seeded String Values: " + Arrays.toString(seedStringValues));
+        SPouT.log("Taint Analysis Targets: ");
+        for (Map.Entry<String,Taint> e : analyzedMethodsTaint.entrySet()) {
+            SPouT.log("  " + e.getKey() + " " + Arrays.toString(e.getValue().getColors()));
+        }
+        SPouT.log("Taint Sources: ");
+        for (Map.Entry<String,Taint> e : sourceMethods.entrySet()) {
+            SPouT.log("  " + e.getKey() + " " + Arrays.toString(e.getValue().getColors()));
+        }
+        SPouT.log("Taint Sanitizers: ");
+        for (Map.Entry<String,Taint> e : sanitizingMethods.entrySet()) {
+            SPouT.log("  " + e.getKey() + " " + Arrays.toString(e.getValue().getColors()));
+        }
+        SPouT.log("Taint Sinks: ");
+        for (Map.Entry<String,Taint> e : sinkMethods.entrySet()) {
+            SPouT.log("  " + e.getKey() + " " + Arrays.toString(e.getValue().getColors()));
+        }
+        SPouT.log("Concolic Analysis Targets: ");
+        for (String s : analyzedMethodsConcolic) {
+           SPouT.log("  " + s);
+        }
+        SPouT.log("Concolic Sources: ");
+        for (String s : concolicMethods) {
+            SPouT.log("  " + s);
+        }
     }
 
     private void parseConfig(String config) {
@@ -147,7 +210,24 @@ public class Config {
                 case "taint.flow":
                     parseTaint(vals);
                     break;
-
+                case "taint.source":
+                    parseTaintSignature(vals, sourceMethods);
+                    break;
+                case "taint.sani":
+                    parseTaintSignature(vals, sanitizingMethods);
+                    break;
+                case "taint.sink":
+                    parseTaintSignature(vals, sinkMethods);
+                    break;
+                case "taint.target":
+                    parseTaintSignature(vals, analyzedMethodsTaint);
+                    break;
+                case "concolic.source":
+                    parseConcolicSignature(vals, concolicMethods);
+                    break;
+                case "concolic.target":
+                    parseConcolicSignature(vals, analyzedMethodsConcolic);
+                    break;
             }
         }
     }
@@ -244,6 +324,24 @@ public class Config {
 
     private void parseTaint(String[] valsAsStr) {
         taintType = TaintType.valueOf(valsAsStr[0].trim());
+    }
+
+    private void parseTaintSignature(String[] param, Map<String,Taint> sigmap) {
+        String sig = param[0].trim();
+        Integer color = Integer.parseInt(param[1].trim());
+        Taint t = sigmap.get(sig);
+        if (t == null) {
+            t = new Taint(color);
+        }
+        else {
+            t = ColorUtil.addColor(t, color);
+        }
+        sigmap.put(sig, t);
+    }
+
+    private void parseConcolicSignature(String[] param, List<String> sigs) {
+        String sig = param[0].trim();
+        sigs.add(sig);
     }
 
     // --------------------------------------------------------------------------
@@ -555,4 +653,30 @@ public class Config {
             symbolic = s;
         }
     };
+
+    // methods ...
+
+    private String signatureOf(Method method) {
+        return method.getDeclaringKlass().getNameAsString().replaceAll("/", ".") + "." +
+                method.getNameAsString() +
+                method.getSignatureAsString();
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public boolean isConcolicSource(Method method) {
+        return concolicMethods.contains(signatureOf(method));
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public boolean isPartOfAnalysis(Method method) {
+        String signature = signatureOf(method);
+        SPouT.log(signature);
+
+        return analyzedMethodsConcolic.contains(signature) ||
+                concolicMethods.contains(signature) ||
+                analyzedMethodsTaint.containsKey(signature) ||
+                sourceMethods.containsKey(signature) ||
+                sinkMethods.containsKey(signature) ||
+                sanitizingMethods.containsKey(signature);
+    }
 }

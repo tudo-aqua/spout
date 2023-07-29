@@ -58,7 +58,7 @@ public final class Target_tools_aqua_concolic_Verifier {
         return SPouT.nextSymbolicShort();
     }
 
-    @Substitution(passAnnotations = true)
+    //@Substitution(passAnnotations = true)
     public static @JavaType(internalName = "I") Object nondetInt() {
         return SPouT.nextSymbolicInt();
     }

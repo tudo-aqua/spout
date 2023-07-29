@@ -177,6 +177,24 @@ public final class Arguments {
                             case "taint.flow":
                                 concolicOptions += "taint.flow:" + value + " ";
                                 break;
+                            case "taint.source":
+                                concolicOptions += "taint.source:" + value + " ";
+                                break;
+                            case "taint.sink":
+                                concolicOptions += "taint.sink:" + value + " ";
+                                break;
+                            case "taint.sani":
+                                concolicOptions += "taint.sani:" + value + " ";
+                                break;
+                            case "taint.target":
+                                concolicOptions += "taint.target:" + value + " ";
+                                break;
+                            case "concolic.source":
+                                concolicOptions += "concolic.source:" + value + " ";
+                                break;
+                            case "concolic.target":
+                                concolicOptions += "concolic.target:" + value + " ";
+                                break;
                         }
                         builder.option(JAVA_PROPS + key, value);
                     } else if (optionString.equals("-ea") || optionString.equals("-enableassertions")) {

@@ -101,6 +101,7 @@ import com.oracle.truffle.espresso.runtime.GuestAllocator;
 import com.oracle.truffle.espresso.runtime.MethodHandleIntrinsics;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import com.oracle.truffle.espresso.vm.InterpreterToVM;
+import tools.aqua.spout.SPouT;
 
 public final class Method extends Member<Signature> implements TruffleObject, ContextAccess {
 
@@ -1585,4 +1586,12 @@ public final class Method extends Member<Signature> implements TruffleObject, Co
     }
     // endregion jdwp-specific
 
+    private Boolean partOfAnalysis = null;
+
+    public boolean isPartOfAnalysis() {
+        if (partOfAnalysis == null) {
+            partOfAnalysis = SPouT.isPartOfAnalysis(this);
+        }
+        return partOfAnalysis;
+    }
 }

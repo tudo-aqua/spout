@@ -108,6 +108,27 @@ public class SPouT {
 
     // --------------------------------------------------------------------------
     //
+    // interception of method invocations
+
+    @CompilerDirectives.TruffleBoundary
+    public static boolean isPartOfAnalysis(Method method) {
+        if (analyze) {
+            return config.isPartOfAnalysis(method);
+        }
+        else {
+            return false;
+        }
+    }
+
+    public static Object processReturnValue(Object result, Method method) {
+        if (analyze && config.isConcolicSource(method)) {
+            return SPouT.nextSymbolicInt();
+        }
+        return result;
+    }
+
+    // --------------------------------------------------------------------------
+    //
     // analysis entry points
 
     // FIXME: move part of these methods into the different analyses?
