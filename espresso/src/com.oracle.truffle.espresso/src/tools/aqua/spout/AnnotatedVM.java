@@ -40,19 +40,26 @@ public class AnnotatedVM {
     private static final int ANNOTATION_SLOT = 1;
     private static final int VALUES_START = 2;
 
+    private static boolean annotate = false;
+
+    public static void setAnnotate(boolean annotate) {
+        AnnotatedVM.annotate = annotate;
+    }
+
     private static Annotations[] getAnnotations(VirtualFrame frame) {
         return (Annotations[]) frame.getObject(ANNOTATION_SLOT);
     }
 
     public static Annotations peekAnnotations(VirtualFrame frame, int slot){
         Annotations[] annotations = getAnnotations(frame);
-        if (annotations != null && (slot-VALUES_START) >= 0 && (slot-VALUES_START) < annotations.length) {
+        if (annotate && annotations != null && (slot-VALUES_START) >= 0 && (slot-VALUES_START) < annotations.length) {
             return annotations[slot - VALUES_START];
         }
         return null;
     }
 
     public static Annotations popAnnotations(VirtualFrame frame, int slot) {
+        if (!annotate) return null;
         Annotations[] annotations = getAnnotations(frame);
         Annotations result = annotations[slot - VALUES_START];
         annotations[slot - VALUES_START] = null;
@@ -60,17 +67,20 @@ public class AnnotatedVM {
     }
 
     public static void putAnnotations(VirtualFrame frame, int slot, Annotations value) {
+        if (!annotate) return;
         Annotations[] annotations = getAnnotations(frame);
         annotations[slot - VALUES_START] = value;
     }
 
     public static Annotations getLocalAnnotations(VirtualFrame frame, int slot) {
+        if (!annotate) return null;
         Annotations[] annotations = getAnnotations(frame);
         Annotations result = annotations[slot];
         return result;
     }
 
     public static void setLocalAnnotations(VirtualFrame frame, int slot, Annotations value) {
+        if (!annotate) return;
         Annotations[] annotations = getAnnotations(frame);
         annotations[slot] = value;
     }
@@ -85,6 +95,7 @@ public class AnnotatedVM {
     // fields and arrays
 
     public static void setFieldAnnotation(StaticObject obj, Field f, Annotations a) {
+        if (!annotate) return;
         if (f.isStatic()) {
             obj = f.getDeclaringKlass().getStatics();
         }
@@ -105,6 +116,7 @@ public class AnnotatedVM {
     }
 
     public static Annotations getFieldAnnotation(StaticObject obj, Field f) {
+        if (!annotate) return null;
         if (f.isStatic()) {
             obj = f.getDeclaringKlass().getStatics();
         }
@@ -114,10 +126,12 @@ public class AnnotatedVM {
         }
         Annotations[] annotations = obj.getAnnotations();
         Annotations a = annotations[f.getSlot()];
-        return a;
+        Annotations b = Annotations.objectAnnotation(obj);
+        return SPouT.getField(a, b);
     }
 
     public static Annotations getArrayAnnotations(StaticObject array, int index) {
+        if (!annotate) return null;
         if (!array.hasAnnotations()) {
             return null;
         }
@@ -127,6 +141,7 @@ public class AnnotatedVM {
     }
 
     public static void setArrayAnnotations(StaticObject array, int index, Annotations a, EspressoLanguage lang) {
+        if (!annotate) return;
         if (a == null) return;
 
         if (!array.hasAnnotations()) {
@@ -143,7 +158,7 @@ public class AnnotatedVM {
 
     public static Object[] deAnnotateArguments(Object[] args, Method method) {
         for (int i=0; i<args.length; i++) {
-            if (args[i] instanceof AnnotatedValue) {
+            if (annotate && args[i] instanceof AnnotatedValue) {
                 SPouT.log("Warning: removing annotations before calling substituted/native method " +
                         method.getDeclaringKlass().getNameAsString() + "." + method.getNameAsString() + ": " + args[i]);
             }

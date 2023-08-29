@@ -49,6 +49,10 @@ public class Config {
 
     public enum TaintType {OFF, DATA, CONTROL, INFORMATION};
 
+    public enum InitType {PRIMITIVES, ARRAYS, OBJECTS, FIELDS};
+
+    private boolean propagateTaintOnFields = false;
+
     private boolean hasConcolicAnalysis = false;
 
     private TaintType taintType = TaintType.OFF;
@@ -228,6 +232,12 @@ public class Config {
                 case "concolic.target":
                     parseConcolicSignature(vals, analyzedMethodsConcolic);
                     break;
+                case "taint.propagate":
+                    parsePropagation(vals);
+                    break;
+                case "taint.init":
+                    parseInitialization(vals);
+                    break;
             }
         }
     }
@@ -344,6 +354,12 @@ public class Config {
         sigs.add(sig);
     }
 
+    private void parsePropagation(String[] vals) {
+    }
+
+    private void parseInitialization(String[] vals) {
+    }
+
     // --------------------------------------------------------------------------
     //
     // Section symbolic values
@@ -451,155 +467,27 @@ public class Config {
 
     private boolean[] seedsBooleanValues = new boolean[] {};
     private int countBooleanSeeds = 0;
-/*
-    @CompilerDirectives.TruffleBoundary
-    public AnnotatedValue nextSymbolicBoolean() {
-        boolean concrete = false;
-        if (countBooleanSeeds < seedsBooleanValues.length) {
-            concrete = seedsBooleanValues[countBooleanSeeds];
-        }
-        Variable symbolic = new Variable(Types.BOOL, countBooleanSeeds);
-        AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
-        countBooleanSeeds++;
-        Analysis.getInstance().getTrace().addElement(new SymbolDeclaration(symbolic));
-        GWIT.trackLocationForWitness("" + concrete);
-        return a;
-    }
-*/
+
     private int[] seedsByteValues = new int[] {};
     private int countByteSeeds = 0;
-/*
-    @CompilerDirectives.TruffleBoundary
-    public AnnotatedValue nextSymbolicByte() {
-        int concrete = 0;
-        if (countByteSeeds < seedsByteValues.length) {
-            concrete = seedsByteValues[countByteSeeds];
-        }
-        Variable symbolic = new Variable(Types.BYTE, countByteSeeds);
-        countByteSeeds++;
-        Analysis.getInstance().getTrace().addElement(new SymbolDeclaration(symbolic));
-        GWIT.trackLocationForWitness("" + concrete);
-        // upcast byte to int
-        return new AnnotatedValue(concrete, new ComplexExpression(OperatorComparator.B2I, symbolic));
-    }
-*/
+
     private int[] seedsCharValues = new int[] {};
     private int countCharSeeds = 0;
-/*
-    @CompilerDirectives.TruffleBoundary
-    public AnnotatedValue nextSymbolicChar() {
-        int concrete = 0;
-        if (countCharSeeds < seedsCharValues.length) {
-            concrete = seedsCharValues[countCharSeeds];
-        }
-        Variable symbolic = new Variable(Types.CHAR, countCharSeeds);
-        countCharSeeds++;
-        Analysis.getInstance().getTrace().addElement(new SymbolDeclaration(symbolic));
-        GWIT.trackLocationForWitness("" + concrete);
-        // upcast char to int
-        return new AnnotatedValue(concrete, new ComplexExpression(OperatorComparator.C2I, symbolic));
-    }
-*/
+
     private int[] seedsShortValues = new int[] {};
     private int countShortSeeds = 0;
-/*
-    @CompilerDirectives.TruffleBoundary
-    public AnnotatedValue nextSymbolicShort() {
-        int concrete = 0;
-        if (countShortSeeds < seedsShortValues.length) {
-            concrete = seedsShortValues[countShortSeeds];
-        }
-        Variable symbolic = new Variable(Types.SHORT, countShortSeeds);
-        countShortSeeds++;
-        Analysis.getInstance().getTrace().addElement(new SymbolDeclaration(symbolic));
-        GWIT.trackLocationForWitness("" + concrete);
-        // upcast short to int
-        return new AnnotatedValue(concrete, new ComplexExpression(OperatorComparator.S2I, symbolic));
-    }
-*/
+
     private long[] seedsLongValues = new long[] {};
     private int countLongSeeds = 0;
-/*
-    @CompilerDirectives.TruffleBoundary
-    public AnnotatedValue nextSymbolicLong() {
-        long concrete = 0L;
-        if (countLongSeeds < seedsLongValues.length) {
-            concrete = seedsLongValues[countLongSeeds];
-        }
-        Variable symbolic = new Variable(Types.LONG, countLongSeeds);
-        AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
-        countLongSeeds++;
-        Analysis.getInstance().getTrace().addElement(new SymbolDeclaration(symbolic));
-        GWIT.trackLocationForWitness("" + concrete + "L");
-        return a;
-    }
-*/
+
     private float[] seedsFloatValues = new float[] {};
     private int countFloatSeeds = 0;
-/*
-    @CompilerDirectives.TruffleBoundary
-    public AnnotatedValue nextSymbolicFloat() {
-        float concrete = 0f;
-        if (countFloatSeeds < seedsFloatValues.length) {
-            concrete = seedsFloatValues[countFloatSeeds];
-        }
-        Variable symbolic = new Variable(Types.FLOAT, countFloatSeeds);
-        AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
-        countFloatSeeds++;
-        Analysis.getInstance().getTrace().addElement(new SymbolDeclaration(symbolic));
-        GWIT.trackLocationForWitness("Float.parseFloat(\"" + concrete + "\")");
-        return a;
-    }
-*/
+
     private  double[] seedsDoubleValues = new double[] {};
     private int countDoubleSeeds = 0;
-/*
-    @CompilerDirectives.TruffleBoundary
-    public AnnotatedValue nextSymbolicDouble() {
-        double concrete = 0d;
-        if (countDoubleSeeds < seedsDoubleValues.length) {
-            concrete = seedsDoubleValues[countDoubleSeeds];
-        }
-        Variable symbolic = new Variable(Types.DOUBLE, countDoubleSeeds);
-        AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
-        countDoubleSeeds++;
-        Analysis.getInstance().getTrace().addElement(new SymbolDeclaration(symbolic));
-        GWIT.trackLocationForWitness("Double.parseDouble(\"" + concrete + "\")");
-        return a;
-    }
-*/
+
     private String[] seedStringValues = new String[] {};
     private int countStringSeeds = 0;
-/*
-    @CompilerDirectives.TruffleBoundary
-    public StaticObject nextSymbolicString(Meta meta) {
-        String concreteHost = "";
-        if (countStringSeeds < seedStringValues.length) {
-            concreteHost = seedStringValues[countStringSeeds];
-        }
-        StaticObject concrete = meta.toGuestString(concreteHost);
-        Variable symbolic = new Variable(Types.STRING, countStringSeeds);
-        AnnotatedValue a = new AnnotatedValue(concrete, symbolic);
-        AnnotatedValue length =
-                new AnnotatedValue(
-                        concreteHost.length(),
-                        new ComplexExpression(
-                                OperatorComparator.NAT2BV32, new ComplexExpression(SLENGTH, symbolic)));
-
-        //concrete.setAnnotationId(symbolicObjects.size());
-
-        int lengthAnnotations = ((ObjectKlass) concrete.getKlass()).getFieldTable().length + 2;
-        AnnotatedValue[] annotation = new AnnotatedValue[lengthAnnotations];
-        annotation[annotation.length - 2] = a;
-        annotation[annotation.length - 1] = length;
-        //symbolicObjects.add(annotation);
-        Analysis.getInstance().getAnnotatedVM().registerAnnotation(concrete, annotation);
-        countStringSeeds++;
-        Analysis.getInstance().getTrace().addElement(new SymbolDeclaration(symbolic));
-        GWIT.trackLocationForWitness("\"" + concrete + "\"");
-        return concrete;
-    }
-    */
 
     public int getConcolicIdx() {
         return concolicIdx;
@@ -668,9 +556,55 @@ public class Config {
     }
 
     @CompilerDirectives.TruffleBoundary
+    public Taint sanitizeTaintOnReturn(Method method) {
+        return sanitizingMethods.get(signatureOf(method));
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public Taint checkTaintOnSink(Method method) {
+        return sinkMethods.get(signatureOf(method));
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public Taint taintFromSource(Method method) {
+        return sourceMethods.get(signatureOf(method));
+    }
+
+    /**
+     * returns true if method is to be analyzed concolically
+     * and removes methods from list to analyze only first
+     * invocation
+     *
+     * @param method
+     * @return
+     */
+    @CompilerDirectives.TruffleBoundary
+    public boolean isAnalyzedConcolically(Method method) {
+        String signature = signatureOf(method);
+        return analyzedMethodsConcolic.remove(signature);
+    }
+
+    /**
+     * returns taint for method parameters and removes
+     * method from analyzed methods
+     *
+     * @param method
+     * @return
+     */
+    @CompilerDirectives.TruffleBoundary
+    public Taint getAnalyzedTaint(Method method) {
+        String signature = signatureOf(method);
+        Taint t = analyzedMethodsTaint.get(signature);
+        if (t != null) {
+            analyzedMethodsTaint.remove(signature);
+        }
+        return t;
+    }
+
+    @CompilerDirectives.TruffleBoundary
     public boolean isPartOfAnalysis(Method method) {
         String signature = signatureOf(method);
-        SPouT.log(signature);
+        SPouT.debug(signature);
 
         return analyzedMethodsConcolic.contains(signature) ||
                 concolicMethods.contains(signature) ||

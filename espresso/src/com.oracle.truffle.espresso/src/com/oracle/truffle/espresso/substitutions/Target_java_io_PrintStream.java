@@ -14,7 +14,7 @@ public final class Target_java_io_PrintStream {
         StaticObject system_out = meta.java_lang_System_out.getAsObject(meta, meta.java_lang_System.getStatics());
         String hostString = meta.toHostString(string);
         if (receiver == system_out) {
-            SPouT.log("Warning: removing annotations before writing to System.out.println() ...");
+            SPouT.logDuringAnalysis("Warning: removing annotations before writing to System.out.println() ...");
             StaticObject cleanString = meta.toGuestString(hostString);
             meta.java_io_PrintStream_println_obj.invokeMethod(receiver, new Object[] { cleanString });
         }

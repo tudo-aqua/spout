@@ -195,6 +195,11 @@ public final class Arguments {
                             case "concolic.target":
                                 concolicOptions += "concolic.target:" + value + " ";
                                 break;
+                            case "taint.propagate":
+                                concolicOptions += "taint.propagate:" + value + " ";
+                                break;
+                            case "taint.init":
+                                concolicOptions += "taint.init:" + value + " ";
                         }
                         builder.option(JAVA_PROPS + key, value);
                     } else if (optionString.equals("-ea") || optionString.equals("-enableassertions")) {

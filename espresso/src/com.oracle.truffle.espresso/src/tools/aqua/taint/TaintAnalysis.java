@@ -82,6 +82,17 @@ public class TaintAnalysis implements Analysis<Taint> {
         return av;
     }
 
+    public Object sanitize(Object o, int color) {
+        if (!(o instanceof AnnotatedValue)) return o;
+        AnnotatedValue av = (AnnotatedValue) o;
+        Taint t = Annotations.annotation(av, config.getTaintIdx());
+        if (t != null) {
+            long[] sanitized = ColorUtil.removeColor(t.getColors(), color);
+            av.set(config.getTaintIdx(), new Taint(sanitized));
+        }
+        return av;
+    }
+
     public void taintObject(StaticObject o, int color) {
         // TODO: maybe most of this code should move to SPouT?
         if (!o.hasAnnotations()) {
@@ -97,7 +108,7 @@ public class TaintAnalysis implements Analysis<Taint> {
         }
     }
 
-    public void checkTaint(AnnotatedValue o, int color) {
+    public void checkTaint(Annotations o, int color) {
         Taint taint = Annotations.annotation( o, config.getTaintIdx());
         if (type.equals(INFORMATION)) {
             trace.addElement(new TaintCheck(color, taint, ifColorNames));
@@ -111,6 +122,9 @@ public class TaintAnalysis implements Analysis<Taint> {
     }
 
     public void checkTaintObject(StaticObject o, int color) {
+
+        // TODO: walk heap?
+
         Annotations a = Annotations.objectAnnotation(o);
         Taint taint = (Taint) Annotations.annotation(a, config.getTaintIdx());
         if (type.equals(INFORMATION)) {

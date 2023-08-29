@@ -284,6 +284,10 @@ public interface Analysis<T> {
 
     default T isNull(StaticObject c, T a, boolean isInstance) { return null; }
 
+    default T getField(T field, T object) { return field; }
+
+    default T setField(T field, T object) { return object; }
+
     default void checkcast(VirtualFrame frame, BytecodeNode bcn, int bci, boolean takeBranch, T a1) { }
 
     default void takeBranchRef1(VirtualFrame frame, BytecodeNode bcn, int bci,

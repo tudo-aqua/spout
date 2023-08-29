@@ -1388,7 +1388,7 @@ public final class JniEnv extends NativeEnv {
             return 0;
         }
         //FIXME: removing annotations after call to String length in JniEnv
-        SPouT.log("Warning: removing annotations after call to String length in JniEnv");
+        SPouT.logDuringAnalysis("Warning: removing annotations after call to String length in JniEnv");
         return (int) AnnotatedValue.value(getMeta().java_lang_String_length.invokeDirect(string));
     }
 

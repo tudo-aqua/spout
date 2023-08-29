@@ -23,6 +23,7 @@
 package com.oracle.truffle.espresso.nodes.quick.invoke;
 
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.espresso.EspressoLanguage;
 import com.oracle.truffle.espresso.descriptors.Signatures;
 import com.oracle.truffle.espresso.descriptors.Symbol.Name;
 import com.oracle.truffle.espresso.descriptors.Types;
@@ -69,11 +70,11 @@ public final class InvokeStaticQuickNode extends QuickNode {
         }
         Object[] args = BytecodeNode.popArguments(frame, top, false, method.getMethod().getParsedSignature());
         if (method.getMethod().isPartOfAnalysis()) {
-            SPouT.log("### called analyzed method");
+            args = SPouT.processMethodCall(args, method.getMethod(), getLanguage(), getRootNode());
         }
         Object result = invokeStatic.execute(args);
         if (method.getMethod().isPartOfAnalysis()) {
-            result = SPouT.processReturnValue(result, method.getMethod());
+            result = SPouT.processReturnValue(result, method.getMethod(), getLanguage(), getRootNode());
         }
         if (!returnsPrimitiveType) {
             getBytecodeNode().checkNoForeignObjectAssumption((StaticObject) result);

@@ -58,9 +58,12 @@ public final class InvokeVirtualQuickNode extends QuickNode {
         Object[] args = BytecodeNode.popArguments(frame, top, true, method.getMethod().getParsedSignature());
         nullCheck((StaticObject) args[0]);
         if (method.getMethod().isPartOfAnalysis()) {
-            SPouT.log("### called analyzed method");
+            args = SPouT.processMethodCall(args, method.getMethod(), getLanguage(), getRootNode());
         }
         Object result = invokeVirtual.execute(args);
+        if (method.getMethod().isPartOfAnalysis()) {
+            result = SPouT.processReturnValue(result, method.getMethod(), getLanguage(), getRootNode());
+        }
         if (!returnsPrimitiveType) {
             getBytecodeNode().checkNoForeignObjectAssumption((StaticObject) result);
         }

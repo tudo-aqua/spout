@@ -40,51 +40,51 @@ public final class Target_tools_aqua_concolic_Verifier {
 
     @Substitution(hasReceiver = false, passAnnotations = true)
     public static @JavaType(internalName = "Z") Object nondetBoolean() {
-        return SPouT.nextSymbolicBoolean();
+        return SPouT.nextSymbolicBoolean(null);
     }
 
     @Substitution(hasReceiver = false, passAnnotations = true)
     public static @JavaType(internalName = "B") Object nondetByte() {
-        return SPouT.nextSymbolicByte();
+        return SPouT.nextSymbolicByte(null);
     }
 
     @Substitution(hasReceiver = false, passAnnotations = true)
     public static @JavaType(internalName = "C") Object nondetChar() {
-        return SPouT.nextSymbolicChar();
+        return SPouT.nextSymbolicChar(null);
     }
 
     @Substitution(hasReceiver = false, passAnnotations = true)
     public static @JavaType(internalName = "S") Object nondetShort() {
-        return SPouT.nextSymbolicShort();
+        return SPouT.nextSymbolicShort(null);
     }
 
-    //@Substitution(passAnnotations = true)
+    @Substitution(passAnnotations = true)
     public static @JavaType(internalName = "I") Object nondetInt() {
-        return SPouT.nextSymbolicInt();
+        return SPouT.nextSymbolicInt(null);
     }
 
     //    public static long nondetLong()
     @Substitution(hasReceiver = false, passAnnotations = true)
     public static @JavaType(internalName = "J") Object nondetLong() {
-        return SPouT.nextSymbolicLong();
+        return SPouT.nextSymbolicLong(null);
     }
 
     //    public static float nondetFloat()
     @Substitution(hasReceiver = false, passAnnotations = true)
     public static @JavaType(internalName = "F") Object nondetFloat() {
-        return SPouT.nextSymbolicFloat();
+        return SPouT.nextSymbolicFloat(null);
     }
 
     //    public static double nondetDouble()
     @Substitution(hasReceiver = false, passAnnotations = true)
     public static @JavaType(internalName = "D") Object nondetDouble() {
-        return SPouT.nextSymbolicDouble();
+        return SPouT.nextSymbolicDouble(null);
     }
 
     //    public static String nondetString()
     @Substitution(hasReceiver = false)
     public static @JavaType(String.class) StaticObject nondetString(@Inject Meta meta) {
-        return SPouT.nextSymbolicString(meta);
+        return SPouT.nextSymbolicString(meta, null);
     }
 
 }

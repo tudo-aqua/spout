@@ -26,24 +26,31 @@ package tools.aqua.spout;
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.espresso.EspressoLanguage;
+import com.oracle.truffle.espresso.descriptors.Signatures;
 import com.oracle.truffle.espresso.descriptors.Symbol;
 import com.oracle.truffle.espresso.descriptors.Symbol.Signature;
 import com.oracle.truffle.espresso.impl.Field;
 import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.impl.ObjectKlass;
+import com.oracle.truffle.espresso.jdwp.api.KlassRef;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.concolic.ConcolicAnnotationAction;
 import tools.aqua.smt.ComplexExpression;
 import tools.aqua.smt.Constant;
 import tools.aqua.smt.Expression;
 import tools.aqua.smt.OperatorComparator;
 import tools.aqua.taint.ColorUtil;
 import tools.aqua.taint.PostDominatorAnalysis;
+import tools.aqua.taint.SanitizingAction;
 import tools.aqua.taint.Taint;
+import tools.aqua.taint.TaintAction;
+import tools.aqua.taint.TaintCheckAction;
 import tools.aqua.witnesses.GWIT;
 
 import java.util.Arrays;
@@ -57,7 +64,7 @@ import static com.oracle.truffle.espresso.runtime.dispatch.EspressoInterop.getMe
 
 public class SPouT {
 
-    public static final boolean DEBUG = true;
+    public static final boolean DEBUG = false;
 
     private static boolean analyze = false, oldAnalyze = analyze;
 
@@ -85,6 +92,7 @@ public class SPouT {
         // TODO: should be deferred to latest possible point in time
         analyze = true;
         oldAnalyze = true;
+        AnnotatedVM.setAnnotate(true);
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -102,6 +110,7 @@ public class SPouT {
     private static void stopAnalysis() {
         if (analyze) {
             analyze = false;
+            AnnotatedVM.setAnnotate(false);
             //FIXME: analysis.terminate();
         }
     }
@@ -120,12 +129,51 @@ public class SPouT {
         }
     }
 
-    public static Object processReturnValue(Object result, Method method) {
-        if (analyze && config.isConcolicSource(method)) {
-            return SPouT.nextSymbolicInt();
+    @CompilerDirectives.TruffleBoundary
+    public static Object[] processMethodCall(Object[] args, Method method, EspressoLanguage lang, RootNode rn) {
+        if (!analyze) return args;
+
+        if (config.hasConcolicAnalysis() && config.isAnalyzedConcolically(method)) {
+            args = analyzeConcolically(args, method, lang, rn);
         }
+
+        if (!config.hasTaintAnalysis()) return args;
+
+        Taint t = config.getAnalyzedTaint(method);
+        if (t != null) {
+            args = analyzeTaint(args, method, t, lang);
+        }
+
+        t = config.checkTaintOnSink(method);
+        if (t != null) {
+            checkTaintOnCall(args, method, t, lang);
+        }
+
+        return args;
+    }
+
+    public static Object processReturnValue(Object result, Method method, EspressoLanguage lang, RootNode rn) {
+        if (!analyze) return result;
+
+        if (config.hasConcolicAnalysis() && config.isConcolicSource(method)) {
+            result = concolicReturnValue(result, method, lang, rn);
+        }
+
+        if (!config.hasTaintAnalysis()) return result;
+
+        Taint t = config.sanitizeTaintOnReturn(method);
+        if (t != null) {
+            result = sanitizeReturnValue(result, method, t, lang);
+        }
+
+        t = config.taintFromSource(method);
+        if (t != null) {
+            result = taintReturnValue(result, method, t, lang);
+        }
+
         return result;
     }
+
 
     // --------------------------------------------------------------------------
     //
@@ -190,78 +238,219 @@ public class SPouT {
     //
     // concolic values
 
+    private static AnnotatedValue setConcolicValue(Object o, AnnotatedValue concolic) {
+        if (o instanceof AnnotatedValue) {
+            AnnotatedValue oAnnotated = (AnnotatedValue) o;
+            AnnotatedValue a = new AnnotatedValue(concolic.getValue(), oAnnotated.getAnnotations());
+            a.set(config.getConcolicIdx(), Annotations.annotation(concolic, config.getConcolicIdx()));
+            return a;
+        } else {
+            return concolic;
+        }
+    }
+
+    private static Object makeConcolic(Object obj, Symbol<Symbol.Type> type, EspressoLanguage lang, RootNode rn) {
+        if (obj instanceof AnnotatedValue &&
+                Annotations.annotation( (AnnotatedValue) obj, config.getConcolicIdx()) != null) {
+            SPouT.log("Skip analysis of parameter of type " + type + ", value is already concolic");
+            return obj;
+        }
+        switch (type.byteAt(0)) {
+            case 'Z':
+                obj = setConcolicValue(obj, (AnnotatedValue) nextSymbolicBoolean(rn));
+                break;
+            case 'B':
+                obj = setConcolicValue(obj, (AnnotatedValue) nextSymbolicByte(rn));
+                break;
+            case 'S':
+                obj = setConcolicValue(obj, (AnnotatedValue) nextSymbolicShort(rn));
+                break;
+            case 'C':
+                obj = setConcolicValue(obj, (AnnotatedValue) nextSymbolicChar(rn));
+                break;
+            case 'I':
+                obj = setConcolicValue(obj, (AnnotatedValue) nextSymbolicInt(rn));
+                break;
+            case 'F':
+                obj = setConcolicValue(obj, (AnnotatedValue) nextSymbolicFloat(rn));
+                break;
+            case 'J':
+                obj = setConcolicValue(obj, (AnnotatedValue) nextSymbolicLong(rn));
+                break;
+            case 'D':
+                obj = setConcolicValue(obj, (AnnotatedValue) nextSymbolicDouble(rn));
+                break;
+            case '[': // fall through
+            case 'L': {
+                // Reference type.
+                ConcolicAnnotationAction action = new ConcolicAnnotationAction(config);
+                HeapWalker walker = new HeapWalker((StaticObject) obj, action);
+                walker.walk(lang);
+                break;
+            }
+        }
+        return obj;
+    }
+
+    private static Object[] analyzeConcolically(Object[] args, Method method, EspressoLanguage lang, RootNode rn) {
+        int receiver = 0 + (method.isStatic() ? 0 : 1);
+        Symbol<Symbol.Type>[] methodSignature = method.getParsedSignature();
+        int argCount = Signatures.parameterCount(methodSignature);
+        CompilerAsserts.partialEvaluationConstant(argCount);
+        for (int i = 0; i < argCount; ++i) {
+            Symbol<Symbol.Type> argType = Signatures.parameterType(methodSignature, i);
+            SPouT.log("Analyse Reference " + argType);
+            args[receiver + i] = makeConcolic(args[receiver + i], argType, lang, rn);
+        }
+        return args;
+    }
+
+    public static Object concolicReturnValue(Object result, Method method, EspressoLanguage lang, RootNode rn) {
+        Symbol<Symbol.Type>[] methodSignature = method.getParsedSignature();
+        int argCount = Signatures.parameterCount(methodSignature);
+        return makeConcolic(result, methodSignature[argCount], lang, rn);
+    }
+
     @CompilerDirectives.TruffleBoundary
-    public static Object nextSymbolicInt() {
+    public static Object nextSymbolicInt(RootNode rn) {
         if (!analyze || !config.hasConcolicAnalysis()) return 0;
         Object av = config.getConcolicAnalysis().nextSymbolicInt();
-        gwit.trackLocationForWitness("" + (int) ((AnnotatedValue) av).getValue());
+        gwit.trackLocationForWitness("" + (int) ((AnnotatedValue) av).getValue(), rn);
         return av;
     }
 
     @CompilerDirectives.TruffleBoundary
-    public static Object nextSymbolicLong() {
+    public static Object nextSymbolicLong(RootNode rn) {
         if (!analyze || !config.hasConcolicAnalysis()) return 0;
         Object av = config.getConcolicAnalysis().nextSymbolicLong();
-        gwit.trackLocationForWitness("" + (long) ((AnnotatedValue) av).getValue() + "L");
+        gwit.trackLocationForWitness("" + (long) ((AnnotatedValue) av).getValue() + "L", rn);
         return av;
     }
 
     @CompilerDirectives.TruffleBoundary
-    public static Object nextSymbolicFloat() {
+    public static Object nextSymbolicFloat(RootNode rn) {
         if (!analyze || !config.hasConcolicAnalysis()) return 0;
         Object av = config.getConcolicAnalysis().nextSymbolicFloat();
         gwit.trackLocationForWitness("Float.parseFloat(\"" +
-                (float) ((AnnotatedValue) av).getValue() + "\")");
+                (float) ((AnnotatedValue) av).getValue() + "\")", rn);
         return av;
     }
 
     @CompilerDirectives.TruffleBoundary
-    public static Object nextSymbolicDouble() {
+    public static Object nextSymbolicDouble(RootNode rn) {
         if (!analyze || !config.hasConcolicAnalysis()) return 0;
         Object av = config.getConcolicAnalysis().nextSymbolicDouble();
         gwit.trackLocationForWitness("Double.parseDouble(\"" +
-                (double) ((AnnotatedValue) av).getValue() + "\")");
+                (double) ((AnnotatedValue) av).getValue() + "\")", rn);
         return av;
     }
 
     @CompilerDirectives.TruffleBoundary
-    public static Object nextSymbolicBoolean() {
+    public static Object nextSymbolicBoolean(RootNode rn) {
         if (!analyze || !config.hasConcolicAnalysis()) return 0;
         Object av = config.getConcolicAnalysis().nextSymbolicBoolean();
-        gwit.trackLocationForWitness("" + (boolean) ((AnnotatedValue) av).getValue());
+        gwit.trackLocationForWitness("" + (boolean) ((AnnotatedValue) av).getValue(), rn);
         return av;
     }
 
     @CompilerDirectives.TruffleBoundary
-    public static Object nextSymbolicByte() {
+    public static Object nextSymbolicByte(RootNode rn) {
         if (!analyze || !config.hasConcolicAnalysis()) return 0;
         Object av = config.getConcolicAnalysis().nextSymbolicByte();
-        gwit.trackLocationForWitness("" + (int) ((AnnotatedValue) av).getValue());
+        gwit.trackLocationForWitness("" + (int) ((AnnotatedValue) av).getValue(), rn);
         return av;
     }
 
     @CompilerDirectives.TruffleBoundary
-    public static Object nextSymbolicShort() {
+    public static Object nextSymbolicShort(RootNode rn) {
         if (!analyze || !config.hasConcolicAnalysis()) return 0;
         Object av = config.getConcolicAnalysis().nextSymbolicShort();
-        gwit.trackLocationForWitness("" + (int) ((AnnotatedValue) av).getValue());
+        gwit.trackLocationForWitness("" + (int) ((AnnotatedValue) av).getValue(), rn);
         return av;
     }
 
     @CompilerDirectives.TruffleBoundary
-    public static Object nextSymbolicChar() {
+    public static Object nextSymbolicChar(RootNode rn) {
         if (!analyze || !config.hasConcolicAnalysis()) return 0;
         Object av = config.getConcolicAnalysis().nextSymbolicChar();
-        gwit.trackLocationForWitness("" + (int) ((AnnotatedValue) av).getValue());
+        gwit.trackLocationForWitness("" + (int) ((AnnotatedValue) av).getValue(), rn);
         return av;
     }
 
     @CompilerDirectives.TruffleBoundary
-    public static StaticObject nextSymbolicString(Meta meta) {
+    public static StaticObject nextSymbolicString(Meta meta, RootNode rn) {
         if (!analyze || !config.hasConcolicAnalysis()) return meta.toGuestString("");
         StaticObject annotatedObject = config.getConcolicAnalysis().nextSymbolicString(meta);
-        gwit.trackLocationForWitness("\"" + annotatedObject + "\"");
+        gwit.trackLocationForWitness("\"" + annotatedObject + "\"", rn);
         return annotatedObject;
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    private static Object taintReturnValue(Object result, Method method, Taint t, EspressoLanguage lang) {
+        if (method.getReturnKind().isPrimitive()) {
+            for (int c : ColorUtil.colorsIn(t)) {
+                result = config.getTaintAnalysis().taint(result, c);
+            }
+        } else {
+            TaintAction action = new TaintAction(config, t);
+            HeapWalker walker = new HeapWalker((StaticObject) result, action);
+            walker.walk(lang);
+        }
+        return result;
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    private static Object sanitizeReturnValue(Object result, Method method, Taint t, EspressoLanguage lang) {
+        if (method.getReturnKind().isPrimitive()) {
+            for (int c : ColorUtil.colorsIn(t)) {
+                result = config.getTaintAnalysis().sanitize(result, c);
+            }
+        } else {
+            SanitizingAction action = new SanitizingAction(config, t);
+            HeapWalker walker = new HeapWalker((StaticObject) result, action);
+            walker.walk(lang);
+        }
+        return result;
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    private static void checkTaintOnCall(Object[] args, Method method, Taint t, EspressoLanguage lang) {
+        int receiver = 0 + (method.isStatic() ? 0 : 1);
+        KlassRef[] argTypes = method.getParameters();
+        int argCount = argTypes.length;
+        CompilerAsserts.partialEvaluationConstant(argCount);
+        for (int i = 0; i < argCount; ++i) {
+            if (argTypes[i].isPrimitive()) {
+                if (args[receiver + i] instanceof AnnotatedValue) {
+                    for (int c : ColorUtil.colorsIn(t)) {
+                        config.getTaintAnalysis().checkTaint((AnnotatedValue) args[receiver + i], c);
+                    }
+                }
+            } else {
+                TaintCheckAction action = new TaintCheckAction(config, t);
+                HeapWalker walker = new HeapWalker((StaticObject) args[receiver + i], action);
+                walker.walk(lang);
+            }
+        }
+    }
+
+    private static Object[] analyzeTaint(Object[] args, Method method, Taint t, EspressoLanguage lang) {
+        int receiver = 0 + (method.isStatic() ? 0 : 1);
+        KlassRef[] argTypes = method.getParameters();
+        int argCount = argTypes.length;
+        CompilerAsserts.partialEvaluationConstant(argCount);
+        for (int i = 0; i < argCount; ++i) {
+            if (argTypes[i].isPrimitive()) {
+                for (int c : ColorUtil.colorsIn(t)) {
+                    args[receiver + i]  = config.getTaintAnalysis().taint(args[receiver + i], c);
+                }
+            } else {
+                TaintAction action = new TaintAction(config, t);
+                HeapWalker walker = new HeapWalker((StaticObject) args[receiver + i], action);
+                walker.walk(lang);
+            }
+        }
+        return args;
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -1273,6 +1462,13 @@ public class SPouT {
         AnnotatedVM.putAnnotations(frame, top, a);
     }
 
+    public static Annotations getField(Annotations field, Annotations object) {
+        return field;
+    }
+
+    public static Annotations setField(Annotations a, Annotations b) {
+        return null;
+    }
 
     // --------------------------------------------------------------------------
     //
@@ -1961,6 +2157,10 @@ public class SPouT {
         System.out.println(message);
     }
 
+    public static void logDuringAnalysis(String message) {
+        if (analyze) log(message);
+    }
+
     public static void addToTrace(TraceElement element) {
         if (analyze) trace.addElement(element);
     }
@@ -2014,4 +2214,5 @@ public class SPouT {
     public static void resumeAnalyze() {
         analyze = oldAnalyze;
     }
+
 }
