@@ -25,6 +25,7 @@ package tools.aqua.spout;
 
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.api.TruffleLogger;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.espresso.EspressoLanguage;
@@ -39,6 +40,7 @@ import com.oracle.truffle.espresso.jdwp.api.KlassRef;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
+import com.oracle.truffle.espresso.runtime.EspressoContext;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.concolic.ConcolicAnnotationAction;
 import tools.aqua.smt.ComplexExpression;
@@ -57,6 +59,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.logging.Level;
 
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.*;
 import static com.oracle.truffle.espresso.nodes.BytecodeNode.*;
@@ -76,20 +79,27 @@ public class SPouT {
 
     private static GWIT gwit;
 
+    private static TruffleLogger logger;
+
     // --------------------------------------------------------------------------
     //
     // start and stop
 
     @CompilerDirectives.TruffleBoundary
-    public static void newPath(String options) {
-        System.out.println("======================== START PATH [BEGIN].");
+    public static void newPath(String options, EspressoContext context) {
+        SPouT.logger = context.getLogger();
+        log("======================== START PATH [BEGIN].");
         config = new Config(options);
         config.configureAnalysis();
         analysis = new MetaAnalysis(config);
         trace = config.getTrace();
         gwit = new GWIT(trace);
-        System.out.println("======================== START PATH [END].");
+        log("======================== START PATH [END].");
         // TODO: should be deferred to latest possible point in time
+        if (!config.hasTaintAnalysis() && !config.hasConcolicAnalysis()) {
+            log("no analysis to run.");
+            return;
+        }
         analyze = true;
         oldAnalyze = true;
         AnnotatedVM.setAnnotate(true);
@@ -97,14 +107,14 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static void endPath() {
-        System.out.println("======================== END PATH [BEGIN].");
+        log("======================== END PATH [BEGIN].");
         stopAnalysis();
         if (trace != null) {
             trace.printTrace();
         }
-        System.out.println("======================== END PATH [END].");
-        System.out.println("[ENDOFTRACE]");
-        System.out.flush();
+        log("======================== END PATH [END].");
+        log("[ENDOFTRACE]");
+        //System.out.flush();
     }
 
     private static void stopAnalysis() {
@@ -2128,33 +2138,35 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static void debug(String message) {
-        if (DEBUG) System.out.println("[debug] " + message);
+        if (DEBUG) log("[debug] " + message);
     }
 
     @CompilerDirectives.TruffleBoundary
     public static void debug(String message, Object o) {
-        if (DEBUG) System.out.println("[debug] %s with Object %s".formatted(message, o));
+        if (DEBUG) log("[debug] %s with Object %s".formatted(message, o));
     }
 
     @CompilerDirectives.TruffleBoundary
     public static void debug(String method, Expression a1, Expression a2) {
-        if (DEBUG) System.out.println("[debug] bytecode: %s a1: %s a2: %s".formatted(method, a1, a2));
+        if (DEBUG) log("[debug] bytecode: %s a1: %s a2: %s".formatted(method, a1, a2));
     }
 
     @CompilerDirectives.TruffleBoundary
     public static void debug(String method, int slot, Annotations a) {
-        if (DEBUG) System.out.println("[debug] bytecode: %s slot: %s a1: %s ".formatted(method, slot, a));
+        if (DEBUG) log("[debug] bytecode: %s slot: %s a1: %s ".formatted(method, slot, a));
     }
 
     @CompilerDirectives.TruffleBoundary
     public static void debug(String method, int slot, int slot2, Annotations a) {
-        if (DEBUG)
-            System.out.println("[debug] bytecode: %s slot: %s  slot2: %s a1: %s ".formatted(method, slot, slot2, a));
+        if (DEBUG) log("[debug] bytecode: %s slot: %s  slot2: %s a1: %s ".formatted(method, slot, slot2, a));
     }
 
     @CompilerDirectives.TruffleBoundary
     public static void log(String message) {
-        System.out.println(message);
+        if (logger != null) {
+            logger.log(Level.INFO, message);
+        }
+        //System.out.println(message);
     }
 
     public static void logDuringAnalysis(String message) {

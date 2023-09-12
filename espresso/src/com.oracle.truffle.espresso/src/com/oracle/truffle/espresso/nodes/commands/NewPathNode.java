@@ -26,6 +26,7 @@ package com.oracle.truffle.espresso.nodes.commands;
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.RootNode;
+import com.oracle.truffle.espresso.runtime.EspressoContext;
 import tools.aqua.spout.SPouT;
 
 /**
@@ -43,7 +44,7 @@ public final class NewPathNode extends RootNode {
 
     @Override
     public Object execute(VirtualFrame frame) {
-        SPouT.newPath(config);
+        SPouT.newPath(config, EspressoContext.get(this));
         return 1;
     }
 }
