@@ -31,6 +31,7 @@ import com.oracle.truffle.espresso.nodes.bytecodes.InvokeInterface;
 import com.oracle.truffle.espresso.nodes.bytecodes.InvokeInterfaceNodeGen;
 import com.oracle.truffle.espresso.nodes.quick.QuickNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.spout.SPouT;
 
 public final class InvokeInterfaceQuickNode extends QuickNode {
 
@@ -54,11 +55,17 @@ public final class InvokeInterfaceQuickNode extends QuickNode {
          * Method signature does not change across methods. Can safely use the constant signature
          * from `resolutionSeed` instead of the non-constant signature from the resolved method.
          */
-        final Object[] args = BytecodeNode.popArguments(frame, top, true, resolutionSeed.getParsedSignature());
+        Object[] args = BytecodeNode.popArguments(frame, top, true, resolutionSeed.getParsedSignature());
         nullCheck((StaticObject) args[0]);
+        if (resolutionSeed.isPartOfAnalysis()) {
+            args = SPouT.processMethodCall(args, resolutionSeed, getLanguage(), getRootNode());
+        }
         Object result = invokeInterface.execute(args);
         if (!returnKind.isPrimitive()) {
             getBytecodeNode().checkNoForeignObjectAssumption((StaticObject) result);
+        }
+        if (resolutionSeed.isPartOfAnalysis()) {
+            result = SPouT.processReturnValue(result, resolutionSeed, getLanguage(), getRootNode());
         }
         return (getResultAt() - top) + BytecodeNode.putKind(frame, getResultAt(), result, returnKind);
     }

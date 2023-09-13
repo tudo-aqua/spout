@@ -63,6 +63,10 @@ public class HeapWalker {
         Set<StaticObject> visited = new HashSet<>();
         LinkedList<StaticObject> queue = new LinkedList<>();
         LinkedList<StaticObject> nextQueue = new LinkedList<>();
+        if (origin.isArray()) {
+            processArray(origin, lang, nextQueue, visited);
+            return;
+        }
         queue.offer(origin);
         visited.add(origin);
         while (!queue.isEmpty()) {

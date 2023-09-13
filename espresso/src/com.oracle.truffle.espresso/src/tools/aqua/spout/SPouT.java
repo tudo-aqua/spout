@@ -1954,7 +1954,7 @@ public class SPouT {
     public static Object characterToLowerCase(Object c, Meta meta) {
         char cChar = AnnotatedValue.value(c);
         Annotations sChar = AnnotatedValue.svalue(c);
-        char cRes = Character.toUpperCase(cChar);
+        char cRes = Character.toLowerCase(cChar);
         if(analyze){
             Annotations a = analysis.characterToLowerCase(cChar, sChar);
             if (a != null) return new AnnotatedValue(cRes, a);

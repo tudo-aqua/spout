@@ -63,7 +63,7 @@ public class Trace {
     public void printTrace() {
         TraceElement cur = traceHead;
         while (cur != null) {
-            System.out.println(cur);
+            SPouT.log(cur.toString());
             cur = cur.getNext();
         }
     }
