@@ -2136,11 +2136,10 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
         } else if (constant instanceof StringConstant) {
             assert opcode == LDC || opcode == LDC_W;
             StaticObject internedString = pool.resolvedStringAt(cpi);
-            // todo: if we do this as we did below then springboot will fail to start with IncompleteAnnotation exceptions
-            //Meta meta = getMeta();
-            //StaticObject obj = meta.toGuestString(meta.toHostString(internedString));
-            //SPouT.markObjectWithIFTaint(obj);
-            //TODO: (annotate string and maybe clone?)
+            //TODO: (this is definitively not correct! Maybe clone properly and annotate?)
+            Meta meta = getMeta();
+            StaticObject obj = meta.toGuestString(meta.toHostString(internedString));
+            SPouT.markObjectWithIFTaint(obj);
             putObject(frame, top, internedString);
         } else if (constant instanceof ClassConstant) {
             assert opcode == LDC || opcode == LDC_W;

@@ -13,8 +13,7 @@ public final class Target_java_lang_StringBuffer {
      * If we do not intercept the constructor, we get side effects from the length comparison in the trace that are
      * irrelevant for the symbolic encoding.
      */
-    //todo: leads to segfault when starting springboot
-    //@Substitution(hasReceiver = true, methodName = "<init>")
+    @Substitution(hasReceiver = true, methodName = "<init>")
     public static void init_string(
             @JavaType(StringBuilder.class) StaticObject self,
             @JavaType(String.class) StaticObject other,
