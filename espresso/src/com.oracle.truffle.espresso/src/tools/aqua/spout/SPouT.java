@@ -529,6 +529,10 @@ public class SPouT {
         AnnotatedVM.putAnnotations(frame, top, a);
     }
 
+    public static boolean generateIFTaint() {
+        return (analyze && config.analyzeControlFlowTaint());
+    }
+
     public static void markObjectWithIFTaint(StaticObject obj) {
         if(!analyze || !config.analyzeControlFlowTaint()) return;
         if (obj == StaticObject.NULL) return;

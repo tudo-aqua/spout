@@ -2137,10 +2137,15 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
             assert opcode == LDC || opcode == LDC_W;
             StaticObject internedString = pool.resolvedStringAt(cpi);
             //TODO: (this is definitively not correct! Maybe clone properly and annotate?)
-            Meta meta = getMeta();
-            StaticObject obj = meta.toGuestString(meta.toHostString(internedString));
-            SPouT.markObjectWithIFTaint(obj);
-            putObject(frame, top, internedString);
+            if (SPouT.generateIFTaint()) {
+                Meta meta = getMeta();
+                StaticObject obj = meta.toGuestString(meta.toHostString(internedString));
+                SPouT.markObjectWithIFTaint(obj);
+                putObject(frame, top, obj);
+            }
+            else {
+                putObject(frame, top, internedString);
+            }
         } else if (constant instanceof ClassConstant) {
             assert opcode == LDC || opcode == LDC_W;
             Klass klass = pool.resolvedKlassAt(getDeclaringKlass(), cpi);
