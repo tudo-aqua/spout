@@ -838,6 +838,7 @@ public final class Meta extends ContextAccessImpl {
 
         java_lang_StringLatin1 = knownKlass(Type.java_lang_StringLatin1);
         java_lang_StringLatin1_newString = java_lang_StringLatin1.lookupMethod(getNames().getOrCreate("newString"), Signature.String_byte_array_int_int);
+        java_lang_StringLatin1_equals = java_lang_StringLatin1.lookupMethod(getNames().getOrCreate("equals"), Signature._boolean_byte_array_byte_array);
 
         java_lang_StringUTF16 = knownKlass(Type.java_lang_StringUTF16);
         java_lang_StringUTF16_newString = java_lang_StringUTF16.lookupMethod(getNames().getOrCreate("newString"), Signature.String_byte_array_int_int);
@@ -1454,6 +1455,7 @@ public final class Meta extends ContextAccessImpl {
     public final ObjectKlass java_lang_StringLatin1;
 
     public final Method java_lang_StringLatin1_newString;
+    public final Method java_lang_StringLatin1_equals;
 
     public final ObjectKlass java_lang_StringUTF16;
 

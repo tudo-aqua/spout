@@ -1566,20 +1566,50 @@ public class SPouT {
 
     }
 
+    // this is a faithful re-implementation of String.equals()
+    private static boolean stringEqualsConcrete(StaticObject self, StaticObject other, Meta meta) {
+        if (self == other) {
+            return true;
+        }
+
+        if (!other.isString()) {
+            return false;
+        }
+
+        boolean COMPACT_STRINGS = meta.java_lang_String_COMPACT_STRINGS.getBoolean(meta.java_lang_String.getStatics());
+        Object this_coder = meta.java_lang_String_coder.getValue(self);
+        Object other_coder = meta.java_lang_String_coder.getValue(other);
+
+        if (COMPACT_STRINGS && this_coder != other_coder) {
+            return false;
+        }
+
+        Object this_value = meta.java_lang_String_value.getValue(self);
+        Object other_value = meta.java_lang_String_value.getValue(other);
+        return (boolean) meta.java_lang_StringLatin1_equals.invokeMethod(null, new Object[] {this_value, other_value});
+
+    }
+
     @CompilerDirectives.TruffleBoundary
     public static Object stringEquals(StaticObject self, StaticObject other, Meta meta) {
-        String cSelf = meta.toHostString(self);
-        String cOther = meta.toHostString(other);
-        boolean areEqual = cSelf.equals(cOther);
-        if (!analyze || !self.hasAnnotations() && !other.hasAnnotations()) {
-            return areEqual;
+        boolean areEqual = stringEqualsConcrete(self, other, meta);
+        if (!analyze) return areEqual;
+        if (self.hasAnnotations() || (!StaticObject.isNull(other) && other.hasAnnotations())) {
+            String cSelf = meta.toHostString(self);
+            String cOther = meta.toHostString(other);
+            Annotations a = analysis.stringEquals(cSelf,
+                    cOther,
+                    getStringAnnotations(self),
+                    getStringAnnotations(other));
+            if(a != null) {
+                return new AnnotatedValue(areEqual, a);
+            }
         }
-        Annotations a = analysis.stringEquals(cSelf,
-                cOther,
-                getStringAnnotations(self),
-                getStringAnnotations(other));
-        if(a != null) return new AnnotatedValue(areEqual, a);
-        else return areEqual;
+        // todo: maybe this can be encoded?
+        if (self.hasAnnotations() && StaticObject.isNull(other)) {
+            log("not recording string == null");
+        }
+        return areEqual;
     }
 
     @CompilerDirectives.TruffleBoundary

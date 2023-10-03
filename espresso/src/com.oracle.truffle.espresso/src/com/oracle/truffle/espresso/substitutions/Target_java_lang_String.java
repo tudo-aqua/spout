@@ -8,7 +8,7 @@ import tools.aqua.spout.SPouT;
 
 import java.util.Locale;
 
-//@EspressoSubstitutions
+@EspressoSubstitutions
 public final class Target_java_lang_String {
     @Substitution(hasReceiver = true)
     public static @JavaType(internalName = "Z") Object contains(@JavaType(String.class) StaticObject self,

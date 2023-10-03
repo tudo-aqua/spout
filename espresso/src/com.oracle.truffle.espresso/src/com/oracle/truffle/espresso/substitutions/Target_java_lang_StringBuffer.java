@@ -5,7 +5,7 @@ import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.spout.SPouT;
 
-//@EspressoSubstitutions
+@EspressoSubstitutions
 public final class Target_java_lang_StringBuffer {
 
 
