@@ -2136,11 +2136,9 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
         } else if (constant instanceof StringConstant) {
             assert opcode == LDC || opcode == LDC_W;
             StaticObject internedString = pool.resolvedStringAt(cpi);
-            Meta meta = getMeta();
-            StaticObject obj = meta.toGuestString(meta.toHostString(internedString));
-            SPouT.markObjectWithIFTaint(obj);
+            SPouT.markObjectWithIFTaint(internedString);
             //TODO: (annotate string and maybe clone?)
-            putObject(frame, top, obj);
+            putObject(frame, top, internedString);
         } else if (constant instanceof ClassConstant) {
             assert opcode == LDC || opcode == LDC_W;
             Klass klass = pool.resolvedKlassAt(getDeclaringKlass(), cpi);

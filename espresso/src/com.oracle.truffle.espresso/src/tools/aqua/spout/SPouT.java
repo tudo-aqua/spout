@@ -1568,6 +1568,10 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static Object stringEquals(StaticObject self, StaticObject other, Meta meta) {
+        // other might be null
+        if(!other.isString()){
+            return false;
+        }
         String cSelf = meta.toHostString(self);
         String cOther = meta.toHostString(other);
         boolean areEqual = cSelf.equals(cOther);
