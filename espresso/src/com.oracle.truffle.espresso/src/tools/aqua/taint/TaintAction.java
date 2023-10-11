@@ -43,7 +43,16 @@ public class TaintAction implements HeapWalkAction {
 
     @Override
     public void applyToString(StaticObject obj) {
-        SPouT.log("currently not tainting strings s on heap");
+        if (!config.hasTaintAnalysis()) return;
+        Annotations a = Annotations.objectAnnotation(obj);
+        Taint tOld = Annotations.annotation(a, config.getTaintIdx());
+        if (a == null) {
+            a = Annotations.create();
+        }
+        Taint tNew = ColorUtil.joinColors(tOld, taint);
+        SPouT.log("tainting string with " + tNew);
+        a.set(config.getTaintIdx(), tNew);
+        Annotations.setObjectAnnotation(obj, a);
     }
 
     @Override

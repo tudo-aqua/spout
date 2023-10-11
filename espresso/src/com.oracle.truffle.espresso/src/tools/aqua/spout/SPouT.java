@@ -67,7 +67,7 @@ import static com.oracle.truffle.espresso.runtime.dispatch.EspressoInterop.getMe
 
 public class SPouT {
 
-    public static final boolean DEBUG = false;
+    public static final boolean DEBUG = true;
 
     private static boolean analyze = false, oldAnalyze = analyze;
 
@@ -113,8 +113,8 @@ public class SPouT {
             trace.printTrace();
         }
         log("======================== END PATH [END].");
-        log("[ENDOFTRACE]");
-        //System.out.flush();
+        System.out.println("[ENDOFTRACE]");
+        System.out.flush();
     }
 
     private static void stopAnalysis() {
@@ -445,6 +445,7 @@ public class SPouT {
     }
 
     private static Object[] analyzeTaint(Object[] args, Method method, Taint t, EspressoLanguage lang) {
+        log("analyze taint on method " + method.getName());
         int receiver = 0 + (method.isStatic() ? 0 : 1);
         KlassRef[] argTypes = method.getParameters();
         int argCount = argTypes.length;
