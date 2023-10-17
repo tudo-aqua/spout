@@ -61,7 +61,8 @@ public class Annotations {
 
     @SuppressWarnings("unchecked")
     public static <T> T annotation(Annotations a, int i) {
-        return a != null ? (T) a.annotations[i] : null;
+        if (a == null || i < 0 || a.annotations.length <= i) return null;
+        return (T) a.annotations[i];
     }
 
     @SuppressWarnings("unchecked")

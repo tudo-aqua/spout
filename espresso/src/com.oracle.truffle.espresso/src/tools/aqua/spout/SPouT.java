@@ -140,6 +140,11 @@ public class SPouT {
     }
 
     @CompilerDirectives.TruffleBoundary
+    public static Object[] processMethodCall(Object[] args, Method method, Meta meta) {
+        return processMethodCall(args, method, meta.getLanguage(), meta.getSubstitutions().get(method));
+    }
+
+    @CompilerDirectives.TruffleBoundary
     public static Object[] processMethodCall(Object[] args, Method method, EspressoLanguage lang, RootNode rn) {
         if (!analyze) return args;
 
@@ -160,6 +165,11 @@ public class SPouT {
         }
 
         return args;
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static Object processReturnValue(Object result, Method method, Meta meta) {
+        return processReturnValue(result, method, meta.getLanguage(), meta.getSubstitutions().get(method));
     }
 
     public static Object processReturnValue(Object result, Method method, EspressoLanguage lang, RootNode rn) {
@@ -303,7 +313,7 @@ public class SPouT {
     }
 
     private static Object[] analyzeConcolically(Object[] args, Method method, EspressoLanguage lang, RootNode rn) {
-        int receiver = 0 + (method.isStatic() ? 0 : 1);
+        int receiver = 0 + (method.isStatic() || args.length == method.getParameterCount() ? 0 : 1);
         Symbol<Symbol.Type>[] methodSignature = method.getParsedSignature();
         int argCount = Signatures.parameterCount(methodSignature);
         CompilerAsserts.partialEvaluationConstant(argCount);
@@ -425,7 +435,7 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     private static void checkTaintOnCall(Object[] args, Method method, Taint t, EspressoLanguage lang) {
-        int receiver = 0 + (method.isStatic() ? 0 : 1);
+        int receiver = 0 + (method.isStatic() || args.length == method.getParameterCount() ? 0 : 1);
         KlassRef[] argTypes = method.getParameters();
         int argCount = argTypes.length;
         CompilerAsserts.partialEvaluationConstant(argCount);
@@ -446,7 +456,7 @@ public class SPouT {
 
     private static Object[] analyzeTaint(Object[] args, Method method, Taint t, EspressoLanguage lang) {
         log("analyze taint on method " + method.getName());
-        int receiver = 0 + (method.isStatic() ? 0 : 1);
+        int receiver = 0 + (method.isStatic() || args.length == method.getParameterCount() ? 0 : 1);
         KlassRef[] argTypes = method.getParameters();
         int argCount = argTypes.length;
         CompilerAsserts.partialEvaluationConstant(argCount);
