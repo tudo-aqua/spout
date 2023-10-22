@@ -229,7 +229,6 @@ import static com.oracle.truffle.espresso.bytecode.Bytecodes.SWAP;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.TABLESWITCH;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.WIDE;
 
-import java.lang.invoke.SwitchPoint;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -298,6 +297,7 @@ import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.ExceptionHandler;
 import com.oracle.truffle.espresso.meta.JavaKind;
 import com.oracle.truffle.espresso.meta.Meta;
+import com.oracle.truffle.espresso.nodes.concolic.ConcolicInvokeVirtualNode;
 import com.oracle.truffle.espresso.nodes.helper.EspressoReferenceArrayStoreNode;
 import com.oracle.truffle.espresso.nodes.quick.BaseQuickNode;
 import com.oracle.truffle.espresso.nodes.quick.CheckCastQuickNode;
@@ -342,7 +342,6 @@ import com.oracle.truffle.espresso.vm.InterpreterToVM;
 
 import tools.aqua.spout.*;
 import tools.aqua.taint.PostDominatorAnalysis;
-import tools.aqua.taint.TaintAnalysis;
 
 /**
  * Bytecode interpreter loop.
@@ -2492,6 +2491,9 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     throw EspressoError.unimplemented("Quickening for " + Bytecodes.nameOf(opcode));
             }
             // @formatter:on
+        }
+        if (resolved == getMeta().java_lang_String_equals) {
+            invoke = new ConcolicInvokeVirtualNode.StringEquals(resolved, top, curBCI, getMeta());
         }
         return invoke;
     }

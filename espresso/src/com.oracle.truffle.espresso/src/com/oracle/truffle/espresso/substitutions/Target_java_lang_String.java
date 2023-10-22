@@ -31,7 +31,7 @@ public final class Target_java_lang_String {
                                                                  @Inject Meta meta) {
         return SPouT.stringCompareTo(self, other, meta);
     }
-
+/*
     @Substitution(hasReceiver = true)
     public static @JavaType(internalName = "Z") Object equals(
             @JavaType(String.class) StaticObject self,
@@ -39,7 +39,7 @@ public final class Target_java_lang_String {
             @Inject Meta meta) {
         return SPouT.stringEquals(self, other, meta);
     }
-
+*/
     @Substitution(hasReceiver = true)
     public static @JavaType(internalName = "C") Object charAt(@JavaType(String.class) StaticObject self,
                                                                     @JavaType(internalName = "I") Object index,

@@ -57,7 +57,6 @@ import com.oracle.truffle.espresso.runtime.EspressoException;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import com.oracle.truffle.espresso.substitutions.JavaType;
 import com.oracle.truffle.espresso.vm.InterpreterToVM;
-import tools.aqua.spout.SPouT;
 
 /**
  * Introspection API to access the guest world from the host. Provides seamless conversions from
@@ -840,6 +839,8 @@ public final class Meta extends ContextAccessImpl {
         java_lang_StringLatin1_newString = java_lang_StringLatin1.lookupMethod(getNames().getOrCreate("newString"), Signature.String_byte_array_int_int);
         java_lang_StringLatin1_equals = java_lang_StringLatin1.lookupMethod(getNames().getOrCreate("equals"), Signature._boolean_byte_array_byte_array);
 
+        java_lang_String_equals = java_lang_String.lookupMethod(getNames().getOrCreate("equals"), Signature._boolean_Object);
+
         java_lang_StringUTF16 = knownKlass(Type.java_lang_StringUTF16);
         java_lang_StringUTF16_newString = java_lang_StringUTF16.lookupMethod(getNames().getOrCreate("newString"), Signature.String_byte_array_int_int);
     }
@@ -1456,7 +1457,7 @@ public final class Meta extends ContextAccessImpl {
 
     public final Method java_lang_StringLatin1_newString;
     public final Method java_lang_StringLatin1_equals;
-
+    public final Method java_lang_String_equals;
     public final ObjectKlass java_lang_StringUTF16;
 
     public final Method java_lang_StringUTF16_newString;

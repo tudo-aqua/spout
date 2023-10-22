@@ -125,6 +125,10 @@ public class SPouT {
         }
     }
 
+    public static boolean doAnalyze() {
+        return analyze;
+    }
+
     // --------------------------------------------------------------------------
     //
     // interception of method invocations
@@ -1581,33 +1585,10 @@ public class SPouT {
 
     }
 
-    // this is a faithful re-implementation of String.equals()
-    private static boolean stringEqualsConcrete(StaticObject self, StaticObject other, Meta meta) {
-        if (self == other) {
-            return true;
-        }
-
-        if (!other.isString()) {
-            return false;
-        }
-
-        boolean COMPACT_STRINGS = meta.java_lang_String_COMPACT_STRINGS.getBoolean(meta.java_lang_String.getStatics());
-        Object this_coder = meta.java_lang_String_coder.getValue(self);
-        Object other_coder = meta.java_lang_String_coder.getValue(other);
-
-        if (COMPACT_STRINGS && this_coder != other_coder) {
-            return false;
-        }
-
-        Object this_value = meta.java_lang_String_value.getValue(self);
-        Object other_value = meta.java_lang_String_value.getValue(other);
-        return (boolean) meta.java_lang_StringLatin1_equals.invokeMethod(null, new Object[] {this_value, other_value});
-
-    }
-
+    // TODO: the concrete result may have annotations!!!
+    // TODO: these methods should work like the other entrypoints and distribute / integrate analyses!
     @CompilerDirectives.TruffleBoundary
-    public static Object stringEquals(StaticObject self, StaticObject other, Meta meta) {
-        boolean areEqual = stringEqualsConcrete(self, other, meta);
+    public static Object stringEquals(StaticObject self, StaticObject other, boolean areEqual, Meta meta) {
         if (!analyze) return areEqual;
         if (self.hasAnnotations() || (!StaticObject.isNull(other) && other.hasAnnotations())) {
             String cSelf = meta.toHostString(self);
