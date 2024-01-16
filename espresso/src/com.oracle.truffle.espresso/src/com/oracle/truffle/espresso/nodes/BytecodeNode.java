@@ -229,7 +229,6 @@ import static com.oracle.truffle.espresso.bytecode.Bytecodes.SWAP;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.TABLESWITCH;
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.WIDE;
 
-import java.lang.invoke.SwitchPoint;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -298,6 +297,7 @@ import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.ExceptionHandler;
 import com.oracle.truffle.espresso.meta.JavaKind;
 import com.oracle.truffle.espresso.meta.Meta;
+import com.oracle.truffle.espresso.nodes.concolic.ConcolicInvokeVirtualNode;
 import com.oracle.truffle.espresso.nodes.helper.EspressoReferenceArrayStoreNode;
 import com.oracle.truffle.espresso.nodes.quick.BaseQuickNode;
 import com.oracle.truffle.espresso.nodes.quick.CheckCastQuickNode;
@@ -342,7 +342,6 @@ import com.oracle.truffle.espresso.vm.InterpreterToVM;
 
 import tools.aqua.spout.*;
 import tools.aqua.taint.PostDominatorAnalysis;
-import tools.aqua.taint.TaintAnalysis;
 
 /**
  * Bytecode interpreter loop.
@@ -2136,11 +2135,16 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
         } else if (constant instanceof StringConstant) {
             assert opcode == LDC || opcode == LDC_W;
             StaticObject internedString = pool.resolvedStringAt(cpi);
-            Meta meta = getMeta();
-            StaticObject obj = meta.toGuestString(meta.toHostString(internedString));
-            SPouT.markObjectWithIFTaint(obj);
-            //TODO: (annotate string and maybe clone?)
-            putObject(frame, top, obj);
+            //TODO: (this is definitively not correct! Maybe clone properly and annotate?)
+            if (SPouT.generateIFTaint()) {
+                Meta meta = getMeta();
+                StaticObject obj = meta.toGuestString(meta.toHostString(internedString));
+                SPouT.markObjectWithIFTaint(obj);
+                putObject(frame, top, obj);
+            }
+            else {
+                putObject(frame, top, internedString);
+            }
         } else if (constant instanceof ClassConstant) {
             assert opcode == LDC || opcode == LDC_W;
             Klass klass = pool.resolvedKlassAt(getDeclaringKlass(), cpi);
@@ -2488,6 +2492,12 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
             }
             // @formatter:on
         }
+
+        Meta meta = getMeta();
+        if (resolved.hasModel(meta)) {
+            invoke = SPouT.injectModel(resolved, meta, top, curBCI);
+        }
+
         return invoke;
     }
 

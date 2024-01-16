@@ -1586,7 +1586,9 @@ public final class Method extends Member<Signature> implements TruffleObject, Co
     }
     // endregion jdwp-specific
 
+    // spout
     private Boolean partOfAnalysis = null;
+    private Integer modelId = null;
 
     public boolean isPartOfAnalysis() {
         if (partOfAnalysis == null) {
@@ -1594,4 +1596,16 @@ public final class Method extends Member<Signature> implements TruffleObject, Co
         }
         return partOfAnalysis;
     }
+
+    public boolean hasModel(Meta meta) {
+        if (modelId == null) {
+            modelId = SPouT.getModelId(this, meta);
+        }
+        return modelId != -1;
+    }
+
+    public int getModelId() {
+        return modelId;
+    }
+
 }

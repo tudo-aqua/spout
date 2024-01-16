@@ -34,6 +34,7 @@ import com.oracle.truffle.espresso.meta.JavaKind;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.runtime.EspressoException;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.spout.SPouT;
 
 /**
  * This substitution is merely for performance reasons, to avoid the deep-dive to native. libjava
@@ -340,7 +341,13 @@ public final class Target_sun_reflect_NativeMethodAccessorImpl {
 
         Object result;
         try {
+            if (method.isPartOfAnalysis()) {
+                adjustedArgs = SPouT.processMethodCall(adjustedArgs, method, meta);
+            }
             result = method.invokeDirect(receiver, adjustedArgs);
+//            if (method.isPartOfAnalysis()) {
+//                result = SPouT.processReturnValue(result, method, meta);
+//            }
         } catch (EspressoException e) {
             throw meta.throwExceptionWithCause(meta.java_lang_reflect_InvocationTargetException, e.getGuestException());
         }

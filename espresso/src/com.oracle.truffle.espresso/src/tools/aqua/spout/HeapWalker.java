@@ -71,6 +71,10 @@ public class HeapWalker {
         visited.add(origin);
         while (!queue.isEmpty()) {
             StaticObject current = queue.poll();
+            if (current.isString()) {
+                action.applyToString(current);
+                continue;
+            }
             action.applyToObject(current);
             //SPouT.log("Analyzing " + current.getKlass().getNameAsString() + " . " + current.toString());
             ObjectKlass oClass = (ObjectKlass) current.getKlass();
@@ -113,18 +117,19 @@ public class HeapWalker {
         assert arr.isArray();
         action.applyToArray(arr);
         Klass eClass = arr.getKlass().getElementalType();
-        Object[] data = arr.unwrap(lang);
         if (eClass.isPrimitive()) {
-            for (int i=0; i<data.length; i++) {
+            for (int i=0; i<arr.length(lang); i++) {
                 action.applyToPrimitiveArrayElement(arr, i);
             }
         }
         else if (eClass.getType() == Symbol.Type.java_lang_String) {
+            Object[] data = arr.unwrap(lang);
             for (Object e : data) {
                 StaticObject str = (StaticObject) e;
                 action.applyToString(str);
             }
         } else if (eClass.isArray()) {
+            Object[] data = arr.unwrap(lang);
             for (Object e : data) {
                 StaticObject arr2 = (StaticObject) e;
                 if (visited.contains(arr2)) continue;
@@ -132,6 +137,7 @@ public class HeapWalker {
                 processArray( arr2, lang, nextQueue, visited);
             }
         } else {
+            Object[] data = arr.unwrap(lang);
             for (Object e : data) {
                 StaticObject obj2 = (StaticObject) e;
                 if (visited.contains(obj2)) continue;

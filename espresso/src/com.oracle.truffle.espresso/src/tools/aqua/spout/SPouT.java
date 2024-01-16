@@ -40,6 +40,8 @@ import com.oracle.truffle.espresso.jdwp.api.KlassRef;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
+import com.oracle.truffle.espresso.nodes.concolic.ConcolicInvokeVirtualNode;
+import com.oracle.truffle.espresso.nodes.quick.QuickNode;
 import com.oracle.truffle.espresso.runtime.EspressoContext;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.concolic.ConcolicAnnotationAction;
@@ -67,7 +69,7 @@ import static com.oracle.truffle.espresso.runtime.dispatch.EspressoInterop.getMe
 
 public class SPouT {
 
-    public static final boolean DEBUG = false;
+    public static final boolean DEBUG = true;
 
     private static boolean analyze = false, oldAnalyze = analyze;
 
@@ -113,8 +115,8 @@ public class SPouT {
             trace.printTrace();
         }
         log("======================== END PATH [END].");
-        log("[ENDOFTRACE]");
-        //System.out.flush();
+        System.out.println("[ENDOFTRACE]");
+        System.out.flush();
     }
 
     private static void stopAnalysis() {
@@ -123,6 +125,10 @@ public class SPouT {
             AnnotatedVM.setAnnotate(false);
             //FIXME: analysis.terminate();
         }
+    }
+
+    public static boolean doAnalyze() {
+        return analyze;
     }
 
     // --------------------------------------------------------------------------
@@ -137,6 +143,32 @@ public class SPouT {
         else {
             return false;
         }
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static int getModelId(Method method, Meta meta) {
+        Klass clazz = method.getDeclaringKlass();
+        if (clazz == meta.java_lang_String) {
+            if (method == meta.java_lang_String_equals) {
+                return 0;
+            }
+        }
+        return -1;
+    }
+
+    public static QuickNode injectModel(Method method, Meta meta, int top, int curBCI) {
+        switch (method.getModelId()) {
+            case 0: return new ConcolicInvokeVirtualNode.StringEquals(top, curBCI, getMeta());
+        }
+        stopRecordingWithoutMeta("unknown model");
+        // will not be reached
+        return null;
+    }
+
+
+    @CompilerDirectives.TruffleBoundary
+    public static Object[] processMethodCall(Object[] args, Method method, Meta meta) {
+        return processMethodCall(args, method, meta.getLanguage(), meta.getSubstitutions().get(method));
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -160,6 +192,11 @@ public class SPouT {
         }
 
         return args;
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static Object processReturnValue(Object result, Method method, Meta meta) {
+        return processReturnValue(result, method, meta.getLanguage(), meta.getSubstitutions().get(method));
     }
 
     public static Object processReturnValue(Object result, Method method, EspressoLanguage lang, RootNode rn) {
@@ -303,7 +340,7 @@ public class SPouT {
     }
 
     private static Object[] analyzeConcolically(Object[] args, Method method, EspressoLanguage lang, RootNode rn) {
-        int receiver = 0 + (method.isStatic() ? 0 : 1);
+        int receiver = 0 + (method.isStatic() || args.length == method.getParameterCount() ? 0 : 1);
         Symbol<Symbol.Type>[] methodSignature = method.getParsedSignature();
         int argCount = Signatures.parameterCount(methodSignature);
         CompilerAsserts.partialEvaluationConstant(argCount);
@@ -425,7 +462,7 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     private static void checkTaintOnCall(Object[] args, Method method, Taint t, EspressoLanguage lang) {
-        int receiver = 0 + (method.isStatic() ? 0 : 1);
+        int receiver = 0 + (method.isStatic() || args.length == method.getParameterCount() ? 0 : 1);
         KlassRef[] argTypes = method.getParameters();
         int argCount = argTypes.length;
         CompilerAsserts.partialEvaluationConstant(argCount);
@@ -445,7 +482,8 @@ public class SPouT {
     }
 
     private static Object[] analyzeTaint(Object[] args, Method method, Taint t, EspressoLanguage lang) {
-        int receiver = 0 + (method.isStatic() ? 0 : 1);
+        log("analyze taint on method " + method.getName());
+        int receiver = 0 + (method.isStatic() || args.length == method.getParameterCount() ? 0 : 1);
         KlassRef[] argTypes = method.getParameters();
         int argCount = argTypes.length;
         CompilerAsserts.partialEvaluationConstant(argCount);
@@ -527,6 +565,10 @@ public class SPouT {
         }
         a.set(config.getTaintIdx(), ColorUtil.joinColors(t, Annotations.annotation(a, config.getTaintIdx())));
         AnnotatedVM.putAnnotations(frame, top, a);
+    }
+
+    public static boolean generateIFTaint() {
+        return (analyze && config.analyzeControlFlowTaint());
     }
 
     public static void markObjectWithIFTaint(StaticObject obj) {
@@ -1566,20 +1608,27 @@ public class SPouT {
 
     }
 
+    // TODO: the concrete result may have annotations!!!
+    // TODO: these methods should work like the other entrypoints and distribute / integrate analyses!
     @CompilerDirectives.TruffleBoundary
-    public static Object stringEquals(StaticObject self, StaticObject other, Meta meta) {
-        String cSelf = meta.toHostString(self);
-        String cOther = meta.toHostString(other);
-        boolean areEqual = cSelf.equals(cOther);
-        if (!analyze || !self.hasAnnotations() && !other.hasAnnotations()) {
-            return areEqual;
+    public static Object stringEquals(StaticObject self, StaticObject other, boolean areEqual, Meta meta) {
+        if (!analyze) return areEqual;
+        if (self.hasAnnotations() || (!StaticObject.isNull(other) && other.hasAnnotations())) {
+            String cSelf = meta.toHostString(self);
+            String cOther = meta.toHostString(other);
+            Annotations a = analysis.stringEquals(cSelf,
+                    cOther,
+                    getStringAnnotations(self),
+                    getStringAnnotations(other));
+            if(a != null) {
+                return new AnnotatedValue(areEqual, a);
+            }
         }
-        Annotations a = analysis.stringEquals(cSelf,
-                cOther,
-                getStringAnnotations(self),
-                getStringAnnotations(other));
-        if(a != null) return new AnnotatedValue(areEqual, a);
-        else return areEqual;
+        // todo: maybe this can be encoded?
+        if (self.hasAnnotations() && StaticObject.isNull(other)) {
+            log("not recording string == null");
+        }
+        return areEqual;
     }
 
     @CompilerDirectives.TruffleBoundary

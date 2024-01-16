@@ -30,13 +30,13 @@ public class TaintCheckAction implements HeapWalkAction {
     @Override
     public void applyToPrimitiveField(StaticObject obj, Field f) {
         if (!config.hasTaintAnalysis()) return;
+        Annotations a = AnnotatedVM.getFieldAnnotation(obj, f);
         for (int color : ColorUtil.colorsIn(taint)) {
             SPouT.log("checking " + color + " taint on " +
                     f.getKind().toString() + "-field " +
                     f.getNameAsString() + " of " +
                     obj.getKlass().getNameAsString() + " [" +
                     obj.toString() + "]");
-            Annotations a = AnnotatedVM.getFieldAnnotation(obj, f);
         taintAnalysis.checkTaint(a, color);
         }
     }
@@ -48,7 +48,12 @@ public class TaintCheckAction implements HeapWalkAction {
 
     @Override
     public void applyToString(StaticObject obj) {
-        SPouT.log("currently not checking taint on strings s on heap");
+        if (!config.hasTaintAnalysis()) return;
+        Annotations a = Annotations.objectAnnotation(obj);
+        for (int color : ColorUtil.colorsIn(taint)) {
+            SPouT.log("checking string for taint with color " + color);
+            taintAnalysis.checkTaint(a, color);
+        }
     }
 
     @Override

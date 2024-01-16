@@ -1117,6 +1117,8 @@ public final class Symbol<T> extends ByteSequence {
 
         public static final Symbol<Signature> String_byte_array_int_int = StaticSymbols.putSignature(Type.java_lang_String, Type._byte_array, Type._int, Type._int);
 
+        public static final Symbol<Signature> _boolean_byte_array_byte_array = StaticSymbols.putSignature(Type._boolean, Type._byte_array, Type._byte_array);
+
         public static final Symbol<Signature> _void_int_int_char_array_int = StaticSymbols.putSignature(Type._void, Type._int, Type._int, Type._char_array, Type._int);
     }
 }
