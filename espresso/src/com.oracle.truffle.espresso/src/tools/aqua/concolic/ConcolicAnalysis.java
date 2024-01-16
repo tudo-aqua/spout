@@ -1208,7 +1208,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return new ComplexExpression(STRINGEQ, a1, a2);
     }
 
-    public Object regionMatches(StaticObject self, StaticObject other, boolean ignore, int ctoffset, int cooffset, int clen, Meta meta) {
+    public Object regionMatches(StaticObject self, StaticObject other, boolean ignore, int ctoffset, int cooffset, int clen, boolean cRes, Meta meta) {
         String cSelf = meta.toHostString(self);
         String cOther = meta.toHostString(other);
         boolean isSelfSymbolic = self.hasAnnotations()
@@ -1227,7 +1227,6 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         if (!boundsCheck) {
             return false;
         }
-        boolean cRes = cSelf.regionMatches(ignore, ctoffset, cOther, cooffset, clen);
         if (isSelfSymbolic && !isOtherSymbolic) {
             return regionMatchesSymbolic(
                     makeStringToExpr(self, meta),

@@ -1492,15 +1492,20 @@ public class SPouT {
         } else {
             clen = (int) len;
         }
-        boolean isSelfSymbolic = self.hasAnnotations() && self.getAnnotations()[self.getAnnotations().length - 1] != null
-                && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
-        boolean isOtherSymbolic = other.hasAnnotations() && other.getAnnotations()[self.getAnnotations().length - 1] != null
-                && other.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
-        if ((isSelfSymbolic || isOtherSymbolic) && analyze && config.hasConcolicAnalysis()) {
-            return config.getConcolicAnalysis().regionMatches(self, other, ignore, ctoffset, cooffset, clen, meta);
-        } else {
-            return meta.toHostString(self).regionMatches(ignore, ctoffset, meta.toHostString(other), cooffset, clen);
+        boolean cres = meta.toHostString(self).regionMatches(ignore, ctoffset, meta.toHostString(other), cooffset, clen);
+        if (analyze && config.hasConcolicAnalysis()){
+            boolean isSelfSymbolic = self.hasAnnotations() && self.getAnnotations()[self.getAnnotations().length - 1] != null
+                    && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
+            boolean isOtherSymbolic = other.hasAnnotations() && other.getAnnotations()[self.getAnnotations().length - 1] != null
+                    && other.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
+            if ((isSelfSymbolic || isOtherSymbolic) && analyze && config.hasConcolicAnalysis()) {
+                config.getConcolicAnalysis().regionMatches(self, other, ignore, ctoffset, cooffset, clen, cres, meta);
+            }
         }
+        if (analyze && config.hasTaintAnalysis()) {
+            return config.getTaintAnalysis().regionMatches(self, other, cres);
+        }
+        return cres;
     }
 
     @CompilerDirectives.TruffleBoundary

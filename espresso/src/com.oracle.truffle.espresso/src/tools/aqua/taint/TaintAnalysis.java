@@ -748,6 +748,31 @@ public class TaintAnalysis implements Analysis<Taint> {
         }
     }
 
+    public Object regionMatches(StaticObject self, StaticObject other, boolean cres) {
+        Taint taint = null;
+        boolean isSelfAnnotated = self.hasAnnotations() && self.getAnnotations()[self.getAnnotations().length - 1] != null
+                && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getTaintIdx()] != null;
+        if (isSelfAnnotated){
+            taint = (Taint) self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getTaintIdx()];
+        }
+        boolean isOtherAnnotated = other.hasAnnotations() && other.getAnnotations()[other.getAnnotations().length - 1] != null
+                && other.getAnnotations()[other.getAnnotations().length - 1].getAnnotations()[config.getTaintIdx()] != null;
+        if (isOtherAnnotated){
+            if (taint != null){
+                taint = ColorUtil.joinColors(taint,
+                        (Taint) other.getAnnotations()[other.getAnnotations().length - 1].getAnnotations()[config.getTaintIdx()]);
+            }else{
+                taint = (Taint) other.getAnnotations()[other.getAnnotations().length - 1].getAnnotations()[config.getTaintIdx()];
+            }
+        }
+        if(taint != null){
+            Annotations a = Annotations.emptyArray();
+            a.set(config.getTaintIdx(), taint);
+            return new AnnotatedValue(cres,a);
+        }
+        return cres;
+    }
+
     private final class ConvRes {
         public Taint taint;
         public boolean fromSymbolic;
