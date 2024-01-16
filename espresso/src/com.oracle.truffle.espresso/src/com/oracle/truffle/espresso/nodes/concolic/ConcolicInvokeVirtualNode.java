@@ -14,6 +14,7 @@ import tools.aqua.spout.SPouT;
 
 public abstract class ConcolicInvokeVirtualNode extends QuickNode {
 
+    final Meta meta;
     final Method.MethodVersion method;
     final int resultAt;
     final boolean returnsPrimitiveType;
@@ -21,13 +22,14 @@ public abstract class ConcolicInvokeVirtualNode extends QuickNode {
 
     abstract Object concolicAnalysis(Object concreteResult, Object[] args);
 
-    public ConcolicInvokeVirtualNode(Method method, int top, int curBCI) {
+    public ConcolicInvokeVirtualNode(Method method, int top, int curBCI, Meta meta) {
         super(top, curBCI);
         assert !method.isStatic();
         this.method = method.getMethodVersion();
         this.resultAt = top - Signatures.slotsForParameters(method.getParsedSignature()) - 1; // -receiver
         this.returnsPrimitiveType = Types.isPrimitive(Signatures.returnType(method.getParsedSignature()));
         this.invokeVirtual = InvokeVirtualNodeGen.WithoutNullCheckNodeGen.create(method);
+        this.meta = meta;
     }
 
     @Override
@@ -58,12 +60,10 @@ public abstract class ConcolicInvokeVirtualNode extends QuickNode {
 
     public static final class StringEquals extends ConcolicInvokeVirtualNode {
 
-        private final Meta meta;
-
-        public StringEquals(Method method, int top, int curBCI, Meta meta) {
-            super(method, top, curBCI);
-            this.meta = meta;
+        public StringEquals(int top, int curBCI, Meta meta) {
+            super(meta.java_lang_String_equals, top, curBCI, meta);
         }
+
         @Override
         Object concolicAnalysis(Object concreteResult, Object[] args) {
             SPouT.log("concolic virtual node");

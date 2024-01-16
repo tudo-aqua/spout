@@ -2492,9 +2492,12 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
             }
             // @formatter:on
         }
-        if (resolved == getMeta().java_lang_String_equals) {
-            invoke = new ConcolicInvokeVirtualNode.StringEquals(resolved, top, curBCI, getMeta());
+
+        Meta meta = getMeta();
+        if (resolved.hasModel(meta)) {
+            invoke = SPouT.injectModel(resolved, meta, top, curBCI);
         }
+
         return invoke;
     }
 

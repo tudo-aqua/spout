@@ -40,6 +40,8 @@ import com.oracle.truffle.espresso.jdwp.api.KlassRef;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
+import com.oracle.truffle.espresso.nodes.concolic.ConcolicInvokeVirtualNode;
+import com.oracle.truffle.espresso.nodes.quick.QuickNode;
 import com.oracle.truffle.espresso.runtime.EspressoContext;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.concolic.ConcolicAnnotationAction;
@@ -142,6 +144,27 @@ public class SPouT {
             return false;
         }
     }
+
+    @CompilerDirectives.TruffleBoundary
+    public static int getModelId(Method method, Meta meta) {
+        Klass clazz = method.getDeclaringKlass();
+        if (clazz == meta.java_lang_String) {
+            if (method == meta.java_lang_String_equals) {
+                return 0;
+            }
+        }
+        return -1;
+    }
+
+    public static QuickNode injectModel(Method method, Meta meta, int top, int curBCI) {
+        switch (method.getModelId()) {
+            case 0: return new ConcolicInvokeVirtualNode.StringEquals(top, curBCI, getMeta());
+        }
+        stopRecordingWithoutMeta("unknown model");
+        // will not be reached
+        return null;
+    }
+
 
     @CompilerDirectives.TruffleBoundary
     public static Object[] processMethodCall(Object[] args, Method method, Meta meta) {
