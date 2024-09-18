@@ -33,31 +33,35 @@ public class Variable extends Atom {
         this.id = id;
     }
 
+    private String wrap(int id) {
+            return (id >= 0 ? "" + this.id : "taint" + -this.id);
+    }
+
     @Override
     public String toString() {
         switch (this.getType()) {
             case BOOL:
-                return "__bool_" + this.id;
+                return "__bool_" + wrap(this.id);
             case BYTE:
-                return "__byte_" + this.id;
+                return "__byte_" + wrap(this.id);
             case CHAR:
-                return "__char_" + this.id;
+                return "__char_" + wrap(this.id);
             case SHORT:
-                return "__short_" + this.id;
+                return "__short_" + wrap(this.id);
             case INT:
-                return "__int_" + this.id;
+                return "__int_" + wrap(this.id);
             case LONG:
-                return "__long_" + this.id;
+                return "__long_" + wrap(this.id);
             case FLOAT:
-                return "__float_" + this.id;
+                return "__float_" + wrap(this.id);
             case DOUBLE:
-                return "__double_" + this.id;
+                return "__double_" + wrap(this.id);
             case STRING:
-                return "__string_" + this.id;
+                return "__string_" + wrap(this.id);
             default:
                 return "Variable{" +
-                        "id=" + id +
-                        "id=" + id +
+                        "id=" + wrap(this.id) +
+                        "id=" + wrap(this.id) +
                         '}';
         }
 

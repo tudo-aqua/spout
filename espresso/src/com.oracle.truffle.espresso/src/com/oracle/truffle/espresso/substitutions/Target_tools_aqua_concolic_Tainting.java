@@ -26,6 +26,7 @@ package com.oracle.truffle.espresso.substitutions;
 
 
 import com.oracle.truffle.espresso.meta.JavaKind;
+import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.spout.AnnotatedValue;
 import tools.aqua.spout.SPouT;
@@ -77,13 +78,13 @@ public final class Target_tools_aqua_concolic_Tainting {
     }
 
     @Substitution(passAnnotations = false, methodName = "check")
-    public static void check_string(@JavaType(String.class) StaticObject o, int color) {
-        SPouT.checkTaintObject(o, color);
+    public static void check_string(@JavaType(String.class) StaticObject o, int color, @Inject Meta meta) {
+        SPouT.checkTaintObject(o, color, meta);
     }
 
     @Substitution(passAnnotations = false, methodName = "check")
-    public static void check_object(@JavaType(Object.class) StaticObject o, int color) {
-        SPouT.checkTaintObject(o, color);
+    public static void check_object(@JavaType(Object.class) StaticObject o, int color, @Inject Meta meta) {
+        SPouT.checkTaintObject(o, color, meta);
     }
 
     /*

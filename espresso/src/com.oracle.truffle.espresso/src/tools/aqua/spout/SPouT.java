@@ -37,10 +37,14 @@ import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.runtime.StaticObject;
+import tools.aqua.concolic.SymTaint;
+import tools.aqua.concolic.SymbolDeclaration;
 import tools.aqua.smt.ComplexExpression;
 import tools.aqua.smt.Constant;
 import tools.aqua.smt.Expression;
 import tools.aqua.smt.OperatorComparator;
+import tools.aqua.smt.Types;
+import tools.aqua.smt.Variable;
 import tools.aqua.taint.ColorUtil;
 import tools.aqua.taint.PostDominatorAnalysis;
 import tools.aqua.taint.Taint;
@@ -256,14 +260,77 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static void checkTaint(Object o, int color) {
-        if (!analyze || !config.hasTaintAnalysis()) return;
-        config.getTaintAnalysis().checkTaint(o instanceof AnnotatedValue ? (AnnotatedValue) o : null, color);
+        if (analyze && config.hasConcolicAnalysis()) {
+            Object conc = AnnotatedValue.value(o);
+            Expression symb = Annotations.annotation(AnnotatedValue.svalue(o), config.getConcolicIdx());
+            Expression e = null;
+            Variable v = null;
+            if (conc instanceof Boolean) {
+                v = new Variable(Types.BOOL, -color);
+                e = new ComplexExpression(OperatorComparator.BEQUIV, v, symb != null ?
+                        symb : Constant.fromConcreteValue((boolean) o));
+            } else if (conc instanceof Byte) {
+                v = new Variable(Types.BYTE, -color);
+                e = new ComplexExpression(OperatorComparator.BVEQ, v, symb != null ?
+                        symb : Constant.fromConcreteValue((byte) o));
+            } else if (conc instanceof Short) {
+                v = new Variable(Types.SHORT, -color);
+                e = new ComplexExpression(OperatorComparator.BVEQ, v, symb != null ?
+                        symb : Constant.fromConcreteValue((short) o));
+            } else if (conc instanceof Character) {
+                v = new Variable(Types.CHAR, -color);
+                e = new ComplexExpression(OperatorComparator.BVEQ, v, symb != null ?
+                        symb : Constant.fromConcreteValue((char) o));
+            } else if (conc instanceof Integer) {
+                v = new Variable(Types.INT, -color);
+                e = new ComplexExpression(OperatorComparator.BVEQ, v, symb != null ?
+                        symb : Constant.fromConcreteValue((int) o));
+            } else if (conc instanceof Float) {
+                v = new Variable(Types.FLOAT, -color);
+                e = new ComplexExpression(OperatorComparator.BVEQ, v, symb != null ?
+                        symb : Constant.fromConcreteValue((float) o));
+            } else if (conc instanceof Long) {
+                v = new Variable(Types.LONG, -color);
+                e = new ComplexExpression(OperatorComparator.BVEQ, v, symb != null ?
+                        symb : Constant.fromConcreteValue((long) o));
+            } else if (conc instanceof Double) {
+                v = new Variable(Types.DOUBLE,-color);
+                e = new ComplexExpression(OperatorComparator.FPEQ, v, symb != null ?
+                        symb : Constant.fromConcreteValue((double) o));
+            } else {
+                log("unsupported symbolic taint check!");
+            };
+            if (e != null) {
+                addToTrace(new SymbolDeclaration(v));
+                addToTrace(new SymTaint(e));
+            }
+        }
+        if (analyze && config.hasTaintAnalysis()) {
+            config.getTaintAnalysis().checkTaint(o instanceof AnnotatedValue ? (AnnotatedValue) o : null, color);
+        }
     }
 
     @CompilerDirectives.TruffleBoundary
-    public static void checkTaintObject(StaticObject o, int color) {
-        if (!analyze || !config.hasTaintAnalysis()) return;
-        config.getTaintAnalysis().checkTaintObject(o, color);
+    public static void checkTaintObject(StaticObject o, int color, Meta meta) {
+        if (analyze && config.hasConcolicAnalysis()) {
+            Expression symb = Annotations.annotation(Annotations.objectAnnotation(o), config.getConcolicIdx());
+            Expression e = null;
+            Variable v = null;
+            if (o.isString()) {
+                v = new Variable(Types.STRING, -color);
+                e = new ComplexExpression(OperatorComparator.STRINGEQ, v, symb != null ?
+                        symb : Constant.fromConcreteValue( meta.toHostString(o)));
+            } else {
+                log("unsupported symbolic taint check!");
+            };
+            if (e != null) {
+                addToTrace(new SymbolDeclaration(v));
+                addToTrace(new SymTaint(e));
+            }
+        }
+        if (analyze && config.hasTaintAnalysis()) {
+            config.getTaintAnalysis().checkTaintObject(o, color);
+        }
     }
 
     public static void nextBytecode(VirtualFrame frame, BytecodeNode bcn, int bci) {
