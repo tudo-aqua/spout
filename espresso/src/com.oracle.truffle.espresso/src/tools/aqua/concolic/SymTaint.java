@@ -18,7 +18,7 @@ public class SymTaint extends TraceElement {
 
     @Override
     public String toString() {
-        return "[SYMTAINT] (check=" + condition + ")";
+        return "[SYMTAINT] (assert " + condition + ")";
     }
 
 }
