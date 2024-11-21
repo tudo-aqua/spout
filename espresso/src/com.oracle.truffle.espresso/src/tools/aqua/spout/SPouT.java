@@ -331,7 +331,7 @@ public class SPouT {
             Expression e = null;
             Variable v = null;
             if (o.isString()) {
-                v = new Variable(Types.STRING, -color);
+                v = new Variable(Types.STRING, nextColorVar(color));
                 e = new ComplexExpression(OperatorComparator.STRINGEQ, v, symb != null ?
                         symb : Constant.fromConcreteValue( meta.toHostString(o)));
             } else {
