@@ -54,6 +54,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.TreeMap;
 
 import static com.oracle.truffle.espresso.bytecode.Bytecodes.*;
 import static com.oracle.truffle.espresso.nodes.BytecodeNode.*;
@@ -266,35 +267,35 @@ public class SPouT {
             Expression e = null;
             Variable v = null;
             if (conc instanceof Boolean) {
-                v = new Variable(Types.BOOL, -color);
+                v = new Variable(Types.BOOL, nextColorVar(color));
                 e = new ComplexExpression(OperatorComparator.BEQUIV, v, symb != null ?
                         symb : Constant.fromConcreteValue((boolean) o));
             } else if (conc instanceof Byte) {
-                v = new Variable(Types.BYTE, -color);
+                v = new Variable(Types.BYTE, nextColorVar(color));
                 e = new ComplexExpression(OperatorComparator.BVEQ, v, symb != null ?
                         symb : Constant.fromConcreteValue((byte) o));
             } else if (conc instanceof Short) {
-                v = new Variable(Types.SHORT, -color);
+                v = new Variable(Types.SHORT, nextColorVar(color));
                 e = new ComplexExpression(OperatorComparator.BVEQ, v, symb != null ?
                         symb : Constant.fromConcreteValue((short) o));
             } else if (conc instanceof Character) {
-                v = new Variable(Types.CHAR, -color);
+                v = new Variable(Types.CHAR, nextColorVar(color));
                 e = new ComplexExpression(OperatorComparator.BVEQ, v, symb != null ?
                         symb : Constant.fromConcreteValue((char) o));
             } else if (conc instanceof Integer) {
-                v = new Variable(Types.INT, -color);
+                v = new Variable(Types.INT, nextColorVar(color));
                 e = new ComplexExpression(OperatorComparator.BVEQ, v, symb != null ?
                         symb : Constant.fromConcreteValue((int) o));
             } else if (conc instanceof Float) {
-                v = new Variable(Types.FLOAT, -color);
+                v = new Variable(Types.FLOAT, nextColorVar(color));
                 e = new ComplexExpression(OperatorComparator.BVEQ, v, symb != null ?
                         symb : Constant.fromConcreteValue((float) o));
             } else if (conc instanceof Long) {
-                v = new Variable(Types.LONG, -color);
+                v = new Variable(Types.LONG, nextColorVar(color));
                 e = new ComplexExpression(OperatorComparator.BVEQ, v, symb != null ?
                         symb : Constant.fromConcreteValue((long) o));
             } else if (conc instanceof Double) {
-                v = new Variable(Types.DOUBLE,-color);
+                v = new Variable(Types.DOUBLE,nextColorVar(color));
                 e = new ComplexExpression(OperatorComparator.FPEQ, v, symb != null ?
                         symb : Constant.fromConcreteValue((double) o));
             } else {
@@ -308,6 +309,19 @@ public class SPouT {
         if (analyze && config.hasTaintAnalysis()) {
             config.getTaintAnalysis().checkTaint(o instanceof AnnotatedValue ? (AnnotatedValue) o : null, color);
         }
+    }
+
+    private static TreeMap<Integer, Integer> colorVars = new TreeMap<>();
+
+    @CompilerDirectives.TruffleBoundary
+    private static int nextColorVar(int color) {
+        Integer prev = colorVars.get(color);
+        if (prev == null) {
+            prev = color * 100;
+        }
+        prev++;
+        colorVars.put(color, prev);
+        return -prev;
     }
 
     @CompilerDirectives.TruffleBoundary
