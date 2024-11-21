@@ -87,10 +87,9 @@ public final class Target_tools_aqua_concolic_Tainting {
         SPouT.checkTaintObject(o, color, meta);
     }
 
-    /*
+
     @Substitution(hasReceiver = false)
     public static void stopAnalysis() {
-        TaintAnalysis.stopTaintAnalysis();
+        SPouT.stopAnalysis();
     }
- */
 }

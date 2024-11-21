@@ -104,7 +104,7 @@ public class SPouT {
         System.out.flush();
     }
 
-    private static void stopAnalysis() {
+    public static void stopAnalysis() {
         if (analyze) {
             analyze = false;
             //FIXME: analysis.terminate();
