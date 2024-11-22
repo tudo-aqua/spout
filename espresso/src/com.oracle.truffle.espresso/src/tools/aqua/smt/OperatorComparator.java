@@ -153,7 +153,18 @@ public enum OperatorComparator {
     BV2NAT,
     NATADD,
     NATMINUS,
-    SLT, NAT2BV16;
+    SLT,
+    NAT2BV16,
+    MATHSIN,
+    MATHCOS,
+    MATHTAN,
+    MATHATAN,
+    MATHEXP,
+    MATHSQRT,
+    MATHARCSIN,
+    MATHARCCOS;
+
+
 
 
     @Override
@@ -347,6 +358,22 @@ public enum OperatorComparator {
                 return "+";
             case NATMINUS:
                 return "-";
+            case MATHTAN:
+                return "TAN";
+            case MATHCOS:
+                return "COS";
+            case MATHEXP:
+                return "EXP";
+            case MATHSIN:
+                return "SIN";
+            case MATHATAN:
+                return "ATAN";
+            case MATHSQRT:
+                return "SQRT";
+            case MATHARCCOS:
+                return "ARCCOS";
+            case MATHARCSIN:
+                return "ARCSIN";
 
             default:
                 return super.toString();

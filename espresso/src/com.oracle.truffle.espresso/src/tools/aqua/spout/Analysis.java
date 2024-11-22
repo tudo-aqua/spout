@@ -316,6 +316,16 @@ public interface Analysis<T> {
                               int[] vals, int key, T a1) {
     }
 
+    // Math
+    default  T mathSin(double c, T s){return  null;}
+    default  T mathCos(double c, T s){return  null;}
+    default  T mathSqrt(double c, T s){return  null;}
+    default  T mathExp(double c, T s){return  null;}
+    default  T mathTan(double c, T s){return  null;}
+    default  T mathArcSin(double c, T s){return  null;}
+    default  T mathArcCos(double c, T s){return  null;}
+    default  T mathArcTan(double c, T s){return  null;}
+
     // Strings
     default T stringLength(int c, T s) { return null; }
 

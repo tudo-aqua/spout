@@ -614,6 +614,14 @@ public class TaintAnalysis implements Analysis<Taint> {
         }
     }
 
+    // Math
+
+    @Override
+    public Taint mathSin(double c, Taint s) {
+        return ColorUtil.joinColors(s, ifTaint);
+    }
+
+
     // Strings
 
     @Override

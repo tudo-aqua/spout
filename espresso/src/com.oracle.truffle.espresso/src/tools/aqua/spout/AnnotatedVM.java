@@ -24,6 +24,7 @@
 
 package tools.aqua.spout;
 
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.EspressoLanguage;
 import com.oracle.truffle.espresso.impl.Field;
@@ -141,6 +142,7 @@ public class AnnotatedVM {
     //
     // method arguments
 
+    @CompilerDirectives.TruffleBoundary
     public static Object[] deAnnotateArguments(Object[] args, Method method) {
         for (int i=0; i<args.length; i++) {
             if (args[i] instanceof AnnotatedValue) {

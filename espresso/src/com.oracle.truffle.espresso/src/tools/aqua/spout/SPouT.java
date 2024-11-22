@@ -1251,7 +1251,91 @@ public class SPouT {
         Annotations a = analysis.isNull(object, Annotations.objectAnnotation(object), isNull);
         AnnotatedVM.putAnnotations(frame, top, a);
     }
+    // ---------------------------------------------------------------------------
+    //
+    // Annotations required for java.lang.Math
 
+//    @CompilerDirectives.TruffleBoundary
+    public static Object mathSin(Object a, Meta meta) {
+//        double concreteValue = AnnotatedValue.value(pDouble);
+//        Annotations symPDouble = AnnotatedValue.svalue(pDouble);
+//        double concreteResult = Math.sin(concreteValue);
+//        if(analyze && symPDouble != null){
+//            return new AnnotatedValue(concreteResult, analysis.mathSin(concreteValue, symPDouble));
+//        }
+//        else return concreteResult;
+        debug("Math sin called", AnnotatedValue.svalue(a));
+        if(AnnotatedValue.svalue(a) != null){
+            debug("Analysis stopped");
+            stopRecording("Math.sin is not symbolically implemented yet", meta);}
+        return Math.sin((double) a);
+    }
+
+//    @CompilerDirectives.TruffleBoundary
+    public static Object mathCos(Object a, Meta meta) {
+        if(AnnotatedValue.svalue(a) != null) stopRecording("Math.cos is not symbolically implemented yet", meta);
+        return Math.cos((double) a);
+    }
+
+//    @CompilerDirectives.TruffleBoundary
+    public static Object mathArcCos(Object a, Meta meta) {
+        if(AnnotatedValue.svalue(a) != null) stopRecording("Math.acos is not symbolically implemented yet", meta);
+        return Math.acos((double) a);
+    }
+
+//    @CompilerDirectives.TruffleBoundary
+    public static Object mathArcSin(Object a, Meta meta) {
+        if(AnnotatedValue.svalue(a) != null) stopRecording("Math.asin is not symbolically implemented yet", meta);
+        return Math.asin((double) a);
+    }
+
+//    @CompilerDirectives.TruffleBoundary
+    public static Object mathTan(Object a, Meta meta) {
+        if(AnnotatedValue.svalue(a) != null) stopRecording("Math.tan is not symbolically implemented yet", meta);
+        return Math.tan((double) a);
+    }
+
+//    @CompilerDirectives.TruffleBoundary
+    public static Object mathATan(Object a, Meta meta) {
+        if(AnnotatedValue.svalue(a) != null) stopRecording("Math.atan is not symbolically implemented yet", meta);
+        return Math.atan((double) a);
+    }
+
+//    @CompilerDirectives.TruffleBoundary
+    public static Object mathSqrt(Object a, Meta meta) {
+        if(AnnotatedValue.svalue(a) != null) stopRecording("Math.sqrt is not symbolically implemented yet", meta);
+        return Math.sqrt((double) a);
+    }
+
+//    @CompilerDirectives.TruffleBoundary
+    public static Object mathExp(Object a, Meta meta) {
+        if(AnnotatedValue.svalue(a) != null) stopRecording("Math.exp is not symbolically implemented yet", meta);
+        return Math.exp((double) a);
+    }
+
+//    @CompilerDirectives.TruffleBoundary
+    public static Object mathRoundF(Object a, Meta meta) {
+        if(AnnotatedValue.svalue(a) != null) stopRecording("Cannot round floats", meta);
+        return Math.round((float) a);
+    }
+
+//    @CompilerDirectives.TruffleBoundary
+    public static Object mathRoundD(Object a, Meta meta) {
+        if(AnnotatedValue.svalue(a) != null) stopRecording("Cannot round double", meta);
+        return Math.round((double) a);
+    }
+
+//    @CompilerDirectives.TruffleBoundary
+    public static double mathLog10(Object a, Meta meta) {
+        if(AnnotatedValue.svalue(a) != null) stopRecording("Math.log10 is not symbolically implemented yet", meta);
+        return Math.log10((double) a);
+    }
+
+    //@CompilerDirectives.TruffleBoundary
+    public static double mathLog(Object a, Meta meta) {
+        if(AnnotatedValue.svalue(a) != null) stopRecording("Math.log is not symbolically implemented yet", meta);
+        return Math.log((double) a);
+    }
 
     // --------------------------------------------------------------------------
     //

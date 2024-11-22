@@ -862,6 +862,56 @@ public class MetaAnalysis implements Analysis<Annotations> {
         }
     }
 
+    // Math
+
+    @Override
+    public Annotations mathSin(double c, Annotations s){
+        if (s == null) return null;
+        return dexecute(c, s, Analysis::mathSin);
+    }
+
+    @Override
+    public Annotations mathCos(double c, Annotations s) {
+        if (s == null) return null;
+        return dexecute(c, s, Analysis::mathCos);
+    }
+
+    @Override
+    public Annotations mathSqrt(double c, Annotations s) {
+        if (s == null) return null;
+        return dexecute(c, s, Analysis::mathSqrt);
+    }
+
+    @Override
+    public Annotations mathExp(double c, Annotations s) {
+        if (s == null) return null;
+        return dexecute(c, s, Analysis::mathExp);
+    }
+
+    @Override
+    public Annotations mathTan(double c, Annotations s) {
+        if (s == null) return null;
+        return dexecute(c, s, Analysis::mathTan);
+    }
+
+    @Override
+    public Annotations mathArcSin(double c, Annotations s) {
+        if (s == null) return null;
+        return dexecute(c, s, Analysis::mathArcSin);
+    }
+
+    @Override
+    public Annotations mathArcCos(double c, Annotations s) {
+        if (s == null) return null;
+        return dexecute(c, s, Analysis::mathArcCos);
+    }
+
+    @Override
+    public Annotations mathArcTan(double c, Annotations s) {
+        if (s == null) return null;
+        return dexecute(c, s, Analysis::mathArcTan);
+    }
+
     // Strings
 
     @Override

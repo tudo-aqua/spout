@@ -854,6 +854,48 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                 new ComplexExpression(OperatorComparator.BAND, subExpr), vals.length, vals.length + 1));
     }
 
+    // java.lang.Math
+
+    @Override
+    public Expression mathSin(double c, Expression s) {
+        return new ComplexExpression(MATHSIN, s);
+    }
+
+    @Override
+    public Expression mathCos(double c, Expression s) {
+        return new ComplexExpression(MATHCOS, s);
+    }
+
+    @Override
+    public Expression mathSqrt(double c, Expression s) {
+        return new ComplexExpression(MATHSQRT, s);
+    }
+
+    @Override
+    public Expression mathExp(double c, Expression s) {
+        return new ComplexExpression(MATHEXP, s);
+    }
+
+    @Override
+    public Expression mathTan(double c, Expression s) {
+        return new ComplexExpression(MATHTAN, s);
+    }
+
+    @Override
+    public Expression mathArcSin(double c, Expression s) {
+        return new ComplexExpression(MATHARCSIN, s);
+    }
+
+    @Override
+    public Expression mathArcCos(double c, Expression s) {
+        return new ComplexExpression(MATHARCCOS, s);
+    }
+
+    @Override
+    public Expression mathArcTan(double c, Expression s) {
+        return new ComplexExpression(MATHATAN, s);
+    }
+
     //__________________________________________________________________
     // Concolic String library
     //__________________________________________________________________
