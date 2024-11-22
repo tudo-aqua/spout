@@ -109,13 +109,13 @@ public final class Target_java_lang_Math {
         return Math.rint(a);
     }
 
-    @Substitution
-    public static double atan2(@JavaType(internalName = "D") Object y, @JavaType(internalName = "D") Object x, @Inject Meta meta) {
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "D") Object atan2(@JavaType(internalName = "D") Object y, @JavaType(internalName = "D") Object x, @Inject Meta meta) {
         return SPouT.mathATan2(y, x, meta);
     }
 
-    @Substitution
-    public static double pow(@JavaType(internalName = "D") Object a, @JavaType(internalName = "D") Object b, @Inject Meta meta) {
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "D") Object pow(@JavaType(internalName = "D") Object a, @JavaType(internalName = "D") Object b, @Inject Meta meta) {
         return SPouT.mathPow(a, b, meta);
     }
 
