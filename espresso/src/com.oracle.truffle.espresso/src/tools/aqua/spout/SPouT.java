@@ -1337,6 +1337,16 @@ public class SPouT {
         return Math.log((double) a);
     }
 
+    public static double mathPow(Object a, Object b, Meta meta) {
+        if(AnnotatedValue.svalue(a) != null || AnnotatedValue.svalue(b) != null) stopRecording("Math.pow is not symbolically implemented yet", meta);
+        return Math.log((double) a);
+    }
+
+    public static double mathATan2(Object a, Object b, Meta meta) {
+        if(AnnotatedValue.svalue(a) != null || AnnotatedValue.svalue(b) != null) stopRecording("Math.atan2 is not symbolically implemented yet", meta);
+        return Math.log((double) a);
+    }
+
     // --------------------------------------------------------------------------
     //
     // The String Library

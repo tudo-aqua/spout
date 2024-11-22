@@ -110,13 +110,13 @@ public final class Target_java_lang_Math {
     }
 
     @Substitution
-    public static double atan2(double y, double x) {
-        return Math.atan2(y, x);
+    public static double atan2(@JavaType(internalName = "D") Object y, @JavaType(internalName = "D") Object x, @Inject Meta meta) {
+        return SPouT.mathATan2(y, x, meta);
     }
 
     @Substitution
-    public static double pow(double a, double b) {
-        return Math.pow(a, b);
+    public static double pow(@JavaType(internalName = "D") Object a, @JavaType(internalName = "D") Object b, @Inject Meta meta) {
+        return SPouT.mathPow(a, b, meta);
     }
 
     @Substitution(passAnnotations = true, methodName = "round")
