@@ -2059,7 +2059,7 @@ public class SPouT {
             if (intCache == null) {
                 initIntCache();
             }
-            o = intCache[128 - v];
+            o = intCache[128 + v];
         }
         return o;
     }
