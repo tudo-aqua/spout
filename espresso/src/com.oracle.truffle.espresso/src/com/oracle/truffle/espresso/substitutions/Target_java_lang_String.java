@@ -3,7 +3,6 @@ package com.oracle.truffle.espresso.substitutions;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.runtime.StaticObject;
-import tools.aqua.spout.AnnotatedValue;
 import tools.aqua.spout.SPouT;
 
 import java.util.Locale;
@@ -145,7 +144,7 @@ public final class Target_java_lang_String {
     @Substitution(methodName = "valueOf", passAnnotations = true)
     @CompilerDirectives.TruffleBoundary
     public static @JavaType(String.class) StaticObject valueOf_int(@JavaType(internalName = "I") Object v, @Inject Meta meta) {
-        return SPouT.valueOf_int(v, meta);
+        return SPouT.string_valueOf_int(v, meta);
     }
 
     @Substitution(methodName = "valueOf", passAnnotations = true)

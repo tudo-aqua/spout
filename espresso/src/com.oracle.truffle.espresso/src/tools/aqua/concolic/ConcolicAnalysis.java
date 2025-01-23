@@ -43,6 +43,7 @@ import static tools.aqua.smt.OperatorComparator.*;
 import static tools.aqua.smt.OperatorComparator.D2F;
 import static tools.aqua.smt.OperatorComparator.F2D;
 import static tools.aqua.smt.OperatorComparator.I2L;
+import static tools.aqua.smt.OperatorComparator.IOR;
 import static tools.aqua.smt.OperatorComparator.IADD;
 import static tools.aqua.smt.OperatorComparator.IOR;
 import static tools.aqua.smt.OperatorComparator.ISHR;
@@ -808,6 +809,54 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
         PathCondition pc = new PathCondition(expr, takeBranch ? FAILURE : SUCCESS, BINARY_SPLIT);
         trace.addElement(pc);
+    }
+
+    @Override
+    public void takeBranchRef2(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, StaticObject c1, StaticObject c2, Expression a1, Expression a2) {
+        if ((a1 == null) && (a2 == null)) {
+            return;
+        }
+
+        Expression expr = null;
+        Meta meta = bcn.getMeta();
+
+        // special case: cached Integer
+        if (meta.java_lang_Integer.equals(c1.getKlass()) &&
+                meta.java_lang_Integer.equals(c1.getKlass())) {
+
+            Expression e1 = c1 == null ? null : Annotations.annotation(
+                    AnnotatedVM.getFieldAnnotation(c1, meta.java_lang_Integer_value), config.getConcolicIdx());
+            Expression e2 = c2 == null ? null : Annotations.annotation(
+                    AnnotatedVM.getFieldAnnotation(c2, meta.java_lang_Integer_value), config.getConcolicIdx());
+
+            if (e1 != null || e2 != null) {
+
+                int int1 = meta.java_lang_Integer_value.getInt(c1);
+                int int2 = meta.java_lang_Integer_value.getInt(c1);
+
+                e1 = e1 == null ? Expression.fromConstant(Types.INT, int1) : e1;
+                e2 = e2 == null ? Expression.fromConstant(Types.INT, int1) : e2;
+
+                expr = new ComplexExpression(BAND,
+                        new ComplexExpression(BVEQ, e1, e2),
+                        new ComplexExpression(BVLE, Expression.fromConstant(Types.INT, 127), e1),
+                        new ComplexExpression(BVLE, e1, Expression.fromConstant(Types.INT, 127)));
+
+                if (int1 == int2 && -128 <= int1 && int1 <= 127) {
+                    if (opcode == IF_ACMPNE) {
+                        expr = new ComplexExpression(BNEG, expr);
+                    }
+                } else {
+                    if (opcode == IF_ACMPEQ) {
+                        expr = new ComplexExpression(BNEG, expr);
+                    }
+                }
+                PathCondition pc = new PathCondition(expr, takeBranch ? FAILURE : SUCCESS, BINARY_SPLIT);
+                trace.addElement(pc);
+            }
+            // nothing to trace symbolically
+        }
+        // TODO: general object equality not handled currently
     }
 
     @Override

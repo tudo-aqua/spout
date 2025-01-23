@@ -1205,20 +1205,39 @@ public class SPouT {
         assert IF_ACMPEQ <= opcode && opcode <= IF_ACMPNE;
         boolean result;
         // @formatter:off
-        switch (opcode) {
-            case IF_ACMPEQ : result =  operand1 == operand2; break;
-            case IF_ACMPNE : result =  operand1 != operand2; break;
-            default        :
-                CompilerDirectives.transferToInterpreterAndInvalidate();
-                throw EspressoError.shouldNotReachHere("expecting IF_ACMPEQ,IF_ACMPNE");
-        }
-        // @formatter:on
+        if (!analyze) {
+            switch (opcode) {
+                case IF_ACMPEQ : result =  operand1 == operand2; break;
+                case IF_ACMPNE : result =  operand1 != operand2; break;
+                default        :
+                    CompilerDirectives.transferToInterpreterAndInvalidate();
+                    throw EspressoError.shouldNotReachHere("expecting IF_ACMPEQ,IF_ACMPNE");
+            }
+        } else {
+            CompilerDirectives.transferToInterpreterAndInvalidate();
+            Meta meta = getMeta();
+            if (operand1 != operand2) {
+                if (meta.java_lang_Integer.equals(operand1.getKlass()) &&
+                        meta.java_lang_Integer.equals(operand2.getKlass())) {
 
-        if (analyze) {
+                    int int1 = meta.java_lang_Integer_value.getInt(operand1);
+                    int int2 = meta.java_lang_Integer_value.getInt(operand2);
+
+                    if (int1 == int2 && int1 >= -128 && int1 <= 127) {
+                        result = (opcode == IF_ACMPEQ);
+                    } else {
+                        result = (opcode != IF_ACMPEQ);
+                    }
+                } else {
+                    result = (opcode != IF_ACMPEQ);
+                }
+            } else {
+                result = (opcode == IF_ACMPEQ);
+            }
             analysis.takeBranchRef2(frame, bcn, bci, opcode, result, operand1, operand2,
                     Annotations.objectAnnotation(operand1), Annotations.objectAnnotation(operand2));
         }
-
+        // @formatter:on
         return result;
     }
 
@@ -2007,13 +2026,42 @@ public class SPouT {
         return meta.toGuestString(ret);
     }
 
-    public static StaticObject valueOf_int(Object v, Meta meta) {
+    public static StaticObject string_valueOf_int(Object v, Meta meta) {
         if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
             stopRecording("concolic type conversion from int to string not supported, yet.", meta);
         }
 
         String ret = "" + (int) AnnotatedValue.value(v);
         return meta.toGuestString(ret);
+    }
+
+    private static StaticObject[] intCache;
+    private static void initIntCache() {
+        Meta meta = getMeta();
+        intCache = new StaticObject[256];
+        for (int i=-128; i <= 127; i++) {
+            StaticObject o = meta.java_lang_Integer.allocateInstance();
+            meta.java_lang_Integer_value.set(o, AnnotatedValue.value(i));
+            intCache[128 + i] = o;
+        }
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static StaticObject integer_valueOf_int(Object i, Meta meta) {
+        StaticObject o;
+        int v =  AnnotatedValue.value(i);
+        if (analyze || v < -128 || 127 < v)  {
+            o = meta.java_lang_Integer.allocateInstance();
+            meta.java_lang_Integer_value.set(o, AnnotatedValue.value(i));
+            AnnotatedVM.setFieldAnnotation(o, meta.java_lang_Integer_value,
+                    AnnotatedValue.svalue(i));
+        } else {
+            if (intCache == null) {
+                initIntCache();
+            }
+            o = intCache[128 - v];
+        }
+        return o;
     }
 
     public static StaticObject valueOf_long(Object v, Meta meta) {
