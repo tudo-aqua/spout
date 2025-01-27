@@ -253,7 +253,7 @@ public enum OperatorComparator {
                 return "=";
             case BVNE:
             case STRINGNE:
-                return "!=";
+                return "distinct";
             case BVGT:
                 return "bvsgt";
             case BVGE:
