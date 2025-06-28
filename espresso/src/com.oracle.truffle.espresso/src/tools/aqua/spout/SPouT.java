@@ -611,7 +611,7 @@ public class SPouT {
 
     private static void checkNotZero(VirtualFrame frame, long c1, Annotations a, BytecodeNode bcn, int bci) {
         if (analyze) {
-            analysis.checkNotZeroInt(frame, bcn, bci, c1 == 0L, a);
+            analysis.checkNotZeroLong(frame, bcn, bci, c1 == 0L, a);
         }
         if (c1 == 0L) {
             bcn.enterImplicitExceptionProfile();
