@@ -621,6 +621,25 @@ public class TaintAnalysis implements Analysis<Taint> {
         return ColorUtil.joinColors(s, ifTaint);
     }
 
+    @Override
+    public Taint mathAbs(int c, Taint s) {
+        return  ColorUtil.joinColors(s, ifTaint);
+    }
+
+    @Override
+    public Taint mathAbs(long c, Taint s) {
+        return ColorUtil.joinColors(s, ifTaint);
+    }
+
+    @Override
+    public Taint mathAbs(float c, Taint s) {
+        return ColorUtil.joinColors(s, ifTaint);
+    }
+
+    @Override
+    public Taint mathAbs(double c, Taint s) {
+        return ColorUtil.joinColors(s, ifTaint);
+    }
 
     // Strings
 

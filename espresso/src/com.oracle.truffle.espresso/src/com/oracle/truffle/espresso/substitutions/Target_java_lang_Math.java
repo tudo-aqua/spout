@@ -22,6 +22,7 @@
  */
 package com.oracle.truffle.espresso.substitutions;
 
+import com.oracle.truffle.espresso.classfile.constantpool.MethodTypeConstant;
 import com.oracle.truffle.espresso.meta.Meta;
 import tools.aqua.spout.SPouT;
 
@@ -129,24 +130,24 @@ public final class Target_java_lang_Math {
         return SPouT.mathRoundD(a, meta);
     }
 
-    @Substitution
-    public static int abs(int a) {
-        return Math.abs(a);
+    @Substitution(passAnnotations = true, methodName = "abs")
+    public static @JavaType(internalName = "I") Object absInt(@JavaType(internalName = "I") Object a) {
+        return SPouT.mathAbsInt(a);
     }
 
-    @Substitution
-    public static long abs(long a) {
-        return Math.abs(a);
+    @Substitution(passAnnotations = true, methodName = "abs")
+    public static @JavaType(internalName = "J") Object absLong(@JavaType(internalName = "J") Object a) {
+        return SPouT.mathAbsLong(a);
     }
 
-    @Substitution
-    public static float abs(float a) {
-        return Math.abs(a);
+    @Substitution(passAnnotations = true, methodName = "abs")
+    public static @JavaType(internalName = "F") Object absFloat(@JavaType(internalName = "F") Object a) {
+        return SPouT.mathAbsFloat(a);
     }
 
-    @Substitution
-    public static double abs(double a) {
-        return Math.abs(a);
+    @Substitution(passAnnotations = true, methodName = "abs")
+    public static @JavaType(internalName = "D") Object absDouble(@JavaType(internalName = "D") Object a) {
+        return SPouT.mathAbsDouble(a);
     }
 
     @Substitution

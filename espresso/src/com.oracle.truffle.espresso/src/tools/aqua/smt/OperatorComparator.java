@@ -162,7 +162,8 @@ public enum OperatorComparator {
     MATHEXP,
     MATHSQRT,
     MATHARCSIN,
-    MATHARCCOS;
+    MATHARCCOS,
+    FPABS;
 
 
 
@@ -374,6 +375,9 @@ public enum OperatorComparator {
                 return "ARCCOS";
             case MATHARCSIN:
                 return "ARCSIN";
+            case FPABS:
+                return "fp.abs";
+
 
             default:
                 return super.toString();

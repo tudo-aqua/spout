@@ -895,6 +895,26 @@ public class MetaAnalysis implements Analysis<Annotations> {
     }
 
     @Override
+    public Annotations mathAbs(int c, Annotations s) {
+        return execute(c, s, Analysis::mathAbs);
+    }
+
+    @Override
+    public Annotations mathAbs(long c, Annotations s) {
+        return lexecute(c, s, Analysis::mathAbs);
+    }
+
+    @Override
+    public Annotations mathAbs(float c, Annotations s) {
+        return fexecute(c, s, Analysis::mathAbs);
+    }
+
+    @Override
+    public Annotations mathAbs(double c, Annotations s) {
+        return dexecute(c, s, Analysis::mathAbs);
+    }
+
+    @Override
     public Annotations mathArcSin(double c, Annotations s) {
         if (s == null) return null;
         return dexecute(c, s, Analysis::mathArcSin);

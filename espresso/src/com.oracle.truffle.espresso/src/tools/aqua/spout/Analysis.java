@@ -317,6 +317,10 @@ public interface Analysis<T> {
     }
 
     // Math
+    default  T mathAbs(int c, T s){return  null;}
+    default  T mathAbs(long c, T s){return  null;}
+    default  T mathAbs(float c, T s){return  null;}
+    default  T mathAbs(double c, T s){return  null;}
     default  T mathSin(double c, T s){return  null;}
     default  T mathCos(double c, T s){return  null;}
     default  T mathSqrt(double c, T s){return  null;}

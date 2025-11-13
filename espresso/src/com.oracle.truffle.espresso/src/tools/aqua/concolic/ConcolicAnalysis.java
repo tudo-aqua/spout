@@ -43,8 +43,14 @@ import static tools.aqua.smt.OperatorComparator.*;
 import static tools.aqua.smt.OperatorComparator.D2F;
 import static tools.aqua.smt.OperatorComparator.F2D;
 import static tools.aqua.smt.OperatorComparator.I2L;
+import static tools.aqua.smt.OperatorComparator.IADD;
+import static tools.aqua.smt.OperatorComparator.IOR;
+import static tools.aqua.smt.OperatorComparator.ISHR;
 import static tools.aqua.smt.OperatorComparator.L2D;
 import static tools.aqua.smt.OperatorComparator.L2F;
+import static tools.aqua.smt.OperatorComparator.LADD;
+import static tools.aqua.smt.OperatorComparator.LOR;
+import static tools.aqua.smt.OperatorComparator.LSHR;
 import static tools.aqua.smt.Types.LONG;
 
 public class ConcolicAnalysis implements Analysis<Expression> {
@@ -152,12 +158,12 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression iadd(int c1, int c2, Expression a1, Expression a2) {
-        return binarySymbolicOp(OperatorComparator.IADD, Types.INT, c1, c2, a1, a2);
+        return binarySymbolicOp(IADD, Types.INT, c1, c2, a1, a2);
     }
 
     @Override
     public Expression ladd(long c1, long c2, Expression a1, Expression a2) {
-        return binarySymbolicOp(OperatorComparator.LADD, LONG, c1, c2, a1, a2);
+        return binarySymbolicOp(LADD, LONG, c1, c2, a1, a2);
     }
 
     @Override
@@ -195,7 +201,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         Expression sym = null;
         if (s1 != null) {
             Constant symbIncr = Constant.fromConcreteValue(incr);
-            sym = new ComplexExpression(OperatorComparator.IADD, s1, symbIncr);
+            sym = new ComplexExpression(IADD, s1, symbIncr);
         }
         return sym;
     }
@@ -273,7 +279,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                     convertCharToInt(a1) : Constant.fromConcreteValue(c1), INT_0x3F));
         }
         a2 = convertCharToInt(a2);
-        return binarySymbolicOp(OperatorComparator.LSHR, LONG, Types.INT, c2, c1, a2, a1);
+        return binarySymbolicOp(LSHR, LONG, Types.INT, c2, c1, a2, a1);
     }
 
 
@@ -294,7 +300,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             a1 = new ComplexExpression(OperatorComparator.IAND, convertCharToInt(a1), INT_0x1F);
         }
         a2 = convertCharToInt(a2);
-        return binarySymbolicOp(OperatorComparator.ISHR, Types.INT, c2, c1, a2, a1);
+        return binarySymbolicOp(ISHR, Types.INT, c2, c1, a2, a1);
     }
 
     @Override
@@ -537,7 +543,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression ior(int c1, int c2, Expression a1, Expression a2) {
-        return binarySymbolicOp(OperatorComparator.IOR, Types.INT, c1, c2, a1, a2);
+        return binarySymbolicOp(IOR, Types.INT, c1, c2, a1, a2);
     }
 
     @Override
@@ -552,7 +558,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression lor(long c1, long c2, Expression a1, Expression a2) {
-        return binarySymbolicOp(OperatorComparator.LOR, LONG, c1, c2, a1, a2);
+        return binarySymbolicOp(LOR, LONG, c1, c2, a1, a2);
     }
 
     @Override
@@ -894,6 +900,30 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     @Override
     public Expression mathArcTan(double c, Expression s) {
         return new ComplexExpression(MATHATAN, s);
+    }
+
+    @Override
+    public Expression mathAbs(int c, Expression s) {
+        ComplexExpression res = new ComplexExpression(ISHR, s, Constant.fromConcreteValue(31));
+        ComplexExpression addRes = new ComplexExpression(IADD, res, s);
+        return new ComplexExpression(IOR, res, addRes);
+    }
+
+    @Override
+    public Expression mathAbs(long c, Expression s) {
+        ComplexExpression res = new ComplexExpression(LSHR, s, Constant.fromConcreteValue(63));
+        ComplexExpression addRes = new ComplexExpression(LADD, res, s);
+        return new ComplexExpression(LOR, res, addRes);
+    }
+
+    @Override
+    public Expression mathAbs(float c, Expression s) {
+        return new ComplexExpression(FPABS, s);
+    }
+
+    @Override
+    public Expression mathAbs(double c, Expression s) {
+        return new ComplexExpression(FPABS, s);
     }
 
     //__________________________________________________________________

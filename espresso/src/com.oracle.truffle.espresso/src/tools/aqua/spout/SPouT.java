@@ -179,7 +179,7 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static Object nextSymbolicLong() {
-        if (!analyze || !config.hasConcolicAnalysis()) return 0;
+        if (!analyze || !config.hasConcolicAnalysis()) return 0l;
         Object av = config.getConcolicAnalysis().nextSymbolicLong();
         gwit.trackLocationForWitness("" + (long) ((AnnotatedValue) av).getValue() + "L");
         return av;
@@ -187,7 +187,7 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static Object nextSymbolicFloat() {
-        if (!analyze || !config.hasConcolicAnalysis()) return 0;
+        if (!analyze || !config.hasConcolicAnalysis()) return 0f;
         Object av = config.getConcolicAnalysis().nextSymbolicFloat();
         gwit.trackLocationForWitness("Float.parseFloat(\"" +
                 (float) ((AnnotatedValue) av).getValue() + "\")");
@@ -196,7 +196,7 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static Object nextSymbolicDouble() {
-        if (!analyze || !config.hasConcolicAnalysis()) return 0;
+        if (!analyze || !config.hasConcolicAnalysis()) return 0d;
         Object av = config.getConcolicAnalysis().nextSymbolicDouble();
         gwit.trackLocationForWitness("Double.parseDouble(\"" +
                 (double) ((AnnotatedValue) av).getValue() + "\")");
@@ -1273,6 +1273,42 @@ public class SPouT {
     public static Object mathCos(Object a, Meta meta) {
         if(AnnotatedValue.svalue(a) != null) stopRecording("Math.cos is not symbolically implemented yet", meta);
         return Math.cos((double) a);
+    }
+
+    public static Object mathAbsInt(Object a){
+        int cRes = Math.abs(AnnotatedValue.value(a));
+        if(AnnotatedValue.svalue(a) != null){
+            return new AnnotatedValue(cRes, analysis.mathAbs(AnnotatedValue.value(a), AnnotatedValue.svalue(a)));
+        }else{
+            return cRes;
+        }
+    }
+
+    public static Object mathAbsLong(Object a){
+        long cRes = Math.abs((long)AnnotatedValue.value(a));
+        if(AnnotatedValue.svalue(a) != null){
+            return new AnnotatedValue(cRes, analysis.mathAbs((long) AnnotatedValue.value(a), AnnotatedValue.svalue(a)));
+        }else{
+            return cRes;
+        }
+    }
+    public static Object mathAbsFloat(Object a){
+        float cRes = Math.abs((float)AnnotatedValue.value(a));
+        if(AnnotatedValue.svalue(a) != null){
+            return new AnnotatedValue(cRes,analysis.mathAbs((float) AnnotatedValue.value(a), AnnotatedValue.svalue(a)));
+        }else{
+            return cRes;
+        }
+    }
+    public static Object mathAbsDouble(Object a){
+        SPouT.debug("MathAbsDouble1", a.getClass());
+        double cRes = Math.abs((double)AnnotatedValue.value(a));
+        if(AnnotatedValue.svalue(a) != null){
+            return new AnnotatedValue(cRes, analysis.mathAbs((double) AnnotatedValue.value(a), AnnotatedValue.svalue(a)));
+        }else{
+            SPouT.debug("MathAbsDouble", cRes);
+            return cRes;
+        }
     }
 
 //    @CompilerDirectives.TruffleBoundary
