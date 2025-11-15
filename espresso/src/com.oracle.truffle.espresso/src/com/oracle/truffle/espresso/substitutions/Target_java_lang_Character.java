@@ -39,6 +39,36 @@ public final class Target_java_lang_Character {
     }
 
     @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "Z") Object isAlphabetic(@JavaType(internalName = "I") Object codePoint, @Inject Meta meta){
+        return SPouT.characterIsAlphabetic(codePoint, meta);
+    }
+
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "Z") Object isJavaIdentifierStart(@JavaType(internalName = "I") Object codePoint, @Inject Meta meta){
+        return SPouT.characterIsJavaIdentifierStart(codePoint, meta);
+    }
+
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "Z") Object isJavaIdentifierPart(@JavaType(internalName = "I") Object codePoint, @Inject Meta meta){
+        return SPouT.characterIsJavaIdentifierPart(codePoint, meta);
+    }
+
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "Z") Object isUnicodeIdentifierStart(@JavaType(internalName = "I") Object codePoint, @Inject Meta meta){
+        return SPouT.characterIsUnicodeIdentifierStart(codePoint, meta);
+    }
+
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "Z") Object isUnicodeIdentifierPart(@JavaType(internalName = "I") Object codePoint, @Inject Meta meta){
+        return SPouT.characterIsUnicodeIdentifierPart(codePoint, meta);
+    }
+
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "Z") Object isIdentifierIgnorable(@JavaType(internalName = "I") Object codePoint, @Inject Meta meta){
+        return SPouT.characterIsIdentiferIgnorable(codePoint, meta);
+    }
+
+    @Substitution(passAnnotations = true)
     public static @JavaType(Character.class) StaticObject valueOf(@JavaType(internalName = "C") Object cIn, @Inject Meta meta){
         return SPouT.characterValueOf(cIn, meta);
     }

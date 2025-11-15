@@ -611,7 +611,7 @@ public class SPouT {
 
     private static void checkNotZero(VirtualFrame frame, long c1, Annotations a, BytecodeNode bcn, int bci) {
         if (analyze) {
-            analysis.checkNotZeroInt(frame, bcn, bci, c1 == 0L, a);
+            analysis.checkNotZeroLong(frame, bcn, bci, c1 == 0L, a);
         }
         if (c1 == 0L) {
             bcn.enterImplicitExceptionProfile();
@@ -1877,6 +1877,34 @@ public class SPouT {
             if(a != null) return new AnnotatedValue(res, a);
         }
         return res;
+    }
+
+    public static Object characterIsAlphabetic(Object codePoint, Meta meta) {
+        if(AnnotatedValue.svalue(codePoint) != null) stopRecording("Character.isAlphabetic is not symbolically implemented yet", meta);
+        return Character.isAlphabetic((AnnotatedValue.value(codePoint)));
+    }
+
+    public static Object characterIsJavaIdentifierStart(Object codePoint, Meta meta) {
+        if(AnnotatedValue.svalue(codePoint) != null) stopRecording("Character.isJavaIdentifierStart is not symbolically implemented yet", meta);
+        return Character.isJavaIdentifierStart((AnnotatedValue.value(codePoint)));
+    }
+    public static Object characterIsJavaIdentifierPart(Object codePoint, Meta meta) {
+        if(AnnotatedValue.svalue(codePoint) != null) stopRecording("Character.isJavaIdentifierPart is not symbolically implemented yet", meta);
+        return Character.isJavaIdentifierPart((AnnotatedValue.value(codePoint)));
+    }
+    public static Object characterIsUnicodeIdentifierPart(Object codePoint, Meta meta) {
+        if(AnnotatedValue.svalue(codePoint) != null) stopRecording("Character.isUnicodeIdentifiertPart is not symbolically implemented yet", meta);
+        return Character.isUnicodeIdentifierPart((AnnotatedValue.value(codePoint)));
+    }
+
+    public static Object characterIsUnicodeIdentifierStart(Object codePoint, Meta meta) {
+        if(AnnotatedValue.svalue(codePoint) != null) stopRecording("Character.isUnicodeIdentifiertStart is not symbolically implemented yet", meta);
+        return Character.isUnicodeIdentifierStart(AnnotatedValue.value(codePoint));
+    }
+
+    public static Object characterIsIdentiferIgnorable(Object codePoint, Meta meta) {
+        if(AnnotatedValue.svalue(codePoint) != null) stopRecording("Character.isIdentifierIgnorable is not symbolically implemented yet", meta);
+        return Character.isIdentifierIgnorable(AnnotatedValue.value(codePoint));
     }
 
     public static Object characterEquals(StaticObject self, StaticObject other, Meta meta) {
