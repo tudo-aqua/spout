@@ -7,7 +7,7 @@ RUN wget https://github.com/graalvm/labs-openjdk-17/releases/download/jvmci-22.3
 ENV JAVA_HOME=/data/labsjdk-ce-17.0.5-jvmci-22.3-b06/
 
 RUN git clone https://github.com/graalvm/mx.git && \
-    git checkout b62c4ec0
+    cd mx; git checkout b62c4ec0; cd ..;
 ENV PATH=/data/mx:$JAVA_HOME/bin:$PATH
 RUN echo $PATH
 RUN java -version && javac -version
