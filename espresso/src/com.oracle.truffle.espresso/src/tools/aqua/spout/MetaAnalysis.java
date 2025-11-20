@@ -39,7 +39,7 @@ public class MetaAnalysis implements Analysis<Annotations> {
 
     private final Analysis<?>[] analyses;
 
-    MetaAnalysis(Config config) {
+    protected MetaAnalysis(Config config) {
         this.config = config;
         this.analyses = config.getAnalyses();
     }

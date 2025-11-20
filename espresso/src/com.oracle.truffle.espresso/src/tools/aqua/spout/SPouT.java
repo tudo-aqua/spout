@@ -59,9 +59,10 @@ public class SPouT {
 
     public static final boolean DEBUG = true;
 
-    private static boolean analyze = false, oldAnalyze = analyze;
+    protected static boolean analyze = false, oldAnalyze = analyze;
 
-    private static MetaAnalysis analysis = null;
+    protected static MetaAnalysis analysis = null;
+
 
     private static Config config = null;
 
@@ -85,6 +86,7 @@ public class SPouT {
         // TODO: should be deferred to latest possible point in time
         analyze = true;
         oldAnalyze = true;
+        SPouTInteger.newPath(config, true);
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -102,6 +104,7 @@ public class SPouT {
     private static void stopAnalysis() {
         if (analyze) {
             analyze = false;
+            SPouTInteger.stopAnalysis();
             //FIXME: analysis.terminate();
         }
     }
@@ -2035,34 +2038,6 @@ public class SPouT {
         return meta.toGuestString(ret);
     }
 
-    private static StaticObject[] intCache;
-    private static void initIntCache() {
-        Meta meta = getMeta();
-        intCache = new StaticObject[256];
-        for (int i=-128; i <= 127; i++) {
-            StaticObject o = meta.java_lang_Integer.allocateInstance();
-            meta.java_lang_Integer_value.set(o, AnnotatedValue.value(i));
-            intCache[128 + i] = o;
-        }
-    }
-
-    @CompilerDirectives.TruffleBoundary
-    public static StaticObject integer_valueOf_int(Object i, Meta meta) {
-        StaticObject o;
-        int v =  AnnotatedValue.value(i);
-        if (analyze || v < -128 || 127 < v)  {
-            o = meta.java_lang_Integer.allocateInstance();
-            meta.java_lang_Integer_value.set(o, AnnotatedValue.value(i));
-            AnnotatedVM.setFieldAnnotation(o, meta.java_lang_Integer_value,
-                    AnnotatedValue.svalue(i));
-        } else {
-            if (intCache == null) {
-                initIntCache();
-            }
-            o = intCache[128 + v];
-        }
-        return o;
-    }
 
     public static StaticObject valueOf_long(Object v, Meta meta) {
         if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
