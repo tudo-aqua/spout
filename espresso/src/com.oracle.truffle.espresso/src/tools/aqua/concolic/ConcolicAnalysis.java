@@ -45,7 +45,6 @@ import static tools.aqua.smt.OperatorComparator.F2D;
 import static tools.aqua.smt.OperatorComparator.I2L;
 import static tools.aqua.smt.OperatorComparator.IOR;
 import static tools.aqua.smt.OperatorComparator.IADD;
-import static tools.aqua.smt.OperatorComparator.IOR;
 import static tools.aqua.smt.OperatorComparator.ISHR;
 import static tools.aqua.smt.OperatorComparator.L2D;
 import static tools.aqua.smt.OperatorComparator.L2F;
