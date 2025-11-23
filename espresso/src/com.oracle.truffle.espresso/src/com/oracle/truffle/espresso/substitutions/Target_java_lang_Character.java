@@ -4,6 +4,7 @@ import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.spout.AnnotatedValue;
 import tools.aqua.spout.SPouT;
+import tools.aqua.spout.SPouTNumeric;
 
 @EspressoSubstitutions
 public final class Target_java_lang_Character {
@@ -69,7 +70,80 @@ public final class Target_java_lang_Character {
     }
 
     @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "Z") Object isLetterOrDigit(@JavaType(internalName = "I") Object codePoint, @Inject Meta meta){
+        return SPouT.characterIsLetterOrDigit(codePoint, meta);
+    }
+
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "Z") Object isLetter(@JavaType(internalName = "I") Object codePoint, @Inject Meta meta){
+        return SPouT.characterIsLetter(codePoint, meta);
+    }
+
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "Z") Object isLowerCase(@JavaType(internalName = "I") Object codePoint, @Inject Meta meta){
+        return SPouT.characterIsLowerCase(codePoint, meta);
+    }
+
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "Z") Object isMirrored(@JavaType(internalName = "I") Object codePoint, @Inject Meta meta){
+        return SPouT.characterIsMirrored(codePoint, meta);
+    }
+
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "Z") Object isSpaceChar(@JavaType(internalName = "I") Object codePoint, @Inject Meta meta){
+        return SPouT.characterIsSpaceChar(codePoint, meta);
+    }
+
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "Z") Object isSpace(@JavaType(internalName = "I") Object codePoint, @Inject Meta meta){
+        return SPouT.characterIsSpace(codePoint, meta);
+    }
+
+    @Substitution(methodName = "isTitleCase", passAnnotations = true)
+    public static @JavaType(internalName = "Z") Object isTitleCase(@JavaType(internalName = "I") Object codePoint, @Inject Meta meta){
+        return SPouT.characterIsTitleCase(codePoint, meta);
+    }
+
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "Z") Object isUpperCase(@JavaType(internalName = "I") Object codePoint, @Inject Meta meta){
+        return SPouT.characterIsUpperCase(codePoint, meta);
+    }
+
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "Z") Object isWhitespace(@JavaType(internalName = "I") Object codePoint, @Inject Meta meta){
+        return SPouT.characterIsWhitespace(codePoint, meta);
+    }
+
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "B") Object getDirectionality(@JavaType(internalName = "I") Object codePoint, @Inject Meta meta){
+        return SPouT.characterGetDirectionality(codePoint, meta);
+    }
+
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "I") Object digit(@JavaType(internalName = "I") Object codePoint,
+                                                             @JavaType(internalName = "I") Object radix,  @Inject Meta meta){
+        return SPouT.characterDigit(codePoint, radix, meta);
+    }
+
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "I") Object getNumericValue(@JavaType(internalName = "I") Object codePoint, @Inject Meta meta){
+        return SPouT.characterGetNumericValue(codePoint, meta);
+    }
+
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "I") Object getType(@JavaType(internalName = "I") Object codePoint, @Inject Meta meta){
+        return SPouT.characterGetType(codePoint, meta);
+    }
+
+
+
+    @Substitution(passAnnotations = true)
     public static @JavaType(Character.class) StaticObject valueOf(@JavaType(internalName = "C") Object cIn, @Inject Meta meta){
-        return SPouT.characterValueOf(cIn, meta);
+        return SPouTNumeric.charValueOfChar(cIn, meta);
+    }
+
+    @Substitution(hasReceiver = true, passAnnotations = true)
+    public static @JavaType(internalName = "C") Object charValue(@JavaType(Character.class) StaticObject cIn, @Inject Meta meta) {
+        return SPouTNumeric.charCharValue(cIn, meta);
     }
 }

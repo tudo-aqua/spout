@@ -32,6 +32,8 @@ import tools.aqua.smt.Expression;
 
 import java.util.function.UnaryOperator;
 
+import static tools.aqua.spout.SPouT.analysis;
+
 
 public class MetaAnalysis implements Analysis<Annotations> {
 

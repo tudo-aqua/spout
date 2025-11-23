@@ -25,6 +25,7 @@ package com.oracle.truffle.espresso.substitutions;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.spout.SPouT;
+import tools.aqua.spout.SPouTNumeric;
 
 /**
  * These substitutions are just for performance. Directly uses the optimized host intrinsics
@@ -32,18 +33,41 @@ import tools.aqua.spout.SPouT;
  */
 @EspressoSubstitutions
 public final class Target_java_lang_Float {
-    @Substitution(isTrivial = true)
-    public static int floatToRawIntBits(float value) {
-        return Float.floatToRawIntBits(value);
+    @Substitution(passAnnotations  = true)
+    public static @JavaType(internalName = "I") Object floatToRawIntBits(@JavaType(internalName = "F") Object value, @Inject Meta meta) {
+        return SPouTNumeric.floatToRawIntBits(value, meta);
     }
 
-    @Substitution(isTrivial = true)
-    public static float intBitsToFloat(int bits) {
-        return Float.intBitsToFloat(bits);
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "F") Object intBitsToFloat(@JavaType(internalName = "I") Object bits, @Inject Meta meta) {
+        return SPouTNumeric.intBitsToFloat(bits, meta);
     }
+
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "I") Object floatToIntBits(@JavaType(internalName = "F") Object f, @Inject Meta meta){
+        return SPouTNumeric.floatToIntBits(f, meta);
+    }
+
 
     @Substitution
-    public static float parseFloat(@JavaType(String.class)StaticObject s, @Inject Meta meta){
+    public static @JavaType(internalName = "F") Object parseFloat(@JavaType(String.class)StaticObject s, @Inject Meta meta){
         return SPouT.parseFloat(s, meta);
     }
+
+    @Substitution(hasReceiver = true, methodName = "toString")
+    public static @JavaType(String.class) StaticObject toStringSelf (@JavaType(Float.class) StaticObject f, @Inject Meta meta){
+        return SPouTNumeric.floatToString(f, meta);
+    }
+
+    @Substitution(methodName = "toString")
+    public static @JavaType(String.class) StaticObject toStringParam (@JavaType(internalName = "F") Object f, @Inject Meta meta){
+        return SPouTNumeric.floatFloatToString(f, meta);
+    }
+
+    @Substitution(hasReceiver = true, methodName = "toHexString")
+    public static @JavaType(String.class) StaticObject toHexString (@JavaType(Float.class) StaticObject f, @Inject Meta meta){
+        return SPouTNumeric.floatToHexString(f, meta);
+    }
+
+
 }

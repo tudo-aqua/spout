@@ -503,10 +503,10 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                 new ComplexExpression(OperatorComparator.I2D_RTZ, Constant.INT_MAX);
         ComplexExpression rtz = new ComplexExpression(OperatorComparator.D2I_RTZ, a1);
 
-        return getExpressionInt(a1, intMinAsFloat, intMaxAsFloat, rtz);
+        return ConcolicAnalysis.getExpressionInt(a1, intMinAsFloat, intMaxAsFloat, rtz);
     }
 
-    private Expression getExpressionInt(Expression a1, ComplexExpression intMinAsFloat, ComplexExpression intMaxAsFloat, ComplexExpression rtz) {
+    public static Expression getExpressionInt(Expression a1, ComplexExpression intMinAsFloat, ComplexExpression intMaxAsFloat, ComplexExpression rtz) {
         if (a1 == null) {
             return null;
         }

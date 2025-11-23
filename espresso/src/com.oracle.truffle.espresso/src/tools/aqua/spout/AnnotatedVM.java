@@ -145,11 +145,13 @@ public class AnnotatedVM {
     @CompilerDirectives.TruffleBoundary
     public static Object[] deAnnotateArguments(Object[] args, Method method) {
         for (int i=0; i<args.length; i++) {
-            if (args[i] instanceof AnnotatedValue) {
+            String methodName =method.getNameAsString();
+            if (args[i] instanceof AnnotatedValue && !methodName.contains("doubleToRawLongBits") && !methodName.contains("longBitsToDouble")
+            && !methodName.contains("intBitsToFloat") && !methodName.contains("floatToRawIntBits")) {
                 SPouT.log("Warning: removing annotations before calling substituted/native method " +
                         method.getDeclaringKlass().getNameAsString() + "." + method.getNameAsString() + ": " + args[i]);
+                args[i] = AnnotatedValue.value(args[i]);
             }
-            args[i] = AnnotatedValue.value(args[i]);
         }
         return args;
     }

@@ -112,6 +112,7 @@ public enum OperatorComparator {
     B2I,
     S2I,
     C2I,
+    B2L,
     // casting helpers
     FP_ISNAN,
     FP_ISNEG,
@@ -317,6 +318,8 @@ public enum OperatorComparator {
                 return "(_ sign_extend 16)";
             case C2I:
                 return "(_ zero_extend 16)";
+            case B2L:
+                return "(_ sign_extend 56)";
             case SLENGTH:
                 return "str.len";
             case SINDEXOF:

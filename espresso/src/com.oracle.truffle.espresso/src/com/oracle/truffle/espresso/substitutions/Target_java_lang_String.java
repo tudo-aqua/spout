@@ -32,6 +32,13 @@ public final class Target_java_lang_String {
     }
 
     @Substitution(hasReceiver = true)
+    public static @JavaType(internalName = "I") Object compareToIgnoreCase(@JavaType(String.class) StaticObject self,
+                                                                 @JavaType(String.class) StaticObject other,
+                                                                 @Inject Meta meta) {
+        return SPouT.stringCompareToIgnoreCase(self, other, meta);
+    }
+
+    @Substitution(hasReceiver = true)
     public static @JavaType(internalName = "Z") Object equals(
             @JavaType(String.class) StaticObject self,
             @JavaType(Object.class) StaticObject other,
@@ -173,5 +180,10 @@ public final class Target_java_lang_String {
     @Substitution(hasReceiver = true, passAnnotations = true, methodName = "substring")
     public static @JavaType(String.class) StaticObject substring(@JavaType(String.class) StaticObject self,@JavaType(internalName = "I") Object begin, @JavaType(internalName = "I") Object end, @Inject Meta meta){
         return SPouT.substring(self, begin, end, meta);
+    }
+
+    @Substitution(hasReceiver = true)
+    public static boolean isEmpty(@JavaType(String.class) StaticObject self, @Inject Meta meta) {
+        return  SPouT.stringIsEmpty(self, meta);
     }
 }

@@ -26,10 +26,14 @@ package tools.aqua.spout;
 
 import com.oracle.truffle.espresso.runtime.StaticObject;
 import tools.aqua.concolic.ConcolicAnalysis;
+import tools.aqua.concolic.ConcolicNumericAnalysis;
 import tools.aqua.smt.Expression;
 import tools.aqua.smt.OperatorComparator;
 import tools.aqua.smt.Types;
 import tools.aqua.smt.Variable;
+import tools.aqua.spout.analyses.MetaNumericAnalysis;
+import tools.aqua.spout.analyses.NumericAnalysis;
+import tools.aqua.taint.NumericTaintAnalysis;
 import tools.aqua.taint.TaintAnalysis;
 
 import java.nio.charset.StandardCharsets;
@@ -38,6 +42,8 @@ import java.util.Base64;
 
 
 public class Config {
+
+
 
     public enum TaintType {OFF, DATA, CONTROL, INFORMATION};
 
@@ -50,6 +56,14 @@ public class Config {
     private ConcolicAnalysis concolicAnalysis = null;
 
     private TaintAnalysis taintAnalysis = null;
+
+    /**
+     * I split numeric functions in Wrappper from the bytecode for now.
+     * We will have to rethink how to make this smarter in the future.
+     */
+
+    private ConcolicNumericAnalysis concolicNumericAnalysis = null;
+    private NumericTaintAnalysis numericTaintAnalysis = null;
 
     private int concolicIdx = 0;
 
@@ -65,6 +79,7 @@ public class Config {
     void configureAnalysis() {
         if (hasConcolicAnalysis) {
             this.concolicAnalysis = new ConcolicAnalysis(this);
+            this.concolicNumericAnalysis = new ConcolicNumericAnalysis();
         }
         else {
             this.concolicAnalysis = null;
@@ -75,6 +90,7 @@ public class Config {
 
         if (!taintType.equals(TaintType.OFF)) {
             this.taintAnalysis = new TaintAnalysis(this);
+            this.numericTaintAnalysis = new NumericTaintAnalysis();
         }
         else {
             this.taintAnalysis = null;
@@ -311,11 +327,10 @@ public class Config {
         if (countLongSeeds < seedsLongValues.length) {
             concrete = seedsLongValues[countLongSeeds];
         }
-        Variable symbolic = new Variable(Types.LONG, countLongSeeds);
+        Variable symbolic = new Variable(Types.LONG, countLongSeeds++);
         Object[] annotations = new Object[annotationLength];
         annotations[concolicIdx] = symbolic;
         AnnotatedValue a = new AnnotatedValue(concrete, annotations);
-        countIntSeeds++;
         return a;
     }
 
@@ -543,6 +558,13 @@ public class Config {
         Analysis<?>[] analyses = new Analysis<?>[this.annotationLength];
         if (hasConcolicAnalysis()) analyses[this.concolicIdx] = this.concolicAnalysis;
         if (hasTaintAnalysis()) analyses[this.taintIdx] = this.taintAnalysis;
+        return analyses;
+    }
+
+    public NumericAnalysis<?>[] getNumericAnalyses() {
+        NumericAnalysis<?>[] analyses = new NumericAnalysis<?>[this.annotationLength];
+        if (hasConcolicAnalysis()) analyses[this.concolicIdx] = this.concolicNumericAnalysis;
+        if (hasTaintAnalysis()) analyses[this.taintIdx] = this.numericTaintAnalysis;
         return analyses;
     }
 
