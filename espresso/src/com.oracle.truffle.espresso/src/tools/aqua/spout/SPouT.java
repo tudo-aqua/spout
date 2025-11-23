@@ -2032,7 +2032,7 @@ public class SPouT {
     public static Object characterGetType(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
             stopRecording("Character.getType is not symbolically implemented yet", meta);
-        return Character.getType(AnnotatedValue.value(codePoint));
+        return Character.getType((int) AnnotatedValue.value(codePoint));
     }
 
     public static Object characterEquals(StaticObject self, StaticObject other, Meta meta) {
