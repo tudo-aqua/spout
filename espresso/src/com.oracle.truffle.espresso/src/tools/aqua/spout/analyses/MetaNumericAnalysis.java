@@ -1,10 +1,8 @@
 package tools.aqua.spout.analyses;
 
 import com.oracle.truffle.espresso.runtime.StaticObject;
-import tools.aqua.spout.Analysis;
 import tools.aqua.spout.Annotations;
 import tools.aqua.spout.Config;
-import tools.aqua.spout.MetaAnalysis;
 
 public class MetaNumericAnalysis implements NumericAnalysis<Annotations> {
     private final NumericAnalysis<?>[] numericAnalyses;
@@ -150,14 +148,36 @@ public class MetaNumericAnalysis implements NumericAnalysis<Annotations> {
         return hasResult ? Annotations.create(annotations) : null;
     }
 //
-//    protected Annotations fexecute(float c1, Annotations a1, UnaryFloatOperation executor) {
-//        return fexecute(c1, a1, executor);
-//    }
+    protected Annotations fexecute(float c1, Annotations a1, UnaryFloatOperation executor) {
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[numericAnalyses.length];
+        for (NumericAnalysis<?> analysis : numericAnalyses) {
+            Object result = executor.execute(analysis, c1, Annotations.annotation(a1, i));
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? Annotations.create(annotations) : null;
+    }
 //
 //
-//    protected Annotations lexecute(long c1, Annotations a1, UnaryLongOperation executor) {
-//        return lexecute(c1, a1, executor);
-//    }
+    protected Annotations lexecute(long c1, Annotations a1, UnaryLongOperation executor) {
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[numericAnalyses.length];
+        for (NumericAnalysis<?> analysis : numericAnalyses) {
+            Object result = executor.execute(analysis, c1, Annotations.annotation(a1, i));
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? Annotations.create(annotations) : null;
+    }
 //
 //
 //    protected Annotations execute(int c1, Annotations a1, UnaryOperation executor) {
@@ -228,5 +248,15 @@ public class MetaNumericAnalysis implements NumericAnalysis<Annotations> {
     @Override
     public Annotations doubleToShort(double d, Annotations a1) {
         return dexecute(d, a1, NumericAnalysis::doubleToShort);
+    }
+
+    @Override
+    public Annotations longToDouble(long d, Annotations a1) {
+        return lexecute(d, a1, NumericAnalysis::longToDouble);
+    }
+
+    @Override
+    public Annotations longToFloat(long d, Annotations a1) {
+        return lexecute(d, a1, NumericAnalysis::longToFloat);
     }
 }

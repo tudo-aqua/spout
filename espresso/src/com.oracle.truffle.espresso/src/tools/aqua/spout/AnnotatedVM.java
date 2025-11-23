@@ -32,6 +32,8 @@ import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.impl.ObjectKlass;
 import com.oracle.truffle.espresso.runtime.StaticObject;
 
+import static com.oracle.truffle.espresso.runtime.dispatch.EspressoInterop.getMeta;
+
 public class AnnotatedVM {
 
     // --------------------------------------------------------------------------
@@ -146,12 +148,16 @@ public class AnnotatedVM {
     public static Object[] deAnnotateArguments(Object[] args, Method method) {
         for (int i=0; i<args.length; i++) {
             String methodName =method.getNameAsString();
-            if (args[i] instanceof AnnotatedValue && !methodName.contains("doubleToRawLongBits") && !methodName.contains("longBitsToDouble")
-            && !methodName.contains("intBitsToFloat") && !methodName.contains("floatToRawIntBits")) {
+            if (args[i] instanceof AnnotatedValue) {
                 SPouT.log("Warning: removing annotations before calling substituted/native method " +
                         method.getDeclaringKlass().getNameAsString() + "." + method.getNameAsString() + ": " + args[i]);
-                args[i] = AnnotatedValue.value(args[i]);
+                if (methodName.contains("doubleToRawLongBits") || methodName.contains("longBitsToDouble")
+                        || methodName.contains("intBitsToFloat") || methodName.contains("floatToRawIntBits")){
+                    SPouT.stopRecording("Stripping symbolic values from Float or Double methods that do not suppor them.", getMeta());
+                }
+
             }
+            args[i] = AnnotatedValue.value(args[i]);
         }
         return args;
     }

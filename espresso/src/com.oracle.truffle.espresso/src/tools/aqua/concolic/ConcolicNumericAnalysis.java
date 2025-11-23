@@ -7,8 +7,7 @@ import tools.aqua.smt.OperatorComparator;
 import tools.aqua.spout.SPouT;
 import tools.aqua.spout.analyses.NumericAnalysis;
 
-import static tools.aqua.smt.OperatorComparator.I2L;
-import static tools.aqua.smt.OperatorComparator.I2S;
+import static tools.aqua.smt.OperatorComparator.*;
 
 public class ConcolicNumericAnalysis implements NumericAnalysis<Expression> {
 
@@ -32,5 +31,17 @@ public class ConcolicNumericAnalysis implements NumericAnalysis<Expression> {
         ComplexExpression rtz = new ComplexExpression(OperatorComparator.D2I_RTZ, a1);
         SPouT.debug("Generating double to Short Expression", a1);
         return new ComplexExpression(I2S, ConcolicAnalysis.getExpressionInt(a1, intMinAsFloat, intMaxAsFloat, rtz));
+    }
+
+    @Override
+    public Expression longToDouble(long d, Expression a1) {
+        if(a1 != null) return new ComplexExpression(OperatorComparator.L2D, a1);
+        return null;
+    }
+
+    @Override
+    public Expression longToFloat(long d, Expression a1) {
+        if (a1 != null) return new ComplexExpression(L2F, a1);
+        return null;
     }
 }

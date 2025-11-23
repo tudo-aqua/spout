@@ -59,7 +59,7 @@ public final class Target_java_lang_Float {
         return SPouTNumeric.floatToString(f, meta);
     }
 
-    @Substitution(methodName = "toString")
+    @Substitution(methodName = "toString", passAnnotations = true)
     public static @JavaType(String.class) StaticObject toStringParam (@JavaType(internalName = "F") Object f, @Inject Meta meta){
         return SPouTNumeric.floatFloatToString(f, meta);
     }

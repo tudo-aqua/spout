@@ -195,10 +195,29 @@ public class SPouTNumeric {
         return o;
     }
 
+    public static Object longToDoubleValue(StaticObject self, Meta meta) {
+        long cVal = meta.java_lang_Long_value.getAsLong(meta, self, true);
+        Annotations sVal = AnnotatedVM.getFieldAnnotation(self, meta.java_lang_Long_value);
+        if (sVal != null) {
+            return new AnnotatedValue( (double) cVal, analysis.longToDouble(cVal, sVal));
+        }else{
+            return (double) cVal;
+        }
+    }
+
+    public static Object longToFloatValue(StaticObject self, Meta meta) {
+        long cVal = meta.java_lang_Long_value.getAsLong(meta, self, true);
+        Annotations sVal = AnnotatedVM.getFieldAnnotation(self, meta.java_lang_Long_value);
+        if (sVal != null) {
+            return new AnnotatedValue( (float) cVal, analysis.longToFloat(cVal, sVal));
+        }else{
+            return (float) cVal;
+        }
+    }
+
     public static Object longLongValue(StaticObject self, Meta meta) {
         long cVal = meta.java_lang_Long_value.getAsLong(meta, self, true);
         Annotations sVal = AnnotatedVM.getFieldAnnotation(self, meta.java_lang_Long_value);
-        SPouT.debug("Working with", sVal);
         if (sVal != null) {
             return new AnnotatedValue(cVal, sVal);
         }else{
@@ -291,6 +310,8 @@ public class SPouTNumeric {
     }
     @CompilerDirectives.TruffleBoundary
     public static long doubleToRawLongBits(Object value, Meta meta) {
+        Annotations sVal = AnnotatedValue.svalue(value);
+        SPouT.debug("doubleToRawLongBits is not symbolically implemented yet", sVal);
         if (AnnotatedValue.svalue(value) != null) {SPouT.stopRecording("Double.doubleToRawLongBits is not implemented symbolically yet", meta);}
         return Double.doubleToRawLongBits(AnnotatedValue.value(value));
     }
@@ -310,7 +331,9 @@ public class SPouTNumeric {
 
     @CompilerDirectives.TruffleBoundary
     public static StaticObject floatFloatToString(Object f, Meta meta) {
-        if(AnnotatedValue.svalue(f) != null) SPouT.stopRecording("Double.toString is not symbolically implemented yet", meta);
+        Annotations sVal = AnnotatedValue.svalue(f);
+        SPouT.debug("floatFloatToString is not symbolically implemented yet", sVal);
+        if(sVal != null) SPouT.stopRecording("Float.toString is not symbolically implemented yet", meta);
         return meta.toGuestString(Float.toString((AnnotatedValue.value(f))));
     }
 
@@ -343,5 +366,32 @@ public class SPouTNumeric {
     public static Object intBitsToFloat(Object bits, Meta meta) {
         if(AnnotatedValue.svalue(bits) != null) SPouT.stopRecording("Float.intBitsToFloat is not symbolically implemented yet", meta);
         return Float.intBitsToFloat(AnnotatedValue.value(bits));
+    }
+
+    public static @JavaType(internalName = "I") Object integerReverseBytes(@JavaType(internalName = "I") Object i, @Inject Meta meta) {
+        if (AnnotatedValue.svalue(i) != null) {
+            SPouT.stopRecording("Integer.reverseBytes is not symbolically implemented yet", meta);
+        }
+        return Integer.reverseBytes(AnnotatedValue.value(i));
+    }
+
+    public static Object longReverse(Object in,Meta meta) {
+        if (AnnotatedValue.svalue(in) != null) {
+            SPouT.stopRecording("Long.reverse is not symbolically implemented yet", meta);
+        }
+        return Long.reverseBytes(AnnotatedValue.value(in));
+    }
+
+    public static Object mathGetExponentDouble(@JavaType(internalName = "D") Object f, Meta meta) {
+        if(AnnotatedValue.svalue(f) != null) {
+            SPouT.stopRecording("Math.getExponent is not symbolically implemented yet", meta);
+        }
+        return Math.getExponent((double) AnnotatedValue.value(f));
+    }
+    public static Object mathGetExponentFloat(@JavaType(internalName = "F") Object f, Meta meta) {
+        if(AnnotatedValue.svalue(f) != null) {
+            SPouT.stopRecording("Math.getExponent is not symbolically implemented yet", meta);
+        }
+        return Math.getExponent((float) AnnotatedValue.value(f));
     }
 }

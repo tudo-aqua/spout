@@ -186,4 +186,21 @@ public final class Target_java_lang_String {
     public static boolean isEmpty(@JavaType(String.class) StaticObject self, @Inject Meta meta) {
         return  SPouT.stringIsEmpty(self, meta);
     }
+
+    @Substitution(hasReceiver = true, passAnnotations = true, methodName = "indexOf")
+    public static @JavaType(internalName = "I") Object indexOf_int_int(@JavaType(String.class) StaticObject self,
+                                                                   @JavaType(internalName = "I") Object cP,
+                                                                       @JavaType(internalName = "I") Object start,@Inject Meta meta) {
+        return SPouT.stringIndexOfIntInt(self, cP,start,  meta);
+    }
+
+    @Substitution(hasReceiver = true, passAnnotations = true, methodName = "indexOf")
+    public static @JavaType(internalName = "I") Object indexOfString(@JavaType(String.class) StaticObject self, @JavaType(String.class) StaticObject other, @Inject Meta meta) {
+        return SPouT.stringIndexOf(self, other, meta);
+    }
+
+    @Substitution(hasReceiver = true, passAnnotations = true, methodName = "indexOf")
+    public static @JavaType(internalName = "I") Object indexOfStringInt(@JavaType(String.class) StaticObject self, @JavaType(String.class) StaticObject other, @JavaType(internalName = "I") Object start, @Inject Meta meta) {
+        return SPouT.stringIndexOfWithStart(self, other, start, meta);
+    }
 }

@@ -25,6 +25,7 @@ package com.oracle.truffle.espresso.substitutions;
 import com.oracle.truffle.espresso.classfile.constantpool.MethodTypeConstant;
 import com.oracle.truffle.espresso.meta.Meta;
 import tools.aqua.spout.SPouT;
+import tools.aqua.spout.SPouTNumeric;
 
 /**
  * These substitutions are just for performance. Directly uses the optimized host intrinsics
@@ -230,14 +231,14 @@ public final class Target_java_lang_Math {
         return Math.copySign(magnitude, sign);
     }
 
-    @Substitution
-    public static int getExponent(float f) {
-        return Math.getExponent(f);
+    @Substitution(passAnnotations = true, methodName = "getExponent")
+    public static @JavaType(internalName = "I") Object getExponentFloat(@JavaType(internalName = "F") Object f, @Inject Meta meta) {
+        return SPouTNumeric.mathGetExponentFloat(f, meta);
     }
 
-    @Substitution
-    public static int getExponent(double d) {
-        return Math.getExponent(d);
+    @Substitution(passAnnotations = true, methodName = "getExponent")
+    public static @JavaType(internalName = "I") Object getExponentDouble(@JavaType(internalName = "D") Object d, @Inject Meta meta) {
+        return SPouTNumeric.mathGetExponentDouble(d, meta);
     }
 
     @Substitution

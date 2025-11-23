@@ -23,4 +23,9 @@ public final class Target_java_lang_Integer {
     public static @JavaType(Integer.class) StaticObject integerValueOfInt(@JavaType(internalName = "I") Object i, @Inject Meta meta) {
         return SPouTNumeric.integerValueOfInt(i, meta);
     }
+
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "I") Object reverseBytes(@JavaType(internalName = "I")Object i, @Inject Meta meta) {
+        return SPouTNumeric.integerReverseBytes(i, meta);
+    }
 }

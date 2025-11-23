@@ -1028,6 +1028,16 @@ public class MetaAnalysis implements Analysis<Annotations> {
     }
 
     @Override
+    public Annotations stringindexOfString(String self, String other, Annotations a1, Annotations a2) {
+        return sexecute(self, other, a1, a2, Analysis::stringindexOfString);
+    }
+
+    @Override
+    public Annotations stringIndexOfStringWithInt(String self, String other, int i, Annotations a1, Annotations a2, Annotations a3) {
+        return sexecute(self, other, i, a1, a2, a3, Analysis::stringIndexOfStringWithInt);
+    }
+
+    @Override
     public Annotations characterEquals(char self, char other, Annotations a1, Annotations a2) {
         return sexecute(self, other, a1, a2, Analysis::characterEquals);
     }

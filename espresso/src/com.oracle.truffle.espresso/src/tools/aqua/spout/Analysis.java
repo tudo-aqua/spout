@@ -355,6 +355,8 @@ public interface Analysis<T> {
     default T stringBuilderAppend(String self, String other, T a1, T a2){return null;}
     default T stringBuxxLength(String self, T a1){return null;}
     default  T stringBuxxToString(String self, T a1){return null;}
+    default  T stringindexOfString(String self, String other, T a1, T a2){return null;}
+    default  T stringIndexOfStringWithInt(String self, String other, int i, T a1, T a2, T a3){return null;}
 
     default T stringBuxxInsert(String self, String other, int i, T a1, T a2, T a3){return null;}
 

@@ -1273,6 +1273,23 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     @Override
+    public Expression stringindexOfString(String self, String other, Expression a1, Expression a2) {
+        if (a1 == null && a2 == null) return null;
+        if(a1 == null) a1 = Constant.fromConcreteValue(self);
+        if(a2 == null) a2 = Constant.fromConcreteValue(other);
+        return new ComplexExpression(NAT2BV32, new ComplexExpression(SINDEXOF, a1, a2, Constant.createNatConstant(0)));
+    }
+
+    @Override
+    public Expression stringIndexOfStringWithInt(String self, String other, int i, Expression a1, Expression a2, Expression a3) {
+        if (a1 == null && a2 == null && a3 == null) return null;
+        if(a1 == null) a1 = Constant.fromConcreteValue(self);
+        if(a2 == null) a2 = Constant.fromConcreteValue(other);
+        if(a3 == null) a3 = Constant.fromConcreteValue(i);
+        return new ComplexExpression(NAT2BV32, new ComplexExpression(SINDEXOF, a1, a2, new ComplexExpression(BV2NAT, a3)));
+    }
+
+    @Override
     public Expression characterToLowerCase(char self, Expression a1) {
         return new ComplexExpression(STOLOWER, a1);
     }

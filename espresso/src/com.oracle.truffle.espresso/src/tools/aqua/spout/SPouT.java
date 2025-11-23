@@ -1922,67 +1922,67 @@ public class SPouT {
     public static Object characterIsAlphabetic(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
             stopRecording("Character.isAlphabetic is not symbolically implemented yet", meta);
-        return Character.isAlphabetic((AnnotatedValue.value(codePoint)));
+        return Character.isAlphabetic((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsJavaIdentifierStart(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
             stopRecording("Character.isJavaIdentifierStart is not symbolically implemented yet", meta);
-        return Character.isJavaIdentifierStart((AnnotatedValue.value(codePoint)));
+        return Character.isJavaIdentifierStart((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsJavaIdentifierPart(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
             stopRecording("Character.isJavaIdentifierPart is not symbolically implemented yet", meta);
-        return Character.isJavaIdentifierPart((AnnotatedValue.value(codePoint)));
+        return Character.isJavaIdentifierPart((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsUnicodeIdentifierPart(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
             stopRecording("Character.isUnicodeIdentifiertPart is not symbolically implemented yet", meta);
-        return Character.isUnicodeIdentifierPart((AnnotatedValue.value(codePoint)));
+        return Character.isUnicodeIdentifierPart((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsUnicodeIdentifierStart(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
             stopRecording("Character.isUnicodeIdentifiertStart is not symbolically implemented yet", meta);
-        return Character.isUnicodeIdentifierStart(AnnotatedValue.value(codePoint));
+        return Character.isUnicodeIdentifierStart((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsIdentiferIgnorable(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
             stopRecording("Character.isIdentifierIgnorable is not symbolically implemented yet", meta);
-        return Character.isIdentifierIgnorable(AnnotatedValue.value(codePoint));
+        return Character.isIdentifierIgnorable((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsLetterOrDigit(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
             stopRecording("Character.isLetterOrDigit is not symbolically implemented yet", meta);
-        return Character.isLetterOrDigit(AnnotatedValue.value(codePoint));
+        return Character.isLetterOrDigit((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsLetter(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
             stopRecording("Character.isLetter is not symbolically implemented yet", meta);
-        return Character.isLetter(AnnotatedValue.value(codePoint));
+        return Character.isLetter((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsLowerCase(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
             stopRecording("Character.isLowerCase is not symbolically implemented yet", meta);
-        return Character.isLowerCase(AnnotatedValue.value(codePoint));
+        return Character.isLowerCase((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsMirrored(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
             stopRecording("Character.isMirrored is not symbolically implemented yet", meta);
-        return Character.isMirrored(AnnotatedValue.value(codePoint));
+        return Character.isMirrored((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsSpaceChar(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
             stopRecording("Character.isSpaceChar is not symbolically implemented yet", meta);
-        return Character.isSpaceChar(AnnotatedValue.value(codePoint));
+        return Character.isSpaceChar((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsSpace(Object codePoint, Meta meta) {
@@ -1994,25 +1994,25 @@ public class SPouT {
     public static Object characterIsTitleCase(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
             stopRecording("Character.isTitleCase is not symbolically implemented yet", meta);
-        return Character.isTitleCase(AnnotatedValue.value(codePoint));
+        return Character.isTitleCase((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsUpperCase(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
             stopRecording("Character.isUpperCase is not symbolically implemented yet", meta);
-        return Character.isUpperCase(AnnotatedValue.value(codePoint));
+        return Character.isUpperCase((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsWhitespace(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
             stopRecording("Character.isWhitespace is not symbolically implemented yet", meta);
-        return Character.isWhitespace(AnnotatedValue.value(codePoint));
+        return Character.isWhitespace((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterGetDirectionality(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
             stopRecording("Character.getDirectionality is not symbolically implemented yet", meta);
-        return Character.getDirectionality(AnnotatedValue.value(codePoint));
+        return Character.getDirectionality((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterDigit(Object codePoint, Object radix, Meta meta) {
@@ -2026,7 +2026,7 @@ public class SPouT {
     public static Object characterGetNumericValue(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
             stopRecording("Character.getNumericValue is not symbolically implemented yet", meta);
-        return Character.getNumericValue(AnnotatedValue.value(codePoint));
+        return Character.getNumericValue((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterGetType(Object codePoint, Meta meta) {
@@ -2062,6 +2062,52 @@ public class SPouT {
         } else {
             return meta.toHostString(self).isEmpty();
         }
+    }
+
+    public static Object stringIndexOfIntInt(StaticObject self, Object cp, Object start, Meta meta) {
+        if(analyze && config.hasConcolicAnalysis()) {
+            boolean isSelfSymbolic = self.hasAnnotations()
+                    && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
+            boolean isCpSymbolic = AnnotatedValue.svalue(cp) != null && AnnotatedValue.svalue(cp).getAnnotations()[config.getConcolicIdx()] != null;
+            boolean isStartSymbolic = AnnotatedValue.svalue(start) != null && AnnotatedValue.svalue(start).getAnnotations()[config.getConcolicIdx()] != null;
+            if(isSelfSymbolic || isCpSymbolic ||isStartSymbolic) {
+                stopRecording("String.indexOf(int cp) is not symbolically implemented yet", meta);
+            }
+        }
+        return meta.toHostString(self).indexOf((int)AnnotatedValue.value(cp), AnnotatedValue.value(start));
+
+    }
+
+    public static Object stringIndexOf(StaticObject self, StaticObject other, Meta meta){
+        String cSelf = meta.toHostString(self);
+        String cOther = meta.toHostString(other);
+        int cRes = cSelf.indexOf(cOther);
+        SPouT.debug("StringIndexOf annotations self", hasConcolicAnnotations(self));
+        SPouT.debug("StringIndexOf annotations self", self.getAnnotations());
+        SPouT.debug("StringIndexOf annotations other", hasConcolicAnnotations(other));
+        SPouT.debug("StringIndexOf annotations overall", analyze && (hasConcolicAnnotations(self) || hasConcolicAnnotations(other)));
+        if (analyze && (hasConcolicAnnotations(self) || hasConcolicAnnotations(other))) {
+            //return  new AnnotatedValue(cRes, analysis.stringindexOfString(cSelf, cOther, getStringAnnotations(self), getStringAnnotations(other)));
+            stopRecording("String.indexOf(String) is not symbolically implemented yet", meta);
+        }
+        return cRes;
+
+    }
+
+    public static Object stringIndexOfWithStart(StaticObject self, StaticObject other, Object start, Meta meta){
+        String cSelf = meta.toHostString(self);
+        String cOther = meta.toHostString(other);
+        int from = AnnotatedValue.value(start);
+        int cRes = cSelf.indexOf(cOther, from);
+        SPouT.debug("StringIndexOf annotations self", hasConcolicAnnotations(self));
+        SPouT.debug("StringIndexOf annotations ither", hasConcolicAnnotations(other));
+        SPouT.debug("StringIndexOf annotations overall", analyze && (hasConcolicAnnotations(self) || hasConcolicAnnotations(other)));
+        if (analyze && (hasConcolicAnnotations(self) || hasConcolicAnnotations(other))) {
+            stopRecording("String.indexOf(String) is not symbolically implemented yet", meta);
+            //return new AnnotatedValue(cRes, analysis.stringIndexOfStringWithInt(cSelf, cOther, from, getStringAnnotations(self), getStringAnnotations(other), AnnotatedValue.svalue(start)));
+        }
+        return cRes;
+
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -2262,7 +2308,16 @@ public class SPouT {
 
 
     private static boolean hasConcolicAnnotations(StaticObject v) {
-        return v.hasAnnotations() && config.hasConcolicAnalysis() && v.getAnnotations()[config.getConcolicIdx()] != null;
+        //return v.hasAnnotations() && config.hasConcolicAnalysis() && v.getAnnotations()[config.getConcolicIdx()] != null;
+        Annotations[] stringAnnotation = v.getAnnotations();
+        if (stringAnnotation != null) {
+            Annotations annotations = stringAnnotation[stringAnnotation.length - 1];
+            if (annotations != null) {
+                return annotations.getAnnotations()[config.getConcolicIdx()] != null;
+            }
+            //FIXME: it can happen that no length annotation is present. Not sure if this is expected?
+        }
+        return false;
     }
 
     public static void makeConcatWithConstantsSymbolically(Object result, Object[] args, Meta meta) {
