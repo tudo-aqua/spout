@@ -75,12 +75,13 @@ public final class Target_java_lang_Math {
     public static @JavaType(internalName = "D") Object exp(@JavaType(internalName = "D") Object a, @Inject Meta meta) {
         return SPouT.mathExp(a, meta);
     }
-
+    // TODO: causes shutdown problem
+    /*
     @Substitution(passAnnotations = true)
     public static @JavaType(internalName = "D") Object log(@JavaType(internalName = "D") Object a, @Inject Meta meta) {
         return SPouT.mathLog(a, meta);
     }
-
+    */
     @Substitution(passAnnotations = true)
     public static @JavaType(internalName = "D") Object log10(@JavaType(internalName = "D") Object a, @Inject Meta meta) {
         return SPouT.mathLog10(a, meta);
@@ -134,7 +135,7 @@ public final class Target_java_lang_Math {
     public static @JavaType(internalName = "I") Object roundf(@JavaType(internalName = "F") Object a, @Inject Meta meta) {
         return SPouT.mathRoundF(a, meta);
     }
-    */
+ 
     @Substitution(passAnnotations = true, methodName = "round")
     public static @JavaType(internalName = "J") Object roundd(@JavaType(internalName = "D") Object a, @Inject Meta meta) {
         return SPouT.mathRoundD(a, meta);
@@ -145,13 +146,10 @@ public final class Target_java_lang_Math {
         return SPouT.mathAbsInt(a);
     }
 
-    // TODO: causes shutdown problem
-    /*
     @Substitution(passAnnotations = true, methodName = "abs")
     public static @JavaType(internalName = "J") Object absLong(@JavaType(internalName = "J") Object a) {
         return SPouT.mathAbsLong(a);
     }
-    */
 
     @Substitution(passAnnotations = true, methodName = "abs")
     public static @JavaType(internalName = "F") Object absFloat(@JavaType(internalName = "F") Object a) {
@@ -162,6 +160,7 @@ public final class Target_java_lang_Math {
     public static @JavaType(internalName = "D") Object absDouble(@JavaType(internalName = "D") Object a) {
         return SPouT.mathAbsDouble(a);
     }
+    */
 
     @Substitution
     public static float max(float a, float b) {
