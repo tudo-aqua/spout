@@ -24,6 +24,8 @@
 
 package tools.aqua.smt;
 
+import com.oracle.truffle.espresso.impl.Klass;
+
 public abstract class Constant extends Atom {
 
     public final static IntConstant INT_ZERO = new IntConstant(0);
@@ -190,6 +192,41 @@ public abstract class Constant extends Atom {
         }
     }
 
+    private final static class KlassConstant extends Constant {
+        KlassConstant(Klass value) {
+            super(Types.KLASS, value);
+        }
+
+        @Override
+        Klass getValue() {
+            return (Klass) super.getValue();
+        }
+
+        @Override
+        public String toString() {
+            return getValue().getTypeAsString();
+        }
+
+    }
+
+    private final static class NullConstant extends Constant {
+        //todo: Brauch man das überhaupt, wenn man die KLasse "StringConstant" hat
+        NullConstant() {
+            super(Types.NULL, "null");
+        }
+
+        @Override
+        String getValue() {
+            return "null";
+        }
+
+        @Override
+        public String toString() {
+            return "\"" + getValue() + "\"";
+        }
+
+    }
+
     private final Object value;
 
     Constant(Types type, Object value) {
@@ -225,6 +262,14 @@ public abstract class Constant extends Atom {
 
     public static Constant fromConcreteValue(String s) {
         return new StringConstant(s);
+    }
+
+    public static Constant fromConcreteValue(Klass v) {
+        return new KlassConstant(v);
+    }
+
+    public static Constant fromConcreteValue() {
+        return new NullConstant();
     }
 
     public static Constant fromConcreteValue(boolean b) {

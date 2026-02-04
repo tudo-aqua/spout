@@ -27,10 +27,19 @@ package tools.aqua.concolic;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.EspressoLanguage;
+import com.oracle.truffle.espresso.classfile.descriptors.Signature;
+import com.oracle.truffle.espresso.classfile.descriptors.Symbol;
+import com.oracle.truffle.espresso.classfile.descriptors.Type;
+import com.oracle.truffle.espresso.impl.Klass;
+import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.impl.ObjectKlass;
+import com.oracle.truffle.espresso.jdwp.api.KlassRef;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
+import com.oracle.truffle.espresso.nodes.bytecodes.InstanceOf;
+import com.oracle.truffle.espresso.nodes.bytecodes.InvokeSpecial;
+import com.oracle.truffle.espresso.nodes.bytecodes.InvokeSpecialNodeGen;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
 import tools.aqua.smt.*;
 import tools.aqua.spout.*;
@@ -50,11 +59,12 @@ import static tools.aqua.smt.OperatorComparator.L2F;
 import static tools.aqua.smt.OperatorComparator.LADD;
 import static tools.aqua.smt.OperatorComparator.LOR;
 import static tools.aqua.smt.OperatorComparator.LSHR;
-import static tools.aqua.smt.Types.LONG;
+import static tools.aqua.smt.Types.*;
 
 public class ConcolicAnalysis implements Analysis<Expression> {
 
     private final Config config;
+    private int objectCount = 0;
 
     private final Trace trace;
 
@@ -126,6 +136,249 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         guestString.setAnnotations(annotations);
         trace.addElement(new SymbolDeclaration(ssv.symbolic));
         return guestString;
+    }
+
+
+    /***
+     * Trys to create in the guest world a new Object according to the next element of -Dconcolic.constructors
+     *
+     * @param meta introspection API to get information of the guest system during runtime
+     * @return {{@link StaticObject}} if the Object could be created successfully
+     *         null otherwise
+     */
+    public StaticObject nextSymbolicObject(Meta meta, Klass typeBound) {
+        //1. Retrieve the information from the commandline needed to create the next symbolic object
+        Config.SymbolicObjectValue ssv = config.nextSymbolicObject();
+
+        //2. Check if the next symbolic object shall be a "String". Perform special handling in this case
+        if (ssv.klassName.equals("Ljava/lang/String;")) {
+            if (ssv.constructor.equals("(Ljava/lang/String;)V")) {
+                // Use special handling for Strings
+                return nextSymbolicString(meta);
+            } else {
+                SPouT.stopRecording("Unsupported String constructor!", meta);
+            }
+        }
+
+        //3. Check whether the next symbolic object shall be "null". Perform special handling in this case
+        if (ssv.klassName.equals("null")) {
+            Annotations objectDescription = Annotations.emptyArray();
+            objectDescription.set(config.getConcolicIdx(), ssv.symbolic);
+
+            //Add DECLARE-statements for the following variables ...
+            // ... id of object
+            trace.addElement(new ObjectIdentityDeclaration(ssv.symbolic.getId()));
+            // ... class of object
+            trace.addElement(new SymbolDeclaration(ssv.symbolic));
+            // ... used constructor to instantiate the object
+            trace.addElement(new ConstructorDeclaration(ssv.symbolic.getId()));
+
+            // If the type of the object to be created is known (see typeBound), add an ASSUMPTION of this type to the trace
+            // The assumption is a CHECKCAST
+            if (typeBound != null) {
+                Expression klassExpression = Expression.fromConstant(KLASS, typeBound);
+
+                ComplexExpression assume = new ComplexExpression(OBJECT_CHECK_CAST, ssv.symbolic, klassExpression);
+                Annotations annotations = Annotations.create();
+                annotations.set(config.getConcolicIdx(), assume);
+                AnnotatedValue annotatedValue = new AnnotatedValue(true, annotations); //THE CHECKCAST is always TRUE because null can be casted to everything
+                SPouT.assume(annotatedValue, meta);
+            }
+
+            // Add ASSERT-statement that "null" was instantiated with the dummy constructor "null|Null"
+            Variable constructorVariable = new Variable(CONSTRUCTOR, objectCount);
+            Constant constructorName = Constant.fromConcreteValue("null|NULL");
+            ComplexExpression constructorExpression = new ComplexExpression(STRINGEQ, constructorVariable, constructorName);
+            PathCondition constructorPathCondition = new PathCondition(constructorExpression, config.nextConstructorBranchID(), config.getConstructorCount());
+            this.trace.addElement(constructorPathCondition);
+
+            // Create object and increase object count
+            objectCount++;
+            return StaticObject.createNull(objectDescription);
+        }
+
+        // NORMAL BEHAVIOUR TO CREATE AN OBJECT
+
+        //4. Getting classname and method signature type
+        // a) Get the classname of the class in **class file format**
+        Symbol<Type> type = meta.getTypes().fromClassGetName(ssv.klassName);
+        if (type == null) {
+            SPouT.log("returned null, because loading type failed.");
+            return null;
+        }
+        // b) Get the signature of the constructor given by -Dconcolic.constructors
+        Symbol<Signature> signature = meta.getSignatures().lookupValidSignature(ssv.constructor);    //
+        if (signature == null) {
+            SPouT.log("returned null, because loading signature failed.");
+            return null;
+        }
+
+        //5. Loading the class of the object
+        StaticObject classLoader = (StaticObject) meta.java_lang_ClassLoader_getSystemClassLoader.invokeDirect(null);
+        Klass klass = meta.loadKlassOrNull(type,
+                classLoader,  //No classLoader means that the BOOT-Classloader is used
+                StaticObject.NULL); //protectionDomain ???
+
+        if (klass == null) {
+            SPouT.log("returned null, because loading klass failed");
+            return null;
+        }
+
+        //6. Allocate memory for the object
+        StaticObject staticObject = klass.allocateInstance(); //Saves the object in the memory (Just memory no fields)
+        Annotations.initObjectAnnotations(staticObject);
+
+        //7. Until this point memory for the object is allocated, BUT no attributes/ fields are created
+        //A constructor must be used set values of the attributes
+        //Therefore search for the constructor. If applicable, execute constructor to create Object
+        Method[] declaredConstructors = klass.getDeclaredConstructors();
+        boolean initialized = false;
+        SPouT.log("*************************************************************************");
+        SPouT.log("* Search for the following constructor:\n*\tsignature: "+signature.toString()+"\n*\tclass: "+klass.getNameAsString());
+        SPouT.log("* Considered constructors:");
+        for (Method declaredConstructor : declaredConstructors) {
+            SPouT.log("*\t"+declaredConstructor.getSignatureAsString());
+            if (declaredConstructor.getRawSignature().equals(signature)) {
+                //Add DECLARE-statements for the following variables ...
+                // ... id of object
+                trace.addElement(new ObjectIdentityDeclaration(ssv.symbolic.getId()));
+                // ... class of object
+                trace.addElement(new SymbolDeclaration(ssv.symbolic));
+                // ... used constructor to instantiate the object
+                trace.addElement(new ConstructorDeclaration(ssv.symbolic.getId()));
+
+                // If the type of the object to be created is known (see typeBound), add an ASSUMPTION of this type to the trace
+                if (typeBound != null) {
+                    Expression klassExpression = Expression.fromConstant(KLASS, typeBound);
+
+                    ComplexExpression assume = new ComplexExpression(OBJECT_CHECK_CAST, ssv.symbolic, klassExpression);
+                    Annotations annotations = Annotations.create();
+                    annotations.set(config.getConcolicIdx(), assume);
+
+                    //Use InstanceOf to determine if the CHECKCAST is succesfull or not
+                    // Instance of is used because the implementation of CHECKCAST relies on the instanceof check
+                    // (see CHECKCAST Bytecode in BytecodeNode.java)
+                    // The difference between INSTANCEOF and CHECKCAST is the handling of null
+                    // null can ALWAYS be casted to everything but null is NEVER an instanceOf any klass
+                    // At this point in the code we know that the object isn't null therefore we just need the
+                    // instanceof check to determine whether the CHECKCAST is successful
+                    InstanceOf instanceOf = InstanceOf.create(typeBound,   //supertype
+                            false);      //cacheUseEnabeled
+
+                    AnnotatedValue annotatedValue = new AnnotatedValue(instanceOf.execute(klass), annotations);
+                    SPouT.assume(annotatedValue, meta);
+                }
+
+                // Add an ASSERT-statement to the trace which logs which constructor is used
+                Variable constructorVariable = new Variable(CONSTRUCTOR, objectCount);
+                Constant constructorName = Constant.fromConcreteValue("L"+klass.getNameAsString()+";|"+declaredConstructor.getSignatureAsString());
+                ComplexExpression constructorExpression = new ComplexExpression(STRINGEQ, constructorVariable, constructorName);
+                PathCondition constructorPathCondition = new PathCondition(constructorExpression, config.nextConstructorBranchID(), config.getConstructorCount());
+                this.trace.addElement(constructorPathCondition);
+
+                // Increase the object count
+                objectCount++;
+
+                SPouT.log("* Constructor founded! \n* Use the constructor with the following parameters: ");
+                initialized = true;
+
+                //-----------------------------------------------------------------------------------------------------
+                //                          Instantiate/ annotated parameters of the constructor
+                //-----------------------------------------------------------------------------------------------------
+
+                Object[] parameters = new Object[declaredConstructor.getParameterCount()+1];
+                parameters[0] = staticObject;
+                //Add symbolic parameters to the constructor
+                int parameterCount = 1;
+//                for (KlassRef parameter : declaredConstructor.getParameters()) {
+                for (KlassRef parameter : declaredConstructor.resolveParameterKlasses()) {
+                    // if parameter is a primitive type annotated this primitiv parameter
+                    if (parameter.isPrimitive()) {
+                        AnnotatedValue annotatedParameter = getAnnotatedParameter(parameter, meta);
+                        SPouT.log("Primitive Parameter");
+                        SPouT.log("* \tParameter "+ parameterCount +": \n*\t\t Type: "+parameter.getTypeAsString()+"\n*\t\t Value: "+annotatedParameter.getValue());
+                        parameters[parameterCount++] = annotatedParameter;
+                    }
+                    //if parameter is a complex type/ object instantiate the object through a recursive call
+                    else {
+                        SPouT.log("Object Parameter");
+                        parameters[parameterCount++] = SPouT.nextSymbolicObject(meta, (Klass)parameter);
+                    }
+                }
+
+                //8. Invoke the constructor thereby instantiate the object
+                SPouT.log("Invocation of the constructor");
+//                declaredConstructor.invokeMethod(staticObject, parameters);           //doesn't work
+//                declaredConstructor.invokeWithConversions(staticObject, parameters);  //works
+//                declaredConstructor.invokeDirect(staticObject, parameters);             //works
+
+                InvokeSpecial invokeSpecial = InvokeSpecialNodeGen.create(declaredConstructor);
+                Object execute = invokeSpecial.execute(parameters); //todo: Needed Static Object;
+
+                SPouT.log("Object successfully created");
+                SPouT.log("*************************************************************************");
+                break;
+            }
+        }
+        if (!initialized) {
+            SPouT.log("* returned null, because no matching constructor found.");
+            return null;
+        }
+
+
+        //9. Set klass/ type of the object as annotation
+        Annotations objectDescription = Annotations.emptyArray();
+        objectDescription.set(config.getConcolicIdx(), ssv.symbolic);
+        Annotations.setObjectAnnotation(staticObject, objectDescription);
+
+
+        //todo: SetId
+
+
+        //todo: SetConstructor
+
+
+        return staticObject;
+    }
+
+
+    /**
+     * This method returns an annotated value for the given primitive FieldType
+     * For a list of all primitive FieldTypes see Table 4.3-A. Interpretation of field descriptors
+     * of the official JVM documentation
+     * @param parameter FieldType of the primitive
+     * @return          AnnotatedValue containing the concrete value and annoted with constraints
+     */
+    private AnnotatedValue getAnnotatedParameter(KlassRef parameter, Meta meta) {
+        if (parameter.getTypeAsString().equals("I")) {
+            AnnotatedValue annotatedValue = (AnnotatedValue) SPouT.nextSymbolicInt();
+//            annotatedValue.setValue(meta.boxInteger((Integer) annotatedValue.getValue())); // Box value
+            return annotatedValue;
+        }
+        else if (parameter.getTypeAsString().equals("Z")) {
+            return (AnnotatedValue) SPouT.nextSymbolicBoolean();
+        }
+        else if (parameter.getTypeAsString().equals("S")) {
+            return (AnnotatedValue) SPouT.nextSymbolicShort();
+        }
+        else if (parameter.getTypeAsString().equals("C")) {
+            return (AnnotatedValue) SPouT.nextSymbolicChar();
+        }
+        else if (parameter.getTypeAsString().equals("B")) {
+            return (AnnotatedValue) SPouT.nextSymbolicByte();
+        }
+        else if (parameter.getTypeAsString().equals("J")) {
+            return (AnnotatedValue) SPouT.nextSymbolicLong();
+        }
+        else if (parameter.getTypeAsString().equals("D")) {
+            return (AnnotatedValue) SPouT.nextSymbolicDouble();
+        }
+        else if (parameter.getTypeAsString().equals("F")) {
+            return (AnnotatedValue) SPouT.nextSymbolicFloat();
+        }
+        else {
+            throw new IllegalStateException("Should never happen because the list of primitives is completely covered!");
+        }
     }
 
     private Expression binarySymbolicOp(OperatorComparator op, Types typeLeft, Types typeRight,
@@ -645,13 +898,13 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                     break;
                 default:
                     CompilerDirectives.transferToInterpreter();
-                    throw EspressoError.shouldNotReachHere("only defined for IFEQ and IFNE so far");
+                    throw EspressoError.shouldNotReachHere("only defined for IFEQ and IFNE so far. Opcode which reached this point: \"+opcode");
             }
         } else if (Expression.isCmpExpression(a)) {
             ComplexExpression ce = (ComplexExpression) a;
             OperatorComparator op = null;
             switch (ce.getOperator()) {
-                case LCMP:
+                case LCMP: //Long Compare
                     // 0 if x == y; less than 0 if x < y; greater than 0 if x > y
                     switch (opcode) {
                         case IFEQ:
@@ -674,10 +927,10 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                             break;
                     }
                     break;
-                case FCMPL:
-                case FCMPG:
-                case DCMPL:
-                case DCMPG:
+                case FCMPL: //float
+                case FCMPG: //float
+                case DCMPL: //double
+                case DCMPG: //double
                     // 0 if x == y; less than 0 if x < y; greater than 0 if x > y
                     switch (opcode) {
                         case IFEQ:
@@ -809,49 +1062,187 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         trace.addElement(pc);
     }
 
+
+    /**
+     * This method log the decisions during execution to use them during concolic execution.
+     * It logs the decision for the following java bytecodes:
+     * <ul>
+     *      <li>IFNULL</li>
+     *      <li>IFNONNULL</li>
+     * </ul>
+     *
+     * @param frame         Virtual Frame of espresso. Storing the current execution state of the method (e.g. local
+     *                      variables, stacke values, runtime information)
+     * @param bcn           ByteCodeNode: internal structure of the espresso vm for resolving bytecodes
+     * @param bci           ByteCodeIndex: position of the java bytecode within the method
+     * @param opcode        represents a JVM operation (IFNULL, IFNONULL)
+     * @param takeBranch    result of the espresso vm evalution of the given bytecode and the concrete object c
+     * @param c             concrete object: actual instance used for the evaluation
+     * @param a             symbolic object: symbolic object representing a set of objects
+     */
     @Override
-    public void takeBranchRef2(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, StaticObject c1, StaticObject c2, Expression a1, Expression a2) {
-        if ((a1 == null) && (a2 == null)) {
+    public void takeBranchRef1(VirtualFrame frame,
+                               BytecodeNode bcn,
+                               int bci,
+                               int opcode,
+                               boolean takeBranch,
+                               StaticObject c,
+                               Expression a) {
+        Expression nullExpr = Expression.getNullConstant();
+        Expression expr = new ComplexExpression(OBJECT_IS_NULL, a, nullExpr);
+
+        switch (opcode) {
+            case IFNULL    : expr = takeBranch ? expr : new ComplexExpression(BNEG, expr);break;
+            case IFNONNULL : expr = takeBranch ? new ComplexExpression(BNEG, expr): expr; break;
+            default        :
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                throw EspressoError.shouldNotReachHere("expected IFNULL or IFNONNULL bytecode");
+        }
+
+        PathCondition pc = new PathCondition(expr, takeBranch ? FAILURE : SUCCESS, BINARY_SPLIT);
+        this.trace.addElement(pc);
+    }
+
+
+//
+//    @Override
+//    public void takeBranchRef2(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, StaticObject c1, StaticObject c2, Expression a1, Expression a2) {
+//        if ((a1 == null) && (a2 == null)) {
+//            return;
+//        }
+//
+//        Expression expr = null;
+//        Meta meta = bcn.getMeta();
+//
+//        // special case: cached Integer
+//        if (meta.java_lang_Integer.equals(c1.getKlass()) &&
+//                meta.java_lang_Integer.equals(c2.getKlass())) {
+//
+//            Expression e1 = c1 == null ? null : Annotations.annotation(
+//                    AnnotatedVM.getFieldAnnotation(c1, meta.java_lang_Integer_value), config.getConcolicIdx());
+//            Expression e2 = c2 == null ? null : Annotations.annotation(
+//                    AnnotatedVM.getFieldAnnotation(c2, meta.java_lang_Integer_value), config.getConcolicIdx());
+//
+//            if (e1 != null || e2 != null) {
+//
+//                int int1 = meta.java_lang_Integer_value.getInt(c1);
+//                int int2 = meta.java_lang_Integer_value.getInt(c2);
+//
+//                e1 = e1 == null ? Expression.fromConstant(Types.INT, int1) : e1;
+//                e2 = e2 == null ? Expression.fromConstant(Types.INT, int2) : e2;
+//
+//                expr = new ComplexExpression(BAND,
+//                        new ComplexExpression(BVEQ, e1, e2),
+//                        new ComplexExpression(BVLE, Expression.fromConstant(Types.INT, -128), e1),
+//                        new ComplexExpression(BVLE, e1, Expression.fromConstant(Types.INT, 127)),
+//                        // remaining not strictly necessary?
+//                        new ComplexExpression(BVLE, Expression.fromConstant(Types.INT, -128), e2),
+//                        new ComplexExpression(BVLE, e2, Expression.fromConstant(Types.INT, 127)));
+//
+//                if (!(int1 == int2 && -128 <= int1 && int1 <= 127)) {
+//                    expr = new ComplexExpression(BNEG, expr);
+//                }
+//                PathCondition pc = new PathCondition(expr, takeBranch ? FAILURE : SUCCESS, BINARY_SPLIT);
+//                trace.addElement(pc);
+//            }
+//            // nothing to trace symbolically
+//        }
+//        // TODO: general object equality not handled currently
+//    }
+
+    /**
+     * This method log the decisions during execution to use them during concolic execution.
+     * It logs the decision for the following java bytecodes:
+     * <ul>
+     *     <li>IF_ACMPEQ</li>
+     *     <li>IF_ACMPNE</li>
+     * </ul>
+     *
+     * @param frame         Virtual Frame of espresso. Storing the current execution state of the method (e.g. local
+     *                      variables, stacke values, runtime information)
+     * @param bcn           ByteCodeNode: internal structure of the espresso vm for resolving bytecodes
+     * @param bci           ByteCodeIndex: position of the java bytecode within the method
+     * @param opcode        represents a JVM operation (IFNULL, IFNONULL)
+     * @param takeBranch    result of the espresso vm evalution of the given bytecode and the concrete object c
+     * @param c1            first concrete object: actual instance used for the evaluation
+     * @param a1            first symbolic object: symbolic object representing a set of objects
+     * @param c2            second concrete object: actual instance used for the evaluation
+     * @param a2            second symbolic object: symbolic object representing a set of objects
+     */
+    @Override
+    public void takeBranchRef2(VirtualFrame frame,
+                               BytecodeNode bcn,
+                               int bci,
+                               int opcode,
+                               boolean takeBranch,
+                               StaticObject c1,
+                               StaticObject c2,
+                               Expression a1,
+                               Expression a2) {
+        if (a1 == null || a2 == null) {
             return;
         }
+        //todo: Get this variables with Assertions
+        Variable var1 = (Variable) a1;
+        Variable var2 = (Variable) a2;
 
-        Expression expr = null;
-        Meta meta = bcn.getMeta();
 
-        // special case: cached Integer
-        if (meta.java_lang_Integer.equals(c1.getKlass()) &&
-                meta.java_lang_Integer.equals(c2.getKlass())) {
+        Expression expr = new ComplexExpression(OBJECT_IDENTITY_CHECK, new Variable(OBJECT_ID, var1.getId()), new Variable(OBJECT_ID, var2.getId()));
 
-            Expression e1 = c1 == null ? null : Annotations.annotation(
-                    AnnotatedVM.getFieldAnnotation(c1, meta.java_lang_Integer_value), config.getConcolicIdx());
-            Expression e2 = c2 == null ? null : Annotations.annotation(
-                    AnnotatedVM.getFieldAnnotation(c2, meta.java_lang_Integer_value), config.getConcolicIdx());
+        ComplexExpression isNullA1 = new ComplexExpression(OBJECT_IS_NULL, var1, Expression.getNullConstant());
+        ComplexExpression isNullA2 = new ComplexExpression(OBJECT_IS_NULL, var2, Expression.getNullConstant());
 
-            if (e1 != null || e2 != null) {
+        ComplexExpression isNullA1AndA2 = new ComplexExpression(BAND, isNullA1, isNullA2);
 
-                int int1 = meta.java_lang_Integer_value.getInt(c1);
-                int int2 = meta.java_lang_Integer_value.getInt(c2);
+        expr = new ComplexExpression(BOR, isNullA1AndA2, expr);
 
-                e1 = e1 == null ? Expression.fromConstant(Types.INT, int1) : e1;
-                e2 = e2 == null ? Expression.fromConstant(Types.INT, int2) : e2;
-
-                expr = new ComplexExpression(BAND,
-                        new ComplexExpression(BVEQ, e1, e2),
-                        new ComplexExpression(BVLE, Expression.fromConstant(Types.INT, -128), e1),
-                        new ComplexExpression(BVLE, e1, Expression.fromConstant(Types.INT, 127)),
-                        // remaining not strictly necessary?
-                        new ComplexExpression(BVLE, Expression.fromConstant(Types.INT, -128), e2),
-                        new ComplexExpression(BVLE, e2, Expression.fromConstant(Types.INT, 127)));
-
-                if (!(int1 == int2 && -128 <= int1 && int1 <= 127)) {
-                    expr = new ComplexExpression(BNEG, expr);
-                }
-                PathCondition pc = new PathCondition(expr, takeBranch ? FAILURE : SUCCESS, BINARY_SPLIT);
-                trace.addElement(pc);
-            }
-            // nothing to trace symbolically
+        switch (opcode) {
+            case IF_ACMPEQ : expr =  takeBranch ? expr : new ComplexExpression(BNEG, expr); break;
+            case IF_ACMPNE : expr =  takeBranch ? new ComplexExpression(BNEG, expr): expr; break;
+            default        :
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                throw EspressoError.shouldNotReachHere("expecting IF_ACMPEQ,IF_ACMPNE");
         }
-        // TODO: general object equality not handled currently
+
+        PathCondition pc = new PathCondition(expr, takeBranch ? FAILURE : SUCCESS, BINARY_SPLIT);
+        this.trace.addElement(pc);
+    }
+
+    @Override
+    public Expression instanceOf(StaticObject c, Expression a, Klass typeToCheck, boolean isInstance) {
+        if (a == null) {
+            return null;
+        }
+
+        Expression klassConstant = Expression.fromConstant(KLASS, typeToCheck);
+        Expression instanceofExpr = new ComplexExpression(OBJECT_INSTANCE_OF, a, klassConstant);
+
+//        return isInstance
+//                ? instanceofExpr
+//                : new ComplexExpression(BNEG, instanceofExpr);
+        return instanceofExpr;
+    }
+
+    @Override
+    public Expression checkcast(VirtualFrame frame,
+                                BytecodeNode bcn,
+                                int bci,
+                                StaticObject c,
+                                Expression a,
+                                Klass typeToCheck,
+                                boolean isInstance) {
+        if (a == null) {
+            return null;
+        }
+
+        Expression klassExpression = Expression.fromConstant(KLASS, typeToCheck);
+        Expression finalExpr = new ComplexExpression(OBJECT_CHECK_CAST, a, klassExpression);
+
+        finalExpr = isInstance ? new ComplexExpression(BNEG, finalExpr) : finalExpr;
+
+        PathCondition pc = new PathCondition(finalExpr, isInstance ? FAILURE : SUCCESS, BINARY_SPLIT);
+        this.trace.addElement(pc);
+        return finalExpr;
     }
 
     @Override
@@ -1528,6 +1919,24 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                         new ComplexExpression(OperatorComparator.BVNE, a, zero), 0, 2));
     }
 
+    @Override
+    public void checkNull(StaticObject object, boolean isNull, Expression a) {
+        Expression nullExpr = Expression.getNullConstant();
+        Expression expr = new ComplexExpression(OBJECT_IS_NULL, a, nullExpr);
+
+//        boolean takeBranch = StaticObject.isNull(object);
+//        if (takeBranch) {
+//            expr = new ComplexExpression(BNEG, expr);
+//        }
+        if (!isNull) {
+            expr = new ComplexExpression(BNEG, expr);
+        }
+
+
+        PathCondition pc = new PathCondition(expr, isNull ? FAILURE : SUCCESS, BINARY_SPLIT);
+        trace.addElement(pc);
+    }
+
     public void addZeroToTrace(Expression a, Expression zero) {
         trace.addElement(
                 new PathCondition(
@@ -1558,6 +1967,10 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             e = new ComplexExpression(OperatorComparator.SFROMCODE,  new ComplexExpression(BV2NAT, e));
         }
         return e;
+    }
+
+    public int getObjectCount() {
+        return objectCount;
     }
 
 }

@@ -472,4 +472,10 @@ public class StaticObject implements TruffleObject, Cloneable {
     public boolean hasAnnotations() {
         return annotations != null;
     }
+
+    public static StaticObject createNull(Annotations annotations) {
+        StaticObject s = new StaticObject(null);
+        Annotations.setObjectAnnotation(s, annotations);
+        return s;
+    }
 }

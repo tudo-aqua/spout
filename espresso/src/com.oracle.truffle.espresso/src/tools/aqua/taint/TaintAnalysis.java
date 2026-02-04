@@ -26,6 +26,7 @@ package tools.aqua.taint;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
@@ -529,20 +530,13 @@ public class TaintAnalysis implements Analysis<Taint> {
     }
 
     @Override
-    public Taint instanceOf(StaticObject c, Taint a, boolean isInstance) {
-        return ColorUtil.joinColors(a, ifTaint);
-    }
-
-    @Override
     public Taint isNull(StaticObject c, Taint a, boolean isInstance) {
         return ColorUtil.joinColors(a, ifTaint);
     }
 
     @Override
-    public void checkcast(VirtualFrame frame, BytecodeNode bcn, int bci, boolean takeBranch, Taint a) {
-        if (type == INFORMATION || (type == CONTROL && a != null)) {
-            informationFlowAddScope(frame, bcn, bci, takeBranch ? 0 : 1, a, null);
-        }
+    public Taint instanceOf(StaticObject c, Taint a, Klass typeToCheck, boolean isInstance) {
+        return ColorUtil.joinColors(a, ifTaint);
     }
 
     @Override
@@ -550,6 +544,14 @@ public class TaintAnalysis implements Analysis<Taint> {
         if (type == INFORMATION || (type == CONTROL && a != null)) {
             informationFlowAddScope(frame, bcn, bci, isZero ? 0 : 1, a, null);
         }
+    }
+
+    @Override
+    public Taint checkcast(VirtualFrame frame, BytecodeNode bcn, int bci, StaticObject c, Taint a, Klass typeToCast, boolean isInstance) {
+        if (type == INFORMATION || (type == CONTROL && a != null)) {
+            informationFlowAddScope(frame, bcn, bci, isInstance ? 0 : 1, a, null);
+        }
+        return a;
     }
 
     @Override

@@ -145,7 +145,7 @@ public final class Symbol<T> extends ByteSequence {
      *
      * @param value The byte array containing the symbol data
      */
-    Symbol(byte[] value) {
+    public Symbol(byte[] value) {
         this(value, ByteSequence.hashOfRange(value, 0, value.length));
     }
 

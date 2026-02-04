@@ -25,6 +25,7 @@
 package tools.aqua.spout;
 
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
@@ -785,8 +786,20 @@ public class MetaAnalysis implements Analysis<Annotations> {
     }
 
     @Override
-    public Annotations instanceOf(StaticObject c, Annotations a, boolean isInstance) {
-        return oexecute(c, a, isInstance, Analysis::instanceOf);
+    public Annotations instanceOf(StaticObject c, Annotations a, Klass typeToCheck, boolean isInstance) {
+        //The Code is a small variation of MetaAnalysis.execute()
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[analyses.length];
+        for (Analysis<?> analysis : analyses) {
+            Object result = analysis.instanceOf(c, Annotations.annotation(a, i), typeToCheck, isInstance);
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? new Annotations(annotations) : null;
     }
 
     @Override
@@ -795,11 +808,35 @@ public class MetaAnalysis implements Analysis<Annotations> {
     }
 
     @Override
-    public void checkcast(VirtualFrame frame, BytecodeNode bcn, int bci, boolean takeBranch, Annotations a) {
+    public void checkNull(StaticObject staticObject, boolean isNull, Annotations a) {
+//        int i = 0;
+//        for (Analysis<?> analysis : analyses) {
+//            analysis.checkNull(staticObject);
+//        }
         int i = 0;
+//        boolean hasResult = false;
+//        Object[] annotations = new Object[analyses.length];
         for (Analysis<?> analysis : analyses) {
-            analysis.checkcast(frame, bcn, bci, takeBranch, Annotations.annotation(a, i++));
+            analysis.checkNull(staticObject, isNull, Annotations.annotation(a, i));
+            i++;
         }
+    }
+
+    @Override
+    public Annotations checkcast(VirtualFrame frame, BytecodeNode bcn, int bci, StaticObject c, Annotations a, Klass typeToCast, boolean isInstance) {
+        //The Code is a small variation of MetaAnalysis.execute()
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[analyses.length];
+        for (Analysis<?> analysis : analyses) {
+            Object result = analysis.checkcast(frame, bcn, bci, c, Annotations.annotation(a, i), typeToCast, isInstance);
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? new Annotations(annotations) : null;
     }
 
     @Override
@@ -833,6 +870,15 @@ public class MetaAnalysis implements Analysis<Annotations> {
         int i = 0;
         for (Analysis<?> analysis : analyses) {
             analysis.takeBranchPrimitive2(frame, bcn, bci, opcode, takeBranch, c1, c2, Annotations.annotation(a1, i), Annotations.annotation(a2, i));
+            i++;
+        }
+    }
+
+    @Override
+    public void takeBranchRef1(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, StaticObject c1, Annotations a1) {
+        int i = 0;
+        for (Analysis<?> analysis : analyses) {
+            analysis.takeBranchRef1(frame, bcn, bci, opcode, takeBranch, c1, Annotations.annotation(a1, i));
             i++;
         }
     }

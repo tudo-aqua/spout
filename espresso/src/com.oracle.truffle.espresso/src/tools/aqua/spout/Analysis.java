@@ -25,6 +25,7 @@
 package tools.aqua.spout;
 
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
@@ -280,17 +281,29 @@ public interface Analysis<T> {
 
     default void newMultiArray(List<StaticObject> arr) { }
 
-    default T instanceOf(StaticObject c, T a, boolean isInstance) { return null; }
+    default T instanceOf(StaticObject c, T a, Klass typeToCheck, boolean isInstance) {
+        return null;
+    }
 
-    default T isNull(StaticObject c, T a, boolean isInstance) { return null; }
+    default T isNull(StaticObject c, T a, boolean isInstance) {
+        return null;
+    }
 
-    default void checkcast(VirtualFrame frame, BytecodeNode bcn, int bci, boolean takeBranch, T a1) { }
+    default T checkcast(VirtualFrame frame, BytecodeNode bcn, int bci, StaticObject c, T a, Klass typeToCast, boolean isInstance) {
+        return null;
+    }
 
     default void takeBranchRef1(VirtualFrame frame, BytecodeNode bcn, int bci,
-                                int opcode, boolean takeBranch, T a1) { }
+                                int opcode, boolean takeBranch, StaticObject c1, T a1) {
+    }
+
 
     default void takeBranchRef2(VirtualFrame frame, BytecodeNode bcn, int bci,
-                                int opcode, boolean takeBranch, StaticObject c1, StaticObject c2, T a1, T a2) { }
+                                int opcode, boolean takeBranch, StaticObject c1, StaticObject c2, T a1, T a2) {
+    }
+
+    default void checkNull(StaticObject staticObject, boolean isNull, T a) {
+    }
 
     default void checkNotZeroInt(VirtualFrame frame, BytecodeNode bcn, int bci, boolean isZero, T a) {
 

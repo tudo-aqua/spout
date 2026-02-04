@@ -82,7 +82,7 @@ public class Annotations {
 
     public static void initObjectAnnotations(StaticObject o) {
         if (o.hasAnnotations()) return;
-        int lengthAnnotations = ((ObjectKlass) o.getKlass()).getFieldTable().length + 1;
+        int lengthAnnotations = o.getKlass() != null ? ((ObjectKlass) o.getKlass()).getFieldTable().length + 1 : 1;
         Annotations[] annotations = new Annotations[lengthAnnotations];
         o.setAnnotations(annotations);
     }

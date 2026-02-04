@@ -392,6 +392,15 @@ public final class EspressoLauncher extends AbstractLanguageLauncher {
                             case "concolic.strings":
                                 concolicOptions.put("concolic.strings", value);
                                 break;
+                            case "concolic.constructors":
+                                concolicOptions.put("concolic.constructors", value);
+                                break;
+                            case "concolic.constructorCounts":
+                                concolicOptions.put("concolic.constructorCounts", value);
+                                break;
+                            case "concolic.constructorIds":
+                                concolicOptions.put("concolic.constructorIds", value);
+                                break;
                             case "concolic.execution":
                                 concolicOptions.put("concolic.execution", value);
                                 break;
@@ -745,6 +754,15 @@ public final class EspressoLauncher extends AbstractLanguageLauncher {
             }
             if (concolicOptions.containsKey("concolic.strings")) {
                 params += " concolic.strings:" + concolicOptions.get("concolic.strings");
+            }
+            if (concolicOptions.containsKey("concolic.constructors")) {
+                params += " concolic.constructors:" + concolicOptions.get("concolic.constructors");
+            }
+            if (concolicOptions.containsKey("concolic.constructorCounts")) {
+                params += " concolic.constructorCounts:" + concolicOptions.get("concolic.constructorCounts");
+            }
+            if (concolicOptions.containsKey("concolic.constructorIds")) {
+                params += " concolic.constructorIds:" + concolicOptions.get("concolic.constructorIds");
             }
             if (concolicOptions.containsKey("concolic.execution")) {
                 params += " concolic.execution:" + concolicOptions.get("concolic.execution");

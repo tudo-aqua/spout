@@ -72,6 +72,7 @@ public class Config {
     private int annotationLength = 2;
 
     public Config(String config) {
+        SPouT.log(config);
         this.trace = new Trace();
         parseConfig(config);
     }
@@ -113,6 +114,9 @@ public class Config {
         SPouT.log("Seeded Float Values: " + Arrays.toString(seedsFloatValues));
         SPouT.log("Seeded Double Values: " + Arrays.toString(seedsDoubleValues));
         SPouT.log("Seeded String Values: " + Arrays.toString(seedStringValues));
+        SPouT.log("Seeded Constructor Signature Values: " + Arrays.toString(seedConstructorSignatureValues));
+        SPouT.log("Seeded Constructor BranchId Values: "+Arrays.toString(seedsConstructorBranchIdValues));
+        SPouT.log("Seeded Constructor Count Values: "+constructorCount);
     }
 
     private void parseConfig(String config) {
@@ -156,6 +160,15 @@ public class Config {
                     break;
                 case "concolic.strings":
                     parseStrings(vals, b64);
+                    break;
+                case "concolic.constructors":
+                    parseConstructors(vals, b64);
+                    break;
+                case "concolic.constructorCounts":
+                    parseConstructorCountValues(vals, b64);
+                    break;
+                case "concolic.constructorIds":
+                    parseConstructorBranchIdValues(vals, b64);
                     break;
                 case "concolic.execution":
                     parseConcolic(vals);
@@ -251,6 +264,30 @@ public class Config {
         seedStringValues = new String[valsAsStr.length];
         for (int i = 0; i < valsAsStr.length; i++) {
             seedStringValues[i] = b64 ? b64decode(valsAsStr[i].trim()) : valsAsStr[i].trim();
+        }
+    }
+
+    private void parseConstructorCountValues(String[] valsAsStr, boolean b64) {
+        SPouT.log("parseConstructorCountValues");
+        SPouT.log("values"+ valsAsStr);
+        this.constructorCount = Integer.valueOf(b64 ? b64decode(valsAsStr[0].trim()) : valsAsStr[0].trim());
+    }
+
+    private void parseConstructorBranchIdValues(String[] valsAsStr, boolean b64) {
+        SPouT.log("parseConstructorBranchIdValues");
+        SPouT.log("values"+ valsAsStr);
+        this.seedsConstructorBranchIdValues = new int[valsAsStr.length];
+        for (int i = 0; i < valsAsStr.length; i++) {
+            seedsConstructorBranchIdValues[i] =
+                    Integer.valueOf(b64 ? b64decode(valsAsStr[i].trim()) : valsAsStr[i].trim());
+        }
+    }
+
+    private void parseConstructors(String[] valsAsStr, boolean b64) {
+        SPouT.log("parseConstructors");
+        seedConstructorSignatureValues = new String[valsAsStr.length];
+        for (int i = 0; i < valsAsStr.length; i++) {
+            seedConstructorSignatureValues[i] = b64 ? b64decode(valsAsStr[i].trim()) : valsAsStr[i].trim();
         }
     }
 
@@ -365,6 +402,46 @@ public class Config {
         countStringSeeds++;
         return new SymbolicStringValue(concrete, symbolic);
     }
+
+
+    /**
+     * Takes a String from -Dconcolic.constructors and creates a {{@link SymbolicObjectValue}}.
+     * The Strings of -Dconcolic.constructors are in the format {QUALIFIED_CLASS_NAME}|{CONSTRUCTOR_SIGNATURE}.
+     * Both QUALIFIED_CLASS_NAME and CONSTRUCTOR_SIGNATURE follow the <b>class File Format</b><br>
+     * (See JVM Specification chapter 2 The Structure of the Java Virtual Machine)
+     *
+     * <b>example:</b><br>
+     * Ljava/lang/StringBuilder;|()V
+     * Here the default constructor ()V from the class Ljava/lang/StringBuilder is invoked
+     *
+     * @return Parsed {{@link SymbolicObjectValue}}
+     */
+    public SymbolicObjectValue nextSymbolicObject(){
+        //Default values for className and constructor if nothing is given in -Dconcolic.constructors
+        //This is the case if nondetObject() is executed for the first time
+        String className = "null";
+        String constructorSignature = "null|NULL";
+        int branchId = 0; //id of NULL constructor in the List of ALL avaibale constructors
+        int branchCount = getConstructorCount();
+
+        //Get next constructor
+        if(countConstructorSignatureSeeds < seedConstructorSignatureValues.length){
+            String classNameAndConstructor = seedConstructorSignatureValues[countConstructorSignatureSeeds];
+            //Check whether no object needs to be instantiated because null is the desired value
+            if (!classNameAndConstructor.equals("null|NULL")) {
+                //Extract className and constructor_signature
+                String[] split = classNameAndConstructor.split("\\|");
+                className = split[0];
+                constructorSignature = split[1];
+                branchId = Integer.parseInt(split[2]);
+                branchCount = Integer.parseInt(split[3]);
+            }
+        }
+        Variable symbolic = new Variable(Types.OBJECT, countConstructorSignatureSeeds);
+        countConstructorSignatureSeeds++;
+        return new SymbolicObjectValue(className, constructorSignature, symbolic, branchId, branchCount);
+    }
+
 
     private boolean[] seedsBooleanValues = new boolean[] {};
     private int countBooleanSeeds = 0;
@@ -518,6 +595,26 @@ public class Config {
     }
     */
 
+    private String[] seedConstructorSignatureValues = new String[] {};
+    private int countConstructorSignatureSeeds = 0;
+
+    private int constructorCount = 0;
+
+    public int getConstructorCount() {
+        return constructorCount;
+    }
+
+
+    private int[] seedsConstructorBranchIdValues = new int[] {};
+    private int countConstructorBranchIdSeeds = 0;
+
+    public int nextConstructorBranchID() {
+        if (countConstructorBranchIdSeeds >= seedsConstructorBranchIdValues.length) {
+            return 0; // no more seeds
+        }
+        return seedsConstructorBranchIdValues[countConstructorBranchIdSeeds++];
+    }
+
     public int getConcolicIdx() {
         return concolicIdx;
     }
@@ -577,4 +674,23 @@ public class Config {
             symbolic = s;
         }
     };
+    public class SymbolicObjectValue{
+        public String klassName;
+        public String constructor;
+        public Variable symbolic;
+        public int branchId;
+        public int branchCount;
+
+        public SymbolicObjectValue(String klassName,
+                                   String constructor,
+                                   Variable symbolic,
+                                   int branchId,
+                                   int branchCount){
+            this.klassName = klassName;
+            this.constructor = constructor;
+            this.symbolic = symbolic;
+            this.branchId = branchId;
+            this.branchCount = branchCount;
+        }
+    }
 }

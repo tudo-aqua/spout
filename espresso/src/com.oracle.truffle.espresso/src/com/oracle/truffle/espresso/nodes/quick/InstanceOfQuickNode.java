@@ -33,6 +33,7 @@ import tools.aqua.spout.SPouT;
 public final class InstanceOfQuickNode extends QuickNode {
 
     @Child InstanceOf instanceOf;
+    private final Klass typeToCheck;
 
     static final int stackEffectOf_INSTANCEOF = Bytecodes.stackEffectOf(Bytecodes.INSTANCEOF);
 
@@ -40,6 +41,7 @@ public final class InstanceOfQuickNode extends QuickNode {
         super(top, curBCI);
         assert !typeToCheck.isPrimitive();
         this.instanceOf = InstanceOf.create(typeToCheck, true);
+        this.typeToCheck = typeToCheck;
     }
 
     @Override
@@ -47,7 +49,7 @@ public final class InstanceOfQuickNode extends QuickNode {
         StaticObject receiver = EspressoFrame.popObject(frame, top - 1);
         boolean result = StaticObject.notNull(receiver) && instanceOf.execute(receiver.getKlass());
         EspressoFrame.putInt(frame, top - 1, result ? 1 : 0);
-        SPouT.instanceOf(frame, receiver, result, top - 1);
+        SPouT.instanceOf(frame, receiver, result, top - 1, this.typeToCheck);
         return stackEffectOf_INSTANCEOF;
     }
 }

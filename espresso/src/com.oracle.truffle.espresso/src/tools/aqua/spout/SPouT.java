@@ -53,20 +53,7 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IFEQ;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IFGE;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IFGT;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IFLE;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IFLT;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IFNE;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IF_ACMPEQ;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IF_ACMPNE;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IF_ICMPEQ;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IF_ICMPGE;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IF_ICMPGT;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IF_ICMPLE;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IF_ICMPLT;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IF_ICMPNE;
+import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.*;
 import static com.oracle.truffle.espresso.nodes.BytecodeNode.*;
 import static com.oracle.truffle.espresso.nodes.EspressoFrame.*;
 import static com.oracle.truffle.espresso.runtime.dispatch.staticobject.EspressoInterop.getMeta;
@@ -109,11 +96,13 @@ public class SPouT {
     @CompilerDirectives.TruffleBoundary
     public static void endPath() {
         System.out.println("======================== END PATH [BEGIN].");
+
         stopAnalysis();
         if (trace != null) {
             trace.printTrace();
         }
         System.out.println("======================== END PATH [END].");
+        System.out.println("[META_INFOS] object_count: "+config.getConcolicAnalysis().getObjectCount());
         System.out.println("[ENDOFTRACE]");
         System.out.flush();
     }
@@ -261,6 +250,22 @@ public class SPouT {
         StaticObject annotatedObject = config.getConcolicAnalysis().nextSymbolicString(meta);
         gwit.trackLocationForWitness("\"" + annotatedObject + "\"");
         return annotatedObject;
+    }
+
+    /**
+     * These methods mark the barrier between host and guest world (see @CompilerDirectives.TruffleBoundary).
+     * Trys to create in the guest world a new Object according to the next element of -Dconcolic.constructors.
+     * Stops the analysis if the creation fails.
+     * @param meta introspection API to get information of the guest system during runtime
+     * @return object created in the guest world
+     */
+    @CompilerDirectives.TruffleBoundary
+    public static StaticObject nextSymbolicObject(Meta meta, Klass typeBound) {
+        StaticObject staticObject = config.getConcolicAnalysis().nextSymbolicObject(meta, typeBound);
+        if (staticObject == null) {
+            stopRecording("Error Creating Symbolic Object", meta);
+        }
+        return staticObject;
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -605,6 +610,12 @@ public class SPouT {
         AnnotatedVM.putAnnotations(frame, top - 3, analysis.ddiv(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 3)));
+    }
+
+    public static void checkNull(StaticObject staticObject, boolean isNull) {
+        if (analyze) {
+            analysis.checkNull(staticObject, isNull, Annotations.objectAnnotation(staticObject));
+        }
     }
 
 
@@ -1136,10 +1147,15 @@ public class SPouT {
 
     // branching
 
-    public static void checkcast(VirtualFrame frame, StaticObject obj, BytecodeNode bcn, int bci, boolean cast) {
-        if (!analyze) return;
-        Annotations a = Annotations.objectAnnotation(obj);
-        analysis.checkcast(frame, bcn, bci, cast, a);
+    public static void checkcast(VirtualFrame frame,
+                                 StaticObject obj,
+                                 Klass typeToCast,
+                                 int top,
+                                 BytecodeNode bcn,
+                                 int bci,
+                                 boolean isInstance) {
+        if (!analyze || !obj.hasAnnotations()) return;
+        analysis.checkcast(frame, bcn, bci, obj, Annotations.objectAnnotation(obj), typeToCast, isInstance);
     }
 
     public static boolean takeBranchPrimitive1(VirtualFrame frame, int top, int opcode, BytecodeNode bcn, int bci) {
@@ -1219,45 +1235,109 @@ public class SPouT {
         return takeBranch;
     }
 
-    public static boolean takeBranchRef2(VirtualFrame frame, BytecodeNode bcn, int bci, StaticObject operand1, StaticObject operand2, int opcode) {
+
+    /**
+     * This method is an extension of {{@link BytecodeNode#takeBranchRef1(StaticObject, int)}} which is the native
+     * implementation of the espresso vm for the following java bytecodes:
+     * <ul>
+     *     <li>IFNULL</li>
+     *     <li>IFNONNULL</li>
+     * </ul>
+     *
+     * In this method, only meta information, especially the result of the evaluation of the Java byte code,
+     * is passed on in order to log the decisions during execution.
+     * See the implementations of
+     * {{@link Analysis#takeBranchRef1(VirtualFrame, BytecodeNode, int, int, boolean, StaticObject, Object)}}
+     * Implementations of Analysis are
+     * {{@link tools.aqua.concolic.ConcolicAnalysis#takeBranchRef1(VirtualFrame, BytecodeNode, int, int, boolean, StaticObject, Expression)}}
+     * and
+     * {{@link tools.aqua.taint.TaintAnalysis#takeBranchRef1(VirtualFrame, BytecodeNode, int, int, boolean, StaticObject, Object)}}
+     *
+     * @param frame         Virtual Frame of espresso. Storing the current execution state of the method (e.g. local
+     *                      variables, stacke values, runtime information)
+     * @param bcn           internal structure of the espresso vm for resolving bytecodes
+     * @param bci           ByteCodeIndex: position of the java bytecode within the method
+     * @param operand       operand to which the bytecode is applied (in this case always an object type)
+     * @param opcode        represents a JVM operation (IFNULL, IFNONULL)
+     * @return              evaluation of the javabyte code according to the given operand
+     */
+    public static boolean takeBranchRef1(VirtualFrame frame,
+                                         BytecodeNode bcn,
+                                         int bci,
+                                         StaticObject operand,
+                                         int opcode) {
+        assert IFNULL <= opcode && opcode <= IFNONNULL;
+        // @formatter:off
+        boolean result;
+        switch (opcode) {
+            case IFNULL    : result = StaticObject.isNull(operand);break;
+            case IFNONNULL : result = StaticObject.notNull(operand);break;
+            default        :
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                throw EspressoError.shouldNotReachHere("expected IFNULL or IFNONNULL bytecode");
+        }
+        // @formatter:on
+        if (analyze) {
+            analysis.takeBranchRef1(frame, bcn, bci, opcode, result, operand,
+                    Annotations.objectAnnotation(operand));
+        }
+        return result;
+    }
+
+    /**
+     * This method is an extension of {{@link BytecodeNode#takeBranchRef2( StaticObject, StaticObject, int)} which is
+     * the native implementation of the espresso vm for the following java bytecodes:
+     * <ul>
+     *     <li>IF_ACMPEQ (==)</li>
+     *     <li>IF_ACMPNE (!=)</li>
+     * </ul>
+     *
+     * In this method, only meta information, especially the result of the evaluation of the Java byte code,
+     * is passed on in order to log the decisions during execution.
+     *
+     * See the implementations of
+     * {{@link Analysis#takeBranchRef2( VirtualFrame, BytecodeNode, int, int, boolean, StaticObject, StaticObject, Object, Object)}
+     * Implementations of Analysis are
+     * {{@link tools.aqua.concolic.ConcolicAnalysis#takeBranchRef2( VirtualFrame, BytecodeNode, int, int, boolean, StaticObject, StaticObject, Expression, Expression)}
+     * and
+     *  {{@link tools.aqua.taint.TaintAnalysis#takeBranchRef2( VirtualFrame, BytecodeNode, int, int, boolean, StaticObject, StaticObject, Taint, Taint)}
+     *
+     * @param frame         Virtual Frame of espresso. Storing the current execution state of the method (e.g. local
+     *                      variables, stacke values, runtime information)
+     * @param bcn           internal structure of the espresso vm for resolving bytecodes
+     * @param bci           ByteCodeIndex: position of the java bytecode within the method
+     * @param operand1      first operand to which the bytecode is applied (in this case always an object type)
+     * @param operand2      second operand to which the bytecode is applied (in this case always an object type)
+     * @param opcode        represents a JVM operation (IF_ACMPEQ, IF_ACMPNE)
+     * @return              evaluation of the javabyte code according to the two given operands
+     */
+    public static boolean takeBranchRef2(VirtualFrame frame,
+                                         BytecodeNode bcn,
+                                         int bci,
+                                         StaticObject operand1,
+                                         StaticObject operand2,
+                                         int opcode) {
         assert IF_ACMPEQ <= opcode && opcode <= IF_ACMPNE;
         boolean result;
         // @formatter:off
-        if (!analyze) {
-            switch (opcode) {
-                case IF_ACMPEQ : result =  operand1 == operand2; break;
-                case IF_ACMPNE : result =  operand1 != operand2; break;
-                default        :
-                    CompilerDirectives.transferToInterpreterAndInvalidate();
-                    throw EspressoError.shouldNotReachHere("expecting IF_ACMPEQ,IF_ACMPNE");
-            }
-        } else {
-            CompilerDirectives.transferToInterpreterAndInvalidate();
-            Meta meta = getMeta();
-            if (operand1 != operand2) {
-                if (meta.java_lang_Integer.equals(operand1.getKlass()) &&
-                        meta.java_lang_Integer.equals(operand2.getKlass())) {
+        switch (opcode) {
+            case IF_ACMPEQ : result =  operand1 == operand2 || (StaticObject.isNull(operand1) && StaticObject.isNull(operand2)); break;
+            case IF_ACMPNE : result =  operand1 != operand2 && !(StaticObject.isNull(operand1) && StaticObject.isNull(operand2)); break;
+            default        :
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                throw EspressoError.shouldNotReachHere("expecting IF_ACMPEQ,IF_ACMPNE");
+        }
 
-                    int int1 = meta.java_lang_Integer_value.getInt(operand1);
-                    int int2 = meta.java_lang_Integer_value.getInt(operand2);
+        // @formatter:on
 
-                    if (int1 == int2 && int1 >= -128 && int1 <= 127) {
-                        result = (opcode == IF_ACMPEQ);
-                    } else {
-                        result = (opcode != IF_ACMPEQ);
-                    }
-                } else {
-                    result = (opcode != IF_ACMPEQ);
-                }
-            } else {
-                result = (opcode == IF_ACMPEQ);
-            }
+        if (analyze) {
             analysis.takeBranchRef2(frame, bcn, bci, opcode, result, operand1, operand2,
                     Annotations.objectAnnotation(operand1), Annotations.objectAnnotation(operand2));
+
         }
-        // @formatter:on
         return result;
     }
+
 
     public static void tableSwitch(int concIndex, Annotations annotatedIndex, int low, int high,
                                    VirtualFrame frame, BytecodeNode bcn, int bci) {
@@ -1277,9 +1357,9 @@ public class SPouT {
     //
     // Objects
 
-    public static void instanceOf(VirtualFrame frame, StaticObject object, boolean isInstance, int top) {
+    public static void instanceOf(VirtualFrame frame, StaticObject object, boolean isInstance, int top, Klass typeToCheck) {
         if (!analyze || !object.hasAnnotations()) return;
-        Annotations a = analysis.instanceOf(object, Annotations.objectAnnotation(object), isInstance);
+        Annotations a = analysis.instanceOf(object, Annotations.objectAnnotation(object), typeToCheck, isInstance);
         AnnotatedVM.putAnnotations(frame, top, a);
     }
 
@@ -1287,6 +1367,10 @@ public class SPouT {
         if (!analyze || !object.hasAnnotations()) return;
         Annotations a = analysis.isNull(object, Annotations.objectAnnotation(object), isNull);
         AnnotatedVM.putAnnotations(frame, top, a);
+    }
+
+    public static void nullCheckForException(StaticObject object) {
+        if (!analyze || !object.hasAnnotations()) return;
     }
     // ---------------------------------------------------------------------------
     //
@@ -2353,4 +2437,31 @@ public class SPouT {
     public static void resumeAnalyze() {
         analyze = oldAnalyze;
     }
+
+    public class NullCheckResult {
+        private StaticObject object;
+        public boolean result;
+
+        public boolean getResult() {
+            return result;
+        }
+
+        public void setResult(boolean result) {
+            this.result = result;
+        }
+
+        public StaticObject getObject() {
+            return object;
+        }
+
+        public void setObject(StaticObject object) {
+            this.object = object;
+        }
+
+        public NullCheckResult(StaticObject object, boolean result) {
+            this.object = object;
+            this.result = result;
+        }
+    }
+
 }

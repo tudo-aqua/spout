@@ -33,6 +33,10 @@ public class Variable extends Atom {
         this.id = id;
     }
 
+    public int getId() {
+        return id;
+    }
+
     @Override
     public String toString() {
         switch (this.getType()) {
@@ -54,6 +58,12 @@ public class Variable extends Atom {
                 return "__double_" + this.id;
             case STRING:
                 return "__string_" + this.id;
+            case OBJECT:
+                return "__object_" + this.id;
+            case OBJECT_ID:
+                return "__object_id_" + this.id;
+            case CONSTRUCTOR:
+                return "__object_constructor_"+ this.id;
             default:
                 return "Variable{" +
                         "id=" + id +

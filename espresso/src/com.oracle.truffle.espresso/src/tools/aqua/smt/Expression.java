@@ -24,6 +24,7 @@
 package tools.aqua.smt;
 
 import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.meta.EspressoError;
 
 public interface Expression {
@@ -34,10 +35,15 @@ public interface Expression {
             case LONG: return Constant.fromConcreteValue( (long) value);
             case FLOAT: return Constant.fromConcreteValue( (float) value);
             case DOUBLE: return Constant.fromConcreteValue( (double) value);
+            case KLASS: return Constant.fromConcreteValue( (Klass) value);
             default:
                 CompilerDirectives.transferToInterpreter();
                 throw EspressoError.shouldNotReachHere("unsupported constant type");
         }
+    }
+
+    public static Expression getNullConstant() {
+        return Constant.fromConcreteValue();
     }
 
     public static boolean isBoolean(Expression e) {

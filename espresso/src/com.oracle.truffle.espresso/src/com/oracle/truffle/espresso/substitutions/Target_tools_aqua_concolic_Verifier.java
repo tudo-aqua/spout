@@ -87,4 +87,10 @@ public final class Target_tools_aqua_concolic_Verifier {
         return SPouT.nextSymbolicString(meta);
     }
 
+    //@JavaType(internalName = "L.ClassName")
+    @Substitution(hasReceiver = false)
+    public static @JavaType(Object.class) StaticObject nondetObject(@Inject Meta meta) {
+        return SPouT.nextSymbolicObject(meta, null);
+    }
+
 }

@@ -26,6 +26,7 @@ import com.oracle.truffle.api.frame.Frame;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.source.SourceSection;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
+import tools.aqua.spout.SPouT;
 
 public abstract class QuickNode extends BaseQuickNode {
 
@@ -43,9 +44,14 @@ public abstract class QuickNode extends BaseQuickNode {
 
     protected final StaticObject nullCheck(StaticObject value) {
         if (StaticObject.isNull(value)) {
+            //logs StaticObject == null to the trace
+            SPouT.checkNull(value, true);
             getBytecodeNode().enterImplicitExceptionProfile();
             throw getMeta().throwNullPointerException();
         }
+        //logs StaticObect != null to the trace
+        SPouT.checkNull(value, false);
+
         return value;
     }
 

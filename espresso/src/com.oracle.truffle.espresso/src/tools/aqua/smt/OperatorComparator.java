@@ -164,7 +164,11 @@ public enum OperatorComparator {
     MATHSQRT,
     MATHARCSIN,
     MATHARCCOS,
-    FPABS;
+    FPABS,
+    OBJECT_IS_NULL,
+    OBJECT_INSTANCE_OF,
+    OBJECT_IDENTITY_CHECK,
+    OBJECT_CHECK_CAST;
 
 
 
@@ -380,7 +384,14 @@ public enum OperatorComparator {
                 return "ARCSIN";
             case FPABS:
                 return "fp.abs";
-
+            case OBJECT_IS_NULL:
+                return "=";
+            case OBJECT_INSTANCE_OF:
+                return "instance_of";
+            case OBJECT_IDENTITY_CHECK:
+                return "=";
+            case OBJECT_CHECK_CAST:
+                return "extends";
 
             default:
                 return super.toString();
@@ -396,7 +407,7 @@ public enum OperatorComparator {
     public static void initialize() {
         // FIXME: complete set
         stringOps = EnumSet.of(SSUBSTR, SREPLACE, SREPLACEALL, STOLOWER, STOUPPER, SCONCAT, SAT);
-        boolOps = EnumSet.of(BVEQ, STRINGEQ, BVNE, STRINGNE, BVLT, BVLE, BVGT, BVGE, BNEG, BAND, BOR, BXOR, BEQUIV, BIMPLIES, SCONTAINS);
+        boolOps = EnumSet.of(BVEQ, STRINGEQ, BVNE, STRINGNE, BVLT, BVLE, BVGT, BVGE, BNEG, BAND, BOR, BXOR, BEQUIV, BIMPLIES, SCONTAINS, OBJECT_INSTANCE_OF);
         cmpOps = EnumSet.of(LCMP, FCMPL, FCMPG, DCMPL, DCMPG);
     }
 
