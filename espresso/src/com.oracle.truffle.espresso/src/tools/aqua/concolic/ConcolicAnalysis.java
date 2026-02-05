@@ -199,22 +199,16 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
         // NORMAL BEHAVIOUR TO CREATE AN OBJECT
 
-        //4. Getting classname and method signature type
-        // a) Get the classname of the class in **class file format**
+        //4. Getting classname
         Symbol<Type> type = meta.getTypes().fromClassGetName(ssv.klassName);
+        SPouT.log("Type: "+meta.getTypes().fromClassGetName(ssv.klassName));
         if (type == null) {
             SPouT.log("returned null, because loading type failed.");
             return null;
         }
-        // b) Get the signature of the constructor given by -Dconcolic.constructors
-        Symbol<Signature> signature = meta.getSignatures().lookupValidSignature(ssv.constructor);    //
-        if (signature == null) {
-            SPouT.log("returned null, because loading signature failed.");
-            return null;
-        }
 
         //5. Loading the class of the object
-        StaticObject classLoader = (StaticObject) meta.java_lang_ClassLoader_getSystemClassLoader.invokeDirect(null);
+        StaticObject classLoader = (StaticObject) meta.java_lang_ClassLoader_getSystemClassLoader.invokeDirect();
         Klass klass = meta.loadKlassOrNull(type,
                 classLoader,  //No classLoader means that the BOOT-Classloader is used
                 StaticObject.NULL); //protectionDomain ???
@@ -224,11 +218,22 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             return null;
         }
 
-        //6. Allocate memory for the object
+        //6. Get the signature of the constructor given by -Dconcolic.constructors
+        SPouT.log("ssv.constructor: "+ssv.constructor);
+        SPouT.log("All signatures: "+meta.getSignatures());
+        Symbol<Signature> signature = klass.getSignatures().lookupValidSignature(ssv.constructor);
+        if (signature == null) {
+            SPouT.log("returned null, because loading signature failed.");
+            return null;
+        }
+
+
+
+        //7. Allocate memory for the object
         StaticObject staticObject = klass.allocateInstance(); //Saves the object in the memory (Just memory no fields)
         Annotations.initObjectAnnotations(staticObject);
 
-        //7. Until this point memory for the object is allocated, BUT no attributes/ fields are created
+        //8. Until this point memory for the object is allocated, BUT no attributes/ fields are created
         //A constructor must be used set values of the attributes
         //Therefore search for the constructor. If applicable, execute constructor to create Object
         Method[] declaredConstructors = klass.getDeclaredConstructors();

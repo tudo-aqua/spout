@@ -1519,7 +1519,7 @@ public final class JniEnv extends NativeEnv {
         if (StaticObject.isNull(string)) {
             return 0;
         }
-        SPouT.log("Warning: removing annotations after call to String length in JniEnv");
+//        SPouT.log("Warning: removing annotations after call to String length in JniEnv");
         return (int) getMeta().java_lang_String_length.invokeDirectSpecial(string);
     }
 

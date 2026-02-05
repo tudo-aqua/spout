@@ -84,7 +84,7 @@ public final class Target_java_lang_String {
 
     @Substitution(hasReceiver = true, methodName = "toLowerCase")
     public static @JavaType(String.class) StaticObject toLowerCase_local(@JavaType(String.class) StaticObject self, @JavaType(Locale.class) StaticObject locale,  @Inject Meta meta){
-        SPouT.log("Warning: we do not support a precise model for toLowerCase with Locales. Using normal toLowerCase without Locale instead as approximation.");
+//        SPouT.log("Warning: we do not support a precise model for toLowerCase with Locales. Using normal toLowerCase without Locale instead as approximation.");
         return SPouT.stringToLowerCase(self, meta);
     }
 
