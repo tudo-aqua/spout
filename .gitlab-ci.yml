@@ -28,5 +28,4 @@ build:
   image: $CI_REGISTRY/psyco/gdart/development:22.2.0
   script:
     - cd espresso
-    - export JAVA_HOME=/data/labsjdk-gdart-25+37-jvmci-b01/
-    - mx --env native-ce build
+    - mx --java-home /data/labsjdk-gdart-25+37-jvmci-b01/ --env native-ce build
