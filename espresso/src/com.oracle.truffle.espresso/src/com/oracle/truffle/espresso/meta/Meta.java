@@ -1025,12 +1025,12 @@ public final class Meta extends ContextAccessImpl
 
         java_time_LocalDate = knownKlass(Types.java_time_LocalDate);
         java_time_LocalDate_year = java_time_LocalDate.requireDeclaredField(Names.year, Types._int);
-        java_time_LocalDate_month = java_time_LocalDate.requireDeclaredField(Names.month, Types._short); 
+        java_time_LocalDate_month = java_time_LocalDate.requireDeclaredField(Names.month, Types._byte); 
                        // diff() //
                        // .field(VERSION_24_OR_LOWER, Names.month, Types._short) //
                        // .field(VERSION_25_OR_HIGHER, Names.month, Types._byte) //
                        // .field(java_time_LocalDate);
-        java_time_LocalDate_day = java_time_LocalDate.requireDeclaredField(Names.day, Types._short);
+        java_time_LocalDate_day = java_time_LocalDate.requireDeclaredField(Names.day, Types._byte);
                        // diff() //
                        // .field(VERSION_24_OR_LOWER, Names.day, Types._short) //
                        // .field(VERSION_25_OR_HIGHER, Names.day, Types._byte) //
