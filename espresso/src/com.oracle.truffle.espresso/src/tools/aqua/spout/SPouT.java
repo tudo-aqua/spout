@@ -81,7 +81,8 @@ public class SPouT {
     @CompilerDirectives.TruffleBoundary
     public static void newPath(String options) {
         System.out.println("======================== START PATH [BEGIN].");
-        config = new Config(options);
+        config = new Config();
+        config.parseConfig(options, getMeta());
         config.configureAnalysis();
         analysis = new MetaAnalysis(config);
         trace = config.getTrace();
@@ -261,6 +262,7 @@ public class SPouT {
      */
     @CompilerDirectives.TruffleBoundary
     public static StaticObject nextSymbolicObject(Meta meta, Klass typeBound) {
+        if (!analyze || !config.hasConcolicAnalysis()) return StaticObject.NULL;
         StaticObject staticObject = config.getConcolicAnalysis().nextSymbolicObject(meta, typeBound);
         if (staticObject == null) {
             stopRecording("Error Creating Symbolic Object", meta);

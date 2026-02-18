@@ -27,19 +27,13 @@ package tools.aqua.concolic;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.EspressoLanguage;
-import com.oracle.truffle.espresso.classfile.descriptors.Signature;
-import com.oracle.truffle.espresso.classfile.descriptors.Symbol;
-import com.oracle.truffle.espresso.classfile.descriptors.Type;
+import com.oracle.truffle.espresso.impl.Field;
 import com.oracle.truffle.espresso.impl.Klass;
-import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.impl.ObjectKlass;
 import com.oracle.truffle.espresso.jdwp.api.KlassRef;
 import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
-import com.oracle.truffle.espresso.nodes.bytecodes.InstanceOf;
-import com.oracle.truffle.espresso.nodes.bytecodes.InvokeSpecial;
-import com.oracle.truffle.espresso.nodes.bytecodes.InvokeSpecialNodeGen;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
 import tools.aqua.smt.*;
 import tools.aqua.spout.*;
@@ -138,6 +132,33 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return guestString;
     }
 
+    @CompilerDirectives.TruffleBoundary
+    private static void annotateObject(StaticObject obj, int cIdx) {
+        Variable oId = (Variable) Annotations.objectAnnotation(obj).getAnnotations()[cIdx];
+        Annotations[] objAnnotations = obj.getAnnotations();
+        ObjectKlass kls = (ObjectKlass) obj.getKlass();
+        if (kls == null) { // null object
+            return;
+        }
+        Field[] fieldTable = kls.getFieldTable();
+        for (int i = 0; i < fieldTable.length; i++) {
+            Field field = fieldTable[i];
+            String name = field.getNameAsString();
+            Expression fName = new FieldName(name, oId);
+            Annotations fieldAnnotations = Annotations.create();
+            fieldAnnotations.set(cIdx, fName);
+            if (field.getKind().isPrimitive()) {
+                objAnnotations[field.getSlot()] = fieldAnnotations;
+            } else if (field.getKind().isObject()){
+                StaticObject fObj = field.getObject(obj);
+                Annotations.setObjectAnnotation(fObj, fieldAnnotations);
+                annotateObject(fObj, cIdx);
+            }
+            // TODO: arrays?
+            // TODO: name collisions
+        }
+        obj.setAnnotations(objAnnotations);
+    }
 
     /***
      * Trys to create in the guest world a new Object according to the next element of -Dconcolic.constructors
@@ -147,38 +168,46 @@ public class ConcolicAnalysis implements Analysis<Expression> {
      *         null otherwise
      */
     public StaticObject nextSymbolicObject(Meta meta, Klass typeBound) {
-        //1. Retrieve the information from the commandline needed to create the next symbolic object
-        Config.SymbolicObjectValue ssv = config.nextSymbolicObject();
 
-        //2. Check if the next symbolic object shall be a "String". Perform special handling in this case
-        if (ssv.klassName.equals("Ljava/lang/String;")) {
-            if (ssv.constructor.equals("(Ljava/lang/String;)V")) {
-                // Use special handling for Strings
-                return nextSymbolicString(meta);
-            } else {
-                SPouT.stopRecording("Unsupported String constructor!", meta);
-            }
-        }
+        StaticObject obj = config.nextSymbolicObject(meta);
+        assert obj != null;
+        annotateObject(obj, config.getConcolicIdx());
+
+        Variable oId = (Variable) Annotations.objectAnnotation(obj).getAnnotations()[config.getConcolicIdx() ];
+        trace.addElement(new ObjectIdentityDeclaration(oId.getId()));
+
+        // todo: add assumption if type bound
+
+        return obj;
+
+        /*
+
+        // --- old from here ---
+
+        //1. Retrieve the information from the commandline needed to create the next symbolic object
+        Config.SymbolicConstructorConfig ssv = config.nextSymbolicObject();
+
+
 
         //3. Check whether the next symbolic object shall be "null". Perform special handling in this case
         if (ssv.klassName.equals("null")) {
             Annotations objectDescription = Annotations.emptyArray();
-            objectDescription.set(config.getConcolicIdx(), ssv.symbolic);
+            objectDescription.set(config.getConcolicIdx(), ssv.symbolicObjectId);
 
             //Add DECLARE-statements for the following variables ...
             // ... id of object
-            trace.addElement(new ObjectIdentityDeclaration(ssv.symbolic.getId()));
+            trace.addElement(new ObjectIdentityDeclaration(ssv.symbolicObjectId.getId()));
             // ... class of object
-            trace.addElement(new SymbolDeclaration(ssv.symbolic));
+            trace.addElement(new SymbolDeclaration(ssv.symbolicObjectId));
             // ... used constructor to instantiate the object
-            trace.addElement(new ConstructorDeclaration(ssv.symbolic.getId()));
+            trace.addElement(new ConstructorDeclaration(ssv.symbolicObjectId.getId()));
 
             // If the type of the object to be created is known (see typeBound), add an ASSUMPTION of this type to the trace
             // The assumption is a CHECKCAST
             if (typeBound != null) {
                 Expression klassExpression = Expression.fromConstant(KLASS, typeBound);
 
-                ComplexExpression assume = new ComplexExpression(OBJECT_CHECK_CAST, ssv.symbolic, klassExpression);
+                ComplexExpression assume = new ComplexExpression(OBJECT_CHECK_CAST, ssv.symbolicObjectId, klassExpression);
                 Annotations annotations = Annotations.create();
                 annotations.set(config.getConcolicIdx(), assume);
                 AnnotatedValue annotatedValue = new AnnotatedValue(true, annotations); //THE CHECKCAST is always TRUE because null can be casted to everything
@@ -207,26 +236,6 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             return null;
         }
 
-        //5. Loading the class of the object
-        StaticObject classLoader = (StaticObject) meta.java_lang_ClassLoader_getSystemClassLoader.invokeDirect();
-        Klass klass = meta.loadKlassOrNull(type,
-                classLoader,  //No classLoader means that the BOOT-Classloader is used
-                StaticObject.NULL); //protectionDomain ???
-
-        if (klass == null) {
-            SPouT.log("returned null, because loading klass failed");
-            return null;
-        }
-
-        //6. Get the signature of the constructor given by -Dconcolic.constructors
-        SPouT.log("ssv.constructor: "+ssv.constructor);
-        SPouT.log("All signatures: "+meta.getSignatures());
-        Symbol<Signature> signature = klass.getSignatures().lookupValidSignature(ssv.constructor);
-        if (signature == null) {
-            SPouT.log("returned null, because loading signature failed.");
-            return null;
-        }
-
 
 
         //7. Allocate memory for the object
@@ -246,17 +255,17 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             if (declaredConstructor.getRawSignature().equals(signature)) {
                 //Add DECLARE-statements for the following variables ...
                 // ... id of object
-                trace.addElement(new ObjectIdentityDeclaration(ssv.symbolic.getId()));
+                trace.addElement(new ObjectIdentityDeclaration(ssv.symbolicObjectId.getId()));
                 // ... class of object
-                trace.addElement(new SymbolDeclaration(ssv.symbolic));
+                trace.addElement(new SymbolDeclaration(ssv.symbolicObjectId));
                 // ... used constructor to instantiate the object
-                trace.addElement(new ConstructorDeclaration(ssv.symbolic.getId()));
+                trace.addElement(new ConstructorDeclaration(ssv.symbolicObjectId.getId()));
 
                 // If the type of the object to be created is known (see typeBound), add an ASSUMPTION of this type to the trace
                 if (typeBound != null) {
                     Expression klassExpression = Expression.fromConstant(KLASS, typeBound);
 
-                    ComplexExpression assume = new ComplexExpression(OBJECT_CHECK_CAST, ssv.symbolic, klassExpression);
+                    ComplexExpression assume = new ComplexExpression(OBJECT_CHECK_CAST, ssv.symbolicObjectId, klassExpression);
                     Annotations annotations = Annotations.create();
                     annotations.set(config.getConcolicIdx(), assume);
 
@@ -333,7 +342,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
         //9. Set klass/ type of the object as annotation
         Annotations objectDescription = Annotations.emptyArray();
-        objectDescription.set(config.getConcolicIdx(), ssv.symbolic);
+        objectDescription.set(config.getConcolicIdx(), ssv.symbolicObjectId);
         Annotations.setObjectAnnotation(staticObject, objectDescription);
 
 
@@ -341,9 +350,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
 
         //todo: SetConstructor
-
-
-        return staticObject;
+        */
     }
 
 
@@ -1192,7 +1199,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         Variable var2 = (Variable) a2;
 
 
-        Expression expr = new ComplexExpression(OBJECT_IDENTITY_CHECK, new Variable(OBJECT_ID, var1.getId()), new Variable(OBJECT_ID, var2.getId()));
+        Expression expr = new ComplexExpression(OBJECT_EQ, new Variable(OBJECT_ID, var1.getId()), new Variable(OBJECT_ID, var2.getId()));
 
         ComplexExpression isNullA1 = new ComplexExpression(OBJECT_IS_NULL, var1, Expression.getNullConstant());
         ComplexExpression isNullA2 = new ComplexExpression(OBJECT_IS_NULL, var2, Expression.getNullConstant());
@@ -1220,11 +1227,10 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         }
 
         Expression klassConstant = Expression.fromConstant(KLASS, typeToCheck);
-        Expression instanceofExpr = new ComplexExpression(OBJECT_INSTANCE_OF, a, klassConstant);
+        Expression instanceofExpr = new ComplexExpression(BAND,
+                new ComplexExpression(BNEG, new ComplexExpression(OBJECT_IS_NULL, a)),
+                new ComplexExpression(OBJECT_OF_TYPE, a, klassConstant));
 
-//        return isInstance
-//                ? instanceofExpr
-//                : new ComplexExpression(BNEG, instanceofExpr);
         return instanceofExpr;
     }
 
@@ -1241,7 +1247,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         }
 
         Expression klassExpression = Expression.fromConstant(KLASS, typeToCheck);
-        Expression finalExpr = new ComplexExpression(OBJECT_CHECK_CAST, a, klassExpression);
+        Expression finalExpr = new ComplexExpression(OBJECT_OF_TYPE, a, klassExpression);
 
         finalExpr = isInstance ? new ComplexExpression(BNEG, finalExpr) : finalExpr;
 

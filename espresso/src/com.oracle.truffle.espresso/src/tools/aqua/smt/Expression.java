@@ -71,7 +71,7 @@ public interface Expression {
     }
 
     public static boolean isFormula(Expression e) {
-        if (e instanceof Variable) {
+        if (e instanceof Variable || e instanceof FieldName) {
             return true;
         }
         else if (e instanceof ComplexExpression) {

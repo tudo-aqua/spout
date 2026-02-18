@@ -24,14 +24,22 @@
 
 package tools.aqua.spout;
 
+import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.espresso.classfile.descriptors.Signature;
+import com.oracle.truffle.espresso.classfile.descriptors.Symbol;
+import com.oracle.truffle.espresso.classfile.descriptors.Type;
+import com.oracle.truffle.espresso.impl.Klass;
+import com.oracle.truffle.espresso.impl.Method;
+import com.oracle.truffle.espresso.impl.PrimitiveKlass;
+import com.oracle.truffle.espresso.meta.Meta;
+import com.oracle.truffle.espresso.nodes.bytecodes.InvokeSpecial;
+import com.oracle.truffle.espresso.nodes.bytecodes.InvokeSpecialNodeGen;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
 import tools.aqua.concolic.ConcolicAnalysis;
 import tools.aqua.concolic.ConcolicNumericAnalysis;
-import tools.aqua.smt.Expression;
 import tools.aqua.smt.OperatorComparator;
 import tools.aqua.smt.Types;
 import tools.aqua.smt.Variable;
-import tools.aqua.spout.analyses.MetaNumericAnalysis;
 import tools.aqua.spout.analyses.NumericAnalysis;
 import tools.aqua.taint.NumericTaintAnalysis;
 import tools.aqua.taint.TaintAnalysis;
@@ -71,10 +79,8 @@ public class Config {
 
     private int annotationLength = 2;
 
-    public Config(String config) {
-        SPouT.log(config);
+    public Config() {
         this.trace = new Trace();
-        parseConfig(config);
     }
 
     void configureAnalysis() {
@@ -114,12 +120,13 @@ public class Config {
         SPouT.log("Seeded Float Values: " + Arrays.toString(seedsFloatValues));
         SPouT.log("Seeded Double Values: " + Arrays.toString(seedsDoubleValues));
         SPouT.log("Seeded String Values: " + Arrays.toString(seedStringValues));
-        SPouT.log("Seeded Constructor Signature Values: " + Arrays.toString(seedConstructorSignatureValues));
+        SPouT.log("Seeded Constructor Signature Values: " + Arrays.toString(seedObjectValues));
         SPouT.log("Seeded Constructor BranchId Values: "+Arrays.toString(seedsConstructorBranchIdValues));
         SPouT.log("Seeded Constructor Count Values: "+constructorCount);
     }
 
-    private void parseConfig(String config) {
+    public void parseConfig(String config, Meta meta) {
+        SPouT.log(config);
         if (config.trim().length() < 1) {
             return;
         }
@@ -162,7 +169,7 @@ public class Config {
                     parseStrings(vals, b64);
                     break;
                 case "concolic.constructors":
-                    parseConstructors(vals, b64);
+                    parseConstructors(vals, meta, b64);
                     break;
                 case "concolic.constructorCounts":
                     parseConstructorCountValues(vals, b64);
@@ -283,11 +290,10 @@ public class Config {
         }
     }
 
-    private void parseConstructors(String[] valsAsStr, boolean b64) {
-        SPouT.log("parseConstructors");
-        seedConstructorSignatureValues = new String[valsAsStr.length];
+    private void parseConstructors(String[] valsAsStr, Meta meta, boolean b64) {
+        seedObjectValues = new StaticObject[valsAsStr.length];
         for (int i = 0; i < valsAsStr.length; i++) {
-            seedConstructorSignatureValues[i] = b64 ? b64decode(valsAsStr[i].trim()) : valsAsStr[i].trim();
+            seedObjectValues[i] = parseObjectValue(b64 ? b64decode(valsAsStr[i].trim()) : valsAsStr[i].trim(), meta, b64);
         }
     }
 
@@ -403,9 +409,9 @@ public class Config {
         return new SymbolicStringValue(concrete, symbolic);
     }
 
-
+    // todo: update documentation
     /**
-     * Takes a String from -Dconcolic.constructors and creates a {{@link SymbolicObjectValue}}.
+     * Takes a String from -Dconcolic.constructors and creates a {{@link StaticObject}}.
      * The Strings of -Dconcolic.constructors are in the format {QUALIFIED_CLASS_NAME}|{CONSTRUCTOR_SIGNATURE}.
      * Both QUALIFIED_CLASS_NAME and CONSTRUCTOR_SIGNATURE follow the <b>class File Format</b><br>
      * (See JVM Specification chapter 2 The Structure of the Java Virtual Machine)
@@ -414,34 +420,149 @@ public class Config {
      * Ljava/lang/StringBuilder;|()V
      * Here the default constructor ()V from the class Ljava/lang/StringBuilder is invoked
      *
-     * @return Parsed {{@link SymbolicObjectValue}}
+     * @return Parsed {{@link StaticObject}}
      */
-    public SymbolicObjectValue nextSymbolicObject(){
-        //Default values for className and constructor if nothing is given in -Dconcolic.constructors
-        //This is the case if nondetObject() is executed for the first time
-        String className = "null";
-        String constructorSignature = "null|NULL";
-        int branchId = 0; //id of NULL constructor in the List of ALL avaibale constructors
-        int branchCount = getConstructorCount();
-
-        //Get next constructor
-        if(countConstructorSignatureSeeds < seedConstructorSignatureValues.length){
-            String classNameAndConstructor = seedConstructorSignatureValues[countConstructorSignatureSeeds];
-            //Check whether no object needs to be instantiated because null is the desired value
-            if (!classNameAndConstructor.equals("null|NULL")) {
-                //Extract className and constructor_signature
-                String[] split = classNameAndConstructor.split("\\|");
-                className = split[0];
-                constructorSignature = split[1];
-                branchId = Integer.parseInt(split[2]);
-                branchCount = Integer.parseInt(split[3]);
-            }
+    public StaticObject nextSymbolicObject(Meta meta) {
+        StaticObject obj = null;
+        if(countObjectSeeds < seedObjectValues.length) {
+            obj = seedObjectValues[countObjectSeeds];
+        } else {
+            obj = StaticObject.createNull(null);
         }
-        Variable symbolic = new Variable(Types.OBJECT, countConstructorSignatureSeeds);
-        countConstructorSignatureSeeds++;
-        return new SymbolicObjectValue(className, constructorSignature, symbolic, branchId, branchCount);
+
+        Variable symbolicObjectId = new Variable(Types.OBJECT, countObjectSeeds);
+        countObjectSeeds++;
+
+        Annotations objectDescription = Annotations.emptyArray();
+        objectDescription.set(getConcolicIdx(), symbolicObjectId);
+        Annotations.setObjectAnnotation(obj, objectDescription);
+        return obj;
     }
 
+   @CompilerDirectives.TruffleBoundary
+    private static StaticObject parseObjectValue(String value, Meta meta, boolean b64) {
+        //Extract className and constructor_signature etc.
+        if (value.equals("null|NULL")) {
+            return StaticObject.createNull(null);
+        }
+
+        String[] split = value.split("\\|", 3);
+        String className = split[0];
+        String constructorSignature = split[1];
+
+        if (className.equals("Ljava/lang/String;")) {
+            // TODO: simply call String handling?
+            SPouT.stopRecording("Strings are currently not supported as symbolic objects.", meta);
+        }
+
+        Klass klass = getKlass(className, meta);
+        assert klass != null;
+        Method constructor = getConstructor(klass, constructorSignature, meta);
+        assert constructor != null;
+
+        Object[] constructorCallparams = new Object[constructor.getArgumentCount()];
+        Klass[] paramTypes = constructor.resolveParameterKlasses();
+        String paramListAsString = split[2];
+        for (int i = 0; i < paramTypes.length; i++) {
+            int endIdx = findMatchingIndex(paramListAsString);
+            String paramAsString = paramListAsString.substring(1, endIdx);
+            paramListAsString = paramListAsString.substring(endIdx);
+            if (paramTypes[i].isPrimitive()) {
+                constructorCallparams[i + 1] = parsePrimitiveValue(paramAsString, (PrimitiveKlass) paramTypes[i], meta, b64);
+            } else {
+                constructorCallparams[i + 1] = parseObjectValue(paramAsString, meta, b64);
+            }
+        }
+
+        // instantiate object
+        StaticObject staticObject = klass.allocateInstance();
+        constructorCallparams[0] = staticObject;
+        InvokeSpecial invokeSpecial = InvokeSpecialNodeGen.create(constructor);
+        invokeSpecial.execute(constructorCallparams);
+        return staticObject;
+    }
+
+    private static Object parsePrimitiveValue(String value, PrimitiveKlass klass, Meta meta, boolean b64) {
+        if (b64) {
+            value = b64decode(value);
+        }
+        switch (klass.getPrimitiveJavaKind()) {
+            case Boolean -> {
+                return Boolean.parseBoolean(value);
+            }
+            case Byte -> {
+                return Byte.parseByte(value);
+            }
+            case Short -> {
+                return Short.parseShort(value);
+            }
+            case Char -> {
+                return value.charAt(0);
+            }
+            case Int -> {
+                return Integer.parseInt(value);
+            }
+            case Float -> {
+                return Float.parseFloat(value);
+            }
+            case Long -> {
+                return Long.parseLong(value);
+            }
+            case Double -> {
+                return Double.parseDouble(value);
+            }
+            default -> {
+                SPouT.stopRecording("unsupported primitive kind.", meta);
+            }
+        }
+        // unreachable code
+        return null;
+    }
+
+    private static int findMatchingIndex(String str) {
+        assert str.length() > 1 && str.charAt(0) == '{';
+        int count = 0;
+        for (int i = 0; i < str.length(); i++) {
+            char c = str.charAt(i);
+            if (c == '{') { count++; } else if (c == '}') { count--; }
+            if (count == 0) { return i; }
+        }
+        return -1;
+    }
+
+    public static Klass getKlass(String fqn, Meta meta) {
+        Symbol<Type> type = meta.getTypes().fromClassGetName(fqn);
+        if (type == null) {
+            SPouT.stopRecording("loading symbol for classname failed.", meta);
+        }
+
+        StaticObject classLoader = (StaticObject) meta.java_lang_ClassLoader_getSystemClassLoader.invokeDirect();
+        Klass klass = meta.loadKlassOrNull(type,
+                classLoader,  //No classLoader means that the BOOT-Classloader is used
+                StaticObject.NULL); //protectionDomain ???
+
+        if (klass == null) {
+            SPouT.stopRecording("loading klass failed", meta);
+        }
+        return klass;
+    }
+
+    public static Method getConstructor(Klass klass, String signatureString, Meta meta) {
+
+        Symbol<Signature> signature = klass.getSignatures().lookupValidSignature(signatureString);
+        if (signature == null) {
+            SPouT.stopRecording("loading symbol for signature failed.", meta);
+        }
+
+        Method[] declaredConstructors = klass.getDeclaredConstructors();
+        for (Method declaredConstructor : declaredConstructors) {
+            if (declaredConstructor.getRawSignature().equals(signature)) {
+                return declaredConstructor;
+            }
+        }
+        SPouT.stopRecording("no constructor found for signature.", meta);
+        return null; // cannot be reached
+    }
 
     private boolean[] seedsBooleanValues = new boolean[] {};
     private int countBooleanSeeds = 0;
@@ -595,8 +716,8 @@ public class Config {
     }
     */
 
-    private String[] seedConstructorSignatureValues = new String[] {};
-    private int countConstructorSignatureSeeds = 0;
+    private StaticObject[] seedObjectValues = StaticObject.EMPTY_ARRAY;
+    private int countObjectSeeds = 0;
 
     private int constructorCount = 0;
 
@@ -674,23 +795,5 @@ public class Config {
             symbolic = s;
         }
     };
-    public class SymbolicObjectValue{
-        public String klassName;
-        public String constructor;
-        public Variable symbolic;
-        public int branchId;
-        public int branchCount;
 
-        public SymbolicObjectValue(String klassName,
-                                   String constructor,
-                                   Variable symbolic,
-                                   int branchId,
-                                   int branchCount){
-            this.klassName = klassName;
-            this.constructor = constructor;
-            this.symbolic = symbolic;
-            this.branchId = branchId;
-            this.branchCount = branchCount;
-        }
-    }
 }
