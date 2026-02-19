@@ -125,7 +125,8 @@ public class Config {
         SPouT.log("Seeded Float Values: " + Arrays.toString(seedsFloatValues));
         SPouT.log("Seeded Double Values: " + Arrays.toString(seedsDoubleValues));
         SPouT.log("Seeded String Values: " + Arrays.toString(seedStringValues));
-        SPouT.log("Seeded Object Values: " + Arrays.toString(constructorConfig));
+        SPouT.log("Seeded Object Values: " + Arrays.toString(
+                constructorConfig == null ? seedObjectValues : constructorConfig));
     }
 
     public void parseAnalysesConfig(String config, Meta meta) {
@@ -503,28 +504,28 @@ public class Config {
         }
         switch (klass.getPrimitiveJavaKind()) {
             case Boolean -> {
-                return Boolean.parseBoolean(value);
+                return constructorSummary ? SPouT.nextSymbolicBoolean() : Boolean.parseBoolean(value);
             }
             case Byte -> {
-                return Byte.parseByte(value);
+                return constructorSummary ? SPouT.nextSymbolicByte() : Byte.parseByte(value);
             }
             case Short -> {
-                return Short.parseShort(value);
+                return constructorSummary ? SPouT.nextSymbolicShort() : Short.parseShort(value);
             }
             case Char -> {
-                return value.charAt(0);
+                return constructorSummary ? SPouT.nextSymbolicChar() : value.charAt(0);
             }
             case Int -> {
                 return constructorSummary ? SPouT.nextSymbolicInt() : Integer.parseInt(value);
             }
             case Float -> {
-                return Float.parseFloat(value);
+                return constructorSummary ? SPouT.nextSymbolicFloat() : Float.parseFloat(value);
             }
             case Long -> {
-                return Long.parseLong(value);
+                return constructorSummary ? SPouT.nextSymbolicLong() : Long.parseLong(value);
             }
             case Double -> {
-                return Double.parseDouble(value);
+                return constructorSummary ? SPouT.nextSymbolicDouble() : Double.parseDouble(value);
             }
             default -> {
                 SPouT.stopRecording("unsupported primitive kind.", meta);
