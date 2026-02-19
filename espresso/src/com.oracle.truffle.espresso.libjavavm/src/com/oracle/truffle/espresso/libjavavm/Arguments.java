@@ -198,11 +198,8 @@ public final class Arguments {
                             case "concolic.constructors":
                                 concolicOptions += "concolic.constructors:" + value + " ";
                                 break;
-                            case "concolic.constructorCounts":
-                                concolicOptions += "concolic.constructorCounts:" + value + " ";
-                                break;
-                            case "concolic.constructorIds":
-                                concolicOptions += "concolic.constructorIds:" + value + " ";
+                            case "concolic.constructor.summary":
+                                concolicOptions += "concolic.constructor.summary:" + value + " ";
                                 break;
                             case "concolic.execution":
                                 concolicOptions += "concolic.execution:" + value + " ";

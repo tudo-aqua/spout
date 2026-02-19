@@ -222,7 +222,7 @@ public abstract class Constant extends Atom {
 
         @Override
         public String toString() {
-            return getValue().getTypeAsString();
+            return "\"" + (getValue() == null ? "null" : getValue().getTypeAsString()) + "\"";
         }
 
     }

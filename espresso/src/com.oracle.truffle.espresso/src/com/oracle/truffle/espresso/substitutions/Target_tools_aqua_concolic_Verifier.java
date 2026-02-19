@@ -24,8 +24,10 @@
 package com.oracle.truffle.espresso.substitutions;
 
 import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
+import tools.aqua.spout.Config;
 import tools.aqua.spout.SPouT;
 
 @EspressoSubstitutions
@@ -93,4 +95,16 @@ public final class Target_tools_aqua_concolic_Verifier {
         return SPouT.nextSymbolicObject(meta, null);
     }
 
+    @Substitution(hasReceiver = false)
+    public static @JavaType(Object.class) StaticObject nondetObject(@JavaType(Class.class) StaticObject type,
+               @JavaType(internalName = "Ltools/aqua/concolic/ObjectFactory;") Object factory, @Inject Meta meta) {
+        return SPouT.nextSymbolicObject(meta, loadKlass(type, meta));
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    private static Klass loadKlass(StaticObject o, Meta meta) {
+        StaticObject hostTypename = (StaticObject) meta.java_lang_Class_getTypeName.invokeMethodVirtual(o);
+        String typename = "L" + meta.toHostString(hostTypename).replaceAll("\\.", "/") + ";";
+        return Config.getKlass(typename, meta);
+    }
 }

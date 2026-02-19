@@ -79,16 +79,19 @@ public class Config {
 
     private int annotationLength = 2;
 
+    // cache for object config
+    private String[] constructorConfig = new String[] {};
+    private boolean b64ConstructorConfig = false;
+
     public Config() {
         this.trace = new Trace();
     }
 
-    void configureAnalysis() {
+    private void configureAnalysis() {
         if (hasConcolicAnalysis) {
             this.concolicAnalysis = new ConcolicAnalysis(this);
             this.concolicNumericAnalysis = new ConcolicNumericAnalysis();
-        }
-        else {
+        } else {
             this.concolicAnalysis = null;
             this.concolicIdx = -1;
             this.taintIdx = 0;
@@ -98,8 +101,7 @@ public class Config {
         if (!taintType.equals(TaintType.OFF)) {
             this.taintAnalysis = new TaintAnalysis(this);
             this.numericTaintAnalysis = new NumericTaintAnalysis();
-        }
-        else {
+        } else {
             this.taintAnalysis = null;
             this.taintIdx = -1;
             this.annotationLength--;
@@ -108,8 +110,11 @@ public class Config {
         Annotations.configure(this.annotationLength);
         // native image precautions ...
         OperatorComparator.initialize();
+    }
 
+    void printAnalysisConfig() {
         SPouT.log("Concolic Analysis: " + hasConcolicAnalysis);
+        SPouT.log("Constructor Summary: " + constructorSummary);
         SPouT.log("Taint Analysis: " + taintType);
         SPouT.log("Seeded Bool Values: " + Arrays.toString(seedsBooleanValues));
         SPouT.log("Seeded Byte Values: " + Arrays.toString(seedsByteValues));
@@ -120,11 +125,34 @@ public class Config {
         SPouT.log("Seeded Float Values: " + Arrays.toString(seedsFloatValues));
         SPouT.log("Seeded Double Values: " + Arrays.toString(seedsDoubleValues));
         SPouT.log("Seeded String Values: " + Arrays.toString(seedStringValues));
-        SPouT.log("Seeded Object Values: " + Arrays.toString(seedObjectValues));
+        SPouT.log("Seeded Object Values: " + Arrays.toString(constructorConfig));
     }
 
-    public void parseConfig(String config, Meta meta) {
-        SPouT.log(config);
+    public void parseAnalysesConfig(String config, Meta meta) {
+        if (config.trim().length() < 1) {
+            return;
+        }
+        String[] paramsGroups = config.trim().split(" "); // not in base64
+        for (String paramGroup : paramsGroups) {
+            String[] keyValue = paramGroup.split(":"); // not in base64
+            String value = keyValue[1].trim();
+            switch (keyValue[0]) {
+                case "concolic.execution":
+                    parseConcolic(value);
+                    break;
+                case "concolic.constructor.summary":
+                    parseSummary(value);
+                    break;
+                case "taint.flow":
+                    parseTaint(value);
+                    break;
+
+            }
+        }
+        configureAnalysis();
+    }
+
+    public void parseConcolicValues(String config, Meta meta) {
         if (config.trim().length() < 1) {
             return;
         }
@@ -167,22 +195,14 @@ public class Config {
                     parseStrings(vals, b64);
                     break;
                 case "concolic.constructors":
-                    parseConstructors(vals, meta, b64);
+                    constructorConfig = vals;
+                    b64ConstructorConfig = b64;
                     break;
-                case "concolic.constructorCounts":
-                    parseConstructorCountValues(vals, b64);
-                    break;
-                case "concolic.constructorIds":
-                    parseConstructorBranchIdValues(vals, b64);
-                    break;
-                case "concolic.execution":
-                    parseConcolic(vals);
-                    break;
-                case "taint.flow":
-                    parseTaint(vals);
-                    break;
-
             }
+        }
+        // make sure to parse objects last as we may use other values
+        if (!constructorSummary && constructorConfig != null) {
+            parseConstructors(constructorConfig, meta, b64ConstructorConfig);
         }
     }
 
@@ -272,35 +292,24 @@ public class Config {
         }
     }
 
-    private void parseConstructorCountValues(String[] valsAsStr, boolean b64) {
-        SPouT.log("parseConstructorCountValues");
-        SPouT.log("values"+ valsAsStr);
-        this.constructorCount = Integer.valueOf(b64 ? b64decode(valsAsStr[0].trim()) : valsAsStr[0].trim());
-    }
-
-    private void parseConstructorBranchIdValues(String[] valsAsStr, boolean b64) {
-        SPouT.log("parseConstructorBranchIdValues");
-        SPouT.log("values"+ valsAsStr);
-        this.seedsConstructorBranchIdValues = new int[valsAsStr.length];
-        for (int i = 0; i < valsAsStr.length; i++) {
-            seedsConstructorBranchIdValues[i] =
-                    Integer.valueOf(b64 ? b64decode(valsAsStr[i].trim()) : valsAsStr[i].trim());
-        }
-    }
-
     private void parseConstructors(String[] valsAsStr, Meta meta, boolean b64) {
+        constructorConfig = null;
         seedObjectValues = new StaticObject[valsAsStr.length];
         for (int i = 0; i < valsAsStr.length; i++) {
             seedObjectValues[i] = parseObjectValue(b64 ? b64decode(valsAsStr[i].trim()) : valsAsStr[i].trim(), meta, b64);
         }
     }
 
-    private void parseConcolic(String[] valsAsStr) {
-        hasConcolicAnalysis = Boolean.valueOf(valsAsStr[0].trim());
+    private void parseConcolic(String valsAsStr) {
+        hasConcolicAnalysis = Boolean.valueOf(valsAsStr.trim());
     }
 
-    private void parseTaint(String[] valsAsStr) {
-        taintType = TaintType.valueOf(valsAsStr[0].trim());
+    private void parseSummary(String valsAsStr) {
+        constructorSummary = Boolean.valueOf(valsAsStr.trim());
+    }
+
+    private void parseTaint(String valsAsStr) {
+        taintType = TaintType.valueOf(valsAsStr.trim());
     }
 
     // --------------------------------------------------------------------------
@@ -420,7 +429,12 @@ public class Config {
      *
      * @return Parsed {{@link StaticObject}}
      */
+    @CompilerDirectives.TruffleBoundary
     public StaticObject nextSymbolicObject(Meta meta) {
+        if (constructorSummary && constructorConfig != null) {
+            parseConstructors(constructorConfig, meta, b64ConstructorConfig);
+        }
+
         StaticObject obj = null;
         if(countObjectSeeds < seedObjectValues.length) {
             obj = seedObjectValues[countObjectSeeds];
@@ -438,7 +452,7 @@ public class Config {
     }
 
    @CompilerDirectives.TruffleBoundary
-    private static StaticObject parseObjectValue(String value, Meta meta, boolean b64) {
+    private StaticObject parseObjectValue(String value, Meta meta, boolean b64) {
         //Extract className and constructor_signature etc.
         if (value.equals("null|NULL")) {
             return StaticObject.createNull(null);
@@ -474,13 +488,16 @@ public class Config {
 
         // instantiate object
         StaticObject staticObject = klass.allocateInstance();
+        // for some reason we have to do it here explicitly ...
+        Annotations.initObjectAnnotations(staticObject);
         constructorCallparams[0] = staticObject;
+        //SPouT.log("constructor call: " + Arrays.toString(constructorCallparams));
         InvokeSpecial invokeSpecial = InvokeSpecialNodeGen.create(constructor);
         invokeSpecial.execute(constructorCallparams);
         return staticObject;
     }
 
-    private static Object parsePrimitiveValue(String value, PrimitiveKlass klass, Meta meta, boolean b64) {
+    private Object parsePrimitiveValue(String value, PrimitiveKlass klass, Meta meta, boolean b64) {
         if (b64) {
             value = b64decode(value);
         }
@@ -498,7 +515,7 @@ public class Config {
                 return value.charAt(0);
             }
             case Int -> {
-                return Integer.parseInt(value);
+                return constructorSummary ? SPouT.nextSymbolicInt() : Integer.parseInt(value);
             }
             case Float -> {
                 return Float.parseFloat(value);
@@ -717,21 +734,14 @@ public class Config {
     private StaticObject[] seedObjectValues = StaticObject.EMPTY_ARRAY;
     private int countObjectSeeds = 0;
 
-    private int constructorCount = 0;
-
-    public int getConstructorCount() {
-        return constructorCount;
+    public int getCountObjectSeeds() {
+        return countObjectSeeds;
     }
 
+    private boolean constructorSummary = false;
 
-    private int[] seedsConstructorBranchIdValues = new int[] {};
-    private int countConstructorBranchIdSeeds = 0;
-
-    public int nextConstructorBranchID() {
-        if (countConstructorBranchIdSeeds >= seedsConstructorBranchIdValues.length) {
-            return 0; // no more seeds
-        }
-        return seedsConstructorBranchIdValues[countConstructorBranchIdSeeds++];
+    public boolean isConstructorSummary() {
+        return constructorSummary;
     }
 
     public int getConcolicIdx() {

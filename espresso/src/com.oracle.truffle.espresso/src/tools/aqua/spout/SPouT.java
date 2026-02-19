@@ -46,7 +46,6 @@ import tools.aqua.smt.Constant;
 import tools.aqua.smt.Expression;
 import tools.aqua.smt.OperatorComparator;
 import tools.aqua.smt.Types;
-import tools.aqua.smt.Variable;
 import tools.aqua.taint.ColorUtil;
 import tools.aqua.taint.PostDominatorAnalysis;
 import tools.aqua.taint.Taint;
@@ -60,7 +59,6 @@ import java.util.List;
 import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.*;
 import static com.oracle.truffle.espresso.nodes.BytecodeNode.*;
 import static com.oracle.truffle.espresso.nodes.EspressoFrame.*;
-import static com.oracle.truffle.espresso.runtime.dispatch.staticobject.EspressoInterop.fitsInByte;
 import static com.oracle.truffle.espresso.runtime.dispatch.staticobject.EspressoInterop.getMeta;
 
 
@@ -87,12 +85,10 @@ public class SPouT {
     public static void newPath(String options) {
         System.out.println("======================== START PATH [BEGIN].");
         config = new Config();
-        config.parseConfig(options, getMeta());
-        config.configureAnalysis();
+        config.parseAnalysesConfig(options, getMeta());
         analysis = new MetaAnalysis(config);
         trace = config.getTrace();
         gwit = new GWIT(trace);
-        System.out.println("======================== START PATH [END].");
         // TODO: should be deferred to latest possible point in time
         analyze = true;
         oldAnalyze = true;
@@ -102,6 +98,9 @@ public class SPouT {
             SymbolDeclaration decl = new SymbolDeclaration(nv, true);
             trace.addElement(decl);
         }
+        config.parseConcolicValues(options, getMeta());
+        config.printAnalysisConfig();
+        System.out.println("======================== START PATH [END].");
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -116,7 +115,7 @@ public class SPouT {
             trace.printTrace();
         }
         System.out.println("======================== END PATH [END].");
-        System.out.println("[META_INFOS] object_count: "+config.getConcolicAnalysis().getObjectCount());
+        System.out.println("[META_INFOS] object_count: "+config.getCountObjectSeeds());
         System.out.println("[ENDOFTRACE]");
         System.out.flush();
     }

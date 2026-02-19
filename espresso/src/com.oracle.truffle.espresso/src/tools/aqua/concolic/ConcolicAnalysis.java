@@ -27,6 +27,7 @@ package tools.aqua.concolic;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.EspressoLanguage;
+import com.oracle.truffle.espresso.classfile.JavaKind;
 import com.oracle.truffle.espresso.impl.Field;
 import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.impl.Method;
@@ -61,7 +62,6 @@ import static tools.aqua.smt.Types.*;
 public class ConcolicAnalysis implements Analysis<Expression> {
 
     private final Config config;
-    private int objectCount = 0;
 
     private final Trace trace;
 
@@ -134,12 +134,23 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         trace.addElement(new SymbolDeclaration(ssv.symbolic));
         return guestString;
     }
-    
+
     @CompilerDirectives.TruffleBoundary
     private void annotateObject(StaticObject obj, int cIdx) {
         Atom oId = (Atom) Annotations.objectAnnotation(obj).getAnnotations()[cIdx];
         Annotations[] objAnnotations = obj.getAnnotations();
         ObjectKlass kls = (ObjectKlass) obj.getKlass();
+        if (config.isConstructorSummary()) {
+            AuxiliaryVariable oCls = new AuxiliaryVariable(oId + ".cls", STRING);
+            Expression nullExpr = new ComplexExpression(OBJECT_IS_NULL, oId ,Constant.NULL);
+            if (kls != null) {
+                nullExpr = new ComplexExpression(BNEG, nullExpr);
+            }
+            Expression clsExpr = new ComplexExpression(STRINGEQ, oCls, Expression.fromConstant(KLASS, kls));
+
+            trace.addElement(new ConstructorCondition(nullExpr));
+            trace.addElement(new ConstructorCondition(clsExpr));
+        }
         if (kls == null) { // null object
             return;
         }
@@ -147,22 +158,72 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         for (int i = 0; i < fieldTable.length; i++) {
             Field field = fieldTable[i];
             AuxiliaryVariable fName = getAuxiliaryVariable(field, oId);
-            trace.addElement(new SymbolDeclaration(fName, true));
+            trace.addElement(new SymbolDeclaration(fName, !config.isConstructorSummary()));
             Annotations fieldAnnotations = Annotations.create();
             fieldAnnotations.set(cIdx, fName);
             if (field.getKind().isPrimitive()) {
-                objAnnotations[field.getSlot()] = fieldAnnotations;
+                if (config.isConstructorSummary()) {
+                    Annotations constructedAnnotations = objAnnotations[field.getSlot()];
+                    Object fieldValue = field.getValue(obj);
+                    logConstructorSummary(field, fName, fieldValue, Annotations.annotation(constructedAnnotations , cIdx ));
+                } else {
+                    objAnnotations[field.getSlot()] = fieldAnnotations;
+                }
             } else if (field.getKind().isObject()){
                 StaticObject fObj = field.getObject(obj);
                 AuxiliaryVariable fCls = new AuxiliaryVariable(fName + ".cls", STRING);
-                trace.addElement(new SymbolDeclaration(fCls, true));
+                trace.addElement(new SymbolDeclaration(fCls, !config.isConstructorSummary()));
                 Annotations.setObjectAnnotation(fObj, fieldAnnotations);
                 annotateObject(fObj, cIdx);
+                if (config.isConstructorSummary()) {
+                    Annotations.setObjectAnnotation(fObj, null);
+                }
             }
             // TODO: arrays?
             // TODO: name collisions
         }
         obj.setAnnotations(objAnnotations);
+    }
+
+    private void logConstructorSummary(Field field, Atom fieldName, Object fieldValue, Expression explanation) {
+        Expression summary = null;
+        switch (field.getKind()) {
+            case Boolean:
+                summary = new ComplexExpression(BEQUIV, fieldName,
+                    explanation != null ? explanation : Constant.fromConcreteValue( (boolean) fieldValue));
+                break;
+            case Byte:
+                summary = new ComplexExpression(BVEQ, fieldName,
+                        explanation != null ? explanation : Constant.fromConcreteValue( (byte) fieldValue));
+                break;
+            case Short:
+                summary = new ComplexExpression(BVEQ, fieldName,
+                        explanation != null ? explanation : Constant.fromConcreteValue( (short) fieldValue));
+                break;
+            case Char:
+                summary = new ComplexExpression(BVEQ, fieldName,
+                        explanation != null ? explanation : Constant.fromConcreteValue( (char) fieldValue));
+                break;
+            case Int:
+                summary = new ComplexExpression(BVEQ, fieldName,
+                    explanation != null ? explanation : Constant.fromConcreteValue( (int) fieldValue));
+                break;
+            case Long:
+                summary = new ComplexExpression(BVEQ, fieldName,
+                        explanation != null ? explanation : Constant.fromConcreteValue( (long) fieldValue));
+                break;
+            case Float:
+                summary = new ComplexExpression(FPEQ, fieldName,
+                        explanation != null ? explanation : Constant.fromConcreteValue( (float) fieldValue));
+                break;
+            case Double:
+                summary = new ComplexExpression(FPEQ, fieldName,
+                        explanation != null ? explanation : Constant.fromConcreteValue( (double) fieldValue));
+                break;
+            default:
+                assert false;
+        }
+        trace.addElement(new ConstructorCondition(summary));
     }
 
     private static AuxiliaryVariable getAuxiliaryVariable(Field field, Atom oId) {
@@ -186,6 +247,17 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return fName;
     }
 
+    @CompilerDirectives.TruffleBoundary
+    private static boolean aExtendB(Klass a, Klass b) {
+        if (a == null) return false;
+        if (a == b) return true;
+        if (aExtendB(a.getSuperKlass(), b)) return true;
+        for (Klass iface : a.getSuperInterfaces()) {
+            if (aExtendB(iface, b)) return true;
+        }
+        return false;
+    }
+
     /***
      * Trys to create in the guest world a new Object according to the next element of -Dconcolic.constructors
      *
@@ -197,7 +269,6 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
         StaticObject obj = config.nextSymbolicObject(meta);
         assert obj != null;
-        annotateObject(obj, config.getConcolicIdx());
 
         Variable oId = (Variable) Annotations.objectAnnotation(obj).getAnnotations()[config.getConcolicIdx() ];
         Variable oCls = Expression.getKlassVariable(oId);
@@ -205,7 +276,14 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         trace.addElement(new SymbolDeclaration(oCls));
 
         // todo: add assumption if type bound
-
+        if (typeBound != null) {
+            Expression typeAssumption = new ComplexExpression(OBJECT_EXTENDS, oCls, Expression.fromConstant(KLASS, typeBound));
+            Annotations a = Annotations.emptyArray();
+            a.set(config.getConcolicIdx(), typeAssumption);
+            AnnotatedValue av = new AnnotatedValue(aExtendB(obj.getKlass(), typeBound), a);
+            SPouT.assume(av, meta);
+        }
+        annotateObject(obj, config.getConcolicIdx());
         return obj;
 
         /*
@@ -1975,10 +2053,6 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             e = new ComplexExpression(OperatorComparator.SFROMCODE,  new ComplexExpression(BV2NAT, e));
         }
         return e;
-    }
-
-    public int getObjectCount() {
-        return objectCount;
     }
 
 }
