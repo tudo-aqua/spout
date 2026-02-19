@@ -29,6 +29,7 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.EspressoLanguage;
 import com.oracle.truffle.espresso.impl.Field;
 import com.oracle.truffle.espresso.impl.Klass;
+import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.impl.ObjectKlass;
 import com.oracle.truffle.espresso.jdwp.api.KlassRef;
 import com.oracle.truffle.espresso.meta.EspressoError;
@@ -133,7 +134,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     @CompilerDirectives.TruffleBoundary
-    private static void annotateObject(StaticObject obj, int cIdx) {
+    private void annotateObject(StaticObject obj, int cIdx) {
         Variable oId = (Variable) Annotations.objectAnnotation(obj).getAnnotations()[cIdx];
         Annotations[] objAnnotations = obj.getAnnotations();
         ObjectKlass kls = (ObjectKlass) obj.getKlass();
@@ -143,8 +144,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         Field[] fieldTable = kls.getFieldTable();
         for (int i = 0; i < fieldTable.length; i++) {
             Field field = fieldTable[i];
-            String name = field.getNameAsString();
-            Expression fName = new FieldName(name, oId);
+            AuxiliaryVariable fName = getAuxiliaryVariable(field, oId);
+            trace.addElement(new SymbolDeclaration(fName, true));
             Annotations fieldAnnotations = Annotations.create();
             fieldAnnotations.set(cIdx, fName);
             if (field.getKind().isPrimitive()) {
@@ -158,6 +159,27 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             // TODO: name collisions
         }
         obj.setAnnotations(objAnnotations);
+    }
+
+    private static AuxiliaryVariable getAuxiliaryVariable(Field field, Variable oId) {
+        String name = field.getNameAsString();
+        Types type = null;
+        switch (field.getKind()) {
+            case Boolean -> type = BOOL;
+            case Byte ->    type = BYTE;
+            case Short ->   type = SHORT;
+            case Char ->    type = CHAR;
+            case Int ->     type = INT;
+            case Float ->   type = FLOAT;
+            case Long ->    type = LONG;
+            case Double ->  type = DOUBLE;
+            case Object ->  type = OBJECT;
+            default -> {
+                // unreachable
+            }
+        }
+        AuxiliaryVariable fName = new AuxiliaryVariable(oId + "." + name, type);
+        return fName;
     }
 
     /***
@@ -174,7 +196,9 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         annotateObject(obj, config.getConcolicIdx());
 
         Variable oId = (Variable) Annotations.objectAnnotation(obj).getAnnotations()[config.getConcolicIdx() ];
-        trace.addElement(new ObjectIdentityDeclaration(oId.getId()));
+        Variable oCls = Expression.getKlassVariable(oId);
+        trace.addElement(new SymbolDeclaration(oId));
+        trace.addElement(new SymbolDeclaration(oCls));
 
         // todo: add assumption if type bound
 
@@ -1100,8 +1124,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                                boolean takeBranch,
                                StaticObject c,
                                Expression a) {
-        Expression nullExpr = Expression.getNullConstant();
-        Expression expr = new ComplexExpression(OBJECT_IS_NULL, a, nullExpr);
+
+        Expression expr = new ComplexExpression(OBJECT_IS_NULL, a, Constant.NULL);
 
         switch (opcode) {
             case IFNULL    : expr = takeBranch ? expr : new ComplexExpression(BNEG, expr);break;
@@ -1115,52 +1139,6 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         this.trace.addElement(pc);
     }
 
-
-//
-//    @Override
-//    public void takeBranchRef2(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, StaticObject c1, StaticObject c2, Expression a1, Expression a2) {
-//        if ((a1 == null) && (a2 == null)) {
-//            return;
-//        }
-//
-//        Expression expr = null;
-//        Meta meta = bcn.getMeta();
-//
-//        // special case: cached Integer
-//        if (meta.java_lang_Integer.equals(c1.getKlass()) &&
-//                meta.java_lang_Integer.equals(c2.getKlass())) {
-//
-//            Expression e1 = c1 == null ? null : Annotations.annotation(
-//                    AnnotatedVM.getFieldAnnotation(c1, meta.java_lang_Integer_value), config.getConcolicIdx());
-//            Expression e2 = c2 == null ? null : Annotations.annotation(
-//                    AnnotatedVM.getFieldAnnotation(c2, meta.java_lang_Integer_value), config.getConcolicIdx());
-//
-//            if (e1 != null || e2 != null) {
-//
-//                int int1 = meta.java_lang_Integer_value.getInt(c1);
-//                int int2 = meta.java_lang_Integer_value.getInt(c2);
-//
-//                e1 = e1 == null ? Expression.fromConstant(Types.INT, int1) : e1;
-//                e2 = e2 == null ? Expression.fromConstant(Types.INT, int2) : e2;
-//
-//                expr = new ComplexExpression(BAND,
-//                        new ComplexExpression(BVEQ, e1, e2),
-//                        new ComplexExpression(BVLE, Expression.fromConstant(Types.INT, -128), e1),
-//                        new ComplexExpression(BVLE, e1, Expression.fromConstant(Types.INT, 127)),
-//                        // remaining not strictly necessary?
-//                        new ComplexExpression(BVLE, Expression.fromConstant(Types.INT, -128), e2),
-//                        new ComplexExpression(BVLE, e2, Expression.fromConstant(Types.INT, 127)));
-//
-//                if (!(int1 == int2 && -128 <= int1 && int1 <= 127)) {
-//                    expr = new ComplexExpression(BNEG, expr);
-//                }
-//                PathCondition pc = new PathCondition(expr, takeBranch ? FAILURE : SUCCESS, BINARY_SPLIT);
-//                trace.addElement(pc);
-//            }
-//            // nothing to trace symbolically
-//        }
-//        // TODO: general object equality not handled currently
-//    }
 
     /**
      * This method log the decisions during execution to use them during concolic execution.
@@ -1199,10 +1177,10 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         Variable var2 = (Variable) a2;
 
 
-        Expression expr = new ComplexExpression(OBJECT_EQ, new Variable(OBJECT_ID, var1.getId()), new Variable(OBJECT_ID, var2.getId()));
+        Expression expr = new ComplexExpression(OBJECT_EQ, var1, var2);
 
-        ComplexExpression isNullA1 = new ComplexExpression(OBJECT_IS_NULL, var1, Expression.getNullConstant());
-        ComplexExpression isNullA2 = new ComplexExpression(OBJECT_IS_NULL, var2, Expression.getNullConstant());
+        ComplexExpression isNullA1 = new ComplexExpression(OBJECT_IS_NULL, var1, Constant.NULL);
+        ComplexExpression isNullA2 = new ComplexExpression(OBJECT_IS_NULL, var2, Constant.NULL);
 
         ComplexExpression isNullA1AndA2 = new ComplexExpression(BAND, isNullA1, isNullA2);
 
@@ -1226,12 +1204,28 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             return null;
         }
 
+        assert a instanceof Variable;
+        Variable klassVar = Expression.getKlassVariable((Variable) a);
+
         Expression klassConstant = Expression.fromConstant(KLASS, typeToCheck);
         Expression instanceofExpr = new ComplexExpression(BAND,
-                new ComplexExpression(BNEG, new ComplexExpression(OBJECT_IS_NULL, a)),
-                new ComplexExpression(OBJECT_OF_TYPE, a, klassConstant));
+                new ComplexExpression(BNEG, new ComplexExpression(OBJECT_IS_NULL, a, Constant.NULL)),
+                new ComplexExpression(OBJECT_EXTENDS, klassVar, klassConstant));
 
         return instanceofExpr;
+    }
+
+    @Override
+    public void polymorphicMethodAccess(StaticObject object, Method m, Expression aObj) {
+        if (aObj == null) return;
+        Variable aCls = Expression.getKlassVariable((Variable) aObj);
+        Expression klassExpression = Expression.fromConstant(KLASS, m.getDeclaringKlass());
+        Expression aMethodName = Expression.fromConstant(STRING, m.getNameAsString());
+        Expression aMethodSignature = Expression.fromConstant(STRING, m.getSignatureAsString());
+        Expression pma = new ComplexExpression(OBJECT_METHOD_OF,
+                aCls, aMethodName, aMethodSignature, klassExpression);
+        PathCondition pc = new PathCondition(pma, UNKNOWN, UNKNOWN);
+        this.trace.addElement(pc);
     }
 
     @Override
@@ -1245,9 +1239,9 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         if (a == null) {
             return null;
         }
-
+        Variable klassVar = Expression.getKlassVariable((Variable) a);
         Expression klassExpression = Expression.fromConstant(KLASS, typeToCheck);
-        Expression finalExpr = new ComplexExpression(OBJECT_OF_TYPE, a, klassExpression);
+        Expression finalExpr = new ComplexExpression(OBJECT_EXTENDS, klassVar, klassExpression);
 
         finalExpr = isInstance ? new ComplexExpression(BNEG, finalExpr) : finalExpr;
 
@@ -1932,8 +1926,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public void checkNull(StaticObject object, boolean isNull, Expression a) {
-        Expression nullExpr = Expression.getNullConstant();
-        Expression expr = new ComplexExpression(OBJECT_IS_NULL, a, nullExpr);
+        Expression expr = new ComplexExpression(OBJECT_IS_NULL, a, Constant.NULL);
 
 //        boolean takeBranch = StaticObject.isNull(object);
 //        if (takeBranch) {

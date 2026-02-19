@@ -25,7 +25,9 @@
 package tools.aqua.spout;
 
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.espresso.impl.Field;
 import com.oracle.truffle.espresso.impl.Klass;
+import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BytecodeNode;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
@@ -818,6 +820,16 @@ public class MetaAnalysis implements Analysis<Annotations> {
 //        Object[] annotations = new Object[analyses.length];
         for (Analysis<?> analysis : analyses) {
             analysis.checkNull(staticObject, isNull, Annotations.annotation(a, i));
+            i++;
+        }
+    }
+
+    @Override
+    public void polymorphicMethodAccess(StaticObject object, Method m, Annotations aObj) {
+        if (aObj == null) return;
+        int i = 0;
+        for (Analysis<?> analysis : analyses) {
+            analysis.polymorphicMethodAccess(object, m, Annotations.annotation(aObj, i));
             i++;
         }
     }

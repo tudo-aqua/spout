@@ -39,10 +39,14 @@ import com.oracle.truffle.espresso.nodes.EspressoFrame;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
 import com.oracle.truffle.espresso.substitutions.Inject;
 import com.oracle.truffle.espresso.substitutions.JavaType;
+import tools.aqua.concolic.SymbolDeclaration;
+import tools.aqua.smt.AuxiliaryVariable;
 import tools.aqua.smt.ComplexExpression;
 import tools.aqua.smt.Constant;
 import tools.aqua.smt.Expression;
 import tools.aqua.smt.OperatorComparator;
+import tools.aqua.smt.Types;
+import tools.aqua.smt.Variable;
 import tools.aqua.taint.ColorUtil;
 import tools.aqua.taint.PostDominatorAnalysis;
 import tools.aqua.taint.Taint;
@@ -56,6 +60,7 @@ import java.util.List;
 import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.*;
 import static com.oracle.truffle.espresso.nodes.BytecodeNode.*;
 import static com.oracle.truffle.espresso.nodes.EspressoFrame.*;
+import static com.oracle.truffle.espresso.runtime.dispatch.staticobject.EspressoInterop.fitsInByte;
 import static com.oracle.truffle.espresso.runtime.dispatch.staticobject.EspressoInterop.getMeta;
 
 
@@ -92,6 +97,11 @@ public class SPouT {
         analyze = true;
         oldAnalyze = true;
         SPouTNumeric.newPath(config, true);
+        if (config.hasConcolicAnalysis()) {
+            AuxiliaryVariable nv = new AuxiliaryVariable("null", Types.OBJECT);
+            SymbolDeclaration decl = new SymbolDeclaration(nv, true);
+            trace.addElement(decl);
+        }
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -100,6 +110,9 @@ public class SPouT {
 
         stopAnalysis();
         if (trace != null) {
+            if (config.hasConcolicAnalysis()) {
+                System.out.println("[AUXILIARY] (declare-sort Object 0)");
+            }
             trace.printTrace();
         }
         System.out.println("======================== END PATH [END].");
@@ -1369,6 +1382,11 @@ public class SPouT {
         if (!analyze || !object.hasAnnotations()) return;
         Annotations a = analysis.isNull(object, Annotations.objectAnnotation(object), isNull);
         AnnotatedVM.putAnnotations(frame, top, a);
+    }
+
+    public static void polymorphicMethodAccess(StaticObject object, Method m) {
+        if (!analyze || !object.hasAnnotations()) return;
+        analysis.polymorphicMethodAccess(object, m, Annotations.objectAnnotation(object));
     }
 
     public static void nullCheckForException(StaticObject object) {

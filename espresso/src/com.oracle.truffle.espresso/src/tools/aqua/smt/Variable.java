@@ -60,10 +60,8 @@ public class Variable extends Atom {
                 return "__string_" + this.id;
             case OBJECT:
                 return "__object_" + this.id;
-            case OBJECT_ID:
-                return "__object_id_" + this.id;
-            case CONSTRUCTOR:
-                return "__object_constructor_"+ this.id;
+            case KLASS:
+                return "__object_" + this.id + ".cls";
             default:
                 return "Variable{" +
                         "id=" + id +

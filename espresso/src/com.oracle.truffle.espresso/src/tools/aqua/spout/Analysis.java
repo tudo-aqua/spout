@@ -25,6 +25,7 @@
 package tools.aqua.spout;
 
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.espresso.impl.Field;
 import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.meta.Meta;
@@ -303,6 +304,9 @@ public interface Analysis<T> {
     }
 
     default void checkNull(StaticObject staticObject, boolean isNull, T a) {
+    }
+
+    default void polymorphicMethodAccess(StaticObject object, Method m, T aObj) {
     }
 
     default void checkNotZeroInt(VirtualFrame frame, BytecodeNode bcn, int bci, boolean isZero, T a) {

@@ -40,6 +40,7 @@ public abstract class Constant extends Atom {
     public final static LongConstant LONG_MIN = new LongConstant(Long.MIN_VALUE);
     public final static LongConstant LONG_MAX = new LongConstant(Long.MAX_VALUE);
 
+    public final static ObjectConstant NULL = new ObjectConstant("null");
 
     public final static LongConstant LONG_ZERO = new LongConstant(0L);
 
@@ -192,6 +193,23 @@ public abstract class Constant extends Atom {
         }
     }
 
+    private final static class ObjectConstant extends Constant {
+
+        ObjectConstant(String value) {
+            super(Types.OBJECT, value);
+        }
+
+        @Override
+        String getValue() {
+            return (String) super.getValue();
+        }
+
+        @Override
+        public String toString() {
+            return getValue();
+        }
+    }
+
     private final static class KlassConstant extends Constant {
         KlassConstant(Klass value) {
             super(Types.KLASS, value);
@@ -205,24 +223,6 @@ public abstract class Constant extends Atom {
         @Override
         public String toString() {
             return getValue().getTypeAsString();
-        }
-
-    }
-
-    private final static class NullConstant extends Constant {
-        //todo: Brauch man das überhaupt, wenn man die KLasse "StringConstant" hat
-        NullConstant() {
-            super(Types.NULL, "null");
-        }
-
-        @Override
-        String getValue() {
-            return "null";
-        }
-
-        @Override
-        public String toString() {
-            return "\"" + getValue() + "\"";
         }
 
     }
@@ -266,10 +266,6 @@ public abstract class Constant extends Atom {
 
     public static Constant fromConcreteValue(Klass v) {
         return new KlassConstant(v);
-    }
-
-    public static Constant fromConcreteValue() {
-        return new NullConstant();
     }
 
     public static Constant fromConcreteValue(boolean b) {

@@ -34,6 +34,7 @@ import com.oracle.truffle.api.nodes.NodeInfo;
 import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.nodes.EspressoNode;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
+import tools.aqua.spout.SPouT;
 
 /**
  * INVOKESPECIAL bytecode.
@@ -64,6 +65,7 @@ public abstract class InvokeSpecial extends EspressoNode {
                     @Cached("create(method)") WithoutNullCheck invokeSpecial) {
         StaticObject receiver = (StaticObject) args[0];
         nullCheck.execute(receiver);
+        SPouT.polymorphicMethodAccess((StaticObject) args[0], method);
         return invokeSpecial.execute(args);
     }
 
@@ -103,6 +105,7 @@ public abstract class InvokeSpecial extends EspressoNode {
                         @Cached("methodLookup(method, receiver)") Method.MethodVersion resolvedMethod,
                         @Cached("createAndMaybeForceInline(resolvedMethod)") DirectCallNode directCallNode) {
             assert !StaticObject.isNull(receiver);
+            SPouT.polymorphicMethodAccess((StaticObject) args[0], method);
             return directCallNode.call(args);
         }
 
@@ -113,6 +116,7 @@ public abstract class InvokeSpecial extends EspressoNode {
             StaticObject receiver = (StaticObject) args[0];
             assert !StaticObject.isNull(receiver);
             Method.MethodVersion resolvedMethod = methodLookup(method, receiver);
+            SPouT.polymorphicMethodAccess((StaticObject) args[0], resolvedMethod.getMethod());
             return indirectCallNode.call(resolvedMethod.getCallTarget(), receiver, args);
         }
     }
@@ -129,6 +133,7 @@ public abstract class InvokeSpecial extends EspressoNode {
                         @Cached WithoutNullCheck invokeSpecial) {
             StaticObject receiver = (StaticObject) args[0];
             nullCheck.execute(receiver);
+            SPouT.polymorphicMethodAccess((StaticObject) args[0], method);
             return invokeSpecial.execute(method, args);
         }
 
@@ -151,6 +156,7 @@ public abstract class InvokeSpecial extends EspressoNode {
                             @Bind("getReceiver(args)") StaticObject receiver,
                             @Cached("method") Method cachedMethod,
                             @Cached("create(method)") InvokeSpecial invokeSpecial) {
+                SPouT.polymorphicMethodAccess((StaticObject) args[0], method);
                 return invokeSpecial.execute(args);
             }
 
@@ -161,6 +167,7 @@ public abstract class InvokeSpecial extends EspressoNode {
                 StaticObject receiver = (StaticObject) args[0];
                 assert !StaticObject.isNull(receiver);
                 Method.MethodVersion resolvedMethod = methodLookup(method, receiver);
+                SPouT.polymorphicMethodAccess((StaticObject) args[0], resolvedMethod.getMethod());
                 return indirectCallNode.call(resolvedMethod.getCallTarget(), args);
             }
         }

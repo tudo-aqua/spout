@@ -36,14 +36,11 @@ public interface Expression {
             case FLOAT: return Constant.fromConcreteValue( (float) value);
             case DOUBLE: return Constant.fromConcreteValue( (double) value);
             case KLASS: return Constant.fromConcreteValue( (Klass) value);
+            case STRING: return Constant.fromConcreteValue((String) value);
             default:
                 CompilerDirectives.transferToInterpreter();
                 throw EspressoError.shouldNotReachHere("unsupported constant type");
         }
-    }
-
-    public static Expression getNullConstant() {
-        return Constant.fromConcreteValue();
     }
 
     public static boolean isBoolean(Expression e) {
@@ -71,7 +68,7 @@ public interface Expression {
     }
 
     public static boolean isFormula(Expression e) {
-        if (e instanceof Variable || e instanceof FieldName) {
+        if (e instanceof Variable || e instanceof AuxiliaryVariable) {
             return true;
         }
         else if (e instanceof ComplexExpression) {
@@ -97,5 +94,10 @@ public interface Expression {
         else {
             return false;
         }
+    }
+
+    static Variable getKlassVariable(Variable var) {
+        assert var.getType().equals(Types.OBJECT);
+        return new Variable(Types.KLASS, var.getId());
     }
 }

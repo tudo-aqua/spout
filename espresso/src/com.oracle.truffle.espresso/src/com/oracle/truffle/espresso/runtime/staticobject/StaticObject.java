@@ -242,7 +242,7 @@ public class StaticObject implements TruffleObject, Cloneable {
     @TruffleBoundary
     @Override
     public final String toString() {
-        if (this == NULL) {
+        if (this.klass == null) {
             return "null";
         }
         if (isForeignObject()) {
