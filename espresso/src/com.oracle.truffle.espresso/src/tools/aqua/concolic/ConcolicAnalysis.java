@@ -39,6 +39,8 @@ import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
 import tools.aqua.smt.*;
 import tools.aqua.spout.*;
 
+import java.util.LinkedList;
+
 import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.*;
 import static tools.aqua.concolic.PathCondition.*;
 import static tools.aqua.smt.Constant.*;
@@ -132,10 +134,10 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         trace.addElement(new SymbolDeclaration(ssv.symbolic));
         return guestString;
     }
-
+    
     @CompilerDirectives.TruffleBoundary
     private void annotateObject(StaticObject obj, int cIdx) {
-        Variable oId = (Variable) Annotations.objectAnnotation(obj).getAnnotations()[cIdx];
+        Atom oId = (Atom) Annotations.objectAnnotation(obj).getAnnotations()[cIdx];
         Annotations[] objAnnotations = obj.getAnnotations();
         ObjectKlass kls = (ObjectKlass) obj.getKlass();
         if (kls == null) { // null object
@@ -152,6 +154,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                 objAnnotations[field.getSlot()] = fieldAnnotations;
             } else if (field.getKind().isObject()){
                 StaticObject fObj = field.getObject(obj);
+                AuxiliaryVariable fCls = new AuxiliaryVariable(fName + ".cls", STRING);
+                trace.addElement(new SymbolDeclaration(fCls, true));
                 Annotations.setObjectAnnotation(fObj, fieldAnnotations);
                 annotateObject(fObj, cIdx);
             }
@@ -161,7 +165,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         obj.setAnnotations(objAnnotations);
     }
 
-    private static AuxiliaryVariable getAuxiliaryVariable(Field field, Variable oId) {
+    private static AuxiliaryVariable getAuxiliaryVariable(Field field, Atom oId) {
         String name = field.getNameAsString();
         Types type = null;
         switch (field.getKind()) {
