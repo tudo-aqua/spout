@@ -96,8 +96,9 @@ public interface Expression {
         }
     }
 
-    static Variable getKlassVariable(Variable var) {
+    @CompilerDirectives.TruffleBoundary
+    static AuxiliaryVariable getKlassVariable(Atom var) {
         assert var.getType().equals(Types.OBJECT);
-        return new Variable(Types.KLASS, var.getId());
+        return new AuxiliaryVariable(var + ".cls", Types.KLASS);
     }
 }

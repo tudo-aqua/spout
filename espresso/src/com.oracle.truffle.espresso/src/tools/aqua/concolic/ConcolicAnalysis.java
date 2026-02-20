@@ -169,8 +169,13 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                 } else {
                     objAnnotations[field.getSlot()] = fieldAnnotations;
                 }
-            } else if (field.getKind().isObject()){
+            } else if (field.getKind().isObject()) {
                 StaticObject fObj = field.getObject(obj);
+                // this can happen if the null is created in a constructor
+                if (fObj == StaticObject.NULL) {
+                    fObj = StaticObject.createNull(null);
+                    field.set(obj, fObj);
+                }
                 AuxiliaryVariable fCls = new AuxiliaryVariable(fName + ".cls", STRING);
                 trace.addElement(new SymbolDeclaration(fCls, !config.isConstructorSummary()));
                 Annotations.setObjectAnnotation(fObj, fieldAnnotations);
@@ -271,16 +276,17 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         assert obj != null;
 
         Variable oId = (Variable) Annotations.objectAnnotation(obj).getAnnotations()[config.getConcolicIdx() ];
-        Variable oCls = Expression.getKlassVariable(oId);
+        Atom oCls = Expression.getKlassVariable(oId);
         trace.addElement(new SymbolDeclaration(oId));
         trace.addElement(new SymbolDeclaration(oCls));
 
         // todo: add assumption if type bound
         if (typeBound != null) {
-            Expression typeAssumption = new ComplexExpression(OBJECT_EXTENDS, oCls, Expression.fromConstant(KLASS, typeBound));
+            boolean isInstance = aExtendB(obj.getKlass(), typeBound);
+            Expression typeAssumption = instanceOf(obj, oId, typeBound, isInstance);
             Annotations a = Annotations.emptyArray();
             a.set(config.getConcolicIdx(), typeAssumption);
-            AnnotatedValue av = new AnnotatedValue(aExtendB(obj.getKlass(), typeBound), a);
+            AnnotatedValue av = new AnnotatedValue(isInstance, a);
             SPouT.assume(av, meta);
         }
         annotateObject(obj, config.getConcolicIdx());
@@ -1255,8 +1261,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             return;
         }
         //todo: Get this variables with Assertions
-        Variable var1 = (Variable) a1;
-        Variable var2 = (Variable) a2;
+        Atom var1 = (Atom) a1;
+        Atom var2 = (Atom) a2;
 
 
         Expression expr = new ComplexExpression(OBJECT_EQ, var1, var2);
@@ -1287,7 +1293,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         }
 
         assert a instanceof Variable;
-        Variable klassVar = Expression.getKlassVariable((Variable) a);
+        Atom klassVar = Expression.getKlassVariable((Atom) a);
 
         Expression klassConstant = Expression.fromConstant(KLASS, typeToCheck);
         Expression instanceofExpr = new ComplexExpression(BAND,
@@ -1300,7 +1306,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     @Override
     public void polymorphicMethodAccess(StaticObject object, Method m, Expression aObj) {
         if (aObj == null) return;
-        Variable aCls = Expression.getKlassVariable((Variable) aObj);
+        Atom aCls = Expression.getKlassVariable((Atom) aObj);
         Expression klassExpression = Expression.fromConstant(KLASS, m.getDeclaringKlass());
         Expression aMethodName = Expression.fromConstant(STRING, m.getNameAsString());
         Expression aMethodSignature = Expression.fromConstant(STRING, m.getSignatureAsString());
@@ -1321,7 +1327,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         if (a == null) {
             return null;
         }
-        Variable klassVar = Expression.getKlassVariable((Variable) a);
+        Atom klassVar = Expression.getKlassVariable((Atom) a);
         Expression klassExpression = Expression.fromConstant(KLASS, typeToCheck);
         Expression finalExpr = new ComplexExpression(OBJECT_EXTENDS, klassVar, klassExpression);
 
