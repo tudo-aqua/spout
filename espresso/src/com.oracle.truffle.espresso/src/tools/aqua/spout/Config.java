@@ -492,6 +492,14 @@ public class Config {
         // for some reason we have to do it here explicitly ...
         Annotations.initObjectAnnotations(staticObject);
         constructorCallparams[0] = staticObject;
+        if (constructorSummary) {
+            trace.addElement(new TraceElement() {
+                @Override
+                public String toString() {
+                    return "[CONSTRUCTOR] " + value;
+                }
+            });
+        }
         //SPouT.log("constructor call: " + Arrays.toString(constructorCallparams));
         InvokeSpecial invokeSpecial = InvokeSpecialNodeGen.create(constructor);
         invokeSpecial.execute(constructorCallparams);
