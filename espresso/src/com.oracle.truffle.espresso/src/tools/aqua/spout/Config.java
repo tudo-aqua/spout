@@ -205,10 +205,6 @@ public class Config {
                     break;
             }
         }
-        // make sure to parse objects last as we may use other values
-        if (!constructorSummary && constructorConfig != null) {
-            parseConstructors(constructorConfig, meta, b64ConstructorConfig);
-        }
     }
 
     private static String[] splitVals(String config) {
@@ -445,7 +441,7 @@ public class Config {
      */
     @CompilerDirectives.TruffleBoundary
     public StaticObject nextSymbolicObject(Meta meta) {
-        if (constructorSummary && constructorConfig != null) {
+        if (constructorConfig != null) {
             parseConstructors(constructorConfig, meta, b64ConstructorConfig);
         }
 
