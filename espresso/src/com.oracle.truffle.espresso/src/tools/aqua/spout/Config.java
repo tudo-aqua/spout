@@ -37,6 +37,10 @@ import com.oracle.truffle.espresso.nodes.bytecodes.InvokeSpecialNodeGen;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
 import tools.aqua.concolic.ConcolicAnalysis;
 import tools.aqua.concolic.ConcolicNumericAnalysis;
+import tools.aqua.concolic.ConstructorCondition;
+import tools.aqua.smt.AuxiliaryVariable;
+import tools.aqua.smt.ComplexExpression;
+import tools.aqua.smt.Expression;
 import tools.aqua.smt.OperatorComparator;
 import tools.aqua.smt.Types;
 import tools.aqua.smt.Variable;
@@ -301,9 +305,11 @@ public class Config {
             StringBuilder call = new StringBuilder();
             seedObjectValues[i] = parseObjectValue(b64 ? b64decode(valsAsStr[i].trim()) : valsAsStr[i].trim(), meta, b64, call);
             if (constructorSummary) {
-                trace.addElement(new TraceElement() {
-                    @Override public String toString() { return "[CONSTRUCTOR] " + call.toString(); }
-                });
+                AuxiliaryVariable var = new AuxiliaryVariable("__object_" + i + ".init", Types.STRING);
+                Expression.fromConstant(Types.STRING, call.toString());
+                trace.addElement(new ConstructorCondition(
+                        new ComplexExpression(OperatorComparator.STRINGEQ, var,
+                                Expression.fromConstant(Types.STRING, call.toString()))));
             }
         }
     }

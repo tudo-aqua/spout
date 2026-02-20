@@ -13,6 +13,6 @@ public class ConstructorCondition extends TraceElement {
 
     @Override
     public String toString() {
-        return "[SUMMARY] (assert " + condition + ")";
+        return "[SUMMARY] " + condition;
     }
 }
