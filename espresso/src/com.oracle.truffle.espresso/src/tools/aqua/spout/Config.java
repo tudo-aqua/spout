@@ -293,11 +293,18 @@ public class Config {
         }
     }
 
+    @CompilerDirectives.TruffleBoundary
     private void parseConstructors(String[] valsAsStr, Meta meta, boolean b64) {
         constructorConfig = null;
         seedObjectValues = new StaticObject[valsAsStr.length];
         for (int i = 0; i < valsAsStr.length; i++) {
-            seedObjectValues[i] = parseObjectValue(b64 ? b64decode(valsAsStr[i].trim()) : valsAsStr[i].trim(), meta, b64);
+            StringBuilder call = new StringBuilder();
+            seedObjectValues[i] = parseObjectValue(b64 ? b64decode(valsAsStr[i].trim()) : valsAsStr[i].trim(), meta, b64, call);
+            if (constructorSummary) {
+                trace.addElement(new TraceElement() {
+                    @Override public String toString() { return "[CONSTRUCTOR] " + call.toString(); }
+                });
+            }
         }
     }
 
@@ -453,9 +460,10 @@ public class Config {
     }
 
    @CompilerDirectives.TruffleBoundary
-    private StaticObject parseObjectValue(String value, Meta meta, boolean b64) {
+    private StaticObject parseObjectValue(String value, Meta meta, boolean b64, StringBuilder call) {
         //Extract className and constructor_signature etc.
         if (value.equals("null|NULL")) {
+            call.append(value);
             return StaticObject.createNull(null);
         }
 
@@ -472,19 +480,24 @@ public class Config {
         assert klass != null;
         Method constructor = getConstructor(klass, constructorSignature, meta);
         assert constructor != null;
+        call.append(className).append("|").append(constructorSignature).append("|");
 
         Object[] constructorCallparams = new Object[constructor.getArgumentCount()];
         Klass[] paramTypes = constructor.resolveParameterKlasses();
         String paramListAsString = split[2];
         for (int i = 0; i < paramTypes.length; i++) {
+            call.append("{");
             int endIdx = findMatchingIndex(paramListAsString);
             String paramAsString = paramListAsString.substring(1, endIdx);
             paramListAsString = paramListAsString.substring(endIdx);
             if (paramTypes[i].isPrimitive()) {
                 constructorCallparams[i + 1] = parsePrimitiveValue(paramAsString, (PrimitiveKlass) paramTypes[i], meta, b64);
+                Object a = Annotations.annotation(AnnotatedValue.svalue(constructorCallparams[i + 1]), concolicIdx);
+                if (a != null) call.append(a);
             } else {
-                constructorCallparams[i + 1] = parseObjectValue(paramAsString, meta, b64);
+                constructorCallparams[i + 1] = parseObjectValue(paramAsString, meta, b64, call);
             }
+            call.append("}");
         }
 
         // instantiate object
@@ -492,14 +505,6 @@ public class Config {
         // for some reason we have to do it here explicitly ...
         Annotations.initObjectAnnotations(staticObject);
         constructorCallparams[0] = staticObject;
-        if (constructorSummary) {
-            trace.addElement(new TraceElement() {
-                @Override
-                public String toString() {
-                    return "[CONSTRUCTOR] " + value;
-                }
-            });
-        }
         //SPouT.log("constructor call: " + Arrays.toString(constructorCallparams));
         InvokeSpecial invokeSpecial = InvokeSpecialNodeGen.create(constructor);
         invokeSpecial.execute(constructorCallparams);
