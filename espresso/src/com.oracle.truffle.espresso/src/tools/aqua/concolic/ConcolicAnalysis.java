@@ -158,7 +158,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         for (int i = 0; i < fieldTable.length; i++) {
             Field field = fieldTable[i];
             AuxiliaryVariable fName = getAuxiliaryVariable(field, oId);
-            trace.addElement(new SymbolDeclaration(fName, !config.isConstructorSummary()));
+            trace.addElement(new SymbolDeclaration(fName, false /*!config.isConstructorSummary()*/));
             Annotations fieldAnnotations = Annotations.create();
             fieldAnnotations.set(cIdx, fName);
             if (field.getKind().isPrimitive()) {
@@ -177,7 +177,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                     field.set(obj, fObj);
                 }
                 AuxiliaryVariable fCls = new AuxiliaryVariable(fName + ".cls", STRING);
-                trace.addElement(new SymbolDeclaration(fCls, !config.isConstructorSummary()));
+                trace.addElement(new SymbolDeclaration(fCls, false /*!config.isConstructorSummary()*/ ));
                 Annotations.setObjectAnnotation(fObj, fieldAnnotations);
                 annotateObject(fObj, cIdx);
                 if (config.isConstructorSummary()) {
@@ -291,178 +291,6 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         }
         annotateObject(obj, config.getConcolicIdx());
         return obj;
-
-        /*
-
-        // --- old from here ---
-
-        //1. Retrieve the information from the commandline needed to create the next symbolic object
-        Config.SymbolicConstructorConfig ssv = config.nextSymbolicObject();
-
-
-
-        //3. Check whether the next symbolic object shall be "null". Perform special handling in this case
-        if (ssv.klassName.equals("null")) {
-            Annotations objectDescription = Annotations.emptyArray();
-            objectDescription.set(config.getConcolicIdx(), ssv.symbolicObjectId);
-
-            //Add DECLARE-statements for the following variables ...
-            // ... id of object
-            trace.addElement(new ObjectIdentityDeclaration(ssv.symbolicObjectId.getId()));
-            // ... class of object
-            trace.addElement(new SymbolDeclaration(ssv.symbolicObjectId));
-            // ... used constructor to instantiate the object
-            trace.addElement(new ConstructorDeclaration(ssv.symbolicObjectId.getId()));
-
-            // If the type of the object to be created is known (see typeBound), add an ASSUMPTION of this type to the trace
-            // The assumption is a CHECKCAST
-            if (typeBound != null) {
-                Expression klassExpression = Expression.fromConstant(KLASS, typeBound);
-
-                ComplexExpression assume = new ComplexExpression(OBJECT_CHECK_CAST, ssv.symbolicObjectId, klassExpression);
-                Annotations annotations = Annotations.create();
-                annotations.set(config.getConcolicIdx(), assume);
-                AnnotatedValue annotatedValue = new AnnotatedValue(true, annotations); //THE CHECKCAST is always TRUE because null can be casted to everything
-                SPouT.assume(annotatedValue, meta);
-            }
-
-            // Add ASSERT-statement that "null" was instantiated with the dummy constructor "null|Null"
-            Variable constructorVariable = new Variable(CONSTRUCTOR, objectCount);
-            Constant constructorName = Constant.fromConcreteValue("null|NULL");
-            ComplexExpression constructorExpression = new ComplexExpression(STRINGEQ, constructorVariable, constructorName);
-            PathCondition constructorPathCondition = new PathCondition(constructorExpression, config.nextConstructorBranchID(), config.getConstructorCount());
-            this.trace.addElement(constructorPathCondition);
-
-            // Create object and increase object count
-            objectCount++;
-            return StaticObject.createNull(objectDescription);
-        }
-
-        // NORMAL BEHAVIOUR TO CREATE AN OBJECT
-
-        //4. Getting classname
-        Symbol<Type> type = meta.getTypes().fromClassGetName(ssv.klassName);
-        SPouT.log("Type: "+meta.getTypes().fromClassGetName(ssv.klassName));
-        if (type == null) {
-            SPouT.log("returned null, because loading type failed.");
-            return null;
-        }
-
-
-
-        //7. Allocate memory for the object
-        StaticObject staticObject = klass.allocateInstance(); //Saves the object in the memory (Just memory no fields)
-        Annotations.initObjectAnnotations(staticObject);
-
-        //8. Until this point memory for the object is allocated, BUT no attributes/ fields are created
-        //A constructor must be used set values of the attributes
-        //Therefore search for the constructor. If applicable, execute constructor to create Object
-        Method[] declaredConstructors = klass.getDeclaredConstructors();
-        boolean initialized = false;
-        SPouT.log("*************************************************************************");
-        SPouT.log("* Search for the following constructor:\n*\tsignature: "+signature.toString()+"\n*\tclass: "+klass.getNameAsString());
-        SPouT.log("* Considered constructors:");
-        for (Method declaredConstructor : declaredConstructors) {
-            SPouT.log("*\t"+declaredConstructor.getSignatureAsString());
-            if (declaredConstructor.getRawSignature().equals(signature)) {
-                //Add DECLARE-statements for the following variables ...
-                // ... id of object
-                trace.addElement(new ObjectIdentityDeclaration(ssv.symbolicObjectId.getId()));
-                // ... class of object
-                trace.addElement(new SymbolDeclaration(ssv.symbolicObjectId));
-                // ... used constructor to instantiate the object
-                trace.addElement(new ConstructorDeclaration(ssv.symbolicObjectId.getId()));
-
-                // If the type of the object to be created is known (see typeBound), add an ASSUMPTION of this type to the trace
-                if (typeBound != null) {
-                    Expression klassExpression = Expression.fromConstant(KLASS, typeBound);
-
-                    ComplexExpression assume = new ComplexExpression(OBJECT_CHECK_CAST, ssv.symbolicObjectId, klassExpression);
-                    Annotations annotations = Annotations.create();
-                    annotations.set(config.getConcolicIdx(), assume);
-
-                    //Use InstanceOf to determine if the CHECKCAST is succesfull or not
-                    // Instance of is used because the implementation of CHECKCAST relies on the instanceof check
-                    // (see CHECKCAST Bytecode in BytecodeNode.java)
-                    // The difference between INSTANCEOF and CHECKCAST is the handling of null
-                    // null can ALWAYS be casted to everything but null is NEVER an instanceOf any klass
-                    // At this point in the code we know that the object isn't null therefore we just need the
-                    // instanceof check to determine whether the CHECKCAST is successful
-                    InstanceOf instanceOf = InstanceOf.create(typeBound,   //supertype
-                            false);      //cacheUseEnabeled
-
-                    AnnotatedValue annotatedValue = new AnnotatedValue(instanceOf.execute(klass), annotations);
-                    SPouT.assume(annotatedValue, meta);
-                }
-
-                // Add an ASSERT-statement to the trace which logs which constructor is used
-                Variable constructorVariable = new Variable(CONSTRUCTOR, objectCount);
-                Constant constructorName = Constant.fromConcreteValue("L"+klass.getNameAsString()+";|"+declaredConstructor.getSignatureAsString());
-                ComplexExpression constructorExpression = new ComplexExpression(STRINGEQ, constructorVariable, constructorName);
-                PathCondition constructorPathCondition = new PathCondition(constructorExpression, config.nextConstructorBranchID(), config.getConstructorCount());
-                this.trace.addElement(constructorPathCondition);
-
-                // Increase the object count
-                objectCount++;
-
-                SPouT.log("* Constructor founded! \n* Use the constructor with the following parameters: ");
-                initialized = true;
-
-                //-----------------------------------------------------------------------------------------------------
-                //                          Instantiate/ annotated parameters of the constructor
-                //-----------------------------------------------------------------------------------------------------
-
-                Object[] parameters = new Object[declaredConstructor.getParameterCount()+1];
-                parameters[0] = staticObject;
-                //Add symbolic parameters to the constructor
-                int parameterCount = 1;
-//                for (KlassRef parameter : declaredConstructor.getParameters()) {
-                for (KlassRef parameter : declaredConstructor.resolveParameterKlasses()) {
-                    // if parameter is a primitive type annotated this primitiv parameter
-                    if (parameter.isPrimitive()) {
-                        AnnotatedValue annotatedParameter = getAnnotatedParameter(parameter, meta);
-                        SPouT.log("Primitive Parameter");
-                        SPouT.log("* \tParameter "+ parameterCount +": \n*\t\t Type: "+parameter.getTypeAsString()+"\n*\t\t Value: "+annotatedParameter.getValue());
-                        parameters[parameterCount++] = annotatedParameter;
-                    }
-                    //if parameter is a complex type/ object instantiate the object through a recursive call
-                    else {
-                        SPouT.log("Object Parameter");
-                        parameters[parameterCount++] = SPouT.nextSymbolicObject(meta, (Klass)parameter);
-                    }
-                }
-
-                //8. Invoke the constructor thereby instantiate the object
-                SPouT.log("Invocation of the constructor");
-//                declaredConstructor.invokeMethod(staticObject, parameters);           //doesn't work
-//                declaredConstructor.invokeWithConversions(staticObject, parameters);  //works
-//                declaredConstructor.invokeDirect(staticObject, parameters);             //works
-
-                InvokeSpecial invokeSpecial = InvokeSpecialNodeGen.create(declaredConstructor);
-                Object execute = invokeSpecial.execute(parameters); //todo: Needed Static Object;
-
-                SPouT.log("Object successfully created");
-                SPouT.log("*************************************************************************");
-                break;
-            }
-        }
-        if (!initialized) {
-            SPouT.log("* returned null, because no matching constructor found.");
-            return null;
-        }
-
-
-        //9. Set klass/ type of the object as annotation
-        Annotations objectDescription = Annotations.emptyArray();
-        objectDescription.set(config.getConcolicIdx(), ssv.symbolicObjectId);
-        Annotations.setObjectAnnotation(staticObject, objectDescription);
-
-
-        //todo: SetId
-
-
-        //todo: SetConstructor
-        */
     }
 
 

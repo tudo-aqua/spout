@@ -38,6 +38,8 @@ import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
 import tools.aqua.concolic.ConcolicAnalysis;
 import tools.aqua.concolic.ConcolicNumericAnalysis;
 import tools.aqua.concolic.ConstructorCondition;
+import tools.aqua.concolic.PathCondition;
+import tools.aqua.concolic.SymbolDeclaration;
 import tools.aqua.smt.AuxiliaryVariable;
 import tools.aqua.smt.ComplexExpression;
 import tools.aqua.smt.Expression;
@@ -83,8 +85,6 @@ public class Config {
 
     private int annotationLength = 2;
 
-    // cache for object config
-    private String[] constructorConfig = new String[] {};
     private boolean b64ConstructorConfig = false;
 
     public Config() {
@@ -129,8 +129,7 @@ public class Config {
         SPouT.log("Seeded Float Values: " + Arrays.toString(seedsFloatValues));
         SPouT.log("Seeded Double Values: " + Arrays.toString(seedsDoubleValues));
         SPouT.log("Seeded String Values: " + Arrays.toString(seedStringValues));
-        SPouT.log("Seeded Object Values: " + Arrays.toString(
-                constructorConfig == null ? seedObjectValues : constructorConfig));
+        SPouT.log("Seeded Object Values: " + Arrays.toString(seedObjectValues));
     }
 
     public void parseAnalysesConfig(String config, Meta meta) {
@@ -200,7 +199,7 @@ public class Config {
                     parseStrings(vals, b64);
                     break;
                 case "concolic.constructors":
-                    constructorConfig = vals;
+                    seedObjectValues = vals;
                     b64ConstructorConfig = b64;
                     break;
             }
@@ -292,24 +291,7 @@ public class Config {
             seedStringValues[i] = b64 ? b64decode(valsAsStr[i].trim()) : valsAsStr[i].trim();
         }
     }
-
-    @CompilerDirectives.TruffleBoundary
-    private void parseConstructors(String[] valsAsStr, Meta meta, boolean b64) {
-        constructorConfig = null;
-        seedObjectValues = new StaticObject[valsAsStr.length];
-        for (int i = 0; i < valsAsStr.length; i++) {
-            StringBuilder call = new StringBuilder();
-            seedObjectValues[i] = parseObjectValue(b64 ? b64decode(valsAsStr[i].trim()) : valsAsStr[i].trim(), meta, b64, call);
-            if (constructorSummary) {
-                AuxiliaryVariable var = new AuxiliaryVariable("__object_" + i + ".init", Types.STRING);
-                Expression.fromConstant(Types.STRING, call.toString());
-                trace.addElement(new ConstructorCondition(
-                        new ComplexExpression(OperatorComparator.STRINGEQ, var,
-                                Expression.fromConstant(Types.STRING, call.toString()))));
-            }
-        }
-    }
-
+    
     private void parseConcolic(String valsAsStr) {
         hasConcolicAnalysis = Boolean.valueOf(valsAsStr.trim());
     }
@@ -441,19 +423,39 @@ public class Config {
      */
     @CompilerDirectives.TruffleBoundary
     public StaticObject nextSymbolicObject(Meta meta) {
-        if (constructorConfig != null) {
-            parseConstructors(constructorConfig, meta, b64ConstructorConfig);
+        String constructorConfig = "<>null|NULL";
+        if(countObjectSeeds < seedObjectValues.length) {
+            constructorConfig = b64ConstructorConfig ? b64decode(seedObjectValues[countObjectSeeds]) : seedObjectValues[countObjectSeeds];
         }
 
-        StaticObject obj = null;
-        if(countObjectSeeds < seedObjectValues.length) {
-            obj = seedObjectValues[countObjectSeeds];
-        } else {
-            obj = StaticObject.createNull(null);
-        }
+        int endIdx = findMatchingIndex(constructorConfig, '<', '>');
+        String label =  constructorConfig.substring(1, endIdx);
+        constructorConfig = constructorConfig.substring(endIdx + 1);
 
         Variable symbolicObjectId = new Variable(Types.OBJECT, countObjectSeeds);
+        AuxiliaryVariable objectCreationError = new AuxiliaryVariable( symbolicObjectId + ".err", Types.STRING);
         countObjectSeeds++;
+        Expression errorExpr = new ComplexExpression(OperatorComparator.STRINGEQ,
+                objectCreationError, Expression.fromConstant(Types.STRING, label));
+
+        trace.addElement(new SymbolDeclaration(objectCreationError));
+        if (constructorSummary) {
+            trace.addElement(new ConstructorCondition(errorExpr));
+        } else {
+            trace.addElement(new PathCondition(errorExpr, 0,1));
+        }
+
+        StringBuilder logger = new StringBuilder();
+        logger.append("<").append(label).append(">");
+        StaticObject obj = parseObjectValue(constructorConfig, meta, b64ConstructorConfig, logger);
+
+        if (constructorSummary) {
+            AuxiliaryVariable var = new AuxiliaryVariable(symbolicObjectId + ".init", Types.STRING);
+            Expression.fromConstant(Types.STRING, logger.toString());
+            trace.addElement(new ConstructorCondition(
+                    new ComplexExpression(OperatorComparator.STRINGEQ, var,
+                            Expression.fromConstant(Types.STRING, logger.toString()))));
+        }
 
         Annotations objectDescription = Annotations.emptyArray();
         objectDescription.set(getConcolicIdx(), symbolicObjectId);
@@ -489,7 +491,7 @@ public class Config {
         String paramListAsString = split[2];
         for (int i = 0; i < paramTypes.length; i++) {
             call.append("{");
-            int endIdx = findMatchingIndex(paramListAsString);
+            int endIdx = findMatchingIndex(paramListAsString, '{', '}');
             String paramAsString = paramListAsString.substring(1, endIdx);
             paramListAsString = paramListAsString.substring(endIdx);
             if (paramTypes[i].isPrimitive()) {
@@ -550,12 +552,12 @@ public class Config {
         return null;
     }
 
-    private static int findMatchingIndex(String str) {
-        assert str.length() > 1 && str.charAt(0) == '{';
+    private static int findMatchingIndex(String str, char open, char close) {
+        assert str.length() > 1 && str.charAt(0) == open;
         int count = 0;
         for (int i = 0; i < str.length(); i++) {
             char c = str.charAt(i);
-            if (c == '{') { count++; } else if (c == '}') { count--; }
+            if (c == open) { count++; } else if (c == close) { count--; }
             if (count == 0) { return i; }
         }
         return -1;
@@ -747,7 +749,7 @@ public class Config {
     }
     */
 
-    private StaticObject[] seedObjectValues = StaticObject.EMPTY_ARRAY;
+    private String[] seedObjectValues = new String[] {};
     private int countObjectSeeds = 0;
 
     public int getCountObjectSeeds() {
@@ -811,13 +813,13 @@ public class Config {
     }
 
     // This should be a record, but SPouT cannot compile records yet.
-    public class SymbolicStringValue{
+    public static class SymbolicStringValue {
         public String concrete;
         public Variable symbolic;
         public SymbolicStringValue(String c, Variable s){
             concrete = c;
             symbolic = s;
         }
-    };
+    }
 
 }
