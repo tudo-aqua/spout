@@ -3,7 +3,7 @@ WORKDIR /data
 RUN apt-get update && apt-get install -y wget git python3 python-is-python3 build-essential checkinstall libssl-dev
 
 RUN wget http://www.cmake.org/files/v3.20/cmake-3.20.0.tar.gz && tar -xvzf cmake-3.20.0.tar.gz 
-RUN cd cmake-3.20.0 && ./configure && make && checkinstall && cmake --version
+RUN cd cmake-3.20.0 && ./configure && make && checkinstall -y && cmake --version
 
 RUN wget https://github.com/graalvm/labs-openjdk-17/releases/download/jvmci-22.3-b06/labsjdk-ce-17.0.5+5-jvmci-22.3-b06-linux-amd64.tar.gz && \
     tar -xzf labsjdk-ce-17.0.5+5-jvmci-22.3-b06-linux-amd64.tar.gz
