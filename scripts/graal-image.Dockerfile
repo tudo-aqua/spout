@@ -1,6 +1,6 @@
 FROM --platform=linux/amd64 ubuntu:20.04
 WORKDIR /data
-RUN apt-get update && apt-get install -y wget git python3 python-is-python3 build-essentials checkinstall
+RUN apt-get update && apt-get install -y wget git python3 python-is-python3 build-essential checkinstall
 
 RUN wget http://www.cmake.org/files/v3.20/cmake-3.20.0.tar.gz
 RUN tar -xvzf cmake-3.20.0.tar.gz 
