@@ -5,21 +5,19 @@ RUN apt-get update && apt-get install -y wget git python3 python-is-python3 buil
 RUN wget http://www.cmake.org/files/v3.20/cmake-3.20.0.tar.gz && tar -xvzf cmake-3.20.0.tar.gz 
 RUN cd cmake-3.20.0 && ./configure && make && checkinstall -y && cmake --version
 
-RUN wget https://github.com/graalvm/labs-openjdk-17/releases/download/jvmci-22.3-b06/labsjdk-ce-17.0.5+5-jvmci-22.3-b06-linux-amd64.tar.gz && \
-    tar -xzf labsjdk-ce-17.0.5+5-jvmci-22.3-b06-linux-amd64.tar.gz
-ENV JAVA_HOME=/data/labsjdk-ce-17.0.5-jvmci-22.3-b06/
-
+ADD update_common.py .
+RUN chmod +x update_common.py
 RUN git clone https://github.com/graalvm/mx.git && \
-    cd mx; git checkout b62c4ec0; cd ..;
-ENV PATH=/data/mx:$JAVA_HOME/bin:$PATH
+    cd mx; git checkout 7.54.5; cd .. && \
+    ./update_common.py mx/common.json; ./update_common.py mx/jdk-binaries.json;
+ENV PATH=/data/mx:/data/labsjdk-gdart-25+37-jvmci-b01/bin:$PATH
+RUN yes| mx fetch-jdk --strip-contents-home --to . labsjdk-gdart
 RUN echo $PATH
-RUN java -version && javac -version
+RUN java -version && javac -version && mx --version
 
-RUN wget https://github.com/graalvm/graalvm-ce-builds/releases/download/vm-22.2.0/graalvm-ce-java17-linux-amd64-22.2.0.tar.gz && \
-    tar -xzf graalvm-ce-java17-linux-amd64-22.2.0.tar.gz
-ENV PATH=/data/graalvm-ce-java17-22.2.0/bin:$PATH
-RUN gu install native-image
-RUN DEBIAN_FRONTEND="noninteractive" apt-get -y install build-essential libz-dev zlib1g-dev pip cmake gcc g++
+RUN DEBIAN_FRONTEND="noninteractive" apt-get -y install build-essential libz-dev zlib1g-dev pip gcc g++ openjdk-17-jdk python3-venv
+RUN python -m venv /data/envs/mx_env ; source /data/envs/mx_env/bin/activate ; pip install ninja_syntax
+
 RUN wget https://dlcdn.apache.org/maven/maven-3/3.9.12/binaries/apache-maven-3.9.12-bin.tar.gz && \
     tar -xzf apache-maven-3.9.12-bin.tar.gz
 ENV PATH=/data/apache-maven-3.9.12/bin:$PATH
