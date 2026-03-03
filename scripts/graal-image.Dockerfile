@@ -21,5 +21,3 @@ RUN python -m venv /data/envs/mx_env ; source /data/envs/mx_env/bin/activate ; p
 RUN wget https://dlcdn.apache.org/maven/maven-3/3.9.12/binaries/apache-maven-3.9.12-bin.tar.gz && \
     tar -xzf apache-maven-3.9.12-bin.tar.gz
 ENV PATH=/data/apache-maven-3.9.12/bin:$PATH
-
-
