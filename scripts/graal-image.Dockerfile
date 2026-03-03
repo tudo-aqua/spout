@@ -10,6 +10,7 @@ RUN chmod +x update_common.py
 RUN git clone https://github.com/graalvm/mx.git && \
     cd mx; git checkout 7.54.5; cd .. && \
     ./update_common.py mx/common.json; ./update_common.py mx/jdk-binaries.json;
+    
 ENV PATH=/data/mx:/data/labsjdk-gdart-25+37-jvmci-b01/bin:$PATH
 RUN yes| mx fetch-jdk --strip-contents-home --to . labsjdk-gdart
 RUN echo $PATH
