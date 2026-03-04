@@ -57,8 +57,6 @@ import java.util.Base64;
 
 public class Config {
 
-
-
     public enum TaintType {OFF, DATA, CONTROL, INFORMATION};
 
     private boolean hasConcolicAnalysis = false;
@@ -133,24 +131,23 @@ public class Config {
     }
 
     public void parseAnalysesConfig(String config, Meta meta) {
-        if (config.trim().length() < 1) {
-            return;
-        }
-        String[] paramsGroups = config.trim().split(" "); // not in base64
-        for (String paramGroup : paramsGroups) {
-            String[] keyValue = paramGroup.split(":"); // not in base64
-            String value = keyValue[1].trim();
-            switch (keyValue[0]) {
-                case "concolic.execution":
-                    parseConcolic(value);
-                    break;
-                case "concolic.constructor.summary":
-                    parseSummary(value);
-                    break;
-                case "taint.flow":
-                    parseTaint(value);
-                    break;
+        if (!config.trim().isEmpty()) {
+            String[] paramsGroups = config.trim().split(" "); // not in base64
+            for (String paramGroup : paramsGroups) {
+                String[] keyValue = paramGroup.split(":"); // not in base64
+                String value = keyValue[1].trim();
+                switch (keyValue[0]) {
+                    case "concolic.execution":
+                        parseConcolic(value);
+                        break;
+                    case "concolic.constructor.summary":
+                        parseSummary(value);
+                        break;
+                    case "taint.flow":
+                        parseTaint(value);
+                        break;
 
+                }
             }
         }
         configureAnalysis();
