@@ -746,29 +746,40 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
         // boolean
         if ((a1 == null || Expression.isBoolean(a1)) && (a2 == null || Expression.isBoolean(a2))) {
-            // assume that one is a constant.
-            if (a1 != null && a2 != null) {
+            
+            if (!(c1 == 0 || c1 == 1)){
                 CompilerDirectives.transferToInterpreter();
-                throw EspressoError.shouldNotReachHere("non-branching bytecode");
+                throw EspressoError.shouldNotReachHere("Unexpected constant value.");
             }
 
-            expr = a1 != null ? a1 : a2;
-            int c = (a1 != null) ? c2 : c1;
+            if (!(c2 == 0 || c2 == 1)){
+                CompilerDirectives.transferToInterpreter();
+                throw EspressoError.shouldNotReachHere("Unexpected constant value.");
+            }
+
+            if (a1 == null){
+                a1 = Constant.fromConcreteValue(c1 == 1);
+            }
+
+            if (a2 == null){
+                a2 = Constant.fromConcreteValue(c2 == 1);
+            }
 
             switch (opcode) {
-                case IF_ICMPEQ:
-                    expr = (c != 0) ? new ComplexExpression(BNEG, expr) : expr;
+                case IF_ICMPEQ: 
+                    expr = new ComplexExpression(BEQUIV, a1, a2);
                     break;
                 case IF_ICMPNE:
-                    expr = (c == 0) ? new ComplexExpression(BNEG, expr) : expr;
+                    expr = new ComplexExpression(BNEG, new ComplexExpression(BEQUIV, a1, a2));
                     break;
                 default:
                     CompilerDirectives.transferToInterpreter();
                     // FIXME: replace EspressoError.shouldNotReachHere calls with stoprecording(...) to make analysis shut down properly
                     throw EspressoError.shouldNotReachHere("non-branching bytecode");
+
             }
 
-            if (takeBranch) {
+            if (!takeBranch) {
                 expr = new ComplexExpression(BNEG, expr);
             }
 
