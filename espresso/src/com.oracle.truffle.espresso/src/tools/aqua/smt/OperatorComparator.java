@@ -209,7 +209,7 @@ public enum OperatorComparator {
                 return "bvxor";
             case INEG:
             case LNEG:
-                return "-";
+                return "bvneg";
 
             // float and double
             case FADD:
