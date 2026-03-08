@@ -602,6 +602,9 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                     new ComplexExpression(BVLE, INT_ZERO, sIndex),
                     new ComplexExpression(BVLT, sIndex, sLen));
 
+            // The path conditions must characterize the path taken by the execution.
+            arrayBound = new ComplexExpression(BAND, arrayBound, new ComplexExpression(BVEQ, sIndex, Constant.fromConcreteValue(cIndex)));
+
             trace.addElement(new PathCondition(
                     safe ? arrayBound : new ComplexExpression(BNEG, arrayBound), safe ? FAILURE : SUCCESS, BINARY_SPLIT));
         }
