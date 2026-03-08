@@ -921,7 +921,7 @@ public final class BytecodeNode extends EspressoMethodNode implements BytecodeOS
                     case LLOAD:
                         putLong(frame, top, getLocalLong(frame, bs.readLocalIndex(curBCI)));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
-                        AnnotatedVM.putAnnotations(frame, top, AnnotatedVM.getLocalAnnotations(frame, bs.readLocalIndex(curBCI)));
+                        AnnotatedVM.putAnnotations(frame, top + 1, AnnotatedVM.getLocalAnnotations(frame, bs.readLocalIndex(curBCI)));
                         SPouT.markWithIFTaint(frame, top);
                         break;
                     case FLOAD:
