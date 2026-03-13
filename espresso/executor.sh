@@ -6,9 +6,12 @@ echo "Working directory: $(pwd)"
 
 # perform concrete execution
 # execution with null
-./mxbuild/darwin-aarch64/ESPRESSO_NATIVE_STANDALONE/bin/java -truffle -ea -Dconcolic.execution=true -cp ../../dse/src/test/resources/examples:../../verifier-stub/target/verifier-stub-1.0.jar Example1
-# execution with a given constructor with no arguments
-./mxbuild/darwin-aarch64/ESPRESSO_NATIVE_STANDALONE/bin/java -truffle -ea -Dconcolic.execution=true -Dconcolic.constructors="Ljava/lang/Integer;|(I)V|1|11" -Dconcolic.constructorCounts=11 -Dconcolic.constructorIds=1 -cp ../../dse/src/test/resources/examples:../../verifier-stub/target/verifier-stub-1.0.jar Example1
-# execution with a given constructor with arguments
-./mxbuild/darwin-aarch64/ESPRESSO_NATIVE_STANDALONE/bin/java -truffle -ea -Dconcolic.execution=true -Dconcolic.constructors="LA;|(IILSub;)V|9|11" -Dconcolic.constructorCounts=11 -Dconcolic.constructorIds=9 -cp ../../dse/src/test/resources/examples:../../verifier-stub/target/verifier-stub-1.0.jar Example1
+#./mxbuild/darwin-aarch64/ESPRESSO_NATIVE_STANDALONE/bin/java -truffle -ea -Dconcolic.execution=true -cp ../../dse/src/test/resources/examples:../../verifier-stub/target/verifier-stub-1.0.jar Example1
+## execution with a given constructor with no arguments
+#./mxbuild/darwin-aarch64/ESPRESSO_NATIVE_STANDALONE/bin/java -truffle -ea -Dconcolic.execution=true -Dconcolic.constructors="Ljava/lang/Integer;|(I)V|1|11" -Dconcolic.constructorCounts=11 -Dconcolic.constructorIds=1 -cp ../../dse/src/test/resources/examples:../../verifier-stub/target/verifier-stub-1.0.jar Example1
+## execution with a given constructor with arguments
+#./mxbuild/darwin-aarch64/ESPRESSO_NATIVE_STANDALONE/bin/java -truffle -ea -Dconcolic.execution=true -Dconcolic.constructors="LA;|(IILSub;)V|9|11" -Dconcolic.constructorCounts=11 -Dconcolic.constructorIds=9 -cp ../../dse/src/test/resources/examples:../../verifier-stub/target/verifier-stub-1.0.jar Example1
+
+#./mxbuild/darwin-aarch64/ESPRESSO_NATIVE_STANDALONE/bin/java -cp ../../dse/src/test/resources/example:../../dse/src/main/resources/constructor:../../verifier-stub/target/verifier-stub-1.0.jar -Dconcolic.execution=true -Dconcolic.constructor.summary=true -Dconcolic.constructors="<>LA;|(I)V|{}" SummaryMain
+./mxbuild/darwin-aarch64/ESPRESSO_NATIVE_STANDALONE/bin/java -cp ../../dse/src/test/resources/example:../../dse/src/main/resources/constructor:../../verifier-stub/target/verifier-stub-1.0.jar -Dconcolic.execution=true -Dconcolic.constructor.summary=true -Dconcolic.constructors="<>LC;|(LA;)V|{LC;|(LA;)V|{null|NULL}}" SummaryMain
 
