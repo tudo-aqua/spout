@@ -25,6 +25,7 @@
 package tools.aqua.concolic;
 
 import tools.aqua.smt.Atom;
+import tools.aqua.smt.Types;
 import tools.aqua.smt.Variable;
 import tools.aqua.spout.TraceElement;
 
@@ -47,6 +48,8 @@ public class SymbolDeclaration extends TraceElement {
     public String toString() {
         return  (auxiliary ? "[AUXILIARY]" : "[DECLARE]") +" (declare-fun " +
                 variable + " () " +
-                variable.getType() + ")";
+                variable.getType() + ")" +
+                // todo: remove when custom sort for objects works
+                (variable.getType() == Types.OBJECT ? "\n[OBJECT] " + variable : "");
     }
 }

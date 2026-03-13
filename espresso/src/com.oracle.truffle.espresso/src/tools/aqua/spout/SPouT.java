@@ -109,9 +109,11 @@ public class SPouT {
 
         stopAnalysis();
         if (trace != null) {
+            /*
             if (config.hasConcolicAnalysis()) {
                 System.out.println("[AUXILIARY] (declare-sort Object 0)");
             }
+            */
             trace.printTrace();
         }
         System.out.println("======================== END PATH [END].");
