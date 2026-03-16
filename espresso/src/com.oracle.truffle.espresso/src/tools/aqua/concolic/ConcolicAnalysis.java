@@ -282,11 +282,11 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
         // todo: add assumption if type bound
         if (typeBound != null) {
-            boolean isInstance = aExtendB(obj.getKlass(), typeBound);
-            Expression typeAssumption = instanceOf(obj, oId, typeBound, isInstance);
+            boolean isNullOrInstance = obj.getKlass() == null || aExtendB(obj.getKlass(), typeBound);
+            Expression typeAssumption = instanceOfOrNull(obj, oId, typeBound);
             Annotations a = Annotations.emptyArray();
             a.set(config.getConcolicIdx(), typeAssumption);
-            AnnotatedValue av = new AnnotatedValue(isInstance, a);
+            AnnotatedValue av = new AnnotatedValue(isNullOrInstance, a);
             SPouT.assume(av, meta);
         }
         annotateObject(obj, config.getConcolicIdx());
@@ -1130,6 +1130,21 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
         return instanceofExpr;
     }
+
+    private Expression instanceOfOrNull(StaticObject c, Expression a, Klass typeToCheck) {
+        if (a == null) {
+            return null;
+        }
+
+        assert a instanceof Variable;
+        Atom klassVar = Expression.getKlassVariable((Atom) a);
+
+        Expression klassConstant = Expression.fromConstant(KLASS, typeToCheck);
+        Expression instanceofExpr = new ComplexExpression(OBJECT_EXTENDS, klassVar, klassConstant);
+
+        return instanceofExpr;
+    }
+
 
     @Override
     public void polymorphicMethodAccess(StaticObject object, Method m, Expression aObj) {
