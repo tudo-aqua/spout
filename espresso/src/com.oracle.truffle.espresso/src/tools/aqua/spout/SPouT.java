@@ -1385,9 +1385,15 @@ public class SPouT {
         AnnotatedVM.putAnnotations(frame, top, a);
     }
 
-    public static void polymorphicMethodAccess(StaticObject object, Method m) {
+    public static void polymorphicMethodAccess(StaticObject object, Method m, int i) {
         if (!analyze || !object.hasAnnotations()) return;
+        //if (object.hasAnnotations()) logi(i);
         analysis.polymorphicMethodAccess(object, m, Annotations.objectAnnotation(object));
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    private static void logi(int i) {
+        SPouT.log("case  " + i);
     }
 
     public static void nullCheckForException(StaticObject object) {
