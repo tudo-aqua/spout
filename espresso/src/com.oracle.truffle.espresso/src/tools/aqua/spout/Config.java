@@ -439,7 +439,7 @@ public class Config {
         if (constructorSummary) {
             trace.addElement(new ConstructorCondition(errorExpr));
         } else {
-            trace.addElement(new PathCondition(errorExpr, 0,1));
+            trace.addElement(new PathCondition(errorExpr, 0,2));
         }
 
         StringBuilder logger = new StringBuilder();
