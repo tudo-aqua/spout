@@ -40,6 +40,7 @@ import tools.aqua.concolic.ConcolicNumericAnalysis;
 import tools.aqua.concolic.ConstructorCondition;
 import tools.aqua.concolic.PathCondition;
 import tools.aqua.concolic.SymbolDeclaration;
+import tools.aqua.smt.Atom;
 import tools.aqua.smt.AuxiliaryVariable;
 import tools.aqua.smt.ComplexExpression;
 import tools.aqua.smt.Expression;
@@ -53,6 +54,9 @@ import tools.aqua.taint.TaintAnalysis;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Base64;
+
+import static tools.aqua.smt.OperatorComparator.OBJECT_EXTENDS;
+import static tools.aqua.smt.Types.KLASS;
 
 
 public class Config {
@@ -419,7 +423,7 @@ public class Config {
      * @return Parsed {{@link StaticObject}}
      */
     @CompilerDirectives.TruffleBoundary
-    public StaticObject nextSymbolicObject(Meta meta) {
+    public StaticObject nextSymbolicObject(Meta meta, Klass typeBound) {
         String constructorConfig = "<>null|NULL";
         if(countObjectSeeds < seedObjectValues.length) {
             constructorConfig = b64ConstructorConfig ? b64decode(seedObjectValues[countObjectSeeds]) : seedObjectValues[countObjectSeeds];
@@ -454,6 +458,20 @@ public class Config {
                             Expression.fromConstant(Types.STRING, logger.toString()))));
         }
 
+        Atom oCls = Expression.getKlassVariable(symbolicObjectId);
+        trace.addElement(new SymbolDeclaration(symbolicObjectId));
+        trace.addElement(new SymbolDeclaration(oCls));
+
+        // todo: add assumption if type bound
+        if (typeBound != null) {
+            boolean isNullOrInstance = po.klass == null || aExtendB(po.klass, typeBound);
+            Expression typeAssumption = instanceOfOrNull(symbolicObjectId, typeBound);
+            Annotations a = Annotations.emptyArray();
+            a.set(getConcolicIdx(), typeAssumption);
+            AnnotatedValue av = new AnnotatedValue(isNullOrInstance, a);
+            SPouT.assume(av, meta);
+        }
+
         StaticObject obj = instantiate(po);
         
         Annotations objectDescription = Annotations.emptyArray();
@@ -467,6 +485,31 @@ public class Config {
         Method constructor,
         Object[] constructorCallparams
     ) {}
+
+    @CompilerDirectives.TruffleBoundary
+    private static boolean aExtendB(Klass a, Klass b) {
+        if (a == null) return false;
+        if (a == b) return true;
+        if (aExtendB(a.getSuperKlass(), b)) return true;
+        for (Klass iface : a.getSuperInterfaces()) {
+            if (aExtendB(iface, b)) return true;
+        }
+        return false;
+    }
+
+    private Expression instanceOfOrNull(Expression a, Klass typeToCheck) {
+        if (a == null) {
+            return null;
+        }
+
+        assert a instanceof Variable;
+        Atom klassVar = Expression.getKlassVariable((Atom) a);
+
+        Expression klassConstant = Expression.fromConstant(KLASS, typeToCheck);
+        Expression instanceofExpr = new ComplexExpression(OBJECT_EXTENDS, klassVar, klassConstant);
+
+        return instanceofExpr;
+    }
 
     private static StaticObject instantiate(ParsedObjectValue po) {
         if (po.klass == null) {

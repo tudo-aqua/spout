@@ -252,17 +252,6 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return fName;
     }
 
-    @CompilerDirectives.TruffleBoundary
-    private static boolean aExtendB(Klass a, Klass b) {
-        if (a == null) return false;
-        if (a == b) return true;
-        if (aExtendB(a.getSuperKlass(), b)) return true;
-        for (Klass iface : a.getSuperInterfaces()) {
-            if (aExtendB(iface, b)) return true;
-        }
-        return false;
-    }
-
     /***
      * Trys to create in the guest world a new Object according to the next element of -Dconcolic.constructors
      *
@@ -272,23 +261,9 @@ public class ConcolicAnalysis implements Analysis<Expression> {
      */
     public StaticObject nextSymbolicObject(Meta meta, Klass typeBound) {
 
-        StaticObject obj = config.nextSymbolicObject(meta);
+        StaticObject obj = config.nextSymbolicObject(meta, typeBound);
         assert obj != null;
 
-        Variable oId = (Variable) Annotations.objectAnnotation(obj).getAnnotations()[config.getConcolicIdx() ];
-        Atom oCls = Expression.getKlassVariable(oId);
-        trace.addElement(new SymbolDeclaration(oId));
-        trace.addElement(new SymbolDeclaration(oCls));
-
-        // todo: add assumption if type bound
-        if (typeBound != null) {
-            boolean isNullOrInstance = obj.getKlass() == null || aExtendB(obj.getKlass(), typeBound);
-            Expression typeAssumption = instanceOfOrNull(obj, oId, typeBound);
-            Annotations a = Annotations.emptyArray();
-            a.set(config.getConcolicIdx(), typeAssumption);
-            AnnotatedValue av = new AnnotatedValue(isNullOrInstance, a);
-            SPouT.assume(av, meta);
-        }
         annotateObject(obj, config.getConcolicIdx());
         return obj;
     }
@@ -1130,21 +1105,6 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
         return instanceofExpr;
     }
-
-    private Expression instanceOfOrNull(StaticObject c, Expression a, Klass typeToCheck) {
-        if (a == null) {
-            return null;
-        }
-
-        assert a instanceof Variable;
-        Atom klassVar = Expression.getKlassVariable((Atom) a);
-
-        Expression klassConstant = Expression.fromConstant(KLASS, typeToCheck);
-        Expression instanceofExpr = new ComplexExpression(OBJECT_EXTENDS, klassVar, klassConstant);
-
-        return instanceofExpr;
-    }
-
 
     @Override
     public void polymorphicMethodAccess(StaticObject object, Method m, Expression aObj) {
