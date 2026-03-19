@@ -439,13 +439,6 @@ public class Config {
         Expression errorExpr = new ComplexExpression(OperatorComparator.STRINGEQ,
                 objectCreationError, Expression.fromConstant(Types.STRING, label));
 
-        trace.addElement(new SymbolDeclaration(objectCreationError));
-        if (constructorSummary) {
-            trace.addElement(new ConstructorCondition(errorExpr));
-        } else {
-            trace.addElement(new PathCondition(errorExpr, 0,2));
-        }
-
         StringBuilder logger = new StringBuilder();
         logger.append("<").append(label).append(">");
         ParsedObjectValue po = parseObjectValue(constructorConfig, meta, b64ConstructorConfig, logger);
@@ -472,6 +465,13 @@ public class Config {
             SPouT.assume(av, meta);
         }
 
+        trace.addElement(new SymbolDeclaration(objectCreationError));
+        if (constructorSummary) {
+            trace.addElement(new ConstructorCondition(errorExpr));
+        } else {
+            trace.addElement(new PathCondition(errorExpr, 0,2));
+        }
+        
         StaticObject obj = instantiate(po);
         
         Annotations objectDescription = Annotations.emptyArray();
