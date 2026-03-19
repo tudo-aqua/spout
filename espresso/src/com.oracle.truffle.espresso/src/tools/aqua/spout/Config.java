@@ -444,7 +444,7 @@ public class Config {
 
         StringBuilder logger = new StringBuilder();
         logger.append("<").append(label).append(">");
-        StaticObject obj = parseObjectValue(constructorConfig, meta, b64ConstructorConfig, logger);
+        ParsedObjectValue po = parseObjectValue(constructorConfig, meta, b64ConstructorConfig, logger);
 
         if (constructorSummary) {
             AuxiliaryVariable var = new AuxiliaryVariable(symbolicObjectId + ".init", Types.STRING);
@@ -454,18 +454,46 @@ public class Config {
                             Expression.fromConstant(Types.STRING, logger.toString()))));
         }
 
+        StaticObject obj = instantiate(po);
+        
         Annotations objectDescription = Annotations.emptyArray();
         objectDescription.set(getConcolicIdx(), symbolicObjectId);
         Annotations.setObjectAnnotation(obj, objectDescription);
         return obj;
     }
 
+    private record ParsedObjectValue(
+        Klass klass,
+        Method constructor,
+        Object[] constructorCallparams
+    ) {}
+
+    private static StaticObject instantiate(ParsedObjectValue po) {
+        if (po.klass == null) {
+            return StaticObject.createNull(null);
+        }
+        for (int i=1; i<po.constructorCallparams.length; i++) {
+            if (po.constructorCallparams[i] instanceof ParsedObjectValue) {
+                po.constructorCallparams[i] = instantiate( (ParsedObjectValue) po.constructorCallparams[i]);
+            }
+        }
+        // instantiate object
+        StaticObject staticObject = po.klass.allocateInstance();
+        // for some reason we have to do it here explicitly ...
+        Annotations.initObjectAnnotations(staticObject);
+        po.constructorCallparams[0] = staticObject;
+        //SPouT.log("constructor call: " + Arrays.toString(constructorCallparams));
+        InvokeSpecial invokeSpecial = InvokeSpecialNodeGen.create(po.constructor);
+        invokeSpecial.execute(po.constructorCallparams);
+        return staticObject;
+    }
+
    @CompilerDirectives.TruffleBoundary
-    private StaticObject parseObjectValue(String value, Meta meta, boolean b64, StringBuilder call) {
+    private ParsedObjectValue parseObjectValue(String value, Meta meta, boolean b64, StringBuilder call) {
         //Extract className and constructor_signature etc.
         if (value.equals("null|NULL")) {
             call.append(value);
-            return StaticObject.createNull(null);
+            return new ParsedObjectValue(null, null, null);
         }
 
         String[] split = value.split("\\|", 3);
@@ -501,15 +529,7 @@ public class Config {
             call.append("}");
         }
 
-        // instantiate object
-        StaticObject staticObject = klass.allocateInstance();
-        // for some reason we have to do it here explicitly ...
-        Annotations.initObjectAnnotations(staticObject);
-        constructorCallparams[0] = staticObject;
-        //SPouT.log("constructor call: " + Arrays.toString(constructorCallparams));
-        InvokeSpecial invokeSpecial = InvokeSpecialNodeGen.create(constructor);
-        invokeSpecial.execute(constructorCallparams);
-        return staticObject;
+        return new ParsedObjectValue(klass, constructor,  constructorCallparams);
     }
 
     private Object parsePrimitiveValue(String value, PrimitiveKlass klass, Meta meta, boolean b64) {
