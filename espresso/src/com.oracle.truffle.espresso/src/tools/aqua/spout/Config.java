@@ -43,6 +43,7 @@ import tools.aqua.concolic.SymbolDeclaration;
 import tools.aqua.smt.Atom;
 import tools.aqua.smt.AuxiliaryVariable;
 import tools.aqua.smt.ComplexExpression;
+import tools.aqua.smt.Constant;
 import tools.aqua.smt.Expression;
 import tools.aqua.smt.OperatorComparator;
 import tools.aqua.smt.Types;
@@ -55,8 +56,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Base64;
 
+import static tools.aqua.smt.OperatorComparator.BNEG;
 import static tools.aqua.smt.OperatorComparator.OBJECT_EXTENDS;
+import static tools.aqua.smt.OperatorComparator.OBJECT_IS_NULL;
+import static tools.aqua.smt.OperatorComparator.STRINGEQ;
 import static tools.aqua.smt.Types.KLASS;
+import static tools.aqua.smt.Types.STRING;
 
 
 public class Config {
@@ -468,10 +473,12 @@ public class Config {
         trace.addElement(new SymbolDeclaration(objectCreationError));
         if (constructorSummary) {
             trace.addElement(new ConstructorCondition(errorExpr));
+            Expression clsExpr = new ComplexExpression(STRINGEQ, oCls, Expression.fromConstant(KLASS, po.klass));
+            trace.addElement(new ConstructorCondition(clsExpr));
         } else {
             trace.addElement(new PathCondition(errorExpr, 0,2));
         }
-        
+
         StaticObject obj = instantiate(po);
         
         Annotations objectDescription = Annotations.emptyArray();

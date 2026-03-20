@@ -136,7 +136,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     @CompilerDirectives.TruffleBoundary
-    private void annotateObject(StaticObject obj, int cIdx) {
+    private void annotateObject(StaticObject obj, int cIdx, boolean toplevel) {
         Atom oId = (Atom) Annotations.objectAnnotation(obj).getAnnotations()[cIdx];
         Annotations[] objAnnotations = obj.getAnnotations();
         ObjectKlass kls = (ObjectKlass) obj.getKlass();
@@ -149,7 +149,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             Expression clsExpr = new ComplexExpression(STRINGEQ, oCls, Expression.fromConstant(KLASS, kls));
 
             trace.addElement(new ConstructorCondition(nullExpr));
-            trace.addElement(new ConstructorCondition(clsExpr));
+            // toplevel was logged in config already
+            if (!toplevel) trace.addElement(new ConstructorCondition(clsExpr));
         }
         if (kls == null) { // null object
             return;
@@ -179,7 +180,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                 AuxiliaryVariable fCls = new AuxiliaryVariable(fName + ".cls", STRING);
                 trace.addElement(new SymbolDeclaration(fCls, false /*!config.isConstructorSummary()*/ ));
                 Annotations.setObjectAnnotation(fObj, fieldAnnotations);
-                annotateObject(fObj, cIdx);
+                annotateObject(fObj, cIdx, false);
                 if (config.isConstructorSummary()) {
                     Annotations.setObjectAnnotation(fObj, null);
                 }
@@ -264,7 +265,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         StaticObject obj = config.nextSymbolicObject(meta, typeBound);
         assert obj != null;
 
-        annotateObject(obj, config.getConcolicIdx());
+        annotateObject(obj, config.getConcolicIdx(), true);
         return obj;
     }
 
