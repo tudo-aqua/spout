@@ -46,7 +46,6 @@ import com.oracle.truffle.espresso.nodes.interop.ToPrimitive;
 import com.oracle.truffle.espresso.nodes.interop.ToReference;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
 import tools.aqua.spout.AnnotatedVM;
-import tools.aqua.spout.SPouT;
 
 public abstract class AbstractGetFieldNode extends EspressoNode {
     final Field field;
@@ -108,7 +107,6 @@ abstract class IntGetFieldNode extends AbstractGetFieldNode {
     @Override
     public int getField(VirtualFrame frame, BytecodeNode root, StaticObject receiver, int at, int statementIndex) {
         root.notifyFieldAccess(frame, statementIndex, getField(), receiver);
-        SPouT.checkNull(receiver, StaticObject.isNull(receiver));
         EspressoFrame.putInt(frame, at, executeGetField(receiver));
         AnnotatedVM.putAnnotations(frame, at, AnnotatedVM.getFieldAnnotation(receiver, field));
         return slotCount;
@@ -165,7 +163,6 @@ abstract class BooleanGetFieldNode extends AbstractGetFieldNode {
     @Override
     public int getField(VirtualFrame frame, BytecodeNode root, StaticObject receiver, int at, int statementIndex) {
         root.notifyFieldAccess(frame, statementIndex, getField(), receiver);
-        SPouT.checkNull(receiver, StaticObject.isNull(receiver));
         EspressoFrame.putInt(frame, at, executeGetField(receiver) ? 1 : 0);
         AnnotatedVM.putAnnotations(frame, at, AnnotatedVM.getFieldAnnotation(receiver, field));
         return slotCount;
@@ -222,7 +219,6 @@ abstract class CharGetFieldNode extends AbstractGetFieldNode {
     @Override
     public int getField(VirtualFrame frame, BytecodeNode root, StaticObject receiver, int at, int statementIndex) {
         root.notifyFieldAccess(frame, statementIndex, getField(), receiver);
-        SPouT.checkNull(receiver, StaticObject.isNull(receiver));
         EspressoFrame.putInt(frame, at, executeGetField(receiver));
         AnnotatedVM.putAnnotations(frame, at, AnnotatedVM.getFieldAnnotation(receiver, field));
         return slotCount;
@@ -284,7 +280,6 @@ abstract class ShortGetFieldNode extends AbstractGetFieldNode {
     @Override
     public int getField(VirtualFrame frame, BytecodeNode root, StaticObject receiver, int at, int statementIndex) {
         root.notifyFieldAccess(frame, statementIndex, getField(), receiver);
-        SPouT.checkNull(receiver, StaticObject.isNull(receiver));
         EspressoFrame.putInt(frame, at, executeGetField(receiver));
         AnnotatedVM.putAnnotations(frame, at, AnnotatedVM.getFieldAnnotation(receiver, field));
         return slotCount;
@@ -341,7 +336,6 @@ abstract class ByteGetFieldNode extends AbstractGetFieldNode {
     @Override
     public int getField(VirtualFrame frame, BytecodeNode root, StaticObject receiver, int at, int statementIndex) {
         root.notifyFieldAccess(frame, statementIndex, getField(), receiver);
-        SPouT.checkNull(receiver, StaticObject.isNull(receiver));
         EspressoFrame.putInt(frame, at, executeGetField(receiver));
         AnnotatedVM.putAnnotations(frame, at, AnnotatedVM.getFieldAnnotation(receiver, field));
         return slotCount;
@@ -398,7 +392,6 @@ abstract class LongGetFieldNode extends AbstractGetFieldNode {
     @Override
     public int getField(VirtualFrame frame, BytecodeNode root, StaticObject receiver, int at, int statementIndex) {
         root.notifyFieldAccess(frame, statementIndex, getField(), receiver);
-        SPouT.checkNull(receiver, StaticObject.isNull(receiver));
         EspressoFrame.putLong(frame, at, executeGetField(receiver));
         AnnotatedVM.putAnnotations(frame, at + 1, AnnotatedVM.getFieldAnnotation(receiver, field));
         return slotCount;
@@ -455,7 +448,6 @@ abstract class FloatGetFieldNode extends AbstractGetFieldNode {
     @Override
     public int getField(VirtualFrame frame, BytecodeNode root, StaticObject receiver, int at, int statementIndex) {
         root.notifyFieldAccess(frame, statementIndex, getField(), receiver);
-        SPouT.checkNull(receiver, StaticObject.isNull(receiver));
         EspressoFrame.putFloat(frame, at, executeGetField(receiver));
         AnnotatedVM.putAnnotations(frame, at, AnnotatedVM.getFieldAnnotation(receiver, field));
         return slotCount;
@@ -512,7 +504,6 @@ abstract class DoubleGetFieldNode extends AbstractGetFieldNode {
     @Override
     public int getField(VirtualFrame frame, BytecodeNode root, StaticObject receiver, int at, int statementIndex) {
         root.notifyFieldAccess(frame, statementIndex, getField(), receiver);
-        SPouT.checkNull(receiver, StaticObject.isNull(receiver));
         EspressoFrame.putDouble(frame, at, executeGetField(receiver));
         AnnotatedVM.putAnnotations(frame, at + 1, AnnotatedVM.getFieldAnnotation(receiver, field));
         return slotCount;
@@ -569,10 +560,8 @@ abstract class ObjectGetFieldNode extends AbstractGetFieldNode {
     @Override
     public int getField(VirtualFrame frame, BytecodeNode root, StaticObject receiver, int at, int statementIndex) {
         root.notifyFieldAccess(frame, statementIndex, getField(), receiver);
-        SPouT.checkNull(receiver, StaticObject.isNull(receiver));
         StaticObject result = executeGetField(receiver);
         root.checkNoForeignObjectAssumption(result);
-        SPouT.markObjectWithIFTaint(result);
         EspressoFrame.putObject(frame, at, result);
         return slotCount;
     }

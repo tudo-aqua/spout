@@ -2902,8 +2902,10 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
 
     private StaticObject nullCheck(StaticObject value) {
         if (!StaticObject.isNull(value)) {
+            SPouT.checkNull(value, false);
             return value;
         }
+        SPouT.checkNull(value, true);
         enterImplicitExceptionProfile();
         throw getMethod().getMeta().throwNullPointerException();
     }
