@@ -2664,7 +2664,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
         // Skip inlined nodes if instrumentation is live.
         // Lock must be owned for correctness.
         assert lockIsHeld();
-        boolean tryBytecodeLevelInlining = this.instrumentation == null && allowBytecodeInlining;
+        boolean tryBytecodeLevelInlining = this.instrumentation == null && allowBytecodeInlining && !SPouT.hasAnalysis();
         if (tryBytecodeLevelInlining) {
             InlinedMethodNode node = InlinedMethodNode.createFor(resolvedCall, top, opcode, curBCI, statementIndex);
             if (node != null) {

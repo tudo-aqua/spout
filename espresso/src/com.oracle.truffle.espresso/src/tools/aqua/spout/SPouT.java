@@ -2491,4 +2491,8 @@ public class SPouT {
         }
     }
 
+    public static boolean hasAnalysis() {
+        return analyze;
+    }
+
 }
