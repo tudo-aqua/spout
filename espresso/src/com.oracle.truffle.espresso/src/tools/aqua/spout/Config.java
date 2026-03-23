@@ -70,6 +70,8 @@ public class Config {
 
     private boolean hasConcolicAnalysis = false;
 
+    private boolean useObjectFactories = false;
+
     private TaintType taintType = TaintType.OFF;
 
     private final Trace trace;
@@ -151,6 +153,9 @@ public class Config {
                         break;
                     case "concolic.constructor.summary":
                         parseSummary(value);
+                        break;
+                    case "concolic.object.factories":
+                        parseFactories(value);
                         break;
                     case "taint.flow":
                         parseTaint(value);
@@ -304,6 +309,10 @@ public class Config {
 
     private void parseSummary(String valsAsStr) {
         constructorSummary = Boolean.valueOf(valsAsStr.trim());
+    }
+
+    private void parseFactories(String valsAsStr) {
+        useObjectFactories = Boolean.valueOf(valsAsStr.trim());
     }
 
     private void parseTaint(String valsAsStr) {
@@ -867,6 +876,10 @@ public class Config {
 
     public TaintAnalysis getTaintAnalysis() {
         return taintAnalysis;
+    }
+
+    public boolean useObjectFactories() {
+        return useObjectFactories;
     }
 
     public Analysis<?>[] getAnalyses() {

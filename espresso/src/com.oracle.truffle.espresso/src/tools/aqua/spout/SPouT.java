@@ -2495,4 +2495,8 @@ public class SPouT {
         return analyze;
     }
 
+    public static boolean useObjectFactories() {
+        return analyze && config.useObjectFactories();
+    }
+
 }
