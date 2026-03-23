@@ -546,6 +546,7 @@ public class Config {
             return new ParsedObjectValue(null, null, null);
         }
 
+        //SPouT.log("parse:" + value);
         String[] split = value.split("\\|", 3);
         String className = split[0];
         String constructorSignature = split[1];
@@ -564,11 +565,14 @@ public class Config {
         Object[] constructorCallparams = new Object[constructor.getArgumentCount()];
         Klass[] paramTypes = constructor.resolveParameterKlasses();
         String paramListAsString = split[2];
+        //SPouT.log("  paramListAsString:" + paramListAsString);
         for (int i = 0; i < paramTypes.length; i++) {
             call.append("{");
             int endIdx = findMatchingIndex(paramListAsString, '{', '}');
             String paramAsString = paramListAsString.substring(1, endIdx);
-            paramListAsString = paramListAsString.substring(endIdx);
+            paramListAsString = paramListAsString.substring(endIdx + 1);
+            //SPouT.log("  paramAsString:" + paramAsString);
+            //SPouT.log("  remaining paramListAsString:" + paramListAsString);
             if (paramTypes[i].isPrimitive()) {
                 constructorCallparams[i + 1] = parsePrimitiveValue(paramAsString, (PrimitiveKlass) paramTypes[i], meta, b64);
                 Object a = Annotations.annotation(AnnotatedValue.svalue(constructorCallparams[i + 1]), concolicIdx);
