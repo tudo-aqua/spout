@@ -1071,13 +1071,14 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
         Expression expr = new ComplexExpression(OBJECT_EQ, var1, var2);
 
+        /*
         ComplexExpression isNullA1 = new ComplexExpression(OBJECT_IS_NULL, var1, Constant.NULL);
         ComplexExpression isNullA2 = new ComplexExpression(OBJECT_IS_NULL, var2, Constant.NULL);
 
         ComplexExpression isNullA1AndA2 = new ComplexExpression(BAND, isNullA1, isNullA2);
 
         expr = new ComplexExpression(BOR, isNullA1AndA2, expr);
-
+        */
         switch (opcode) {
             case IF_ACMPEQ : expr =  takeBranch ? expr : new ComplexExpression(BNEG, expr); break;
             case IF_ACMPNE : expr =  takeBranch ? new ComplexExpression(BNEG, expr): expr; break;
