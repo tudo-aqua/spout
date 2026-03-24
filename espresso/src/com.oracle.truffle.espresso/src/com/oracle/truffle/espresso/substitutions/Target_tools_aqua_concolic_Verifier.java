@@ -113,7 +113,7 @@ public final class Target_tools_aqua_concolic_Verifier {
         if (StaticObject.isNull(factory)) meta.throwNullPointerException();
         Method createObject = factory.getKlass().requireDeclaredMethod(
                 EspressoSymbols.Names.createObject, EspressoSymbols.Signatures.Object);
-        return (StaticObject) createObject.invokeDirectInterface(factory);
+        return (StaticObject) createObject.invokeDirect(factory);
     }
 
     @CompilerDirectives.TruffleBoundary
