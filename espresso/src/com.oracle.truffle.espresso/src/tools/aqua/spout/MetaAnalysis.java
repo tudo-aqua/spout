@@ -834,6 +834,22 @@ public class MetaAnalysis implements Analysis<Annotations> {
         }
     }
 
+    public Annotations objectGetClass(StaticObject object, Annotations a) {
+        //The Code is a small variation of MetaAnalysis.execute()
+        int i = 0;
+        boolean hasResult = false;
+        Object[] annotations = new Object[analyses.length];
+        for (Analysis<?> analysis : analyses) {
+            Object result = analysis.objectGetClass(object, Annotations.annotation(a, i));
+            if (result != null) {
+                annotations[i] = result;
+                hasResult = true;
+            }
+            i++;
+        }
+        return hasResult ? new Annotations(annotations) : null;
+    }
+
     @Override
     public Annotations checkcast(VirtualFrame frame, BytecodeNode bcn, int bci, StaticObject c, Annotations a, Klass typeToCast, boolean isInstance) {
         //The Code is a small variation of MetaAnalysis.execute()

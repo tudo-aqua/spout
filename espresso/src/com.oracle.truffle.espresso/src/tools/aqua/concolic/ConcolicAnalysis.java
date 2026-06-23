@@ -1122,6 +1122,12 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     @Override
+    public Expression objectGetClass(StaticObject object, Expression aObj) {
+        if (aObj == null) return null;
+        return Expression.getKlassVariable((Atom) aObj);
+    }
+
+    @Override
     public Expression checkcast(VirtualFrame frame,
                                 BytecodeNode bcn,
                                 int bci,

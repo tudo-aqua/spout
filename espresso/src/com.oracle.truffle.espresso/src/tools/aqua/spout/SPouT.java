@@ -1382,7 +1382,17 @@ public class SPouT {
     public static void isNull(VirtualFrame frame, StaticObject object, boolean isNull, int top) {
         if (!analyze || !object.hasAnnotations()) return;
         Annotations a = analysis.isNull(object, Annotations.objectAnnotation(object), isNull);
-        AnnotatedVM.putAnnotations(frame, top, a);
+        AnnotatedVM.putAnnotations(frame, top, a)
+    }
+
+    public static StaticObject objectGetClass(StaticObject self) {
+        if (!analyze || !self.hasAnnotations()) return self.getKlass().mirror();
+        Annotations aObj = analysis.objectGetClass(self, Annotations.objectAnnotation(self));
+        StaticObject cObj = self.getKlass().mirror();
+        if (aObj != null) {
+            Annotations.setObjectAnnotation(cObj, aObj);
+        }
+        return cObj;
     }
 
     public static void polymorphicMethodAccess(StaticObject object, Method m, int i) {

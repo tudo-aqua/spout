@@ -309,6 +309,10 @@ public interface Analysis<T> {
     default void polymorphicMethodAccess(StaticObject object, Method m, T aObj) {
     }
 
+    default T objectGetClass(StaticObject object, T aObj) {
+        return null;
+    }
+
     default void checkNotZeroInt(VirtualFrame frame, BytecodeNode bcn, int bci, boolean isZero, T a) {
 
     }

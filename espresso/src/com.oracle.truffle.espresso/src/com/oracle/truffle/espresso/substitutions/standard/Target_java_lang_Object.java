@@ -48,6 +48,7 @@ import com.oracle.truffle.espresso.substitutions.SubstitutionNode;
 import com.oracle.truffle.espresso.substitutions.SubstitutionProfiler;
 import com.oracle.truffle.espresso.substitutions.Throws;
 import com.oracle.truffle.espresso.vm.VM;
+import tools.aqua.spout.SPouT;
 
 @EspressoSubstitutions
 public final class Target_java_lang_Object {
@@ -58,7 +59,7 @@ public final class Target_java_lang_Object {
 
     @Substitution(hasReceiver = true, flags = {IsTrivial})
     public static @JavaType(Class.class) StaticObject getClass(@JavaType(Object.class) StaticObject self) {
-        return self.getKlass().mirror();
+        return SPouT.objectGetClass(self);
     }
 
     public static final class InitGuard implements InlinedMethodPredicate {
