@@ -178,6 +178,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                     } else {
                         SPouT.stopRecordingWithoutMeta("Non-Null array during initial object annotations not supported");
                     }
+                } else if (obj.isString()) {
+                    SPouT.stopRecordingWithoutMeta("String during initial object annotations not supported");
                 } else {
                     // this can happen if the null is created in a constructor
                     if (fObj == StaticObject.NULL) {
@@ -187,6 +189,10 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                     AuxiliaryVariable fCls = new AuxiliaryVariable(fName + ".cls", STRING);
                     trace.addElement(new SymbolDeclaration(fCls, false /*!config.isConstructorSummary()*/));
                     Annotations.setObjectAnnotation(fObj, fieldAnnotations);
+                    if (fObj == obj) {
+                        // TODO: prevent more complex cases of recurive structures as well
+                        SPouT.stopRecordingWithoutMeta("Recurive heap structures are currently not supported");
+                    }
                     annotateObject(fObj, cIdx, false);
                     if (config.isConstructorSummary()) {
                         Annotations.setObjectAnnotation(fObj, null);
@@ -252,7 +258,12 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             case Float ->   type = FLOAT;
             case Long ->    type = LONG;
             case Double ->  type = DOUBLE;
-            case Object ->  type = OBJECT;
+            case Object ->  {
+                if (field.getTypeAsString().equals("Ljava/lang/String"))
+                    type = STRING;
+                else
+                    type = OBJECT;
+            }
             default -> {
                 // unreachable
             }

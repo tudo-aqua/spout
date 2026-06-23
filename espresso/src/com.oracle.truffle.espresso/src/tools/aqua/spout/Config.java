@@ -586,6 +586,10 @@ public class Config {
                 constructorCallparams[i + 1] = parsePrimitiveValue(paramAsString, (PrimitiveKlass) paramTypes[i], meta, b64);
                 Object a = Annotations.annotation(AnnotatedValue.svalue(constructorCallparams[i + 1]), concolicIdx);
                 if (a != null) call.append(a);
+            } else if (paramTypes[i].getType() == meta.java_lang_String.getType()) {
+                // todo String delims?
+                SPouT.log("using string param: " + paramAsString);
+                constructorCallparams[i + 1] = constructorSummary ? SPouT.nextSymbolicString(meta) : meta.toGuestString(paramAsString);
             } else {
                 constructorCallparams[i + 1] = parseObjectValue(paramAsString, meta, b64, call);
             }
