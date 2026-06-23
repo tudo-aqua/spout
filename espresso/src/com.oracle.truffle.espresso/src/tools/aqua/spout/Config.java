@@ -668,7 +668,7 @@ public class Config {
                 StaticObject.NULL); //protectionDomain ???
 
         if (klass == null) {
-            SPouT.stopRecording("loading klass failed", meta);
+            SPouT.stopRecording("loading of the following klass failed: "+fqn, meta);
         }
         return klass;
     }
@@ -677,7 +677,7 @@ public class Config {
 
         Symbol<Signature> signature = klass.getSignatures().lookupValidSignature(signatureString);
         if (signature == null) {
-            SPouT.stopRecording("loading symbol for signature failed.", meta);
+            SPouT.stopRecording("loading symbol for signature failed for: "+signatureString, meta);
         }
 
         Method[] declaredConstructors = klass.getDeclaredConstructors();

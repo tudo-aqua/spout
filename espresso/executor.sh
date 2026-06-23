@@ -13,5 +13,8 @@ echo "Working directory: $(pwd)"
 #./mxbuild/darwin-aarch64/ESPRESSO_NATIVE_STANDALONE/bin/java -truffle -ea -Dconcolic.execution=true -Dconcolic.constructors="LA;|(IILSub;)V|9|11" -Dconcolic.constructorCounts=11 -Dconcolic.constructorIds=9 -cp ../../dse/src/test/resources/examples:../../verifier-stub/target/verifier-stub-1.0.jar Example1
 
 #./mxbuild/darwin-aarch64/ESPRESSO_NATIVE_STANDALONE/bin/java -cp ../../dse/src/test/resources/example:../../dse/src/main/resources/constructor:../../verifier-stub/target/verifier-stub-1.0.jar -Dconcolic.execution=true -Dconcolic.constructor.summary=true -Dconcolic.constructors="<>LA;|(I)V|{}" SummaryMain
-./mxbuild/darwin-aarch64/ESPRESSO_NATIVE_STANDALONE/bin/java -cp ../../dse/src/test/resources/example:../../dse/src/main/resources/constructor:../../verifier-stub/target/verifier-stub-1.0.jar -Dconcolic.execution=true -Dconcolic.constructor.summary=true -Dconcolic.constructors="<>LC;|(LA;)V|{LC;|(LA;)V|{null|NULL}}" SummaryMain
+#./mxbuild/darwin-aarch64/ESPRESSO_NATIVE_STANDALONE/bin/java -cp ../../dse/src/test/resources/sv_comp/objects01:../../dse/src/main/resources/constructor:../../verifier-stub/target/verifier-stub-1.0.jar -Dconcolic.execution=true  -Dconcolic.constructors="<>LA;|(IILSub;)V|{}{}{LSub2;|(I)V|{}}" SummaryMain
+
+./mxbuild/darwin-aarch64/ESPRESSO_NATIVE_STANDALONE/bin/java -cp ../../dse/src/test/resources/examples/example03:../../verifier-stub/target/verifier-stub-1.0.jar -Dconcolic.constructors="<java/lang/AssertionError>LA;|(I)V|{0}" -Dconcolic.execution=true Main
+
 
