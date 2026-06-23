@@ -1382,7 +1382,7 @@ public class SPouT {
     public static void isNull(VirtualFrame frame, StaticObject object, boolean isNull, int top) {
         if (!analyze || !object.hasAnnotations()) return;
         Annotations a = analysis.isNull(object, Annotations.objectAnnotation(object), isNull);
-        AnnotatedVM.putAnnotations(frame, top, a)
+        AnnotatedVM.putAnnotations(frame, top, a);
     }
 
     public static StaticObject objectGetClass(StaticObject self) {

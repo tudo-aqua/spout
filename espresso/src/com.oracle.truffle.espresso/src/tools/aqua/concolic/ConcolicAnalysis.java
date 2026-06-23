@@ -172,17 +172,25 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                 }
             } else if (field.getKind().isObject()) {
                 StaticObject fObj = field.getObject(obj);
-                // this can happen if the null is created in a constructor
-                if (fObj == StaticObject.NULL) {
-                    fObj = StaticObject.createNull(null);
-                    field.set(obj, fObj);
-                }
-                AuxiliaryVariable fCls = new AuxiliaryVariable(fName + ".cls", STRING);
-                trace.addElement(new SymbolDeclaration(fCls, false /*!config.isConstructorSummary()*/ ));
-                Annotations.setObjectAnnotation(fObj, fieldAnnotations);
-                annotateObject(fObj, cIdx, false);
-                if (config.isConstructorSummary()) {
-                    Annotations.setObjectAnnotation(fObj, null);
+                if (fObj.isArray()) {
+                    if (fObj == StaticObject.NULL) {
+                        SPouT.stopRecordingWithoutMeta("Null array during initial object annotations not supported");
+                    } else {
+                        SPouT.stopRecordingWithoutMeta("Non-Null array during initial object annotations not supported");
+                    }
+                } else {
+                    // this can happen if the null is created in a constructor
+                    if (fObj == StaticObject.NULL) {
+                        fObj = StaticObject.createNull(null);
+                        field.set(obj, fObj);
+                    }
+                    AuxiliaryVariable fCls = new AuxiliaryVariable(fName + ".cls", STRING);
+                    trace.addElement(new SymbolDeclaration(fCls, false /*!config.isConstructorSummary()*/));
+                    Annotations.setObjectAnnotation(fObj, fieldAnnotations);
+                    annotateObject(fObj, cIdx, false);
+                    if (config.isConstructorSummary()) {
+                        Annotations.setObjectAnnotation(fObj, null);
+                    }
                 }
             }
             // TODO: arrays?
