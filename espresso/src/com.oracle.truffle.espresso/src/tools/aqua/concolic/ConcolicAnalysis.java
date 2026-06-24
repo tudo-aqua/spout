@@ -150,7 +150,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return null;
     }
 
-    private void annotateArray(StaticObject array, int cIdx, boolean toplevel, Meta meta, Atom arrayName) {
+    private void annotateArray(StaticObject array, int cIdx, int level, Meta meta, Atom arrayName) {
         // get component type, length, and array annotations
         ArrayKlass aClass = (ArrayKlass) array.getKlass();
         int length = array.length(meta.getLanguage());
@@ -200,7 +200,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                 Annotations ja = Annotations.create();
                 ja.set(cIdx, ajVar);
                 Annotations.setObjectAnnotation(ajValue, ja);
-                annotateObject(ajValue, cIdx, false, meta);
+                annotateObject(ajValue, cIdx, level+1, meta);
                 if (config.isConstructorSummary()) {
                     Annotations.setObjectAnnotation(ajValue, null);
                 }
@@ -210,7 +210,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     @CompilerDirectives.TruffleBoundary
-    private void annotateObject(StaticObject obj, int cIdx, boolean toplevel, Meta meta) {
+    private void annotateObject(StaticObject obj, int cIdx, int level, Meta meta) {
+        if (level > config.getMaxObjectAnnotationDepth()) return;
         Atom oId = (Atom) Annotations.objectAnnotation(obj).getAnnotations()[cIdx];
         Annotations[] objAnnotations = obj.getAnnotations();
         ObjectKlass kls = (ObjectKlass) obj.getKlass();
@@ -224,7 +225,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
             trace.addElement(new ConstructorCondition(nullExpr));
             // toplevel was logged in config already
-            if (!toplevel) trace.addElement(new ConstructorCondition(clsExpr));
+            if (level > 0) trace.addElement(new ConstructorCondition(clsExpr));
         }
         if (kls == null) { // null object
             return;
@@ -265,7 +266,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                         field.set(obj, fObj);
                     }
                     if (fObj.isArray()) {
-                        annotateArray(fObj, cIdx, false, meta, fName);
+                        annotateArray(fObj, cIdx, level+1, meta, fName);
                     } else {
                         trace.addElement(new SymbolDeclaration(fName, false /*!config.isConstructorSummary()*/));
                         AuxiliaryVariable fCls = new AuxiliaryVariable(fName + ".cls", STRING);
@@ -275,7 +276,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                             // TODO: prevent more complex cases of structures with loops as well
                             SPouT.stopRecording("Heap structures with loops are currently not supported", meta);
                         }
-                        annotateObject(fObj, cIdx, false, meta);
+                        annotateObject(fObj, cIdx, level +1, meta);
                         if (config.isConstructorSummary()) {
                             Annotations.setObjectAnnotation(fObj, null);
                         }
@@ -386,7 +387,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                 // unreachable
             }
         }
-        AuxiliaryVariable fName = new AuxiliaryVariable(oId + "[" + index + "]", type);
+        AuxiliaryVariable fName = new AuxiliaryVariable(oId + "__" + index, type);
         return fName;
     }
 
@@ -402,7 +403,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         StaticObject obj = config.nextSymbolicObject(meta, typeBound);
         assert obj != null;
 
-        annotateObject(obj, config.getConcolicIdx(), true, meta);
+        annotateObject(obj, config.getConcolicIdx(), 0, meta);
         return obj;
     }
 
@@ -1255,6 +1256,10 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     @Override
     public void polymorphicMethodAccess(StaticObject object, Method m, Expression aObj) {
         if (aObj == null) return;
+        if (!(aObj instanceof Atom)) {
+            SPouT.log("not recording polymorphic method access for non-atom object as object is expression is complex (String?)");
+            return;
+        }
         Atom aCls = Expression.getKlassVariable((Atom) aObj);
         Expression klassExpression = Expression.fromConstant(KLASS, m.getDeclaringKlass());
         Expression aMethodName = Expression.fromConstant(STRING, m.getNameAsString());

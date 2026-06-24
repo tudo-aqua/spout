@@ -72,6 +72,8 @@ public class Config {
 
     private boolean useObjectFactories = false;
 
+    private int maxObjectAnnotationDepth = 3;
+
     private TaintType taintType = TaintType.OFF;
 
     private final Trace trace;
@@ -127,6 +129,7 @@ public class Config {
 
     void printAnalysisConfig() {
         SPouT.log("Concolic Analysis: " + hasConcolicAnalysis);
+        SPouT.log("Concolic Object Max. Annotation Depth: " + maxObjectAnnotationDepth);
         SPouT.log("Constructor Summary: " + constructorSummary);
         SPouT.log("Taint Analysis: " + taintType);
         SPouT.log("Seeded Bool Values: " + Arrays.toString(seedsBooleanValues));
@@ -153,6 +156,9 @@ public class Config {
                         break;
                     case "concolic.constructor.summary":
                         parseSummary(value);
+                        break;
+                    case "concolic.max.object.annotation.depth":
+                        parseMaxObjectDepth(value);
                         break;
                     case "concolic.object.factories":
                         parseFactories(value);
@@ -311,6 +317,9 @@ public class Config {
         constructorSummary = Boolean.valueOf(valsAsStr.trim());
     }
 
+    private void parseMaxObjectDepth(String valsAsStr) {
+        maxObjectAnnotationDepth = Integer.valueOf(valsAsStr.trim());
+    }
     private void parseFactories(String valsAsStr) {
         useObjectFactories = Boolean.valueOf(valsAsStr.trim());
     }
@@ -884,6 +893,10 @@ public class Config {
 
     public boolean useObjectFactories() {
         return useObjectFactories;
+    }
+
+    public int getMaxObjectAnnotationDepth() {
+        return maxObjectAnnotationDepth;
     }
 
     public Analysis<?>[] getAnalyses() {

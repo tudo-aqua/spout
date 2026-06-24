@@ -204,6 +204,9 @@ public final class Arguments {
                             case "concolic.object.factories":
                                 concolicOptions += "concolic.object.factories:" + value + " ";
                                 break;
+                            case "concolic.max.object.annotation.depth":
+                                concolicOptions += "concolic.max.object.annotation.depth:" + value + " ";
+                                break;
                             case "concolic.execution":
                                 concolicOptions += "concolic.execution:" + value + " ";
                                 break;
