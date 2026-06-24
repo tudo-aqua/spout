@@ -588,7 +588,7 @@ public class Config {
                 if (a != null) call.append(a);
             } else if (paramTypes[i].getType() == meta.java_lang_String.getType()) {
                 // todo String delims?
-                SPouT.log("using string param: " + paramAsString);
+                //SPouT.log("using string param: " + paramAsString);
                 constructorCallparams[i + 1] = constructorSummary ? SPouT.nextSymbolicString(meta) : meta.toGuestString(paramAsString);
             } else {
                 constructorCallparams[i + 1] = parseObjectValue(paramAsString, meta, b64, call);

@@ -28,6 +28,7 @@ import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.EspressoLanguage;
 import com.oracle.truffle.espresso.classfile.JavaKind;
+import com.oracle.truffle.espresso.impl.ArrayKlass;
 import com.oracle.truffle.espresso.impl.Field;
 import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.impl.Method;
@@ -135,8 +136,61 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return guestString;
     }
 
+    private Object getArrayValue(StaticObject array, int idx, Meta meta) {
+        switch ( ((ArrayKlass)array.getKlass()).getComponentType().getJavaKind() ) {
+            case Int:
+                int[] iArr = array.unwrap(meta.getLanguage());
+                return iArr[idx];
+            default:
+                SPouT.stopRecording("not implemented yet.", meta );
+        }
+        return null;
+    }
+
+    private void annotateArray(StaticObject array, int cIdx, boolean toplevel, Meta meta, Atom arrayName) {
+        // get component type, length, and array annotations
+        ArrayKlass aClass = (ArrayKlass) array.getKlass();
+        int length = array.length(meta.getLanguage());
+        if (!array.hasAnnotations()) {
+            array.setAnnotations(new Annotations[length+1]);
+        }
+        Annotations[] aa = array.getAnnotations();
+        // log array length
+        Atom lengthVar = new AuxiliaryVariable(arrayName + ".length", INT);
+        trace.addElement(new SymbolDeclaration(lengthVar, false /*!config.isConstructorSummary()*/));
+        if (config.isConstructorSummary()) {
+            Annotations lengthAnnotations = Annotations.annotation(aa, -1);
+            Expression lengthExpr = Annotations.annotation(lengthAnnotations, cIdx);
+            logConstructorSummary(JavaKind.Int, lengthVar, length, lengthExpr);
+        } else {
+            if (aa[length] == null) aa[length] = Annotations.create();
+            aa[length].set(cIdx, lengthVar);
+        }
+        if (aClass.getComponentType().isPrimitive()) {
+            // primitive => annotate array
+            for (int j = 0; j < length; j++) {
+                Atom ajVar = getAuxiliaryArrayVariable(aClass.getComponentType(), arrayName, j);
+                trace.addElement(new SymbolDeclaration(ajVar, false /*!config.isConstructorSummary()*/));
+                if (config.isConstructorSummary()) {
+                    Expression ajExpr = Annotations.annotation(aa[j], cIdx);
+                    Object ajValue = getArrayValue(array, j, meta);
+                    logConstructorSummary(aClass.getComponentType().getJavaKind(), ajVar, ajValue, ajExpr);
+                } else {
+                    aa[j] = Annotations.create();
+                    aa[j].set(cIdx, ajVar);
+                }
+            }
+        } else if (aClass.getComponentType() == meta.java_lang_String) {
+            SPouT.stopRecording("String array during initial object annotations not supported", meta );
+        } else if (aClass.getComponentType().isArray()) {
+            SPouT.stopRecording("Array of arrays during initial object annotations not supported", meta );
+        } else { // objects
+            SPouT.stopRecording("Object array during initial object annotations not supported", meta );
+        }
+    }
+
     @CompilerDirectives.TruffleBoundary
-    private void annotateObject(StaticObject obj, int cIdx, boolean toplevel) {
+    private void annotateObject(StaticObject obj, int cIdx, boolean toplevel, Meta meta) {
         Atom oId = (Atom) Annotations.objectAnnotation(obj).getAnnotations()[cIdx];
         Annotations[] objAnnotations = obj.getAnnotations();
         ObjectKlass kls = (ObjectKlass) obj.getKlass();
@@ -159,43 +213,51 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         for (int i = 0; i < fieldTable.length; i++) {
             Field field = fieldTable[i];
             AuxiliaryVariable fName = getAuxiliaryVariable(field, oId);
-            trace.addElement(new SymbolDeclaration(fName, false /*!config.isConstructorSummary()*/));
             Annotations fieldAnnotations = Annotations.create();
             fieldAnnotations.set(cIdx, fName);
             if (field.getKind().isPrimitive()) {
+                trace.addElement(new SymbolDeclaration(fName, false /*!config.isConstructorSummary()*/));
                 if (config.isConstructorSummary()) {
                     Annotations constructedAnnotations = objAnnotations[field.getSlot()];
                     Object fieldValue = field.getValue(obj);
-                    logConstructorSummary(field, fName, fieldValue, Annotations.annotation(constructedAnnotations , cIdx ));
+                    logConstructorSummary(field.getKind(), fName, fieldValue, Annotations.annotation(constructedAnnotations , cIdx ));
                 } else {
                     objAnnotations[field.getSlot()] = fieldAnnotations;
                 }
             } else if (field.getKind().isObject()) {
                 StaticObject fObj = field.getObject(obj);
-                if (fObj.isArray()) {
-                    if (fObj == StaticObject.NULL) {
-                        SPouT.stopRecordingWithoutMeta("Null array during initial object annotations not supported");
+                if (fObj.isString()) {
+                    trace.addElement(new SymbolDeclaration(fName, false /*!config.isConstructorSummary()*/));
+                    if (config.isConstructorSummary()) {
+                        String fValue = meta.toHostString(fObj);
+                        Annotations fAnnot = Annotations.objectAnnotation(fObj);
+                        logConstructorSummary(field.getKind(), fName, fValue, Annotations.annotation(fAnnot, cIdx));
                     } else {
-                        SPouT.stopRecordingWithoutMeta("Non-Null array during initial object annotations not supported");
+                        Annotations strAnnot = Annotations.create();
+                        strAnnot.set(cIdx, fName);
+                        Annotations.setObjectAnnotation(fObj, strAnnot);
                     }
-                } else if (obj.isString()) {
-                    SPouT.stopRecordingWithoutMeta("String during initial object annotations not supported");
                 } else {
                     // this can happen if the null is created in a constructor
                     if (fObj == StaticObject.NULL) {
                         fObj = StaticObject.createNull(null);
                         field.set(obj, fObj);
                     }
-                    AuxiliaryVariable fCls = new AuxiliaryVariable(fName + ".cls", STRING);
-                    trace.addElement(new SymbolDeclaration(fCls, false /*!config.isConstructorSummary()*/));
-                    Annotations.setObjectAnnotation(fObj, fieldAnnotations);
-                    if (fObj == obj) {
-                        // TODO: prevent more complex cases of recurive structures as well
-                        SPouT.stopRecordingWithoutMeta("Recurive heap structures are currently not supported");
-                    }
-                    annotateObject(fObj, cIdx, false);
-                    if (config.isConstructorSummary()) {
-                        Annotations.setObjectAnnotation(fObj, null);
+                    if (fObj.isArray()) {
+                        annotateArray(fObj, cIdx, false, meta, fName);
+                    } else {
+                        trace.addElement(new SymbolDeclaration(fName, false /*!config.isConstructorSummary()*/));
+                        AuxiliaryVariable fCls = new AuxiliaryVariable(fName + ".cls", STRING);
+                        trace.addElement(new SymbolDeclaration(fCls, false /*!config.isConstructorSummary()*/));
+                        Annotations.setObjectAnnotation(fObj, fieldAnnotations);
+                        if (fObj == obj) {
+                            // TODO: prevent more complex cases of structures with loops as well
+                            SPouT.stopRecording("Heap structures with loops are currently not supported", meta);
+                        }
+                        annotateObject(fObj, cIdx, false, meta);
+                        if (config.isConstructorSummary()) {
+                            Annotations.setObjectAnnotation(fObj, null);
+                        }
                     }
                 }
             }
@@ -205,9 +267,9 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         obj.setAnnotations(objAnnotations);
     }
 
-    private void logConstructorSummary(Field field, Atom fieldName, Object fieldValue, Expression explanation) {
+    private void logConstructorSummary(JavaKind kind, Atom fieldName, Object fieldValue, Expression explanation) {
         Expression summary = null;
-        switch (field.getKind()) {
+        switch (kind) {
             case Boolean:
                 summary = new ComplexExpression(BEQUIV, fieldName,
                     explanation != null ? explanation : Constant.fromConcreteValue( (boolean) fieldValue));
@@ -240,6 +302,10 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                 summary = new ComplexExpression(FPEQ, fieldName,
                         explanation != null ? explanation : Constant.fromConcreteValue( (double) fieldValue));
                 break;
+            case Object:
+                summary = new ComplexExpression(STRINGEQ, fieldName,
+                        explanation != null ? explanation : Constant.fromConcreteValue( (String) fieldValue));
+                break;
             default:
                 assert false;
         }
@@ -259,7 +325,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             case Long ->    type = LONG;
             case Double ->  type = DOUBLE;
             case Object ->  {
-                if (field.getTypeAsString().equals("Ljava/lang/String"))
+                if (field.getTypeAsString().equals("Ljava/lang/String;"))
                     type = STRING;
                 else
                     type = OBJECT;
@@ -269,6 +335,31 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             }
         }
         AuxiliaryVariable fName = new AuxiliaryVariable(oId + "." + name, type);
+        return fName;
+    }
+
+    private static AuxiliaryVariable getAuxiliaryArrayVariable(Klass compoentType, Atom oId, int index) {
+        Types type = null;
+        switch (compoentType.getJavaKind()) {
+            case Boolean -> type = BOOL;
+            case Byte ->    type = BYTE;
+            case Short ->   type = SHORT;
+            case Char ->    type = CHAR;
+            case Int ->     type = INT;
+            case Float ->   type = FLOAT;
+            case Long ->    type = LONG;
+            case Double ->  type = DOUBLE;
+            case Object ->  {
+                if (compoentType.getTypeAsString().equals("Ljava/lang/String"))
+                    type = STRING;
+                else
+                    type = OBJECT;
+            }
+            default -> {
+                // unreachable
+            }
+        }
+        AuxiliaryVariable fName = new AuxiliaryVariable(oId + "[" + index + "]", type);
         return fName;
     }
 
@@ -284,7 +375,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         StaticObject obj = config.nextSymbolicObject(meta, typeBound);
         assert obj != null;
 
-        annotateObject(obj, config.getConcolicIdx(), true);
+        annotateObject(obj, config.getConcolicIdx(), true, meta);
         return obj;
     }
 
