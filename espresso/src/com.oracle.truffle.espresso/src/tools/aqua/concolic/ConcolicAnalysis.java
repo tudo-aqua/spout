@@ -247,14 +247,12 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             } else if (field.getKind().isObject()) {
                 StaticObject fObj = field.getObject(obj);
                 if (fObj.isString()) {
-                    if (StaticObject.isNull(fObj)) {
-                        fObj = meta.toGuestString("");
-                    }
                     trace.addElement(new SymbolDeclaration(fName, false /*!config.isConstructorSummary()*/));
                     if (config.isConstructorSummary()) {
                         String fValue = meta.toHostString(fObj);
                         Annotations fAnnot = Annotations.objectAnnotation(fObj);
                         logConstructorSummary(field.getKind(), fName, fValue, Annotations.annotation(fAnnot, cIdx));
+                        Annotations.setObjectAnnotation(fObj, null);
                     } else {
                         Annotations strAnnot = Annotations.create();
                         strAnnot.set(cIdx, fName);
@@ -1162,7 +1160,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             AuxiliaryVariable atom = (AuxiliaryVariable) a;
             if (atom.getType() == STRING || atom.toString().endsWith(".cls")) return;
         }
-        
+
         Expression expr = new ComplexExpression(OBJECT_IS_NULL, a, Constant.NULL);
 
         switch (opcode) {
