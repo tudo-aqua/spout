@@ -141,6 +141,9 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             case Int:
                 int[] iArr = array.unwrap(meta.getLanguage());
                 return iArr[idx];
+            case Object:
+                Object[] oArr = array.unwrap(meta.getLanguage());
+                return oArr[idx];
             default:
                 SPouT.stopRecording("not implemented yet.", meta );
         }
@@ -185,7 +188,24 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         } else if (aClass.getComponentType().isArray()) {
             SPouT.stopRecording("Array of arrays during initial object annotations not supported", meta );
         } else { // objects
-            SPouT.stopRecording("Object array during initial object annotations not supported", meta );
+            for (int j = 0; j < length; j++) {
+                Atom ajVar = getAuxiliaryArrayVariable(aClass.getComponentType(), arrayName, j);
+                StaticObject ajValue = (StaticObject) getArrayValue(array, j, meta);
+                if (ajValue == StaticObject.NULL) {
+                    ajValue = StaticObject.createNull(null);
+                    Object[] unwrapped = array.unwrap(meta.getLanguage());
+                    unwrapped[j] = ajValue;
+                }
+                trace.addElement(new SymbolDeclaration(ajVar, false /*!config.isConstructorSummary()*/));
+                Annotations ja = Annotations.create();
+                ja.set(cIdx, ajVar);
+                Annotations.setObjectAnnotation(ajValue, ja);
+                annotateObject(ajValue, cIdx, false, meta);
+                if (config.isConstructorSummary()) {
+                    Annotations.setObjectAnnotation(ajValue, null);
+                }
+            }
+            //SPouT.stopRecording("Object array during initial object annotations not supported", meta );
         }
     }
 
@@ -303,8 +323,14 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                         explanation != null ? explanation : Constant.fromConcreteValue( (double) fieldValue));
                 break;
             case Object:
-                summary = new ComplexExpression(STRINGEQ, fieldName,
-                        explanation != null ? explanation : Constant.fromConcreteValue( (String) fieldValue));
+                if (fieldName.getType() == STRING) {
+                    summary = new ComplexExpression(STRINGEQ, fieldName,
+                            explanation != null ? explanation : Constant.fromConcreteValue((String) fieldValue));
+                } else {
+                    // should never happen
+                    summary = new ComplexExpression(OBJECT_EQ, fieldName,
+                        explanation != null ? explanation : Constant.fromConcreteValue((StaticObject) fieldValue));
+                }
                 break;
             default:
                 assert false;

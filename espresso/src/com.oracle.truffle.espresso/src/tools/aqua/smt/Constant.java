@@ -25,6 +25,7 @@
 package tools.aqua.smt;
 
 import com.oracle.truffle.espresso.impl.Klass;
+import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
 
 public abstract class Constant extends Atom {
 
@@ -262,6 +263,13 @@ public abstract class Constant extends Atom {
 
     public static Constant fromConcreteValue(String s) {
         return new StringConstant(s);
+    }
+
+    public static Constant fromConcreteValue(StaticObject o) {
+        if (StaticObject.isNull(o)) {
+            return new ObjectConstant("null");
+        }
+        return new ObjectConstant("undef-concrete-object");
     }
 
     public static Constant fromConcreteValue(Klass v) {
