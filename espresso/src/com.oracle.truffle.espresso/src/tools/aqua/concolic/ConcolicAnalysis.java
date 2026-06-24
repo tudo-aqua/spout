@@ -1963,10 +1963,13 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     public void checkNull(StaticObject object, boolean isNull, Expression a) {
         Expression expr = new ComplexExpression(OBJECT_IS_NULL, a, Constant.NULL);
 
-//        boolean takeBranch = StaticObject.isNull(object);
-//        if (takeBranch) {
-//            expr = new ComplexExpression(BNEG, expr);
-//        }
+        if (a instanceof AuxiliaryVariable) {
+            // todo: we skip logging null checks on class variables here
+            //  (as I think they cannot become true and break getClass()....() calls)
+            AuxiliaryVariable atom = (AuxiliaryVariable) a;
+            if (atom.toString().endsWith(".cls")) return;
+        }
+
         if (!isNull) {
             expr = new ComplexExpression(BNEG, expr);
         }
