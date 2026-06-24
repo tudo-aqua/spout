@@ -247,6 +247,9 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             } else if (field.getKind().isObject()) {
                 StaticObject fObj = field.getObject(obj);
                 if (fObj.isString()) {
+                    if (StaticObject.isNull(fObj)) {
+                        fObj = meta.toGuestString("");
+                    }
                     trace.addElement(new SymbolDeclaration(fName, false /*!config.isConstructorSummary()*/));
                     if (config.isConstructorSummary()) {
                         String fValue = meta.toHostString(fObj);
@@ -1153,6 +1156,13 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                                StaticObject c,
                                Expression a) {
 
+        if (a instanceof AuxiliaryVariable) {
+            // todo: we skip logging null checks on class variables here
+            //  (as I think they cannot become true and break getClass()....() calls)
+            AuxiliaryVariable atom = (AuxiliaryVariable) a;
+            if (atom.getType() == STRING || atom.toString().endsWith(".cls")) return;
+        }
+        
         Expression expr = new ComplexExpression(OBJECT_IS_NULL, a, Constant.NULL);
 
         switch (opcode) {
@@ -1967,7 +1977,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             // todo: we skip logging null checks on class variables here
             //  (as I think they cannot become true and break getClass()....() calls)
             AuxiliaryVariable atom = (AuxiliaryVariable) a;
-            if (atom.toString().endsWith(".cls")) return;
+            if (atom.getType() == STRING || atom.toString().endsWith(".cls")) return;
         }
 
         if (!isNull) {
