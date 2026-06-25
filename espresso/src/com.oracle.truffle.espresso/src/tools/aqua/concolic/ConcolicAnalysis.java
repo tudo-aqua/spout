@@ -1155,11 +1155,14 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                                StaticObject c,
                                Expression a) {
 
-        if (a instanceof AuxiliaryVariable) {
+        if (a instanceof Atom) {
             // todo: we skip logging null checks on class variables here
             //  (as I think they cannot become true and break getClass()....() calls)
-            AuxiliaryVariable atom = (AuxiliaryVariable) a;
-            if (atom.getType() == STRING || atom.toString().endsWith(".cls")) return;
+            if (a instanceof AuxiliaryVariable) {
+                AuxiliaryVariable aux = (AuxiliaryVariable) a;
+                if (aux.getType() == STRING || aux.toString().endsWith(".cls")) return;
+            }
+            Atom atom = (Atom) a;
             if (atom.getType() != OBJECT) SPouT.stopRecordingWithoutMeta("Only objects can be null.");
         }
 
@@ -1977,11 +1980,14 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     public void checkNull(StaticObject object, boolean isNull, Expression a) {
         Expression expr = new ComplexExpression(OBJECT_IS_NULL, a, Constant.NULL);
 
-        if (a instanceof AuxiliaryVariable) {
+        if (a instanceof Atom) {
             // todo: we skip logging null checks on class variables here
             //  (as I think they cannot become true and break getClass()....() calls)
-            AuxiliaryVariable atom = (AuxiliaryVariable) a;
-            if (atom.getType() == STRING || atom.toString().endsWith(".cls")) return;
+            if (a instanceof AuxiliaryVariable) {
+                AuxiliaryVariable aux = (AuxiliaryVariable) a;
+                if (aux.getType() == STRING || aux.toString().endsWith(".cls")) return;
+            }
+            Atom atom = (Atom) a;
             if (atom.getType() != OBJECT) SPouT.stopRecordingWithoutMeta("Only objects can be null.");
         }
 
