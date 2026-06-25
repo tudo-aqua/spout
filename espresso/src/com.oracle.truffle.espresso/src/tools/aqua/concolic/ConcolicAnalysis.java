@@ -1160,6 +1160,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             //  (as I think they cannot become true and break getClass()....() calls)
             AuxiliaryVariable atom = (AuxiliaryVariable) a;
             if (atom.getType() == STRING || atom.toString().endsWith(".cls")) return;
+            if (atom.getType() != OBJECT) SPouT.stopRecordingWithoutMeta("Only objects can be null.");
         }
 
         Expression expr = new ComplexExpression(OBJECT_IS_NULL, a, Constant.NULL);
