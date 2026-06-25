@@ -341,7 +341,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     private static AuxiliaryVariable getAuxiliaryVariable(Field field, Atom oId) {
-        String name = field.getNameAsString();
+        String name = field.getDeclaringKlass().getNameAsString() + "_" + field.getNameAsString();
         Types type = null;
         switch (field.getKind()) {
             case Boolean -> type = BOOL;
