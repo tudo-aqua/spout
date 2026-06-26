@@ -197,12 +197,20 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                     unwrapped[j] = ajValue;
                 }
                 trace.addElement(new SymbolDeclaration(ajVar, false /*!config.isConstructorSummary()*/));
-                Annotations ja = Annotations.create();
-                ja.set(cIdx, ajVar);
-                Annotations.setObjectAnnotation(ajValue, ja);
-                annotateObject(ajValue, cIdx, level+1, meta);
-                if (config.isConstructorSummary()) {
-                    Annotations.setObjectAnnotation(ajValue, null);
+                AuxiliaryVariable fCls = new AuxiliaryVariable(ajVar + ".cls", STRING);
+                trace.addElement(new SymbolDeclaration(fCls, false /*!config.isConstructorSummary()*/));
+                if (Annotations.annotation(Annotations.objectAnnotation(ajValue), cIdx) != null  && !config.isConstructorSummary()) {
+                    Annotations fAnnot = Annotations.objectAnnotation(ajValue);
+                    trace.addElement(new ConstructorCondition(new ComplexExpression(
+                            OBJECT_EQ, ajVar, Annotations.annotation(fAnnot, cIdx))));
+                } else {
+                    Annotations ja = Annotations.create();
+                    ja.set(cIdx, ajVar);
+                    Annotations.setObjectAnnotation(ajValue, ja);
+                    annotateObject(ajValue, cIdx, level + 1, meta);
+                    if (config.isConstructorSummary()) {
+                        Annotations.setObjectAnnotation(ajValue, null);
+                    }
                 }
             }
             //SPouT.stopRecording("Object array during initial object annotations not supported", meta );
@@ -247,7 +255,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                 }
             } else if (field.getKind().isObject()) {
                 StaticObject fObj = field.getObject(obj);
-                if (fObj.isString()) {
+                if (field.getType() == meta.java_lang_String.getType()) {
                     trace.addElement(new SymbolDeclaration(fName, false /*!config.isConstructorSummary()*/));
                     if (config.isConstructorSummary()) {
                         String fValue = meta.toHostString(fObj);
@@ -271,10 +279,10 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                         trace.addElement(new SymbolDeclaration(fName, false /*!config.isConstructorSummary()*/));
                         AuxiliaryVariable fCls = new AuxiliaryVariable(fName + ".cls", STRING);
                         trace.addElement(new SymbolDeclaration(fCls, false /*!config.isConstructorSummary()*/));
-                        if (Annotations.annotation(Annotations.objectAnnotation(fObj), cIdx) != null) {
+                        if (Annotations.annotation(Annotations.objectAnnotation(fObj), cIdx) != null && !config.isConstructorSummary() ) {
                             Annotations fAnnot = Annotations.objectAnnotation(fObj);
-                            trace.addElement(new PathCondition(new ComplexExpression(
-                                    OBJECT_EQ, fName, Annotations.annotation(fAnnot, cIdx)), 0, 2));
+                            trace.addElement(new ConstructorCondition(new ComplexExpression(
+                                    OBJECT_EQ, fName, Annotations.annotation(fAnnot, cIdx))));
                         } else {
                             Annotations.setObjectAnnotation(fObj, fieldAnnotations);
                             annotateObject(fObj, cIdx, level +1, meta);
@@ -1160,12 +1168,19 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         if (a instanceof Atom) {
             // todo: we skip logging null checks on class variables here
             //  (as I think they cannot become true and break getClass()....() calls)
-            if (a instanceof AuxiliaryVariable) {
-                AuxiliaryVariable aux = (AuxiliaryVariable) a;
-                if (aux.getType() == STRING || aux.toString().endsWith(".cls")) return;
-            }
             Atom atom = (Atom) a;
-            if (atom.getType() != OBJECT) SPouT.stopRecordingWithoutMeta("Only objects can be null.");
+            if (atom.getType() == STRING) return;
+            if (atom instanceof AuxiliaryVariable) {
+                AuxiliaryVariable aux = (AuxiliaryVariable) atom;
+                if (aux.toString().endsWith(".cls")) return;
+            }
+            if (atom.getType() != OBJECT) {
+                SPouT.log("TAKE BRANCH: Only objects can be null, removing faulty annotation can lead to imprecision");
+                SPouT.debug("  annotation ", atom);
+                SPouT.debug("  object", c);
+                SPouT.debug("  take branch", takeBranch);
+                Annotations.setObjectAnnotation(c, null);
+            }
         }
 
         Expression expr = new ComplexExpression(OBJECT_IS_NULL, a, Constant.NULL);
@@ -1249,6 +1264,12 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         }
 
         assert a instanceof Variable;
+        Atom atom = (Atom)a;
+        // todo: unproper extra handling of strings
+        if (atom.getType() == STRING) {
+            SPouT.log("unproper handling of strings in instanceof may lead to loss in precision");
+            return null;
+        }
         Atom klassVar = Expression.getKlassVariable((Atom) a);
 
         Expression klassConstant = Expression.fromConstant(KLASS, typeToCheck);
@@ -1291,6 +1312,12 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                                 Klass typeToCheck,
                                 boolean isInstance) {
         if (a == null) {
+            return null;
+        }
+        Atom atom = (Atom)a;
+        // todo: unproper extra handling of strings
+        if (atom.getType() == STRING) {
+            SPouT.log("unproper handling of strings in checkcast may lead to loss in precision");
             return null;
         }
         Atom klassVar = Expression.getKlassVariable((Atom) a);
@@ -1985,12 +2012,19 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         if (a instanceof Atom) {
             // todo: we skip logging null checks on class variables here
             //  (as I think they cannot become true and break getClass()....() calls)
-            if (a instanceof AuxiliaryVariable) {
-                AuxiliaryVariable aux = (AuxiliaryVariable) a;
-                if (aux.getType() == STRING || aux.toString().endsWith(".cls")) return;
-            }
             Atom atom = (Atom) a;
-            if (atom.getType() != OBJECT) SPouT.stopRecordingWithoutMeta("Only objects can be null.");
+            if (atom.getType() == STRING) return;
+            if (atom instanceof AuxiliaryVariable) {
+                AuxiliaryVariable aux = (AuxiliaryVariable) atom;
+                if (aux.toString().endsWith(".cls")) return;
+            }
+            if (atom.getType() != OBJECT) {
+                SPouT.log("CHECK NULL: Only objects can be null, removing faulty annotation can lead to imprecision");
+                SPouT.debug("  annotation ", atom);
+                SPouT.debug("  object", object);
+                SPouT.debug("  is null", isNull);
+                Annotations.setObjectAnnotation(object, null);
+            }
         }
 
         if (!isNull) {

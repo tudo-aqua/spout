@@ -37,6 +37,7 @@ import com.oracle.truffle.espresso.nodes.EspressoFrame;
 import com.oracle.truffle.espresso.nodes.quick.QuickNode;
 import com.oracle.truffle.espresso.runtime.EspressoThreadLocalState;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
+import tools.aqua.spout.AnnotatedValue;
 import tools.aqua.spout.SPouT;
 
 public final class InvokeDynamicCallSiteNode extends QuickNode {
@@ -116,6 +117,11 @@ public final class InvokeDynamicCallSiteNode extends QuickNode {
 
     // Transforms ints to sub-words
     public static Object unbasic(Object arg, Symbol<Type> t) {
+        if (arg instanceof AnnotatedValue) {
+            // TODO: this is a hack
+            SPouT.log("removing annotation from argument, may lose precision");
+            arg = AnnotatedValue.value(arg);
+        }
         if (t == Types._boolean) {
             return ((int) arg != 0);
         } else if (t == Types._short) { // Unbox to cast.

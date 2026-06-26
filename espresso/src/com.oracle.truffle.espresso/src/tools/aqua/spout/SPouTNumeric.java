@@ -271,6 +271,12 @@ public class SPouTNumeric {
     }
 
     @CompilerDirectives.TruffleBoundary
+    public static StaticObject booleanToString(Object b, Meta meta){
+        if(AnnotatedValue.svalue(b) != null) SPouT.stopRecording("Boolean.toString is not symbolically implemented yet", meta);
+        return meta.toGuestString(Integer.toString((AnnotatedValue.value(b))));
+    }
+
+    @CompilerDirectives.TruffleBoundary
     public static StaticObject intToString(Object b, Meta meta){
         if(AnnotatedValue.svalue(b) != null) SPouT.stopRecording("Integer.toString is not symbolically implemented yet", meta);
         return meta.toGuestString(Integer.toString((AnnotatedValue.value(b))));
