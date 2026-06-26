@@ -271,12 +271,16 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                         trace.addElement(new SymbolDeclaration(fName, false /*!config.isConstructorSummary()*/));
                         AuxiliaryVariable fCls = new AuxiliaryVariable(fName + ".cls", STRING);
                         trace.addElement(new SymbolDeclaration(fCls, false /*!config.isConstructorSummary()*/));
-                        Annotations.setObjectAnnotation(fObj, fieldAnnotations);
-                        if (fObj == obj) {
+                        if (fObj.hasAnnotations()) {
+                            Annotations fAnnot = Annotations.objectAnnotation(fObj);
+                            trace.addElement(new PathCondition(new ComplexExpression(
+                                    OBJECT_EQ, fName, Annotations.annotation(fAnnot, cIdx)), 0, 2));
                             // TODO: prevent more complex cases of structures with loops as well
-                            SPouT.stopRecording("Heap structures with loops are currently not supported", meta);
+                            //SPouT.stopRecording("Heap structures with loops are currently not supported", meta);
+                        } else {
+                            Annotations.setObjectAnnotation(fObj, fieldAnnotations);
+                            annotateObject(fObj, cIdx, level +1, meta);
                         }
-                        annotateObject(fObj, cIdx, level +1, meta);
                         if (config.isConstructorSummary()) {
                             Annotations.setObjectAnnotation(fObj, null);
                         }

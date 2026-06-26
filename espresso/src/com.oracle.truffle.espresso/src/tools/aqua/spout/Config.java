@@ -72,7 +72,7 @@ public class Config {
 
     private boolean useObjectFactories = false;
 
-    private int maxObjectAnnotationDepth = 3;
+    private int maxObjectAnnotationDepth = Integer.MAX_VALUE;
 
     private TaintType taintType = TaintType.OFF;
 
