@@ -571,7 +571,7 @@ public class Config {
 
         if (className.equals("Ljava/lang/String;")) {
             // TODO: simply call String handling?
-            SPouT.stopRecording("Strings are currently not supported as symbolic objects.", meta);
+            SPouT.notImplementedYet("Strings are currently not supported as symbolic objects.", meta);
         }
 
         Klass klass = getKlass(className, meta);
@@ -638,7 +638,7 @@ public class Config {
                 return constructorSummary ? SPouT.nextSymbolicDouble() : Double.parseDouble(value);
             }
             default -> {
-                SPouT.stopRecording("unsupported primitive kind.", meta);
+                SPouT.fail("unsupported primitive kind.", meta);
             }
         }
         // unreachable code
@@ -659,7 +659,7 @@ public class Config {
     public static Klass getKlass(String fqn, Meta meta) {
         Symbol<Type> type = meta.getTypes().fromClassGetName(fqn);
         if (type == null) {
-            SPouT.stopRecording("loading symbol for classname failed.", meta);
+            SPouT.fail("loading symbol for classname failed.", meta);
         }
 
         StaticObject classLoader = (StaticObject) meta.java_lang_ClassLoader_getSystemClassLoader.invokeDirect();
@@ -668,7 +668,7 @@ public class Config {
                 StaticObject.NULL); //protectionDomain ???
 
         if (klass == null) {
-            SPouT.stopRecording("loading of the following klass failed: "+fqn, meta);
+            SPouT.fail("loading of the following klass failed: "+fqn, meta);
         }
         return klass;
     }
@@ -677,7 +677,7 @@ public class Config {
 
         Symbol<Signature> signature = klass.getSignatures().lookupValidSignature(signatureString);
         if (signature == null) {
-            SPouT.stopRecording("loading symbol for signature failed for: "+signatureString, meta);
+            SPouT.fail("loading symbol for signature failed for: "+signatureString, meta);
         }
 
         Method[] declaredConstructors = klass.getDeclaredConstructors();
@@ -686,7 +686,7 @@ public class Config {
                 return declaredConstructor;
             }
         }
-        SPouT.stopRecording("no constructor found for signature.", meta);
+        SPouT.fail("no constructor found for signature.", meta);
         return null; // cannot be reached
     }
 

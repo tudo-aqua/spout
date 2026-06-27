@@ -138,14 +138,35 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     private Object getArrayValue(StaticObject array, int idx, Meta meta) {
         switch ( ((ArrayKlass)array.getKlass()).getComponentType().getJavaKind() ) {
+            case Boolean:
+                boolean[] boolArr = array.unwrap(meta.getLanguage());
+                return boolArr[idx];
+            case Byte:
+                byte[] byteArr = array.unwrap(meta.getLanguage());
+                return byteArr[idx];
+            case Char:
+                char[] charArr = array.unwrap(meta.getLanguage());
+                return charArr[idx];
+            case Short:
+                short[] shortArr = array.unwrap(meta.getLanguage());
+                return shortArr[idx];
             case Int:
                 int[] iArr = array.unwrap(meta.getLanguage());
                 return iArr[idx];
+           case Long:
+                long[] lArr = array.unwrap(meta.getLanguage());
+                return lArr[idx];
+            case Float:
+                float[] fArr = array.unwrap(meta.getLanguage());
+                return fArr[idx];
+            case Double:
+                double[] dArr = array.unwrap(meta.getLanguage());
+                return dArr[idx];
             case Object:
                 Object[] oArr = array.unwrap(meta.getLanguage());
                 return oArr[idx];
             default:
-                SPouT.stopRecording("not implemented yet.", meta );
+                SPouT.notImplementedYet("not implemented yet.", meta );
         }
         return null;
     }
@@ -184,9 +205,9 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                 }
             }
         } else if (aClass.getComponentType() == meta.java_lang_String) {
-            SPouT.stopRecording("String array during initial object annotations not supported", meta );
+            SPouT.notImplementedYet("String array during initial object annotations not supported", meta );
         } else if (aClass.getComponentType().isArray()) {
-            SPouT.stopRecording("Array of arrays during initial object annotations not supported", meta );
+            SPouT.notImplementedYet("Array of arrays during initial object annotations not supported", meta );
         } else { // objects
             for (int j = 0; j < length; j++) {
                 Atom ajVar = getAuxiliaryArrayVariable(aClass.getComponentType(), arrayName, j);

@@ -119,7 +119,7 @@ public final class InvokeDynamicCallSiteNode extends QuickNode {
     public static Object unbasic(Object arg, Symbol<Type> t) {
         if (arg instanceof AnnotatedValue) {
             // TODO: this is a hack
-            SPouT.log("removing annotation from argument, may lose precision");
+            SPouT.losePrecision("removing annotation from argument, may lose precision", null);
             arg = AnnotatedValue.value(arg);
         }
         if (t == Types._boolean) {
