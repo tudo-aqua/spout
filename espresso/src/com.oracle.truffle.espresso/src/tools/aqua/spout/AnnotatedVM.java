@@ -99,9 +99,9 @@ public class AnnotatedVM {
 
         Annotations[] annotations = obj.getAnnotations();
         if (annotations == null) {
-           annotations = new Annotations[f.isStatic()
+           annotations = new Annotations[1 + (f.isStatic()
                             ? f.getDeclaringKlass().getStaticFieldTable().length
-                            : ((ObjectKlass) obj.getKlass()).getFieldTable().length];
+                            : ((ObjectKlass) obj.getKlass()).getFieldTable().length)];
            obj.setAnnotations(annotations);
         }
 
