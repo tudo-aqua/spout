@@ -239,6 +239,23 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     @CompilerDirectives.TruffleBoundary
+    private boolean skipField(Field field, Meta meta) {
+        if (field.getDeclaringKlass() == meta.java_lang_Throwable) {
+            SPouT.losePrecision("Skip field of Throwable during initial object annotation. May lose precision.", meta );
+            return true;
+        }
+        if (field.getDeclaringKlass() == meta.java_lang_Thread) {
+            SPouT.losePrecision("Skip field of Throwable during initial object annotation. May lose precision.", meta );
+            return true;
+        }
+        if (field.getDeclaringKlass().getNameAsString().contains("ThreadLocal")) {
+            SPouT.losePrecision("Skip field of Throwable during initial object annotation. May lose precision.", meta );
+            return true;
+        }
+        return false;
+    }
+
+    @CompilerDirectives.TruffleBoundary
     private void annotateObject(StaticObject obj, int cIdx, int level, Meta meta) {
         if (level > config.getMaxObjectAnnotationDepth()) return;
         Atom oId = (Atom) Annotations.objectAnnotation(obj).getAnnotations()[cIdx];
@@ -262,6 +279,9 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         Field[] fieldTable = kls.getFieldTable();
         for (int i = 0; i < fieldTable.length; i++) {
             Field field = fieldTable[i];
+            if (skipField(field, meta)) {
+                continue;
+            }
             AuxiliaryVariable fName = getAuxiliaryVariable(field, oId);
             Annotations fieldAnnotations = Annotations.create();
             fieldAnnotations.set(cIdx, fName);
@@ -300,10 +320,11 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                         trace.addElement(new SymbolDeclaration(fName, false /*!config.isConstructorSummary()*/));
                         AuxiliaryVariable fCls = new AuxiliaryVariable(fName + ".cls", STRING);
                         trace.addElement(new SymbolDeclaration(fCls, false /*!config.isConstructorSummary()*/));
-                        if (Annotations.annotation(Annotations.objectAnnotation(fObj), cIdx) != null && !config.isConstructorSummary() ) {
-                            Annotations fAnnot = Annotations.objectAnnotation(fObj);
-                            trace.addElement(new ConstructorCondition(new ComplexExpression(
-                                    OBJECT_EQ, fName, Annotations.annotation(fAnnot, cIdx))));
+                        if (Annotations.annotation(Annotations.objectAnnotation(fObj), cIdx) != null) {
+                            SPouT.losePrecision("Heap loop during initial object annotation. May lose precision.", meta );
+                            // Annotations fAnnot = Annotations.objectAnnotation(fObj);
+                            // trace.addElement(new ConstructorCondition(new ComplexExpression(
+                            //        OBJECT_EQ, fName, Annotations.annotation(fAnnot, cIdx))));
                         } else {
                             Annotations.setObjectAnnotation(fObj, fieldAnnotations);
                             annotateObject(fObj, cIdx, level +1, meta);

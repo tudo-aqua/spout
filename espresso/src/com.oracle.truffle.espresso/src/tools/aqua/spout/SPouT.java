@@ -145,6 +145,7 @@ public class SPouT {
     public static void losePrecision(String message, Meta meta) {
         // TODO: configure stopping the analysis
         // TODO: sometimes called with meta == null
+        SPouT.log(message);
         //stopRecording(message, meta);
     }
 
