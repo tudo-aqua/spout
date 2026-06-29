@@ -24,7 +24,7 @@
 package tools.aqua.smt;
 
 public enum Types {
-    INT, BOOL, CHAR, BYTE, SHORT, LONG, FLOAT, DOUBLE, STRING, NAT;
+    INT, BOOL, CHAR, BYTE, SHORT, LONG, FLOAT, DOUBLE, STRING, NAT, OBJECT, KLASS;
 
     @Override
     public String toString() {
@@ -45,7 +45,11 @@ public enum Types {
             case DOUBLE:
                 return "(_ FloatingPoint 11 53)";
             case STRING:
+            case KLASS:
                 return "String";
+            case OBJECT:
+                // todo: should be replaced with custom sort
+                return "Int";
             // Strictly the NAT type is no primitive type for Java,
             // but sometimes we need Variables that are Integer in the SMT-Lib theory to encode string constraints.
             // I call them NAT as this is sometimes used in the SMT-Lib context to distinguish Integer and BV representations.

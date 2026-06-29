@@ -39,10 +39,13 @@ import com.oracle.truffle.espresso.nodes.EspressoFrame;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
 import com.oracle.truffle.espresso.substitutions.Inject;
 import com.oracle.truffle.espresso.substitutions.JavaType;
+import tools.aqua.concolic.SymbolDeclaration;
+import tools.aqua.smt.AuxiliaryVariable;
 import tools.aqua.smt.ComplexExpression;
 import tools.aqua.smt.Constant;
 import tools.aqua.smt.Expression;
 import tools.aqua.smt.OperatorComparator;
+import tools.aqua.smt.Types;
 import tools.aqua.taint.ColorUtil;
 import tools.aqua.taint.PostDominatorAnalysis;
 import tools.aqua.taint.Taint;
@@ -53,20 +56,7 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IFEQ;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IFGE;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IFGT;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IFLE;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IFLT;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IFNE;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IF_ACMPEQ;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IF_ACMPNE;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IF_ICMPEQ;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IF_ICMPGE;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IF_ICMPGT;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IF_ICMPLE;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IF_ICMPLT;
-import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.IF_ICMPNE;
+import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.*;
 import static com.oracle.truffle.espresso.nodes.BytecodeNode.*;
 import static com.oracle.truffle.espresso.nodes.EspressoFrame.*;
 import static com.oracle.truffle.espresso.runtime.dispatch.staticobject.EspressoInterop.getMeta;
@@ -94,26 +84,40 @@ public class SPouT {
     @CompilerDirectives.TruffleBoundary
     public static void newPath(String options) {
         System.out.println("======================== START PATH [BEGIN].");
-        config = new Config(options);
-        config.configureAnalysis();
+        config = new Config();
+        config.parseAnalysesConfig(options, getMeta());
         analysis = new MetaAnalysis(config);
         trace = config.getTrace();
         gwit = new GWIT(trace);
-        System.out.println("======================== START PATH [END].");
         // TODO: should be deferred to latest possible point in time
         analyze = true;
         oldAnalyze = true;
         SPouTNumeric.newPath(config, true);
+        if (config.hasConcolicAnalysis()) {
+            AuxiliaryVariable nv = new AuxiliaryVariable("null", Types.OBJECT);
+            SymbolDeclaration decl = new SymbolDeclaration(nv, true);
+            trace.addElement(decl);
+        }
+        config.parseConcolicValues(options, getMeta());
+        config.printAnalysisConfig();
+        System.out.println("======================== START PATH [END].");
     }
 
     @CompilerDirectives.TruffleBoundary
     public static void endPath() {
         System.out.println("======================== END PATH [BEGIN].");
+
         stopAnalysis();
         if (trace != null) {
+            /*
+            if (config.hasConcolicAnalysis()) {
+                System.out.println("[AUXILIARY] (declare-sort Object 0)");
+            }
+            */
             trace.printTrace();
         }
         System.out.println("======================== END PATH [END].");
+        System.out.println("[META_INFOS] object_count: "+config.getCountObjectSeeds());
         System.out.println("[ENDOFTRACE]");
         System.out.flush();
     }
@@ -131,6 +135,24 @@ public class SPouT {
     // analysis entry points
 
     // FIXME: move part of these methods into the different analyses?
+
+    @CompilerDirectives.TruffleBoundary
+    public static void fail(String message, Meta meta) {
+        stopRecording(message, meta);
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static void losePrecision(String message, Meta meta) {
+        // TODO: configure stopping the analysis
+        // TODO: sometimes called with meta == null
+        SPouT.log(message);
+        //stopRecording(message, meta);
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static void notImplementedYet(String message, Meta meta) {
+        stopRecording(message, meta);
+    }
 
     @CompilerDirectives.TruffleBoundary
     public static void stopRecording(String message, Meta meta) {
@@ -261,6 +283,24 @@ public class SPouT {
         StaticObject annotatedObject = config.getConcolicAnalysis().nextSymbolicString(meta);
         gwit.trackLocationForWitness("\"" + annotatedObject + "\"");
         return annotatedObject;
+    }
+
+    /**
+     * These methods mark the barrier between host and guest world (see @CompilerDirectives.TruffleBoundary).
+     * Trys to create in the guest world a new Object according to the next element of -Dconcolic.constructors.
+     * Stops the analysis if the creation fails.
+     *
+     * @param meta introspection API to get information of the guest system during runtime
+     * @return object created in the guest world
+     */
+    @CompilerDirectives.TruffleBoundary
+    public static StaticObject nextSymbolicObject(Meta meta, Klass typeBound) {
+        if (!analyze || !config.hasConcolicAnalysis()) return StaticObject.NULL;
+        StaticObject staticObject = config.getConcolicAnalysis().nextSymbolicObject(meta, typeBound);
+        if (staticObject == null) {
+            fail("Error Creating Symbolic Object", meta);
+        }
+        return staticObject;
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -605,6 +645,12 @@ public class SPouT {
         AnnotatedVM.putAnnotations(frame, top - 3, analysis.ddiv(c1, c2,
                 AnnotatedVM.popAnnotations(frame, top - 1),
                 AnnotatedVM.popAnnotations(frame, top - 3)));
+    }
+
+    public static void checkNull(StaticObject staticObject, boolean isNull) {
+        if (analyze) {
+            analysis.checkNull(staticObject, isNull, Annotations.objectAnnotation(staticObject));
+        }
     }
 
 
@@ -1136,10 +1182,15 @@ public class SPouT {
 
     // branching
 
-    public static void checkcast(VirtualFrame frame, StaticObject obj, BytecodeNode bcn, int bci, boolean cast) {
-        if (!analyze) return;
-        Annotations a = Annotations.objectAnnotation(obj);
-        analysis.checkcast(frame, bcn, bci, cast, a);
+    public static void checkcast(VirtualFrame frame,
+                                 StaticObject obj,
+                                 Klass typeToCast,
+                                 int top,
+                                 BytecodeNode bcn,
+                                 int bci,
+                                 boolean isInstance) {
+        if (!analyze || !obj.hasAnnotations()) return;
+        analysis.checkcast(frame, bcn, bci, obj, Annotations.objectAnnotation(obj), typeToCast, isInstance);
     }
 
     public static boolean takeBranchPrimitive1(VirtualFrame frame, int top, int opcode, BytecodeNode bcn, int bci) {
@@ -1219,45 +1270,109 @@ public class SPouT {
         return takeBranch;
     }
 
-    public static boolean takeBranchRef2(VirtualFrame frame, BytecodeNode bcn, int bci, StaticObject operand1, StaticObject operand2, int opcode) {
+
+    /**
+     * This method is an extension of {{@link BytecodeNode#takeBranchRef1(StaticObject, int)}} which is the native
+     * implementation of the espresso vm for the following java bytecodes:
+     * <ul>
+     *     <li>IFNULL</li>
+     *     <li>IFNONNULL</li>
+     * </ul>
+     *
+     * In this method, only meta information, especially the result of the evaluation of the Java byte code,
+     * is passed on in order to log the decisions during execution.
+     * See the implementations of
+     * {{@link Analysis#takeBranchRef1(VirtualFrame, BytecodeNode, int, int, boolean, StaticObject, Object)}}
+     * Implementations of Analysis are
+     * {{@link tools.aqua.concolic.ConcolicAnalysis#takeBranchRef1(VirtualFrame, BytecodeNode, int, int, boolean, StaticObject, Expression)}}
+     * and
+     * {{@link tools.aqua.taint.TaintAnalysis#takeBranchRef1(VirtualFrame, BytecodeNode, int, int, boolean, StaticObject, Object)}}
+     *
+     * @param frame         Virtual Frame of espresso. Storing the current execution state of the method (e.g. local
+     *                      variables, stacke values, runtime information)
+     * @param bcn           internal structure of the espresso vm for resolving bytecodes
+     * @param bci           ByteCodeIndex: position of the java bytecode within the method
+     * @param operand       operand to which the bytecode is applied (in this case always an object type)
+     * @param opcode        represents a JVM operation (IFNULL, IFNONULL)
+     * @return              evaluation of the javabyte code according to the given operand
+     */
+    public static boolean takeBranchRef1(VirtualFrame frame,
+                                         BytecodeNode bcn,
+                                         int bci,
+                                         StaticObject operand,
+                                         int opcode) {
+        assert IFNULL <= opcode && opcode <= IFNONNULL;
+        // @formatter:off
+        boolean result;
+        switch (opcode) {
+            case IFNULL    : result = StaticObject.isNull(operand);break;
+            case IFNONNULL : result = StaticObject.notNull(operand);break;
+            default        :
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                throw EspressoError.shouldNotReachHere("expected IFNULL or IFNONNULL bytecode");
+        }
+        // @formatter:on
+        if (analyze) {
+            analysis.takeBranchRef1(frame, bcn, bci, opcode, result, operand,
+                    Annotations.objectAnnotation(operand));
+        }
+        return result;
+    }
+
+    /**
+     * This method is an extension of {{@link BytecodeNode#takeBranchRef2( StaticObject, StaticObject, int)} which is
+     * the native implementation of the espresso vm for the following java bytecodes:
+     * <ul>
+     *     <li>IF_ACMPEQ (==)</li>
+     *     <li>IF_ACMPNE (!=)</li>
+     * </ul>
+     *
+     * In this method, only meta information, especially the result of the evaluation of the Java byte code,
+     * is passed on in order to log the decisions during execution.
+     *
+     * See the implementations of
+     * {{@link Analysis#takeBranchRef2( VirtualFrame, BytecodeNode, int, int, boolean, StaticObject, StaticObject, Object, Object)}
+     * Implementations of Analysis are
+     * {{@link tools.aqua.concolic.ConcolicAnalysis#takeBranchRef2( VirtualFrame, BytecodeNode, int, int, boolean, StaticObject, StaticObject, Expression, Expression)}
+     * and
+     *  {{@link tools.aqua.taint.TaintAnalysis#takeBranchRef2( VirtualFrame, BytecodeNode, int, int, boolean, StaticObject, StaticObject, Taint, Taint)}
+     *
+     * @param frame         Virtual Frame of espresso. Storing the current execution state of the method (e.g. local
+     *                      variables, stacke values, runtime information)
+     * @param bcn           internal structure of the espresso vm for resolving bytecodes
+     * @param bci           ByteCodeIndex: position of the java bytecode within the method
+     * @param operand1      first operand to which the bytecode is applied (in this case always an object type)
+     * @param operand2      second operand to which the bytecode is applied (in this case always an object type)
+     * @param opcode        represents a JVM operation (IF_ACMPEQ, IF_ACMPNE)
+     * @return              evaluation of the javabyte code according to the two given operands
+     */
+    public static boolean takeBranchRef2(VirtualFrame frame,
+                                         BytecodeNode bcn,
+                                         int bci,
+                                         StaticObject operand1,
+                                         StaticObject operand2,
+                                         int opcode) {
         assert IF_ACMPEQ <= opcode && opcode <= IF_ACMPNE;
         boolean result;
         // @formatter:off
-        if (!analyze) {
-            switch (opcode) {
-                case IF_ACMPEQ : result =  operand1 == operand2; break;
-                case IF_ACMPNE : result =  operand1 != operand2; break;
-                default        :
-                    CompilerDirectives.transferToInterpreterAndInvalidate();
-                    throw EspressoError.shouldNotReachHere("expecting IF_ACMPEQ,IF_ACMPNE");
-            }
-        } else {
-            CompilerDirectives.transferToInterpreterAndInvalidate();
-            Meta meta = getMeta();
-            if (operand1 != operand2) {
-                if (meta.java_lang_Integer.equals(operand1.getKlass()) &&
-                        meta.java_lang_Integer.equals(operand2.getKlass())) {
+        switch (opcode) {
+            case IF_ACMPEQ : result =  operand1 == operand2 || (StaticObject.isNull(operand1) && StaticObject.isNull(operand2)); break;
+            case IF_ACMPNE : result =  operand1 != operand2 && !(StaticObject.isNull(operand1) && StaticObject.isNull(operand2)); break;
+            default        :
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                throw EspressoError.shouldNotReachHere("expecting IF_ACMPEQ,IF_ACMPNE");
+        }
 
-                    int int1 = meta.java_lang_Integer_value.getInt(operand1);
-                    int int2 = meta.java_lang_Integer_value.getInt(operand2);
+        // @formatter:on
 
-                    if (int1 == int2 && int1 >= -128 && int1 <= 127) {
-                        result = (opcode == IF_ACMPEQ);
-                    } else {
-                        result = (opcode != IF_ACMPEQ);
-                    }
-                } else {
-                    result = (opcode != IF_ACMPEQ);
-                }
-            } else {
-                result = (opcode == IF_ACMPEQ);
-            }
+        if (analyze) {
             analysis.takeBranchRef2(frame, bcn, bci, opcode, result, operand1, operand2,
                     Annotations.objectAnnotation(operand1), Annotations.objectAnnotation(operand2));
+
         }
-        // @formatter:on
         return result;
     }
+
 
     public static void tableSwitch(int concIndex, Annotations annotatedIndex, int low, int high,
                                    VirtualFrame frame, BytecodeNode bcn, int bci) {
@@ -1277,9 +1392,9 @@ public class SPouT {
     //
     // Objects
 
-    public static void instanceOf(VirtualFrame frame, StaticObject object, boolean isInstance, int top) {
+    public static void instanceOf(VirtualFrame frame, StaticObject object, boolean isInstance, int top, Klass typeToCheck) {
         if (!analyze || !object.hasAnnotations()) return;
-        Annotations a = analysis.instanceOf(object, Annotations.objectAnnotation(object), isInstance);
+        Annotations a = analysis.instanceOf(object, Annotations.objectAnnotation(object), typeToCheck, isInstance);
         AnnotatedVM.putAnnotations(frame, top, a);
     }
 
@@ -1287,6 +1402,31 @@ public class SPouT {
         if (!analyze || !object.hasAnnotations()) return;
         Annotations a = analysis.isNull(object, Annotations.objectAnnotation(object), isNull);
         AnnotatedVM.putAnnotations(frame, top, a);
+    }
+
+    public static StaticObject objectGetClass(StaticObject self) {
+        if (!analyze || !self.hasAnnotations()) return self.getKlass().mirror();
+        Annotations aObj = analysis.objectGetClass(self, Annotations.objectAnnotation(self));
+        StaticObject cObj = self.getKlass().mirror();
+        if (aObj != null) {
+            Annotations.setObjectAnnotation(cObj, aObj);
+        }
+        return cObj;
+    }
+
+    public static void polymorphicMethodAccess(StaticObject object, Method m, int i) {
+        if (!analyze || !object.hasAnnotations()) return;
+        //if (object.hasAnnotations()) logi(i);
+        analysis.polymorphicMethodAccess(object, m, Annotations.objectAnnotation(object));
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    private static void logi(int i) {
+        SPouT.log("case  " + i);
+    }
+
+    public static void nullCheckForException(StaticObject object) {
+        if (!analyze || !object.hasAnnotations()) return;
     }
     // ---------------------------------------------------------------------------
     //
@@ -1302,14 +1442,18 @@ public class SPouT {
 //        }
 //        else return concreteResult;
         if (AnnotatedValue.svalue(a) != null) {
-            stopRecording("Math.sin is not symbolically implemented yet", meta);
+            losePrecision("Math.sin is not symbolically implemented yet", meta);
+            a = AnnotatedValue.value(a);
         }
         return Math.sin((double) a);
     }
 
     //    @CompilerDirectives.TruffleBoundary
     public static Object mathCos(Object a, Meta meta) {
-        if (AnnotatedValue.svalue(a) != null) stopRecording("Math.cos is not symbolically implemented yet", meta);
+        if (AnnotatedValue.svalue(a) != null) {
+            losePrecision("Math.cos is not symbolically implemented yet", meta);
+            a = AnnotatedValue.value(a);
+        }
         return Math.cos((double) a);
     }
 
@@ -1353,73 +1497,105 @@ public class SPouT {
 
     //    @CompilerDirectives.TruffleBoundary
     public static Object mathArcCos(Object a, Meta meta) {
-        if (AnnotatedValue.svalue(a) != null) stopRecording("Math.acos is not symbolically implemented yet", meta);
+        if (AnnotatedValue.svalue(a) != null) {
+            losePrecision("Math.acos is not symbolically implemented yet", meta);
+            a = AnnotatedValue.value(a);
+        }
         return Math.acos((double) a);
     }
 
     //    @CompilerDirectives.TruffleBoundary
     public static Object mathArcSin(Object a, Meta meta) {
-        if (AnnotatedValue.svalue(a) != null) stopRecording("Math.asin is not symbolically implemented yet", meta);
+        if (AnnotatedValue.svalue(a) != null) {
+            losePrecision("Math.asin is not symbolically implemented yet", meta);
+            a = AnnotatedValue.value(a);
+        }
         return Math.asin((double) a);
     }
 
     //    @CompilerDirectives.TruffleBoundary
     public static Object mathTan(Object a, Meta meta) {
-        if (AnnotatedValue.svalue(a) != null) stopRecording("Math.tan is not symbolically implemented yet", meta);
+        if (AnnotatedValue.svalue(a) != null) {
+            losePrecision("Math.tan is not symbolically implemented yet", meta);
+            a = AnnotatedValue.value(a);
+        }
         return Math.tan((double) a);
     }
 
     //    @CompilerDirectives.TruffleBoundary
     public static Object mathATan(Object a, Meta meta) {
-        if (AnnotatedValue.svalue(a) != null) stopRecording("Math.atan is not symbolically implemented yet", meta);
+        if (AnnotatedValue.svalue(a) != null) {
+            losePrecision("Math.atan is not symbolically implemented yet", meta);
+            a = AnnotatedValue.value(a);
+        }
         return Math.atan((double) a);
     }
 
     //    @CompilerDirectives.TruffleBoundary
     public static Object mathSqrt(Object a, Meta meta) {
-        if (AnnotatedValue.svalue(a) != null) stopRecording("Math.sqrt is not symbolically implemented yet", meta);
+        if (AnnotatedValue.svalue(a) != null) {
+            losePrecision("Math.sqrt is not symbolically implemented yet", meta);
+            a = AnnotatedValue.value(a);
+        }
         return Math.sqrt((double) a);
     }
 
     //    @CompilerDirectives.TruffleBoundary
     public static Object mathExp(Object a, Meta meta) {
-        if (AnnotatedValue.svalue(a) != null) stopRecording("Math.exp is not symbolically implemented yet", meta);
+        if (AnnotatedValue.svalue(a) != null) {
+            losePrecision("Math.exp is not symbolically implemented yet", meta);
+            a = AnnotatedValue.value(a);
+        }
         return Math.exp((double) a);
     }
 
     //    @CompilerDirectives.TruffleBoundary
     public static Object mathRoundF(Object a, Meta meta) {
-        if (AnnotatedValue.svalue(a) != null) stopRecording("Cannot round floats", meta);
+        if (AnnotatedValue.svalue(a) != null) {
+            losePrecision("Math.round is not symbolically implemented yet", meta);
+            a = AnnotatedValue.value(a);
+        }
         return Math.round((float) a);
     }
 
     //    @CompilerDirectives.TruffleBoundary
     public static Object mathRoundD(Object a, Meta meta) {
-        if (AnnotatedValue.svalue(a) != null) stopRecording("Cannot round double", meta);
+        if (AnnotatedValue.svalue(a) != null) {
+            losePrecision("Math.round is not symbolically implemented yet", meta);
+            a = AnnotatedValue.value(a);
+        }
         return Math.round((double) a);
     }
 
     //    @CompilerDirectives.TruffleBoundary
     public static double mathLog10(Object a, Meta meta) {
-        if (AnnotatedValue.svalue(a) != null) stopRecording("Math.log10 is not symbolically implemented yet", meta);
+        if (AnnotatedValue.svalue(a) != null) {
+            losePrecision("Math.log10 is not symbolically implemented yet", meta);
+            a = AnnotatedValue.value(a);
+        }
         return Math.log10((double) a);
     }
 
     //@CompilerDirectives.TruffleBoundary
     public static double mathLog(Object a, Meta meta) {
-        if (AnnotatedValue.svalue(a) != null) stopRecording("Math.log is not symbolically implemented yet", meta);
-        return Math.log((double) a);
+        if (AnnotatedValue.svalue(a) != null) {
+            losePrecision("Math.log is not symbolically implemented yet", meta);
+            a = AnnotatedValue.value(a);
+        }        return Math.log((double) a);
     }
 
     public static double mathPow(Object a, Object b, Meta meta) {
-        if (AnnotatedValue.svalue(a) != null || AnnotatedValue.svalue(b) != null)
-            stopRecording("Math.pow is not symbolically implemented yet", meta);
-        return Math.pow((double) a, (double) b);
+        if (AnnotatedValue.svalue(a) != null) {
+            losePrecision("Math.pow is not symbolically implemented yet", meta);
+            a = AnnotatedValue.value(a);
+        }        return Math.pow((double) a, (double) b);
     }
 
     public static double mathATan2(Object a, Object b, Meta meta) {
-        if (AnnotatedValue.svalue(a) != null || AnnotatedValue.svalue(b) != null)
-            stopRecording("Math.atan2 is not symbolically implemented yet", meta);
+        if (AnnotatedValue.svalue(a) != null) {
+            losePrecision("Math.atan2 is not symbolically implemented yet", meta);
+            a = AnnotatedValue.value(a);
+        }
         return Math.atan2((double) a, (double) b);
     }
 
@@ -1489,7 +1665,7 @@ public class SPouT {
                 && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
         boolean isOtherSymbolic = other.hasAnnotations()
                 && other.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
-        if (isSelfSymbolic || isOtherSymbolic) {stopRecording("StringCompareToIgnoreCase is not yet symobolically implemented", meta);
+        if (isSelfSymbolic || isOtherSymbolic) {losePrecision("StringCompareToIgnoreCase is not yet symobolically implemented", meta);
         return 0;}
         return meta.toHostString(self).compareToIgnoreCase(meta.toHostString(other));
     }
@@ -1654,26 +1830,22 @@ public class SPouT {
     public static Object stringRegionMatches_ignoreCase(StaticObject self, Object ignoreCase, Object toffset, StaticObject other, Object ooffset, Object len, Meta meta) {
         boolean ignore = false;
         if (ignoreCase instanceof AnnotatedValue) {
-            stopRecording("Cannot deal with symbolic ignore case for regionMatches yet", meta);
-        } else {
-            ignore = (boolean) ignoreCase;
+            losePrecision("Cannot deal with symbolic ignore case for regionMatches yet", meta);
         }
+        ignore = (boolean) AnnotatedValue.value(ignoreCase);
         int ctoffset = -1, cooffset = -1, clen = -1;
         if (toffset instanceof AnnotatedValue) {
-            stopRecording("Cannot deal with symbolic toffset for regionMatches yet", meta);
-        } else {
-            ctoffset = (int) toffset;
+            losePrecision("Cannot deal with symbolic toffset for regionMatches yet", meta);
         }
+        ctoffset = (int) AnnotatedValue.value(toffset);
         if (ooffset instanceof AnnotatedValue) {
-            stopRecording("Cannot deal with symbolic ooffset for regionMatches yet", meta);
-        } else {
-            cooffset = (int) ooffset;
+            losePrecision("Cannot deal with symbolic ooffset for regionMatches yet", meta);
         }
+        cooffset = (int) AnnotatedValue.value(ooffset);
         if (len instanceof AnnotatedValue) {
-            stopRecording("Cannot deal with symbolic len for regionMatches yet", meta);
-        } else {
-            clen = (int) len;
+            losePrecision("Cannot deal with symbolic len for regionMatches yet", meta);
         }
+        clen = (int) AnnotatedValue.value(len);
         boolean cres = meta.toHostString(self).regionMatches(ignore, ctoffset, meta.toHostString(other), cooffset, clen);
         if (analyze && config.hasConcolicAnalysis()) {
             boolean isSelfSymbolic = self.hasAnnotations() && self.getAnnotations()[self.getAnnotations().length - 1] != null
@@ -1716,7 +1888,9 @@ public class SPouT {
     @CompilerDirectives.TruffleBoundary
     public static StaticObject stringBuXXAppendString(StaticObject self, StaticObject chars, Object offset, Object length, Meta meta) {
         if (offset instanceof AnnotatedValue || length instanceof AnnotatedValue) {
-            SPouT.stopRecording("SPouT does not support append from char array with symbolic indicies yet!", meta);
+            SPouT.losePrecision("SPouT does not support append from char array with symbolic indicies yet!", meta);
+            offset = AnnotatedValue.value(offset);
+            length = AnnotatedValue.value(length);
         }
         Annotations[] a = chars.getAnnotations();
         char[] hChars = chars.unwrap(meta.getLanguage());
@@ -1801,9 +1975,9 @@ public class SPouT {
                 // FIXME: Not sure if annotations should be able to reach here?
                 (boolean) AnnotatedValue.value(isLatin.invokeDirect(self))
                         ?
-                        (StaticObject) meta.java_lang_StringLatin1_newString.invokeDirect(self, bytes, 0, ilength)
+                        (StaticObject) meta.java_lang_StringLatin1_newString.invokeDirect( bytes, 0, ilength)
                         :
-                        (StaticObject) meta.java_lang_StringUTF16_newString.invokeDirect(self, bytes, 0, ilength);
+                        (StaticObject) meta.java_lang_StringUTF16_newString.invokeDirect( bytes, 0, ilength);
         if (analyze && config.hasConcolicAnalysis()) {
             setStringAnnotations(result,
                     analysis.stringBuxxToString(meta.toHostString(result), getStringAnnotations(self)));
@@ -1814,7 +1988,8 @@ public class SPouT {
     @CompilerDirectives.TruffleBoundary
     public static StaticObject stringBuxxInsert(StaticObject self, Object offset, Object toInsert, Meta meta) {
         if (toInsert instanceof AnnotatedValue) {
-            stopRecording("Cannot insert symbolic chars to StringBuffer", meta);
+            losePrecision("Cannot insert symbolic chars to StringBuffer", meta);
+            toInsert = AnnotatedValue.value(toInsert);
         }
         StaticObject toInsertCasted = meta.toGuestString(String.valueOf((char) toInsert));
         return stringBuxxInsert(self, offset, toInsertCasted, meta);
@@ -1846,9 +2021,9 @@ public class SPouT {
     @CompilerDirectives.TruffleBoundary
     public static StaticObject stringBuxxInsert(StaticObject self, Object offset, StaticObject toInsert, Meta meta) {
         if (offset instanceof AnnotatedValue) {
-            SPouT.stopRecording("Cannot handle symbolic offset values for insert into StringBu* yet.", meta);
+            SPouT.losePrecision("Cannot handle symbolic offset values for insert into StringBu* yet.", meta);
         }
-        int concreteOffset = (int) offset;
+        int concreteOffset = (int) AnnotatedValue.value(offset);
         if (analyze) {
             Annotations a = analysis.stringBuxxInsert(meta.toHostString(self),
                     meta.toHostString(toInsert),
@@ -1869,7 +2044,10 @@ public class SPouT {
                 || config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(dst)
                 || AnnotatedValue.annotation(AnnotatedValue.svalue(dstBegin), config.getConcolicIdx()) != null
                 || config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(self)) {
-            SPouT.stopRecording("symbolic getChars is not supported", meta);
+            SPouT.losePrecision("symbolic getChars is not supported", meta);
+            srcBegin = AnnotatedValue.value(srcBegin);
+            srcEnd = AnnotatedValue.value(srcEnd);
+            dstBegin = AnnotatedValue.value(dstBegin);
         }
         Method m = self.getKlass().getSuperKlass().lookupMethod(meta.getNames().getOrCreate("getChars"), EspressoSymbols.Signatures._void_int_int_char_array_int);
         m.invokeDirect(self, srcBegin, srcEnd, dst, dstBegin);
@@ -1878,10 +2056,10 @@ public class SPouT {
     public static void setBuxxCharAt(StaticObject self, Object i, Object ch, Meta meta) {
         if (analyze && config.hasConcolicAnalysis() && (AnnotatedValue.annotation(AnnotatedValue.svalue(i), config.getConcolicIdx()) != null ||
                 AnnotatedValue.annotation(AnnotatedValue.svalue(ch), config.getConcolicIdx()) != null)) {
-            stopRecording("Symbolic index and symbolic chars are not supported", meta);
+            losePrecision("Symbolic index and symbolic chars are not supported", meta);
         }
-        int index = (int) i;
-        char cha = (char) ch;
+        int index = (int) AnnotatedValue.value(i);
+        char cha = (char) AnnotatedValue.value(ch);
         String val = String.valueOf(cha);
         Method m = self.getKlass().getSuperKlass().lookupMethod(meta.getNames().getOrCreate("setCharAt"), EspressoSymbols.Signatures._void_int_char);
         Annotations[] a = self.getAnnotations();
@@ -1937,117 +2115,117 @@ public class SPouT {
 
     public static Object characterIsAlphabetic(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
-            stopRecording("Character.isAlphabetic is not symbolically implemented yet", meta);
+            losePrecision("Character.isAlphabetic is not symbolically implemented yet", meta);
         return Character.isAlphabetic((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsJavaIdentifierStart(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
-            stopRecording("Character.isJavaIdentifierStart is not symbolically implemented yet", meta);
+            losePrecision("Character.isJavaIdentifierStart is not symbolically implemented yet", meta);
         return Character.isJavaIdentifierStart((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsJavaIdentifierPart(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
-            stopRecording("Character.isJavaIdentifierPart is not symbolically implemented yet", meta);
+            losePrecision("Character.isJavaIdentifierPart is not symbolically implemented yet", meta);
         return Character.isJavaIdentifierPart((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsUnicodeIdentifierPart(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
-            stopRecording("Character.isUnicodeIdentifiertPart is not symbolically implemented yet", meta);
+            losePrecision("Character.isUnicodeIdentifiertPart is not symbolically implemented yet", meta);
         return Character.isUnicodeIdentifierPart((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsUnicodeIdentifierStart(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
-            stopRecording("Character.isUnicodeIdentifiertStart is not symbolically implemented yet", meta);
+            losePrecision("Character.isUnicodeIdentifiertStart is not symbolically implemented yet", meta);
         return Character.isUnicodeIdentifierStart((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsIdentiferIgnorable(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
-            stopRecording("Character.isIdentifierIgnorable is not symbolically implemented yet", meta);
+            losePrecision("Character.isIdentifierIgnorable is not symbolically implemented yet", meta);
         return Character.isIdentifierIgnorable((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsLetterOrDigit(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
-            stopRecording("Character.isLetterOrDigit is not symbolically implemented yet", meta);
+            losePrecision("Character.isLetterOrDigit is not symbolically implemented yet", meta);
         return Character.isLetterOrDigit((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsLetter(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
-            stopRecording("Character.isLetter is not symbolically implemented yet", meta);
+            losePrecision("Character.isLetter is not symbolically implemented yet", meta);
         return Character.isLetter((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsLowerCase(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
-            stopRecording("Character.isLowerCase is not symbolically implemented yet", meta);
+            losePrecision("Character.isLowerCase is not symbolically implemented yet", meta);
         return Character.isLowerCase((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsMirrored(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
-            stopRecording("Character.isMirrored is not symbolically implemented yet", meta);
+            losePrecision("Character.isMirrored is not symbolically implemented yet", meta);
         return Character.isMirrored((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsSpaceChar(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
-            stopRecording("Character.isSpaceChar is not symbolically implemented yet", meta);
+            losePrecision("Character.isSpaceChar is not symbolically implemented yet", meta);
         return Character.isSpaceChar((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsSpace(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
-            stopRecording("Character.isSpace is not symbolically implemented yet", meta);
+            losePrecision("Character.isSpace is not symbolically implemented yet", meta);
         return Character.isSpace(AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsTitleCase(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
-            stopRecording("Character.isTitleCase is not symbolically implemented yet", meta);
+            losePrecision("Character.isTitleCase is not symbolically implemented yet", meta);
         return Character.isTitleCase((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsUpperCase(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
-            stopRecording("Character.isUpperCase is not symbolically implemented yet", meta);
+            losePrecision("Character.isUpperCase is not symbolically implemented yet", meta);
         return Character.isUpperCase((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterIsWhitespace(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
-            stopRecording("Character.isWhitespace is not symbolically implemented yet", meta);
+            losePrecision("Character.isWhitespace is not symbolically implemented yet", meta);
         return Character.isWhitespace((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterGetDirectionality(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
-            stopRecording("Character.getDirectionality is not symbolically implemented yet", meta);
+            losePrecision("Character.getDirectionality is not symbolically implemented yet", meta);
         return Character.getDirectionality((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterDigit(Object codePoint, Object radix, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
-            stopRecording("Character.digit is not symbolically implemented yet", meta);
+            losePrecision("Character.digit is not symbolically implemented yet", meta);
         if (AnnotatedValue.svalue(radix) != null)
-            stopRecording("Character.digit is not symbolically implemented yet", meta);
+            losePrecision("Character.digit is not symbolically implemented yet", meta);
         return Character.digit((int) AnnotatedValue.value(codePoint), AnnotatedValue.value(radix));
     }
 
     public static Object characterGetNumericValue(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
-            stopRecording("Character.getNumericValue is not symbolically implemented yet", meta);
+            losePrecision("Character.getNumericValue is not symbolically implemented yet", meta);
         return Character.getNumericValue((int)AnnotatedValue.value(codePoint));
     }
 
     public static Object characterGetType(Object codePoint, Meta meta) {
         if (AnnotatedValue.svalue(codePoint) != null)
-            stopRecording("Character.getType is not symbolically implemented yet", meta);
+            losePrecision("Character.getType is not symbolically implemented yet", meta);
         return Character.getType((int) AnnotatedValue.value(codePoint));
     }
 
@@ -2073,7 +2251,7 @@ public class SPouT {
         boolean isSelfSymbolic = self.hasAnnotations()
                 && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
         if (isSelfSymbolic) {
-            stopRecording("String.isEmpty() is not symbolically implemented yet", meta);
+            losePrecision("String.isEmpty() is not symbolically implemented yet", meta);
             return false;
         } else {
             return meta.toHostString(self).isEmpty();
@@ -2087,7 +2265,7 @@ public class SPouT {
             boolean isCpSymbolic = AnnotatedValue.svalue(cp) != null && AnnotatedValue.svalue(cp).getAnnotations()[config.getConcolicIdx()] != null;
             boolean isStartSymbolic = AnnotatedValue.svalue(start) != null && AnnotatedValue.svalue(start).getAnnotations()[config.getConcolicIdx()] != null;
             if(isSelfSymbolic || isCpSymbolic ||isStartSymbolic) {
-                stopRecording("String.indexOf(int cp) is not symbolically implemented yet", meta);
+                losePrecision("String.indexOf(int cp) is not symbolically implemented yet", meta);
             }
         }
         return meta.toHostString(self).indexOf((int)AnnotatedValue.value(cp), AnnotatedValue.value(start));
@@ -2104,7 +2282,7 @@ public class SPouT {
         SPouT.debug("StringIndexOf annotations overall", analyze && (hasConcolicAnnotations(self) || hasConcolicAnnotations(other)));
         if (analyze && (hasConcolicAnnotations(self) || hasConcolicAnnotations(other))) {
             //return  new AnnotatedValue(cRes, analysis.stringindexOfString(cSelf, cOther, getStringAnnotations(self), getStringAnnotations(other)));
-            stopRecording("String.indexOf(String) is not symbolically implemented yet", meta);
+            losePrecision("String.indexOf(String) is not symbolically implemented yet", meta);
         }
         return cRes;
 
@@ -2119,7 +2297,7 @@ public class SPouT {
         SPouT.debug("StringIndexOf annotations ither", hasConcolicAnnotations(other));
         SPouT.debug("StringIndexOf annotations overall", analyze && (hasConcolicAnnotations(self) || hasConcolicAnnotations(other)));
         if (analyze && (hasConcolicAnnotations(self) || hasConcolicAnnotations(other))) {
-            stopRecording("String.indexOf(String) is not symbolically implemented yet", meta);
+            losePrecision("String.indexOf(String) is not symbolically implemented yet", meta);
             //return new AnnotatedValue(cRes, analysis.stringIndexOfStringWithInt(cSelf, cOther, from, getStringAnnotations(self), getStringAnnotations(other), AnnotatedValue.svalue(start)));
         }
         return cRes;
@@ -2134,7 +2312,7 @@ public class SPouT {
                 && regex.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
 
         if (isSelfSymbolic || isRegexSymbolic) {
-            stopRecording("Cannot split symbolic strings yet", meta);
+            losePrecision("Cannot split symbolic strings yet", meta);
         }
         String s = meta.toHostString(self);
         String r = meta.toHostString(regex);
@@ -2148,7 +2326,7 @@ public class SPouT {
 
     public static StaticObject valueOf_bool(Object v, Meta meta) {
         if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
-            stopRecording("concolic type conversion from boolean to string not supported, yet.", meta);
+            losePrecision("concolic type conversion from boolean to string not supported, yet.", meta);
         }
         String ret = "" + (boolean) AnnotatedValue.value(v);
         return meta.toGuestString(ret);
@@ -2156,7 +2334,7 @@ public class SPouT {
 
     public static StaticObject valueOf_byte(Object v, Meta meta) {
         if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
-            stopRecording("concolic type conversion from byte to string not supported, yet.", meta);
+            losePrecision("concolic type conversion from byte to string not supported, yet.", meta);
         }
         String ret = "" + (byte) AnnotatedValue.value(v);
         return meta.toGuestString(ret);
@@ -2164,7 +2342,7 @@ public class SPouT {
 
     public static StaticObject valueOf_char(Object v, Meta meta) {
         if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
-            stopRecording("concolic type char conversion to string not supported, yet.", meta);
+            losePrecision("concolic type char conversion to string not supported, yet.", meta);
         }
         String ret = "" + (char) AnnotatedValue.value(v);
         return meta.toGuestString(ret);
@@ -2172,7 +2350,7 @@ public class SPouT {
 
     public static StaticObject valueOf_char_array(StaticObject v, Meta meta) {
         if (hasConcolicAnnotations(v)) {
-            stopRecording("concolic type char array conversion to string not supported, yet.", meta);
+            losePrecision("concolic type char array conversion to string not supported, yet.", meta);
         }
         char[] value = v.unwrap(meta.getLanguage());
         return meta.toGuestString(new String(value));
@@ -2180,7 +2358,7 @@ public class SPouT {
 
     public static StaticObject valueOf_char_array(StaticObject v, Object offset, Object count, Meta meta) {
         if (hasConcolicAnnotations(v) || offset instanceof AnnotatedValue || count instanceof AnnotatedValue) {
-            stopRecording("concolic type char array conversion to string not supported, yet.", meta);
+            losePrecision("concolic type char array conversion to string not supported, yet.", meta);
         }
         int coffset = (int) offset;
         int ccount = (int) count;
@@ -2190,7 +2368,7 @@ public class SPouT {
 
     public static StaticObject valueOf_short(Object v, Meta meta) {
         if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
-            stopRecording("concolic type conversion from short to string not supported, yet.", meta);
+            losePrecision("concolic type conversion from short to string not supported, yet.", meta);
         }
         String ret = "" + (short) AnnotatedValue.value(v);
         return meta.toGuestString(ret);
@@ -2198,7 +2376,7 @@ public class SPouT {
 
     public static StaticObject string_valueOf_int(Object v, Meta meta) {
         if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
-            stopRecording("concolic type conversion from int to string not supported, yet.", meta);
+            losePrecision("concolic type conversion from int to string not supported, yet.", meta);
         }
 
         String ret = "" + (int) AnnotatedValue.value(v);
@@ -2208,7 +2386,7 @@ public class SPouT {
 
     public static StaticObject valueOf_long(Object v, Meta meta) {
         if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
-            stopRecording("concolic type conversion from long to string not supported, yet.", meta);
+            losePrecision("concolic type conversion from long to string not supported, yet.", meta);
         }
         String ret = "" + (long) AnnotatedValue.value(v);
         return meta.toGuestString(ret);
@@ -2216,7 +2394,7 @@ public class SPouT {
 
     public static StaticObject valueOf_float(Object v, Meta meta) {
         if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
-            stopRecording("concolic type conversion from float to string not supported, yet.", meta);
+            losePrecision("concolic type conversion from float to string not supported, yet.", meta);
         }
         String ret = "" + (float) AnnotatedValue.value(v);
         return meta.toGuestString(ret);
@@ -2224,7 +2402,7 @@ public class SPouT {
 
     public static StaticObject valueOf_double(Object v, Meta meta) {
         if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
-            stopRecording("concolic type conversion from double to string not supported, yet.", meta);
+            losePrecision("concolic type conversion from double to string not supported, yet.", meta);
         }
         String ret = "" + (double) AnnotatedValue.value(v);
         return meta.toGuestString(ret);
@@ -2235,7 +2413,7 @@ public class SPouT {
     @CompilerDirectives.TruffleBoundary
     public static double parseDouble(StaticObject s, Meta meta) {
         if (analyze && config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(s)) {
-            stopRecording("Concolic type conversion from string to double is not supported", meta);
+            losePrecision("Concolic type conversion from string to double is not supported", meta);
         }
         return Double.parseDouble(meta.toHostString(s));
     }
@@ -2243,7 +2421,7 @@ public class SPouT {
     @CompilerDirectives.TruffleBoundary
     public static float parseFloat(StaticObject s, Meta meta) {
         if (analyze && config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(s)) {
-            stopRecording("Concolic type conversion from string to float is not supported", meta);
+            losePrecision("Concolic type conversion from string to float is not supported", meta);
         }
         return Float.parseFloat(meta.toHostString(s));
     }
@@ -2251,7 +2429,7 @@ public class SPouT {
     @CompilerDirectives.TruffleBoundary
     public static int parseInt(StaticObject s, Meta meta) {
         if (analyze && config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(s)) {
-            stopRecording("Concolic type conversion from string to int is not supported", meta);
+            losePrecision("Concolic type conversion from string to int is not supported", meta);
         }
         return Integer.parseInt(meta.toHostString(s));
     }
@@ -2353,4 +2531,39 @@ public class SPouT {
     public static void resumeAnalyze() {
         analyze = oldAnalyze;
     }
+
+    public class NullCheckResult {
+        private StaticObject object;
+        public boolean result;
+
+        public boolean getResult() {
+            return result;
+        }
+
+        public void setResult(boolean result) {
+            this.result = result;
+        }
+
+        public StaticObject getObject() {
+            return object;
+        }
+
+        public void setObject(StaticObject object) {
+            this.object = object;
+        }
+
+        public NullCheckResult(StaticObject object, boolean result) {
+            this.object = object;
+            this.result = result;
+        }
+    }
+
+    public static boolean hasAnalysis() {
+        return analyze;
+    }
+
+    public static boolean useObjectFactories() {
+        return analyze && config.useObjectFactories();
+    }
+
 }

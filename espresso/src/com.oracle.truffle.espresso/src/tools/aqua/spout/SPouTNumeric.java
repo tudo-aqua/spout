@@ -266,25 +266,31 @@ public class SPouTNumeric {
 
     @CompilerDirectives.TruffleBoundary
     public static StaticObject byteToString(Object b, Meta meta){
-        if(AnnotatedValue.svalue(b) != null) SPouT.stopRecording("Byte.toString is not symbolically implemented yet", meta);
+        if(AnnotatedValue.svalue(b) != null) SPouT.losePrecision("Byte.toString is not symbolically implemented yet", meta);
         return meta.toGuestString(Byte.toString((AnnotatedValue.value(b))));
     }
 
     @CompilerDirectives.TruffleBoundary
+    public static StaticObject booleanToString(Object b, Meta meta){
+        if(AnnotatedValue.svalue(b) != null) SPouT.losePrecision("Boolean.toString is not symbolically implemented yet", meta);
+        return meta.toGuestString(Integer.toString((AnnotatedValue.value(b))));
+    }
+
+    @CompilerDirectives.TruffleBoundary
     public static StaticObject intToString(Object b, Meta meta){
-        if(AnnotatedValue.svalue(b) != null) SPouT.stopRecording("Integer.toString is not symbolically implemented yet", meta);
+        if(AnnotatedValue.svalue(b) != null) SPouT.losePrecision("Integer.toString is not symbolically implemented yet", meta);
         return meta.toGuestString(Integer.toString((AnnotatedValue.value(b))));
     }
 
     @CompilerDirectives.TruffleBoundary
     public static StaticObject doubleToString(Object b, Meta meta){
-        if(AnnotatedValue.svalue(b) != null) SPouT.stopRecording("Double.toString is not symbolically implemented yet", meta);
+        if(AnnotatedValue.svalue(b) != null) SPouT.losePrecision("Double.toString is not symbolically implemented yet", meta);
         return meta.toGuestString(Double.toString((AnnotatedValue.value(b))));
     }
 
     @CompilerDirectives.TruffleBoundary
     public static StaticObject doubleToHexString(Object b, Meta meta){
-        if(AnnotatedValue.svalue(b) != null) SPouT.stopRecording("Double.toHexString is not symbolically implemented yet", meta);
+        if(AnnotatedValue.svalue(b) != null) SPouT.losePrecision("Double.toHexString is not symbolically implemented yet", meta);
         return meta.toGuestString(Double.toHexString((AnnotatedValue.value(b))));
     }
 
@@ -312,20 +318,20 @@ public class SPouTNumeric {
     public static long doubleToRawLongBits(Object value, Meta meta) {
         Annotations sVal = AnnotatedValue.svalue(value);
         SPouT.debug("doubleToRawLongBits is not symbolically implemented yet", sVal);
-        if (AnnotatedValue.svalue(value) != null) {SPouT.stopRecording("Double.doubleToRawLongBits is not implemented symbolically yet", meta);}
+        if (AnnotatedValue.svalue(value) != null) {SPouT.losePrecision("Double.doubleToRawLongBits is not implemented symbolically yet", meta);}
         return Double.doubleToRawLongBits(AnnotatedValue.value(value));
     }
 
     @CompilerDirectives.TruffleBoundary
     public static double doubleLongBitsToDouble(Object bits, Meta meta) {
-        if (AnnotatedValue.svalue(bits) != null) {SPouT.stopRecording("Double.longBitsToDouble is not implemented symbolically yet", meta);}
+        if (AnnotatedValue.svalue(bits) != null) {SPouT.losePrecision("Double.longBitsToDouble is not implemented symbolically yet", meta);}
         return Double.longBitsToDouble(AnnotatedValue.value(bits));
     }
 
     @CompilerDirectives.TruffleBoundary
     public static StaticObject doubleToString(StaticObject f, Meta meta) {
         Annotations sVal = AnnotatedVM.getFieldAnnotation(f, meta.java_lang_Double_value);
-        if(sVal != null) SPouT.stopRecording("Double.toString is not symbolically implemented yet", meta);
+        if(sVal != null) SPouT.losePrecision("Double.toString is not symbolically implemented yet", meta);
         return meta.toGuestString(Double.toString(meta.java_lang_Double_value.getAsDouble(meta, f, true)));
     }
 
@@ -333,64 +339,64 @@ public class SPouTNumeric {
     public static StaticObject floatFloatToString(Object f, Meta meta) {
         Annotations sVal = AnnotatedValue.svalue(f);
         SPouT.debug("floatFloatToString is not symbolically implemented yet", sVal);
-        if(sVal != null) SPouT.stopRecording("Float.toString is not symbolically implemented yet", meta);
+        if(sVal != null) SPouT.losePrecision("Float.toString is not symbolically implemented yet", meta);
         return meta.toGuestString(Float.toString((AnnotatedValue.value(f))));
     }
 
     @CompilerDirectives.TruffleBoundary
     public static StaticObject floatToString(StaticObject f,  Meta meta) {
         Annotations sVal = AnnotatedVM.getFieldAnnotation(f, meta.java_lang_Float_value);
-        if(sVal != null) SPouT.stopRecording("Float.toString is not symbolically implemented yet", meta);
+        if(sVal != null) SPouT.losePrecision("Float.toString is not symbolically implemented yet", meta);
         return meta.toGuestString(Float.toString(meta.java_lang_Float_value.getAsFloat(meta, f, true)));
     }
 
     @CompilerDirectives.TruffleBoundary
     public static  StaticObject floatToHexString( Object f,Meta meta) {
-        if(AnnotatedValue.svalue(f) != null) SPouT.stopRecording("Float.toHexString is not symbolically implemented yet", meta);
+        if(AnnotatedValue.svalue(f) != null) SPouT.losePrecision("Float.toHexString is not symbolically implemented yet", meta);
         return meta.toGuestString(Float.toHexString((AnnotatedValue.value(f))));
     }
 
     @CompilerDirectives.TruffleBoundary
     public static int floatToIntBits(Object f, Meta meta) {
-        if(AnnotatedValue.svalue(f) != null) SPouT.stopRecording("Float.floatToIntBits is not symbolically implemented yet", meta);
+        if(AnnotatedValue.svalue(f) != null) SPouT.losePrecision("Float.floatToIntBits is not symbolically implemented yet", meta);
         return Float.floatToIntBits(AnnotatedValue.value(f));
     }
 
     @CompilerDirectives.TruffleBoundary
     public static Object floatToRawIntBits(Object value, Meta meta) {
-        if(AnnotatedValue.svalue(value) != null) SPouT.stopRecording("Float.floatToRawIntBits is not symbolically implemented yet", meta);
+        if(AnnotatedValue.svalue(value) != null) SPouT.losePrecision("Float.floatToRawIntBits is not symbolically implemented yet", meta);
         return Float.floatToRawIntBits(AnnotatedValue.value(value));
     }
 
     @CompilerDirectives.TruffleBoundary
     public static Object intBitsToFloat(Object bits, Meta meta) {
-        if(AnnotatedValue.svalue(bits) != null) SPouT.stopRecording("Float.intBitsToFloat is not symbolically implemented yet", meta);
+        if(AnnotatedValue.svalue(bits) != null) SPouT.losePrecision("Float.intBitsToFloat is not symbolically implemented yet", meta);
         return Float.intBitsToFloat(AnnotatedValue.value(bits));
     }
 
     public static @JavaType(internalName = "I") Object integerReverseBytes(@JavaType(internalName = "I") Object i, @Inject Meta meta) {
         if (AnnotatedValue.svalue(i) != null) {
-            SPouT.stopRecording("Integer.reverseBytes is not symbolically implemented yet", meta);
+            SPouT.losePrecision("Integer.reverseBytes is not symbolically implemented yet", meta);
         }
         return Integer.reverseBytes(AnnotatedValue.value(i));
     }
 
     public static Object longReverse(Object in,Meta meta) {
         if (AnnotatedValue.svalue(in) != null) {
-            SPouT.stopRecording("Long.reverse is not symbolically implemented yet", meta);
+            SPouT.losePrecision("Long.reverse is not symbolically implemented yet", meta);
         }
         return Long.reverseBytes(AnnotatedValue.value(in));
     }
 
     public static Object mathGetExponentDouble(@JavaType(internalName = "D") Object f, Meta meta) {
         if(AnnotatedValue.svalue(f) != null) {
-            SPouT.stopRecording("Math.getExponent is not symbolically implemented yet", meta);
+            SPouT.losePrecision("Math.getExponent is not symbolically implemented yet", meta);
         }
         return Math.getExponent((double) AnnotatedValue.value(f));
     }
     public static Object mathGetExponentFloat(@JavaType(internalName = "F") Object f, Meta meta) {
         if(AnnotatedValue.svalue(f) != null) {
-            SPouT.stopRecording("Math.getExponent is not symbolically implemented yet", meta);
+            SPouT.losePrecision("Math.getExponent is not symbolically implemented yet", meta);
         }
         return Math.getExponent((float) AnnotatedValue.value(f));
     }

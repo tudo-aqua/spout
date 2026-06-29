@@ -24,21 +24,32 @@
 
 package tools.aqua.concolic;
 
+import tools.aqua.smt.Atom;
+import tools.aqua.smt.Types;
 import tools.aqua.smt.Variable;
 import tools.aqua.spout.TraceElement;
 
 public class SymbolDeclaration extends TraceElement {
 
-    private final Variable variable;
+    private final Atom variable;
 
-    public SymbolDeclaration(Variable var) {
-        this.variable = var;
+    private final boolean auxiliary;
+
+    public SymbolDeclaration(Atom variable, boolean auxiliary) {
+        this.variable = variable;
+        this.auxiliary = auxiliary;
+    }
+
+    public SymbolDeclaration(Atom var) {
+        this(var, false);
     }
 
     @Override
     public String toString() {
-        return "[DECLARE] (declare-fun " +
+        return  (auxiliary ? "[AUXILIARY]" : "[DECLARE]") +" (declare-fun " +
                 variable + " () " +
-                variable.getType() + ")";
+                variable.getType() + ")" +
+                // todo: remove when custom sort for objects works
+                (variable.getType() == Types.OBJECT ? "\n[OBJECT] " + variable : "");
     }
 }

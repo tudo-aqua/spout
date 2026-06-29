@@ -1,0 +1,1 @@
+../../mx/mx --java-home ../../labsjdk-ce-latest-25+37-jvmci-b01 --env native-ce build

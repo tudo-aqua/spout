@@ -52,10 +52,10 @@ public final class CheckCastQuickNode extends QuickNode {
         BytecodeNode root = getBytecodeNode();
         StaticObject receiver = EspressoFrame.peekObject(frame, top - 1);
         if (StaticObject.isNull(receiver) || instanceOf.execute(receiver.getKlass())) {
-            SPouT.checkcast(frame, receiver, root, root.getBci(frame), false);
+            SPouT.checkcast(frame, receiver, this.typeToCheck, top - 1, root, root.getBci(frame), false);
             return stackEffectOf_CHECKCAST;
         }
-        SPouT.checkcast(frame, receiver, root, root.getBci(frame), true);
+        SPouT.checkcast(frame, receiver, this.typeToCheck, top - 1, root, root.getBci(frame), true);
         root.enterImplicitExceptionProfile();
         EspressoFrame.popObject(frame, top - 1);
         Meta meta = typeToCheck.getMeta();

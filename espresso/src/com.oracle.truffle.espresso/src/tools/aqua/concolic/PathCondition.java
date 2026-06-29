@@ -38,6 +38,7 @@ public class PathCondition extends TraceElement {
     public static final int FAILURE = 1;
     public static final int BINARY_SPLIT = 2;
 
+    public static final int UNKNOWN = -1;
 
     public PathCondition(Expression condition, int branchId, int branchCount) {
         this.condition = condition;

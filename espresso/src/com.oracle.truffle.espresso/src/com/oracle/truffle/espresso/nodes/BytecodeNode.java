@@ -1172,7 +1172,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
 
                     case IFNULL: // fall through
                     case IFNONNULL:
-                        if (takeBranchRef1(popObject(frame, top - 1), curOpcode)) {
+                        if (SPouT.takeBranchRef1(frame, this, curBCI, popObject(frame, top - 1), curOpcode)) {
                             int targetBCI = bs.readBranchDest2(curBCI);
                             top += Bytecodes.stackEffectOf(IFNONNULL);
                             statementIndex = beforeJumpChecks(frame, curBCI, targetBCI, top, statementIndex, instrument, loopCount, skipLivenessActions);
@@ -1444,9 +1444,10 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                         throw getMethod().getMeta().throwException(nullCheck(popObject(frame, top - 1)));
                     case CHECKCAST   : {
                         StaticObject receiver = peekObject(frame, top - 1);
-                        if (StaticObject.isNull(receiver) || receiver.getKlass() == resolveType(CHECKCAST, readOriginalCPI(curBCI))) {
+                        Klass typeToCast = resolveType(CHECKCAST, readOriginalCPI(curBCI));
+                        if (StaticObject.isNull(receiver) || receiver.getKlass() == typeToCast) {
                             // Most common case, avoid spawning a node.
-                            SPouT.checkcast(frame, receiver, this, curBCI, false);
+                            SPouT.checkcast(frame, receiver, typeToCast, top-1, this, curBCI, false);
                         } else {
                             CompilerDirectives.transferToInterpreterAndInvalidate();
                             quickenCheckCast(frame, top, curBCI, CHECKCAST);
@@ -1455,14 +1456,15 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     }
                     case INSTANCEOF  : {
                         StaticObject receiver = popObject(frame, top - 1);
+                        Klass typeToCheck = resolveType(INSTANCEOF, readOriginalCPI(curBCI));
                         if (StaticObject.isNull(receiver)) {
                             // Skip resolution.
                             putInt(frame, top - 1, /* false */ 0);
-                            SPouT.instanceOf(frame, receiver, false, top -1);
-                        } else if (receiver.getKlass() == resolveType(INSTANCEOF, readOriginalCPI(curBCI))) {
+                            SPouT.instanceOf(frame, receiver, false,  top -1, typeToCheck);
+                        } else if (receiver.getKlass() == typeToCheck) {
                             // Quick-check, avoid spawning a node.
                             putInt(frame, top - 1, /* true */ 1);
-                            SPouT.instanceOf(frame, receiver, true, top -1);
+                            SPouT.instanceOf(frame, receiver, true, top -1, typeToCheck);
                         } else {
                             CompilerDirectives.transferToInterpreterAndInvalidate();
                             putObject(frame, top - 1, receiver);
@@ -2662,7 +2664,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
         // Skip inlined nodes if instrumentation is live.
         // Lock must be owned for correctness.
         assert lockIsHeld();
-        boolean tryBytecodeLevelInlining = this.instrumentation == null && allowBytecodeInlining;
+        boolean tryBytecodeLevelInlining = this.instrumentation == null && allowBytecodeInlining && !SPouT.hasAnalysis();
         if (tryBytecodeLevelInlining) {
             InlinedMethodNode node = InlinedMethodNode.createFor(resolvedCall, top, opcode, curBCI, statementIndex);
             if (node != null) {
@@ -2900,8 +2902,10 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
 
     private StaticObject nullCheck(StaticObject value) {
         if (!StaticObject.isNull(value)) {
+            SPouT.checkNull(value, false);
             return value;
         }
+        SPouT.checkNull(value, true);
         enterImplicitExceptionProfile();
         throw getMethod().getMeta().throwNullPointerException();
     }

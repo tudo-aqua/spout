@@ -24,6 +24,7 @@
 package tools.aqua.smt;
 
 import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.meta.EspressoError;
 
 public interface Expression {
@@ -34,6 +35,8 @@ public interface Expression {
             case LONG: return Constant.fromConcreteValue( (long) value);
             case FLOAT: return Constant.fromConcreteValue( (float) value);
             case DOUBLE: return Constant.fromConcreteValue( (double) value);
+            case KLASS: return Constant.fromConcreteValue( (Klass) value);
+            case STRING: return Constant.fromConcreteValue((String) value);
             default:
                 CompilerDirectives.transferToInterpreter();
                 throw EspressoError.shouldNotReachHere("unsupported constant type");
@@ -65,7 +68,7 @@ public interface Expression {
     }
 
     public static boolean isFormula(Expression e) {
-        if (e instanceof Variable) {
+        if (e instanceof Variable || e instanceof AuxiliaryVariable) {
             return true;
         }
         else if (e instanceof ComplexExpression) {
@@ -91,5 +94,11 @@ public interface Expression {
         else {
             return false;
         }
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    static AuxiliaryVariable getKlassVariable(Atom var) {
+        assert var.getType().equals(Types.OBJECT);
+        return new AuxiliaryVariable(var + ".cls", Types.KLASS);
     }
 }

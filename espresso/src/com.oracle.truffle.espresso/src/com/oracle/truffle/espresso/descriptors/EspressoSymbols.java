@@ -1080,6 +1080,7 @@ public class EspressoSymbols {
 
         // Spout
         public static final Symbol<Name> getRuntime = SYMBOLS.putName("getRuntime");
+        public static final Symbol<Name> createObject = SYMBOLS.putName("createObject");
 
         public static void ensureInitialized() {
             assert _init_ == ParserSymbols.ParserNames._init_;

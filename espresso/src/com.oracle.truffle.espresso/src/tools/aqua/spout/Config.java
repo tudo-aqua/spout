@@ -24,14 +24,30 @@
 
 package tools.aqua.spout;
 
+import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.espresso.classfile.descriptors.Signature;
+import com.oracle.truffle.espresso.classfile.descriptors.Symbol;
+import com.oracle.truffle.espresso.classfile.descriptors.Type;
+import com.oracle.truffle.espresso.impl.Klass;
+import com.oracle.truffle.espresso.impl.Method;
+import com.oracle.truffle.espresso.impl.PrimitiveKlass;
+import com.oracle.truffle.espresso.meta.Meta;
+import com.oracle.truffle.espresso.nodes.bytecodes.InvokeSpecial;
+import com.oracle.truffle.espresso.nodes.bytecodes.InvokeSpecialNodeGen;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
 import tools.aqua.concolic.ConcolicAnalysis;
 import tools.aqua.concolic.ConcolicNumericAnalysis;
+import tools.aqua.concolic.ConstructorCondition;
+import tools.aqua.concolic.PathCondition;
+import tools.aqua.concolic.SymbolDeclaration;
+import tools.aqua.smt.Atom;
+import tools.aqua.smt.AuxiliaryVariable;
+import tools.aqua.smt.ComplexExpression;
+import tools.aqua.smt.Constant;
 import tools.aqua.smt.Expression;
 import tools.aqua.smt.OperatorComparator;
 import tools.aqua.smt.Types;
 import tools.aqua.smt.Variable;
-import tools.aqua.spout.analyses.MetaNumericAnalysis;
 import tools.aqua.spout.analyses.NumericAnalysis;
 import tools.aqua.taint.NumericTaintAnalysis;
 import tools.aqua.taint.TaintAnalysis;
@@ -40,14 +56,23 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Base64;
 
+import static tools.aqua.smt.OperatorComparator.BNEG;
+import static tools.aqua.smt.OperatorComparator.OBJECT_EXTENDS;
+import static tools.aqua.smt.OperatorComparator.OBJECT_IS_NULL;
+import static tools.aqua.smt.OperatorComparator.STRINGEQ;
+import static tools.aqua.smt.Types.KLASS;
+import static tools.aqua.smt.Types.STRING;
+
 
 public class Config {
-
-
 
     public enum TaintType {OFF, DATA, CONTROL, INFORMATION};
 
     private boolean hasConcolicAnalysis = false;
+
+    private boolean useObjectFactories = false;
+
+    private int maxObjectAnnotationDepth = Integer.MAX_VALUE;
 
     private TaintType taintType = TaintType.OFF;
 
@@ -71,17 +96,17 @@ public class Config {
 
     private int annotationLength = 2;
 
-    public Config(String config) {
+    private boolean b64ConstructorConfig = false;
+
+    public Config() {
         this.trace = new Trace();
-        parseConfig(config);
     }
 
-    void configureAnalysis() {
+    private void configureAnalysis() {
         if (hasConcolicAnalysis) {
             this.concolicAnalysis = new ConcolicAnalysis(this);
             this.concolicNumericAnalysis = new ConcolicNumericAnalysis();
-        }
-        else {
+        } else {
             this.concolicAnalysis = null;
             this.concolicIdx = -1;
             this.taintIdx = 0;
@@ -91,8 +116,7 @@ public class Config {
         if (!taintType.equals(TaintType.OFF)) {
             this.taintAnalysis = new TaintAnalysis(this);
             this.numericTaintAnalysis = new NumericTaintAnalysis();
-        }
-        else {
+        } else {
             this.taintAnalysis = null;
             this.taintIdx = -1;
             this.annotationLength--;
@@ -101,8 +125,12 @@ public class Config {
         Annotations.configure(this.annotationLength);
         // native image precautions ...
         OperatorComparator.initialize();
+    }
 
+    void printAnalysisConfig() {
         SPouT.log("Concolic Analysis: " + hasConcolicAnalysis);
+        SPouT.log("Concolic Object Max. Annotation Depth: " + maxObjectAnnotationDepth);
+        SPouT.log("Constructor Summary: " + constructorSummary);
         SPouT.log("Taint Analysis: " + taintType);
         SPouT.log("Seeded Bool Values: " + Arrays.toString(seedsBooleanValues));
         SPouT.log("Seeded Byte Values: " + Arrays.toString(seedsByteValues));
@@ -113,9 +141,39 @@ public class Config {
         SPouT.log("Seeded Float Values: " + Arrays.toString(seedsFloatValues));
         SPouT.log("Seeded Double Values: " + Arrays.toString(seedsDoubleValues));
         SPouT.log("Seeded String Values: " + Arrays.toString(seedStringValues));
+        SPouT.log("Seeded Object Values: " + Arrays.toString(seedObjectValues));
     }
 
-    private void parseConfig(String config) {
+    public void parseAnalysesConfig(String config, Meta meta) {
+        if (!config.trim().isEmpty()) {
+            String[] paramsGroups = config.trim().split(" "); // not in base64
+            for (String paramGroup : paramsGroups) {
+                String[] keyValue = paramGroup.split(":"); // not in base64
+                String value = keyValue[1].trim();
+                switch (keyValue[0]) {
+                    case "concolic.execution":
+                        parseConcolic(value);
+                        break;
+                    case "concolic.constructor.summary":
+                        parseSummary(value);
+                        break;
+                    case "concolic.max.object.annotation.depth":
+                        parseMaxObjectDepth(value);
+                        break;
+                    case "concolic.object.factories":
+                        parseFactories(value);
+                        break;
+                    case "taint.flow":
+                        parseTaint(value);
+                        break;
+
+                }
+            }
+        }
+        configureAnalysis();
+    }
+
+    public void parseConcolicValues(String config, Meta meta) {
         if (config.trim().length() < 1) {
             return;
         }
@@ -157,13 +215,10 @@ public class Config {
                 case "concolic.strings":
                     parseStrings(vals, b64);
                     break;
-                case "concolic.execution":
-                    parseConcolic(vals);
+                case "concolic.constructors":
+                    seedObjectValues = vals;
+                    b64ConstructorConfig = b64;
                     break;
-                case "taint.flow":
-                    parseTaint(vals);
-                    break;
-
             }
         }
     }
@@ -253,13 +308,24 @@ public class Config {
             seedStringValues[i] = b64 ? b64decode(valsAsStr[i].trim()) : valsAsStr[i].trim();
         }
     }
-
-    private void parseConcolic(String[] valsAsStr) {
-        hasConcolicAnalysis = Boolean.valueOf(valsAsStr[0].trim());
+    
+    private void parseConcolic(String valsAsStr) {
+        hasConcolicAnalysis = Boolean.valueOf(valsAsStr.trim());
     }
 
-    private void parseTaint(String[] valsAsStr) {
-        taintType = TaintType.valueOf(valsAsStr[0].trim());
+    private void parseSummary(String valsAsStr) {
+        constructorSummary = Boolean.valueOf(valsAsStr.trim());
+    }
+
+    private void parseMaxObjectDepth(String valsAsStr) {
+        maxObjectAnnotationDepth = Integer.valueOf(valsAsStr.trim());
+    }
+    private void parseFactories(String valsAsStr) {
+        useObjectFactories = Boolean.valueOf(valsAsStr.trim());
+    }
+
+    private void parseTaint(String valsAsStr) {
+        taintType = TaintType.valueOf(valsAsStr.trim());
     }
 
     // --------------------------------------------------------------------------
@@ -364,6 +430,264 @@ public class Config {
         Variable symbolic = new Variable(Types.STRING, countStringSeeds);
         countStringSeeds++;
         return new SymbolicStringValue(concrete, symbolic);
+    }
+
+    // todo: update documentation
+    /**
+     * Takes a String from -Dconcolic.constructors and creates a {{@link StaticObject}}.
+     * The Strings of -Dconcolic.constructors are in the format {QUALIFIED_CLASS_NAME}|{CONSTRUCTOR_SIGNATURE}.
+     * Both QUALIFIED_CLASS_NAME and CONSTRUCTOR_SIGNATURE follow the <b>class File Format</b><br>
+     * (See JVM Specification chapter 2 The Structure of the Java Virtual Machine)
+     *
+     * <b>example:</b><br>
+     * Ljava/lang/StringBuilder;|()V
+     * Here the default constructor ()V from the class Ljava/lang/StringBuilder is invoked
+     *
+     * @return Parsed {{@link StaticObject}}
+     */
+    @CompilerDirectives.TruffleBoundary
+    public StaticObject nextSymbolicObject(Meta meta, Klass typeBound) {
+        String constructorConfig = "<>null|NULL";
+        if(countObjectSeeds < seedObjectValues.length) {
+            constructorConfig = b64ConstructorConfig ? b64decode(seedObjectValues[countObjectSeeds]) : seedObjectValues[countObjectSeeds];
+        }
+
+        int endIdx = findMatchingIndex(constructorConfig, '<', '>');
+        String label =  constructorConfig.substring(1, endIdx);
+        constructorConfig = constructorConfig.substring(endIdx + 1);
+
+        Variable symbolicObjectId = new Variable(Types.OBJECT, countObjectSeeds);
+        AuxiliaryVariable objectCreationError = new AuxiliaryVariable( symbolicObjectId + ".err", Types.STRING);
+        countObjectSeeds++;
+        Expression errorExpr = new ComplexExpression(OperatorComparator.STRINGEQ,
+                objectCreationError, Expression.fromConstant(Types.STRING, label));
+
+        StringBuilder logger = new StringBuilder();
+        logger.append("<").append(label).append(">");
+        ParsedObjectValue po = parseObjectValue(constructorConfig, meta, b64ConstructorConfig, logger);
+
+        if (constructorSummary) {
+            AuxiliaryVariable var = new AuxiliaryVariable(symbolicObjectId + ".init", Types.STRING);
+            Expression.fromConstant(Types.STRING, logger.toString());
+            trace.addElement(new ConstructorCondition(
+                    new ComplexExpression(OperatorComparator.STRINGEQ, var,
+                            Expression.fromConstant(Types.STRING, logger.toString()))));
+        }
+
+        Atom oCls = Expression.getKlassVariable(symbolicObjectId);
+        trace.addElement(new SymbolDeclaration(symbolicObjectId));
+        trace.addElement(new SymbolDeclaration(oCls));
+
+        // todo: add assumption if type bound
+        if (typeBound != null) {
+            boolean isNullOrInstance = po.klass == null || aExtendB(po.klass, typeBound);
+            Expression typeAssumption = instanceOfOrNull(symbolicObjectId, typeBound);
+            Annotations a = Annotations.emptyArray();
+            a.set(getConcolicIdx(), typeAssumption);
+            AnnotatedValue av = new AnnotatedValue(isNullOrInstance, a);
+            SPouT.assume(av, meta);
+        }
+
+        trace.addElement(new SymbolDeclaration(objectCreationError));
+        if (constructorSummary) {
+            trace.addElement(new ConstructorCondition(errorExpr));
+            Expression clsExpr = new ComplexExpression(STRINGEQ, oCls, Expression.fromConstant(KLASS, po.klass));
+            trace.addElement(new ConstructorCondition(clsExpr));
+        } else {
+            trace.addElement(new PathCondition(errorExpr, 0,2));
+        }
+
+        StaticObject obj = instantiate(po);
+        
+        Annotations objectDescription = Annotations.emptyArray();
+        objectDescription.set(getConcolicIdx(), symbolicObjectId);
+        Annotations.setObjectAnnotation(obj, objectDescription);
+        return obj;
+    }
+
+    private record ParsedObjectValue(
+        Klass klass,
+        Method constructor,
+        Object[] constructorCallparams
+    ) {}
+
+    @CompilerDirectives.TruffleBoundary
+    private static boolean aExtendB(Klass a, Klass b) {
+        if (a == null) return false;
+        if (a == b) return true;
+        if (aExtendB(a.getSuperKlass(), b)) return true;
+        for (Klass iface : a.getSuperInterfaces()) {
+            if (aExtendB(iface, b)) return true;
+        }
+        return false;
+    }
+
+    private Expression instanceOfOrNull(Expression a, Klass typeToCheck) {
+        if (a == null) {
+            return null;
+        }
+
+        assert a instanceof Variable;
+        Atom klassVar = Expression.getKlassVariable((Atom) a);
+
+        Expression klassConstant = Expression.fromConstant(KLASS, typeToCheck);
+        Expression instanceofExpr = new ComplexExpression(OBJECT_EXTENDS, klassVar, klassConstant);
+
+        return instanceofExpr;
+    }
+
+    private static StaticObject instantiate(ParsedObjectValue po) {
+        if (po.klass == null) {
+            return StaticObject.createNull(null);
+        }
+        for (int i=1; i<po.constructorCallparams.length; i++) {
+            if (po.constructorCallparams[i] instanceof ParsedObjectValue) {
+                po.constructorCallparams[i] = instantiate( (ParsedObjectValue) po.constructorCallparams[i]);
+            }
+        }
+        // instantiate object
+        StaticObject staticObject = po.klass.allocateInstance();
+        // for some reason we have to do it here explicitly ...
+        Annotations.initObjectAnnotations(staticObject);
+        po.constructorCallparams[0] = staticObject;
+        //SPouT.log("constructor call: " + Arrays.toString(constructorCallparams));
+        InvokeSpecial invokeSpecial = InvokeSpecialNodeGen.create(po.constructor);
+        invokeSpecial.execute(po.constructorCallparams);
+        return staticObject;
+    }
+
+   @CompilerDirectives.TruffleBoundary
+    private ParsedObjectValue parseObjectValue(String value, Meta meta, boolean b64, StringBuilder call) {
+        //Extract className and constructor_signature etc.
+        if (value.equals("null|NULL")) {
+            call.append(value);
+            return new ParsedObjectValue(null, null, null);
+        }
+
+        //SPouT.log("parse:" + value);
+        String[] split = value.split("\\|", 3);
+        String className = split[0];
+        String constructorSignature = split[1];
+
+        if (className.equals("Ljava/lang/String;")) {
+            // TODO: simply call String handling?
+            SPouT.notImplementedYet("Strings are currently not supported as symbolic objects.", meta);
+        }
+
+        Klass klass = getKlass(className, meta);
+        assert klass != null;
+        Method constructor = getConstructor(klass, constructorSignature, meta);
+        assert constructor != null;
+        call.append(className).append("|").append(constructorSignature).append("|");
+
+        Object[] constructorCallparams = new Object[constructor.getArgumentCount()];
+        Klass[] paramTypes = constructor.resolveParameterKlasses();
+        String paramListAsString = split[2];
+        //SPouT.log("  paramListAsString:" + paramListAsString);
+        for (int i = 0; i < paramTypes.length; i++) {
+            call.append("{");
+            int endIdx = findMatchingIndex(paramListAsString, '{', '}');
+            String paramAsString = paramListAsString.substring(1, endIdx);
+            paramListAsString = paramListAsString.substring(endIdx + 1);
+            //SPouT.log("  paramAsString:" + paramAsString);
+            //SPouT.log("  remaining paramListAsString:" + paramListAsString);
+            if (paramTypes[i].isPrimitive()) {
+                constructorCallparams[i + 1] = parsePrimitiveValue(paramAsString, (PrimitiveKlass) paramTypes[i], meta, b64);
+                Object a = Annotations.annotation(AnnotatedValue.svalue(constructorCallparams[i + 1]), concolicIdx);
+                if (a != null) call.append(a);
+            } else if (paramTypes[i].getType() == meta.java_lang_String.getType()) {
+                // todo String delims?
+                //SPouT.log("using string param: " + paramAsString);
+                constructorCallparams[i + 1] = constructorSummary ? SPouT.nextSymbolicString(meta) : meta.toGuestString(paramAsString);
+            } else {
+                constructorCallparams[i + 1] = parseObjectValue(paramAsString, meta, b64, call);
+            }
+            call.append("}");
+        }
+
+        return new ParsedObjectValue(klass, constructor,  constructorCallparams);
+    }
+
+    private Object parsePrimitiveValue(String value, PrimitiveKlass klass, Meta meta, boolean b64) {
+        if (b64) {
+            value = b64decode(value);
+        }
+        switch (klass.getPrimitiveJavaKind()) {
+            case Boolean -> {
+                return constructorSummary ? SPouT.nextSymbolicBoolean() : Boolean.parseBoolean(value);
+            }
+            case Byte -> {
+                return constructorSummary ? SPouT.nextSymbolicByte() : Byte.parseByte(value);
+            }
+            case Short -> {
+                return constructorSummary ? SPouT.nextSymbolicShort() : Short.parseShort(value);
+            }
+            case Char -> {
+                return constructorSummary ? SPouT.nextSymbolicChar() : value.charAt(0);
+            }
+            case Int -> {
+                return constructorSummary ? SPouT.nextSymbolicInt() : Integer.parseInt(value);
+            }
+            case Float -> {
+                return constructorSummary ? SPouT.nextSymbolicFloat() : Float.parseFloat(value);
+            }
+            case Long -> {
+                return constructorSummary ? SPouT.nextSymbolicLong() : Long.parseLong(value);
+            }
+            case Double -> {
+                return constructorSummary ? SPouT.nextSymbolicDouble() : Double.parseDouble(value);
+            }
+            default -> {
+                SPouT.fail("unsupported primitive kind.", meta);
+            }
+        }
+        // unreachable code
+        return null;
+    }
+
+    private static int findMatchingIndex(String str, char open, char close) {
+        assert str.length() > 1 && str.charAt(0) == open;
+        int count = 0;
+        for (int i = 0; i < str.length(); i++) {
+            char c = str.charAt(i);
+            if (c == open) { count++; } else if (c == close) { count--; }
+            if (count == 0) { return i; }
+        }
+        return -1;
+    }
+
+    public static Klass getKlass(String fqn, Meta meta) {
+        Symbol<Type> type = meta.getTypes().fromClassGetName(fqn);
+        if (type == null) {
+            SPouT.fail("loading symbol for classname failed.", meta);
+        }
+
+        StaticObject classLoader = (StaticObject) meta.java_lang_ClassLoader_getSystemClassLoader.invokeDirect();
+        Klass klass = meta.loadKlassOrNull(type,
+                classLoader,  //No classLoader means that the BOOT-Classloader is used
+                StaticObject.NULL); //protectionDomain ???
+
+        if (klass == null) {
+            SPouT.fail("loading of the following klass failed: "+fqn, meta);
+        }
+        return klass;
+    }
+
+    public static Method getConstructor(Klass klass, String signatureString, Meta meta) {
+
+        Symbol<Signature> signature = klass.getSignatures().lookupValidSignature(signatureString);
+        if (signature == null) {
+            SPouT.fail("loading symbol for signature failed for: "+signatureString, meta);
+        }
+
+        Method[] declaredConstructors = klass.getDeclaredConstructors();
+        for (Method declaredConstructor : declaredConstructors) {
+            if (declaredConstructor.getRawSignature().equals(signature)) {
+                return declaredConstructor;
+            }
+        }
+        SPouT.fail("no constructor found for signature.", meta);
+        return null; // cannot be reached
     }
 
     private boolean[] seedsBooleanValues = new boolean[] {};
@@ -518,6 +842,19 @@ public class Config {
     }
     */
 
+    private String[] seedObjectValues = new String[] {};
+    private int countObjectSeeds = 0;
+
+    public int getCountObjectSeeds() {
+        return countObjectSeeds;
+    }
+
+    private boolean constructorSummary = false;
+
+    public boolean isConstructorSummary() {
+        return constructorSummary;
+    }
+
     public int getConcolicIdx() {
         return concolicIdx;
     }
@@ -554,6 +891,14 @@ public class Config {
         return taintAnalysis;
     }
 
+    public boolean useObjectFactories() {
+        return useObjectFactories;
+    }
+
+    public int getMaxObjectAnnotationDepth() {
+        return maxObjectAnnotationDepth;
+    }
+
     public Analysis<?>[] getAnalyses() {
         Analysis<?>[] analyses = new Analysis<?>[this.annotationLength];
         if (hasConcolicAnalysis()) analyses[this.concolicIdx] = this.concolicAnalysis;
@@ -569,12 +914,13 @@ public class Config {
     }
 
     // This should be a record, but SPouT cannot compile records yet.
-    public class SymbolicStringValue{
+    public static class SymbolicStringValue {
         public String concrete;
         public Variable symbolic;
         public SymbolicStringValue(String c, Variable s){
             concrete = c;
             symbolic = s;
         }
-    };
+    }
+
 }

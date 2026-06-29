@@ -41,6 +41,7 @@ import com.oracle.truffle.espresso.impl.ObjectKlass;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.EspressoNode;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
+import tools.aqua.spout.SPouT;
 
 /**
  * INVOKEVIRTUAL bytecode.
@@ -133,6 +134,7 @@ public abstract class InvokeVirtual extends EspressoNode {
                         @Cached("create(resolvedMethod)") LazyDirectCallNode directCallNode) {
             assert args[0] == receiver;
             assert !StaticObject.isNull(receiver);
+            SPouT.polymorphicMethodAccess((StaticObject) args[0], resolvedMethod.getMethod(), 8);
             return directCallNode.execute(args);
         }
 
@@ -148,6 +150,7 @@ public abstract class InvokeVirtual extends EspressoNode {
             assert args[0] == receiver;
             assert !StaticObject.isNull(receiver);
             assert resolvedMethod.getMethod() == resolutionSeed;
+            SPouT.polymorphicMethodAccess((StaticObject) args[0], resolvedMethod.getMethod(), 9);
             return directCallNode.execute(args);
         }
 
@@ -163,6 +166,7 @@ public abstract class InvokeVirtual extends EspressoNode {
                         @Cached("createAndMaybeForceInline(resolvedMethod)") DirectCallNode directCallNode) {
             assert args[0] == receiver;
             assert !StaticObject.isNull(receiver);
+            SPouT.polymorphicMethodAccess((StaticObject) args[0], resolvedMethod.getMethod(), 10);
             return directCallNode.call(args);
         }
 
@@ -177,6 +181,7 @@ public abstract class InvokeVirtual extends EspressoNode {
             assert !StaticObject.isNull(receiver);
             // vtable lookup.
             Method.MethodVersion target = genericMethodLookup(node, resolutionSeed, receiver.getKlass(), error);
+            SPouT.polymorphicMethodAccess((StaticObject) args[0], target.getMethod(), 11);
             return indirectCallNode.call(target.getCallTarget(), args);
         }
     }

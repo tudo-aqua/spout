@@ -99,9 +99,9 @@ public class AnnotatedVM {
 
         Annotations[] annotations = obj.getAnnotations();
         if (annotations == null) {
-           annotations = new Annotations[f.isStatic()
+           annotations = new Annotations[1 + (f.isStatic()
                             ? f.getDeclaringKlass().getStaticFieldTable().length
-                            : ((ObjectKlass) obj.getKlass()).getFieldTable().length];
+                            : ((ObjectKlass) obj.getKlass()).getFieldTable().length)];
            obj.setAnnotations(annotations);
         }
 
@@ -154,7 +154,7 @@ public class AnnotatedVM {
                         method.getDeclaringKlass().getNameAsString() + "." + method.getNameAsString() + ": " + args[i]);
                 if (methodName.contains("doubleToRawLongBits") || methodName.contains("longBitsToDouble")
                         || methodName.contains("intBitsToFloat") || methodName.contains("floatToRawIntBits")){
-                    SPouT.stopRecording("Stripping symbolic values from Float or Double methods that do not suppor them.", getMeta());
+                    SPouT.losePrecision("Stripping symbolic values from Float or Double methods that do not support them.", getMeta());
                 }
 
             }

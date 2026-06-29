@@ -24,6 +24,10 @@
 
 package tools.aqua.smt;
 
+import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.espresso.impl.Klass;
+import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
+
 public abstract class Constant extends Atom {
 
     public final static IntConstant INT_ZERO = new IntConstant(0);
@@ -38,6 +42,7 @@ public abstract class Constant extends Atom {
     public final static LongConstant LONG_MIN = new LongConstant(Long.MIN_VALUE);
     public final static LongConstant LONG_MAX = new LongConstant(Long.MAX_VALUE);
 
+    public final static ObjectConstant NULL = new ObjectConstant("null");
 
     public final static LongConstant LONG_ZERO = new LongConstant(0L);
 
@@ -53,8 +58,15 @@ public abstract class Constant extends Atom {
 
     private final static class IntConstant extends Constant {
 
+        int bytes = 4;
+
         IntConstant(int value) {
             super(Types.INT, value);
+        }
+
+        IntConstant(int value, int bytes) {
+            super(Types.INT, value);
+            this.bytes = bytes;
         }
 
         @Override
@@ -63,8 +75,9 @@ public abstract class Constant extends Atom {
         }
 
         @Override
+        @CompilerDirectives.TruffleBoundary
         public String toString() {
-            return "#x" + String.format("%1$08x", getValue());
+            return "#x" + String.format("%1$0" + (bytes * 2) +"x", getValue());
         }
     }
 
@@ -190,6 +203,40 @@ public abstract class Constant extends Atom {
         }
     }
 
+    private final static class ObjectConstant extends Constant {
+
+        ObjectConstant(String value) {
+            super(Types.OBJECT, value);
+        }
+
+        @Override
+        String getValue() {
+            return (String) super.getValue();
+        }
+
+        @Override
+        public String toString() {
+            return getValue();
+        }
+    }
+
+    private final static class KlassConstant extends Constant {
+        KlassConstant(Klass value) {
+            super(Types.KLASS, value);
+        }
+
+        @Override
+        Klass getValue() {
+            return (Klass) super.getValue();
+        }
+
+        @Override
+        public String toString() {
+            return "\"" + (getValue() == null ? "null" : getValue().getTypeAsString()) + "\"";
+        }
+
+    }
+
     private final Object value;
 
     Constant(Types type, Object value) {
@@ -211,6 +258,16 @@ public abstract class Constant extends Atom {
         return new IntConstant(v);
     }
 
+    public static Constant fromConcreteValue(char v) {
+        return new IntConstant(v, 2);
+    }
+    public static Constant fromConcreteValue(byte v) {
+        return new IntConstant(v, 1);
+    }
+    public static Constant fromConcreteValue(short v) {
+        return new IntConstant(v, 2);
+    }
+
     public static Constant fromConcreteValue(long v) {
         return new LongConstant(v);
     }
@@ -225,6 +282,17 @@ public abstract class Constant extends Atom {
 
     public static Constant fromConcreteValue(String s) {
         return new StringConstant(s);
+    }
+
+    public static Constant fromConcreteValue(StaticObject o) {
+        if (StaticObject.isNull(o)) {
+            return new ObjectConstant("null");
+        }
+        return new ObjectConstant("undef-concrete-object");
+    }
+
+    public static Constant fromConcreteValue(Klass v) {
+        return new KlassConstant(v);
     }
 
     public static Constant fromConcreteValue(boolean b) {

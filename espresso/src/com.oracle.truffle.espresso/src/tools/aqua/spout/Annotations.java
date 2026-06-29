@@ -24,9 +24,8 @@
 
 package tools.aqua.spout;
 
-import com.oracle.truffle.espresso.EspressoLanguage;
+import com.oracle.truffle.espresso.impl.Field;
 import com.oracle.truffle.espresso.impl.ObjectKlass;
-import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
 
 import java.util.Arrays;
@@ -73,6 +72,17 @@ public class Annotations {
         return annotation(o.getAnnotations(), -1);
     }
 
+    public static Annotations fieldAnnotation(StaticObject o, Field f) {
+        return annotation(o.getAnnotations(), f.getSlot());
+    }
+
+    public static void setFieldAnnotation(StaticObject o, Field f, Annotations a) {
+        if (!o.hasAnnotations()) {
+            initObjectAnnotations(o);
+        }
+        o.getAnnotations()[f.getSlot()] = a;
+    }
+
     public static void setObjectAnnotation(StaticObject o, Annotations a) {
         if (!o.hasAnnotations()) {
             initObjectAnnotations(o);
@@ -82,7 +92,7 @@ public class Annotations {
 
     public static void initObjectAnnotations(StaticObject o) {
         if (o.hasAnnotations()) return;
-        int lengthAnnotations = ((ObjectKlass) o.getKlass()).getFieldTable().length + 1;
+        int lengthAnnotations = o.getKlass() != null ? ((ObjectKlass) o.getKlass()).getFieldTable().length + 1 : 1;
         Annotations[] annotations = new Annotations[lengthAnnotations];
         o.setAnnotations(annotations);
     }
