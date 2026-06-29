@@ -24,6 +24,7 @@
 
 package tools.aqua.smt;
 
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.espresso.impl.Klass;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
 
@@ -57,8 +58,15 @@ public abstract class Constant extends Atom {
 
     private final static class IntConstant extends Constant {
 
+        int bytes = 4;
+
         IntConstant(int value) {
             super(Types.INT, value);
+        }
+
+        IntConstant(int value, int bytes) {
+            super(Types.INT, value);
+            this.bytes = bytes;
         }
 
         @Override
@@ -67,8 +75,9 @@ public abstract class Constant extends Atom {
         }
 
         @Override
+        @CompilerDirectives.TruffleBoundary
         public String toString() {
-            return "#x" + String.format("%1$08x", getValue());
+            return "#x" + String.format("%1$0" + (bytes * 2) +"x", getValue());
         }
     }
 
@@ -247,6 +256,16 @@ public abstract class Constant extends Atom {
 
     public static Constant fromConcreteValue(int v) {
         return new IntConstant(v);
+    }
+
+    public static Constant fromConcreteValue(char v) {
+        return new IntConstant(v, 2);
+    }
+    public static Constant fromConcreteValue(byte v) {
+        return new IntConstant(v, 1);
+    }
+    public static Constant fromConcreteValue(short v) {
+        return new IntConstant(v, 2);
     }
 
     public static Constant fromConcreteValue(long v) {
