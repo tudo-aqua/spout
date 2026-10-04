@@ -24,6 +24,8 @@
 
 package tools.aqua.spout;
 
+import com.oracle.truffle.espresso.classfile.JavaKind;
+
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.espresso.classfile.descriptors.Signature;
 import com.oracle.truffle.espresso.classfile.descriptors.Symbol;
@@ -73,6 +75,8 @@ public class Config {
     private boolean useObjectFactories = false;
 
     private int maxObjectAnnotationDepth = Integer.MAX_VALUE;
+    /** whether String fields of symbolic objects are annotated (symbolic) or keep their concrete values */
+    private boolean symbolicStringFields = true;
 
     private TaintType taintType = TaintType.OFF;
 
@@ -130,6 +134,7 @@ public class Config {
     void printAnalysisConfig() {
         SPouT.log("Concolic Analysis: " + hasConcolicAnalysis);
         SPouT.log("Concolic Object Max. Annotation Depth: " + maxObjectAnnotationDepth);
+        SPouT.log("Concolic Symbolic String Fields: " + symbolicStringFields);
         SPouT.log("Constructor Summary: " + constructorSummary);
         SPouT.log("Taint Analysis: " + taintType);
         SPouT.log("Seeded Bool Values: " + Arrays.toString(seedsBooleanValues));
@@ -159,6 +164,9 @@ public class Config {
                         break;
                     case "concolic.max.object.annotation.depth":
                         parseMaxObjectDepth(value);
+                        break;
+                    case "concolic.symbolic.string.fields":
+                        symbolicStringFields = Boolean.parseBoolean(value.trim());
                         break;
                     case "concolic.object.factories":
                         parseFactories(value);
@@ -497,8 +505,24 @@ public class Config {
             trace.addElement(new PathCondition(errorExpr, 0,2));
         }
 
-        StaticObject obj = instantiate(po);
-        
+        // Outside of constructor summaries, constructors run with concrete arguments: their effect is described by
+        // the summary of the chosen constructor, not by path conditions. Without pausing, a constructor that reads a
+        // heap object annotated as part of an earlier symbolic object (e.g., a shared singleton such as
+        // ComparableComparator.INSTANCE stored in a field of both objects) records decisions about the earlier
+        // object. These decisions depend on the chosen constructors, which are not decisions themselves, so traces
+        // for different constructors would disagree on the structure of the decision tree.
+        StaticObject obj;
+        if (!constructorSummary) {
+            SPouT.pauseAnalyze();
+        }
+        try {
+            obj = instantiate(po);
+        } finally {
+            if (!constructorSummary) {
+                SPouT.resumeAnalyze();
+            }
+        }
+
         Annotations objectDescription = Annotations.emptyArray();
         objectDescription.set(getConcolicIdx(), symbolicObjectId);
         Annotations.setObjectAnnotation(obj, objectDescription);
@@ -608,6 +632,27 @@ public class Config {
         return new ParsedObjectValue(klass, constructor,  constructorCallparams);
     }
 
+    /**
+     * Symbolic byte, short, and char values carry an int (their value on the operand stack), but arguments of a call
+     * are boxed by their parameter type (see BytecodeNode.initArguments).
+     */
+    private static Object narrow(Object v, JavaKind kind) {
+        if (v instanceof AnnotatedValue av) {
+            return new AnnotatedValue(narrowValue(av.getValue(), kind), av);
+        }
+        return narrowValue(v, kind);
+    }
+
+    private static Object narrowValue(Object v, JavaKind kind) {
+        int i = v instanceof Character c ? c : ((Number) v).intValue();
+        return switch (kind) {
+            case Byte -> (byte) i;
+            case Short -> (short) i;
+            case Char -> (char) i;
+            default -> v;
+        };
+    }
+
     private Object parsePrimitiveValue(String value, PrimitiveKlass klass, Meta meta, boolean b64) {
         if (b64) {
             value = b64decode(value);
@@ -617,13 +662,13 @@ public class Config {
                 return constructorSummary ? SPouT.nextSymbolicBoolean() : Boolean.parseBoolean(value);
             }
             case Byte -> {
-                return constructorSummary ? SPouT.nextSymbolicByte() : Byte.parseByte(value);
+                return constructorSummary ? narrow(SPouT.nextSymbolicByte(), JavaKind.Byte) : Byte.parseByte(value);
             }
             case Short -> {
-                return constructorSummary ? SPouT.nextSymbolicShort() : Short.parseShort(value);
+                return constructorSummary ? narrow(SPouT.nextSymbolicShort(), JavaKind.Short) : Short.parseShort(value);
             }
             case Char -> {
-                return constructorSummary ? SPouT.nextSymbolicChar() : value.charAt(0);
+                return constructorSummary ? narrow(SPouT.nextSymbolicChar(), JavaKind.Char) : value.charAt(0);
             }
             case Int -> {
                 return constructorSummary ? SPouT.nextSymbolicInt() : Integer.parseInt(value);
@@ -893,6 +938,10 @@ public class Config {
 
     public boolean useObjectFactories() {
         return useObjectFactories;
+    }
+
+    public boolean isSymbolicStringFields() {
+        return symbolicStringFields;
     }
 
     public int getMaxObjectAnnotationDepth() {

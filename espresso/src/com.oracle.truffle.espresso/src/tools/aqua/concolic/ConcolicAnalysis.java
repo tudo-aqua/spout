@@ -171,10 +171,23 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return null;
     }
 
+    /**
+     * Elements of an array that are annotated during the initial object annotation. Arrays can be large (e.g. the
+     * buffer of a StringBuilder created with a capacity chosen by the solver: millions of elements, each declared
+     * in the trace); further elements keep their concrete values. The bound is the same in constructor summaries,
+     * so summaries and paths declare the same elements.
+     */
+    private static final int MAX_ANNOTATED_ARRAY_ELEMENTS = 64;
+
     private void annotateArray(StaticObject array, int cIdx, int level, Meta meta, Atom arrayName) {
         // get component type, length, and array annotations
         ArrayKlass aClass = (ArrayKlass) array.getKlass();
         int length = array.length(meta.getLanguage());
+        int annotated = Math.min(length, MAX_ANNOTATED_ARRAY_ELEMENTS);
+        if (annotated < length) {
+            SPouT.losePrecision("Only the first " + annotated + " of " + length
+                    + " array elements are annotated during initial object annotation. May lose precision.", meta);
+        }
         if (!array.hasAnnotations()) {
             array.setAnnotations(new Annotations[length+1]);
         }
@@ -192,7 +205,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         }
         if (aClass.getComponentType().isPrimitive()) {
             // primitive => annotate array
-            for (int j = 0; j < length; j++) {
+            for (int j = 0; j < annotated; j++) {
                 Atom ajVar = getAuxiliaryArrayVariable(aClass.getComponentType(), arrayName, j);
                 trace.addElement(new SymbolDeclaration(ajVar, false /*!config.isConstructorSummary()*/));
                 if (config.isConstructorSummary()) {
@@ -209,13 +222,16 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         } else if (aClass.getComponentType().isArray()) {
             SPouT.notImplementedYet("Array of arrays during initial object annotations not supported", meta );
         } else { // objects
-            for (int j = 0; j < length; j++) {
+            for (int j = 0; j < annotated; j++) {
                 Atom ajVar = getAuxiliaryArrayVariable(aClass.getComponentType(), arrayName, j);
                 StaticObject ajValue = (StaticObject) getArrayValue(array, j, meta);
                 if (ajValue == StaticObject.NULL) {
                     ajValue = StaticObject.createNull(null);
                     Object[] unwrapped = array.unwrap(meta.getLanguage());
                     unwrapped[j] = ajValue;
+                }
+                if (isVmShared(ajValue, meta)) {
+                    continue;
                 }
                 trace.addElement(new SymbolDeclaration(ajVar, false /*!config.isConstructorSummary()*/));
                 AuxiliaryVariable fCls = new AuxiliaryVariable(ajVar + ".cls", STRING);
@@ -239,7 +255,24 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     @CompilerDirectives.TruffleBoundary
+    /**
+     * Objects shared by the whole VM (classes, modules, class loaders) are not annotated: annotations are stored in
+     * the object, so the VM's own uses of the object (e.g. Class.getModule() when printing a stack trace) would record
+     * decisions about the symbolic object that refers to it.
+     */
+    private static boolean isVmShared(StaticObject o, Meta meta) {
+        if (StaticObject.isNull(o)) {
+            return false;
+        }
+        Klass k = o.getKlass();
+        return k == meta.java_lang_Class || k == meta.java_lang_Module || meta.java_lang_ClassLoader.isAssignableFrom(k);
+    }
+
     private boolean skipField(Field field, Meta meta) {
+        if (field.isHidden()) {
+            // VM-internal fields (e.g. the module entry of a Class) do not hold guest objects
+            return true;
+        }
         if (field.getDeclaringKlass() == meta.java_lang_Throwable) {
             SPouT.losePrecision("Skip field of Throwable during initial object annotation. May lose precision.", meta );
             return true;
@@ -297,6 +330,10 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             } else if (field.getKind().isObject()) {
                 StaticObject fObj = field.getObject(obj);
                 if (field.getType() == meta.java_lang_String.getType()) {
+                    if (!config.isSymbolicStringFields()) {
+                        // concolic.symbolic.string.fields=false: String fields keep their concrete values
+                        continue;
+                    }
                     trace.addElement(new SymbolDeclaration(fName, false /*!config.isConstructorSummary()*/));
                     if (config.isConstructorSummary()) {
                         String fValue = meta.toHostString(fObj);
@@ -313,6 +350,9 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                     if (fObj == StaticObject.NULL) {
                         fObj = StaticObject.createNull(null);
                         field.set(obj, fObj);
+                    }
+                    if (isVmShared(fObj, meta)) {
+                        continue;
                     }
                     if (fObj.isArray()) {
                         annotateArray(fObj, cIdx, level+1, meta, fName);
@@ -349,16 +389,19 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                     explanation != null ? explanation : Constant.fromConcreteValue( (boolean) fieldValue));
                 break;
             case Byte:
+                // values on the operand stack (and their annotations) are ints: narrow to the field
                 summary = new ComplexExpression(BVEQ, fieldName,
-                        explanation != null ? explanation : Constant.fromConcreteValue( (byte) fieldValue));
+                        explanation != null ? new ComplexExpression(OperatorComparator.I2B, explanation) : Constant.fromConcreteValue( (byte) fieldValue));
                 break;
             case Short:
+                // values on the operand stack (and their annotations) are ints: narrow to the field
                 summary = new ComplexExpression(BVEQ, fieldName,
-                        explanation != null ? explanation : Constant.fromConcreteValue( (short) fieldValue));
+                        explanation != null ? new ComplexExpression(OperatorComparator.I2S, explanation) : Constant.fromConcreteValue( (short) fieldValue));
                 break;
             case Char:
+                // values on the operand stack (and their annotations) are ints: narrow to the field
                 summary = new ComplexExpression(BVEQ, fieldName,
-                        explanation != null ? explanation : Constant.fromConcreteValue( (char) fieldValue));
+                        explanation != null ? new ComplexExpression(OperatorComparator.I2C, explanation) : Constant.fromConcreteValue( (char) fieldValue));
                 break;
             case Int:
                 summary = new ComplexExpression(BVEQ, fieldName,
@@ -1116,10 +1159,26 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
         // boolean
         if ((a1 == null || Expression.isBoolean(a1)) && (a2 == null || Expression.isBoolean(a2))) {
-            // assume that one is a constant.
+            // expr is the condition under which the branch is not taken (negated below if it is taken)
             if (a1 != null && a2 != null) {
-                CompilerDirectives.transferToInterpreter();
-                throw EspressoError.shouldNotReachHere("non-branching bytecode");
+                // two symbolic booleans, e.g., comparing the boolean fields of two objects
+                Expression equal = new ComplexExpression(BEQUIV, a1, a2);
+                switch (opcode) {
+                    case IF_ICMPEQ:
+                        expr = new ComplexExpression(BNEG, equal);
+                        break;
+                    case IF_ICMPNE:
+                        expr = equal;
+                        break;
+                    default:
+                        CompilerDirectives.transferToInterpreter();
+                        throw EspressoError.shouldNotReachHere("non-branching bytecode");
+                }
+                if (takeBranch) {
+                    expr = new ComplexExpression(BNEG, expr);
+                }
+                trace.addElement(new PathCondition(expr, takeBranch ? FAILURE : SUCCESS, BINARY_SPLIT));
+                return;
             }
 
             expr = a1 != null ? a1 : a2;
@@ -1207,6 +1266,11 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                                StaticObject c,
                                Expression a) {
 
+        if (!(a instanceof Atom)) {
+            // only variables denote objects; e.g. the length annotation (an expression) of an array: (= <length>
+            // null) is ill-typed, record nothing (and keep the annotation: it is the symbolic length)
+            return;
+        }
         if (a instanceof Atom) {
             // todo: we skip logging null checks on class variables here
             //  (as I think they cannot become true and break getClass()....() calls)
@@ -1221,7 +1285,12 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                 SPouT.debug("  annotation ", atom);
                 SPouT.debug("  object", c);
                 SPouT.debug("  take branch", takeBranch);
-                Annotations.setObjectAnnotation(c, null);
+                if (!c.isArray()) {
+                    // for an array, the annotation is its symbolic length, which is kept
+                    Annotations.setObjectAnnotation(c, null);
+                }
+                // e.g. the length annotation of an array: (= <length> null) is ill-typed, record nothing
+                return;
             }
         }
 
@@ -2049,6 +2118,10 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public void checkNull(StaticObject object, boolean isNull, Expression a) {
+        if (!(a instanceof Atom)) {
+            // only variables denote objects (see takeBranchRef1)
+            return;
+        }
         Expression expr = new ComplexExpression(OBJECT_IS_NULL, a, Constant.NULL);
 
         if (a instanceof Atom) {
@@ -2065,7 +2138,12 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                 SPouT.debug("  annotation ", atom);
                 SPouT.debug("  object", object);
                 SPouT.debug("  is null", isNull);
-                Annotations.setObjectAnnotation(object, null);
+                if (!object.isArray()) {
+                    // for an array, the annotation is its symbolic length, which is kept
+                    Annotations.setObjectAnnotation(object, null);
+                }
+                // e.g. the length annotation of an array: (= <length> null) is ill-typed, record nothing
+                return;
             }
         }
 
