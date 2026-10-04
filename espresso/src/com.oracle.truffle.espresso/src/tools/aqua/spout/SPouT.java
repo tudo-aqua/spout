@@ -1152,6 +1152,12 @@ public class SPouT {
         }
 
         Annotations a = AnnotatedVM.getArrayAnnotations(array, cIndex);
+        // the slot of the array reference: the value of a two-slot load (long, double) is annotated in its upper
+        // slot, a stale annotation in the lower slot would be read by later instructions. The array reference is
+        // directly below the index, and the value replaces both (one-slot value: toSlot is the array reference's
+        // slot, two-slot value: toSlot is the index's slot).
+        assert toSlot == fromIndexSlot - 1 || toSlot == fromIndexSlot : "unexpected slots of an array load";
+        AnnotatedVM.popAnnotations(frame, fromIndexSlot - 1);
         AnnotatedVM.putAnnotations(frame, toSlot, a);
     }
 

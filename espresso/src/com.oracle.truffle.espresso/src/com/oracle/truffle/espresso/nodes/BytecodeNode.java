@@ -2144,11 +2144,13 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     putFloat(frame, top - 2, getInterpreterToVM().getArrayFloat(language, index, array, this));
                     break;
                 case LALOAD:
-                    SPouT.getArrayAnnotations(frame, this, curBCI, array, index, top-1, top-2, language);
+                    // the annotation of a two-slot value is kept in its upper slot (cf. SPouT.lmul, LASTORE)
+                    SPouT.getArrayAnnotations(frame, this, curBCI, array, index, top-1, top-1, language);
                     putLong(frame, top - 2, getInterpreterToVM().getArrayLong(language, index, array, this));
                     break;
                 case DALOAD:
-                    SPouT.getArrayAnnotations(frame, this, curBCI, array, index, top-1, top-2, language);
+                    // the annotation of a two-slot value is kept in its upper slot (cf. SPouT.lmul, LASTORE)
+                    SPouT.getArrayAnnotations(frame, this, curBCI, array, index, top-1, top-1, language);
                     putDouble(frame, top - 2, getInterpreterToVM().getArrayDouble(language, index, array, this));
                     break;
                 case AALOAD: putObject(frame, top - 2, getInterpreterToVM().getArrayObject(language, index, array, this));       break;

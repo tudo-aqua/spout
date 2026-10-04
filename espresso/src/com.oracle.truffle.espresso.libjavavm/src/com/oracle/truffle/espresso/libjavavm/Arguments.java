@@ -207,6 +207,9 @@ public final class Arguments {
                             case "concolic.max.object.annotation.depth":
                                 concolicOptions += "concolic.max.object.annotation.depth:" + value + " ";
                                 break;
+                            case "concolic.symbolic.string.fields":
+                                concolicOptions += "concolic.symbolic.string.fields:" + value + " ";
+                                break;
                             case "concolic.execution":
                                 concolicOptions += "concolic.execution:" + value + " ";
                                 break;
