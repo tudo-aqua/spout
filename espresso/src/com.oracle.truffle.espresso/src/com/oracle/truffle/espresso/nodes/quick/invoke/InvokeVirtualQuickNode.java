@@ -41,7 +41,7 @@ public final class InvokeVirtualQuickNode extends InvokeQuickNode {
     @Override
     public int execute(VirtualFrame frame, boolean isContinuationResume) {
         Object[] args = getArguments(frame);
-        nullCheck((StaticObject) args[0]);
+        nullCheckReceiver(args);
         return pushResult(frame, invokeVirtual.execute(args));
     }
 }

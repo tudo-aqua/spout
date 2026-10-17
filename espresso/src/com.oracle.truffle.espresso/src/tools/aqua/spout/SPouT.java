@@ -52,6 +52,8 @@ import tools.aqua.taint.Taint;
 import tools.aqua.witnesses.GWIT;
 
 import java.util.Arrays;
+import java.util.IdentityHashMap;
+import java.util.Map;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
@@ -648,9 +650,109 @@ public class SPouT {
     }
 
     public static void checkNull(StaticObject staticObject, boolean isNull) {
+        checkNull(staticObject, isNull, null);
+    }
+
+    /** @param a the annotation of the slot of the reference */
+    public static void checkNull(StaticObject staticObject, boolean isNull, Annotations a) {
         if (analyze) {
-            analysis.checkNull(staticObject, isNull, Annotations.objectAnnotation(staticObject));
+            analysis.checkNull(staticObject, isNull, refAnnotations(staticObject, a));
         }
+    }
+
+    // --------------------------------------------------------------------------
+    //
+    // heap model: references carry the terms of the objects in the annotations of their slots (see HeapModel)
+
+    /**
+     * Annotation of a reference: the annotation of its slot if it has a term, the object annotation otherwise (the
+     * symbolic value of a string, the length of an array, the identity of a nondet object, or the first term by
+     * which the object was read).
+     */
+    @CompilerDirectives.TruffleBoundary
+    public static Annotations refAnnotations(StaticObject o, Annotations slot) {
+        Annotations oa = Annotations.objectAnnotation(o);
+        if (slot == null || config == null || !config.hasConcolicAnalysis()
+                || Annotations.annotation(slot, config.getConcolicIdx()) == null) {
+            return oa;
+        }
+        if (oa == null) {
+            return slot;
+        }
+        Object[] values = oa.getAnnotations().clone();
+        values[config.getConcolicIdx()] = Annotations.annotation(slot, config.getConcolicIdx());
+        return Annotations.create(values);
+    }
+
+    private static boolean hasHeapModel() {
+        return analyze && config.hasConcolicAnalysis();
+    }
+
+    /** annotation of a field read through a reference with annotation {@code receiverA} */
+    @CompilerDirectives.TruffleBoundary
+    public static Annotations getFieldAnnotation(StaticObject receiver, Annotations receiverA, Field f) {
+        Annotations slot = AnnotatedVM.getFieldAnnotation(receiver, f);
+        if (!hasHeapModel() || f.isStatic()) {
+            return slot;
+        }
+        return config.getConcolicAnalysis().getHeap().readField(receiver, refAnnotations(receiver, receiverA), f, slot,
+                getMeta());
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static void setFieldAnnotation(StaticObject receiver, Annotations receiverA, Field f, Annotations value) {
+        if (hasHeapModel() && !f.isStatic()) {
+            config.getConcolicAnalysis().getHeap().writeField(receiver, refAnnotations(receiver, receiverA), f, value);
+        }
+        AnnotatedVM.setFieldAnnotation(receiver, f, value);
+    }
+
+    /** annotations of the reference arguments of calls, from popping them until the callee initializes its frame */
+    private static final Map<Object[], Annotations[]> argumentAnnotations = new IdentityHashMap<>();
+
+    @CompilerDirectives.TruffleBoundary
+    public static void setArgumentAnnotations(Object[] args, Annotations[] annotations) {
+        if (!analyze) return;
+        synchronized (argumentAnnotations) {
+            if (argumentAnnotations.size() > 10_000) {
+                // left by calls of native or substituted methods
+                argumentAnnotations.clear();
+            }
+            argumentAnnotations.put(args, annotations);
+        }
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static Annotations[] takeArgumentAnnotations(Object[] args) {
+        synchronized (argumentAnnotations) {
+            return argumentAnnotations.isEmpty() ? null : argumentAnnotations.remove(args);
+        }
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static Annotations argumentAnnotation(Object[] args, int i) {
+        synchronized (argumentAnnotations) {
+            Annotations[] a = argumentAnnotations.isEmpty() ? null : argumentAnnotations.get(args);
+            return a != null ? a[i] : null;
+        }
+    }
+
+    /** the reference returned last and its annotation, until the caller pushes it */
+    private static final ThreadLocal<Object[]> returned = new ThreadLocal<>();
+
+    @CompilerDirectives.TruffleBoundary
+    public static void setReturned(Object value, Annotations a) {
+        if (!analyze) return;
+        returned.set(a == null ? null : new Object[]{value, a});
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static Annotations takeReturned(Object value) {
+        if (!analyze) return null;
+        Object[] r = returned.get();
+        if (r == null) return null;
+        returned.set(null);
+        return r[0] == value ? (Annotations) r[1] : null;
     }
 
 
@@ -1124,7 +1226,21 @@ public class SPouT {
     }
 
     public static void arrayLength(VirtualFrame frame, int top, StaticObject arr) {
-        if (!analyze || !arr.hasAnnotations()) return;
+        if (!analyze) return;
+        if (config.hasConcolicAnalysis()) {
+            Expression length = config.getConcolicAnalysis().getHeap().arrayLength(arr,
+                    AnnotatedVM.peekAnnotations(frame, top - 1));
+            if (length != null) {
+                Annotations a = Annotations.create();
+                a.set(config.getConcolicIdx(), length);
+                AnnotatedVM.putAnnotations(frame, top - 1, a);
+                return;
+            }
+        }
+        if (!arr.hasAnnotations()) {
+            AnnotatedVM.putAnnotations(frame, top - 1, null);
+            return;
+        }
         Annotations[] annotations = arr.getAnnotations();
         Annotations aLength = annotations[annotations.length - 1];
         AnnotatedVM.putAnnotations(frame, top - 1, aLength);
@@ -1135,9 +1251,20 @@ public class SPouT {
         if (!analyze) return;
 
         Annotations aIndex = AnnotatedVM.popAnnotations(frame, fromIndexSlot);
+        // the slot of the array reference: the value of a two-slot load (long, double) is annotated in its upper
+        // slot, a stale annotation in the lower slot would be read by later instructions. The array reference is
+        // directly below the index, and the value replaces both (one-slot value: toSlot is the array reference's
+        // slot, two-slot value: toSlot is the index's slot).
+        assert toSlot == fromIndexSlot - 1 || toSlot == fromIndexSlot : "unexpected slots of an array load";
+        Annotations aArray = refAnnotations(array, AnnotatedVM.popAnnotations(frame, fromIndexSlot - 1));
+        Expression sIndex = null;
         if (analyze && config.hasConcolicAnalysis()) {
-            config.getConcolicAnalysis().checkArrayAccessPathConstraint(
-                    array, cIndex, Annotations.annotation(aIndex, config.getConcolicIdx()), lang);
+            sIndex = Annotations.annotation(aIndex, config.getConcolicIdx());
+            if (sIndex != null) {
+                sIndex = config.getConcolicAnalysis().convertCharToInt(sIndex);
+            }
+            config.getConcolicAnalysis().checkArrayAccessPathConstraint(array, cIndex, sIndex,
+                    config.getConcolicAnalysis().getHeap().arrayLength(array, aArray), lang);
         }
 
         if (analyze && config.hasTaintAnalysis() && array.hasAnnotations()) {
@@ -1152,12 +1279,9 @@ public class SPouT {
         }
 
         Annotations a = AnnotatedVM.getArrayAnnotations(array, cIndex);
-        // the slot of the array reference: the value of a two-slot load (long, double) is annotated in its upper
-        // slot, a stale annotation in the lower slot would be read by later instructions. The array reference is
-        // directly below the index, and the value replaces both (one-slot value: toSlot is the array reference's
-        // slot, two-slot value: toSlot is the index's slot).
-        assert toSlot == fromIndexSlot - 1 || toSlot == fromIndexSlot : "unexpected slots of an array load";
-        AnnotatedVM.popAnnotations(frame, fromIndexSlot - 1);
+        if (analyze && config.hasConcolicAnalysis()) {
+            a = config.getConcolicAnalysis().getHeap().readElement(array, aArray, cIndex, sIndex, a, getMeta());
+        }
         AnnotatedVM.putAnnotations(frame, toSlot, a);
     }
 
@@ -1166,9 +1290,15 @@ public class SPouT {
         if (!analyze) return;
 
         Annotations aIndex = AnnotatedVM.popAnnotations(frame, fromIndexSlot);
+        Annotations aArray = refAnnotations(array, AnnotatedVM.popAnnotations(frame, fromIndexSlot - 1));
+        Expression sIndex = null;
         if (analyze && config.hasConcolicAnalysis()) {
-            config.getConcolicAnalysis().checkArrayAccessPathConstraint(
-                    array, cIndex, Annotations.annotation(aIndex, config.getConcolicIdx()), lang);
+            sIndex = Annotations.annotation(aIndex, config.getConcolicIdx());
+            if (sIndex != null) {
+                sIndex = config.getConcolicAnalysis().convertCharToInt(sIndex);
+            }
+            config.getConcolicAnalysis().checkArrayAccessPathConstraint(array, cIndex, sIndex,
+                    config.getConcolicAnalysis().getHeap().arrayLength(array, aArray), lang);
         }
 
         if (analyze && config.hasTaintAnalysis() && array.hasAnnotations()) {
@@ -1183,6 +1313,9 @@ public class SPouT {
         }
 
         Annotations aValue = AnnotatedVM.popAnnotations(frame, fromValueSlot);
+        if (analyze && config.hasConcolicAnalysis()) {
+            config.getConcolicAnalysis().getHeap().writeElement(array, aArray, cIndex, sIndex, aValue);
+        }
         AnnotatedVM.setArrayAnnotations(array, cIndex, aValue, lang);
     }
 
@@ -1195,8 +1328,10 @@ public class SPouT {
                                  BytecodeNode bcn,
                                  int bci,
                                  boolean isInstance) {
-        if (!analyze || !obj.hasAnnotations()) return;
-        analysis.checkcast(frame, bcn, bci, obj, Annotations.objectAnnotation(obj), typeToCast, isInstance);
+        if (!analyze) return;
+        Annotations a = refAnnotations(obj, AnnotatedVM.peekAnnotations(frame, top));
+        if (a == null) return;
+        analysis.checkcast(frame, bcn, bci, obj, a, typeToCast, isInstance);
     }
 
     public static boolean takeBranchPrimitive1(VirtualFrame frame, int top, int opcode, BytecodeNode bcn, int bci) {
@@ -1307,6 +1442,16 @@ public class SPouT {
                                          int bci,
                                          StaticObject operand,
                                          int opcode) {
+        return takeBranchRef1(frame, bcn, bci, null, operand, opcode);
+    }
+
+    /** @param a the annotation of the slot of the operand */
+    public static boolean takeBranchRef1(VirtualFrame frame,
+                                         BytecodeNode bcn,
+                                         int bci,
+                                         Annotations a,
+                                         StaticObject operand,
+                                         int opcode) {
         assert IFNULL <= opcode && opcode <= IFNONNULL;
         // @formatter:off
         boolean result;
@@ -1319,8 +1464,7 @@ public class SPouT {
         }
         // @formatter:on
         if (analyze) {
-            analysis.takeBranchRef1(frame, bcn, bci, opcode, result, operand,
-                    Annotations.objectAnnotation(operand));
+            analysis.takeBranchRef1(frame, bcn, bci, opcode, result, operand, refAnnotations(operand, a));
         }
         return result;
     }
@@ -1358,6 +1502,18 @@ public class SPouT {
                                          StaticObject operand1,
                                          StaticObject operand2,
                                          int opcode) {
+        return takeBranchRef2(frame, bcn, bci, null, null, operand1, operand2, opcode);
+    }
+
+    /** @param a1 the annotation of the slot of operand1, a2 of operand2 */
+    public static boolean takeBranchRef2(VirtualFrame frame,
+                                         BytecodeNode bcn,
+                                         int bci,
+                                         Annotations a1,
+                                         Annotations a2,
+                                         StaticObject operand1,
+                                         StaticObject operand2,
+                                         int opcode) {
         assert IF_ACMPEQ <= opcode && opcode <= IF_ACMPNE;
         boolean result;
         // @formatter:off
@@ -1373,7 +1529,7 @@ public class SPouT {
 
         if (analyze) {
             analysis.takeBranchRef2(frame, bcn, bci, opcode, result, operand1, operand2,
-                    Annotations.objectAnnotation(operand1), Annotations.objectAnnotation(operand2));
+                    refAnnotations(operand1, a1), refAnnotations(operand2, a2));
 
         }
         return result;
@@ -1399,8 +1555,14 @@ public class SPouT {
     // Objects
 
     public static void instanceOf(VirtualFrame frame, StaticObject object, boolean isInstance, int top, Klass typeToCheck) {
-        if (!analyze || !object.hasAnnotations()) return;
-        Annotations a = analysis.instanceOf(object, Annotations.objectAnnotation(object), typeToCheck, isInstance);
+        if (!analyze) return;
+        // the slot of the object, replaced by the result
+        Annotations ao = refAnnotations(object, AnnotatedVM.peekAnnotations(frame, top));
+        if (ao == null) {
+            AnnotatedVM.putAnnotations(frame, top, null);
+            return;
+        }
+        Annotations a = analysis.instanceOf(object, ao, typeToCheck, isInstance);
         AnnotatedVM.putAnnotations(frame, top, a);
     }
 
@@ -1424,6 +1586,16 @@ public class SPouT {
         if (!analyze || !object.hasAnnotations()) return;
         //if (object.hasAnnotations()) logi(i);
         analysis.polymorphicMethodAccess(object, m, Annotations.objectAnnotation(object));
+    }
+
+    /** dispatch on the receiver {@code args[0]} of a call */
+    @CompilerDirectives.TruffleBoundary
+    public static void polymorphicMethodAccess(Object[] args, Method m, int i) {
+        if (!analyze) return;
+        StaticObject object = (StaticObject) args[0];
+        Annotations a = refAnnotations(object, argumentAnnotation(args, 0));
+        if (a == null) return;
+        analysis.polymorphicMethodAccess(object, m, a);
     }
 
     @CompilerDirectives.TruffleBoundary

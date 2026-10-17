@@ -26,6 +26,8 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.espresso.classfile.descriptors.SignatureSymbols;
 import com.oracle.truffle.espresso.impl.Method;
 import com.oracle.truffle.espresso.nodes.EspressoFrame;
+import tools.aqua.spout.AnnotatedVM;
+import tools.aqua.spout.SPouT;
 import com.oracle.truffle.espresso.nodes.quick.QuickNode;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
 
@@ -102,6 +104,8 @@ public abstract class InvokeQuickNode extends QuickNode {
     public final int pushResult(VirtualFrame frame, StaticObject result) {
         getBytecodeNode().checkNoForeignObjectAssumption(result);
         EspressoFrame.putObject(frame, resultAt, result);
+        // the term of the returned reference (see SPouT.setReturned)
+        AnnotatedVM.putAnnotations(frame, resultAt, SPouT.takeReturned(result));
         return stackEffect;
     }
 
@@ -110,6 +114,10 @@ public abstract class InvokeQuickNode extends QuickNode {
             getBytecodeNode().checkNoForeignObjectAssumption((StaticObject) result);
         }
         EspressoFrame.putKind(frame, resultAt, result, method.getMethod().getReturnKind());
+        if (!returnsPrimitive && method.getMethod().getReturnKind().isObject()) {
+            // the term of the returned reference (see SPouT.setReturned)
+            AnnotatedVM.putAnnotations(frame, resultAt, SPouT.takeReturned(result));
+        }
         return stackEffect;
     }
 

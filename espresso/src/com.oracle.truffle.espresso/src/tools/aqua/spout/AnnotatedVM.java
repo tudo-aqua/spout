@@ -68,6 +68,18 @@ public class AnnotatedVM {
         annotations[slot - VALUES_START] = value;
     }
 
+    /**
+     * Removes the annotation of a stack slot to which a reference without annotation is pushed: references carry
+     * the terms of objects in the annotations of their slots, a stale annotation would be taken for the term of
+     * the new reference (or of a primitive value pushed to the slot later).
+     */
+    public static void clearAnnotations(Frame frame, int slot) {
+        Object annotations = frame.getObject(ANNOTATION_SLOT);
+        if (annotations instanceof Annotations[] a && slot - VALUES_START >= 0 && slot - VALUES_START < a.length) {
+            a[slot - VALUES_START] = null;
+        }
+    }
+
     public static Annotations getLocalAnnotations(Frame frame, int slot) {
         Annotations[] annotations = getAnnotations(frame);
         Annotations result = annotations[slot];
@@ -169,9 +181,7 @@ public class AnnotatedVM {
 
     public static void copy(Frame frame, int from, int to) {
         Annotations[] stack = getAnnotations(frame);
-        if (stack[from - VALUES_START] != null) {
-            stack[to - VALUES_START] = new Annotations(stack[from - VALUES_START]);
-        }
+        stack[to - VALUES_START] = stack[from - VALUES_START] != null ? new Annotations(stack[from - VALUES_START]) : null;
     }
 
     public static void swap(Frame frame, int from, int to) {

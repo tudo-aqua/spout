@@ -42,6 +42,7 @@ import com.oracle.truffle.espresso.vm.continuation.HostFrameRecord;
 import tools.aqua.spout.AnnotatedVM;
 import tools.aqua.spout.AnnotatedValue;
 import tools.aqua.spout.Annotations;
+import tools.aqua.spout.SPouT;
 
 /**
  * Exposes accessors to the Espresso frame e.g. operand stack, locals and current BCI.
@@ -227,6 +228,7 @@ public final class EspressoFrame {
         assert slot >= 0;
         assert value != null;
         frame.setObjectStatic(slot, value);
+        AnnotatedVM.clearAnnotations(frame, slot);
     }
 
     public static void putInt(Frame frame, int slot, int value) {
@@ -380,6 +382,8 @@ public final class EspressoFrame {
         CompilerAsserts.partialEvaluationConstant(signature);
         CompilerAsserts.partialEvaluationConstant(hasReceiver);
 
+        // annotations of reference arguments (terms of objects), passed to the callee by SPouT
+        Annotations[] refAnnotations = null;
         int argAt = top - 1;
         for (int i = argCount - 1; i >= 0; --i) {
             Symbol<Type> argType = SignatureSymbols.parameterType(signature, i);
@@ -396,7 +400,13 @@ public final class EspressoFrame {
                 case 'D' : args[i + extraParam] = (a == null) ? popDouble(frame, argAt) : new AnnotatedValue(popDouble(frame, argAt) , a); --argAt; break;
 
                 case '[' : // fall through
-                case 'L' : args[i + extraParam] = popObject(frame, argAt);      break;
+                case 'L' :
+                    args[i + extraParam] = popObject(frame, argAt);
+                    if (a != null) {
+                        if (refAnnotations == null) refAnnotations = new Annotations[args.length];
+                        refAnnotations[i + extraParam] = a;
+                    }
+                    break;
                 default  :
                     CompilerDirectives.transferToInterpreterAndInvalidate();
                     throw EspressoError.shouldNotReachHere();
@@ -406,7 +416,15 @@ public final class EspressoFrame {
 
         }
         if (hasReceiver) {
+            Annotations a = AnnotatedVM.popAnnotations(frame, argAt);
             args[0] = popObject(frame, argAt);
+            if (a != null) {
+                if (refAnnotations == null) refAnnotations = new Annotations[args.length];
+                refAnnotations[0] = a;
+            }
+        }
+        if (refAnnotations != null) {
+            SPouT.setArgumentAnnotations(args, refAnnotations);
         }
         return args;
     }
