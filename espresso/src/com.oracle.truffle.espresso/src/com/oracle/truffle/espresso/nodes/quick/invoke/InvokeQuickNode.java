@@ -82,26 +82,43 @@ public abstract class InvokeQuickNode extends QuickNode {
     }
 
     public final int pushResult(VirtualFrame frame, int result) {
+        clearArgumentAnnotations(frame);
         EspressoFrame.putInt(frame, resultAt, result);
         return stackEffect;
     }
 
     public final int pushResult(VirtualFrame frame, long result) {
+        clearArgumentAnnotations(frame);
         EspressoFrame.putLong(frame, resultAt, result);
         return stackEffect;
     }
 
     public final int pushResult(VirtualFrame frame, float result) {
+        clearArgumentAnnotations(frame);
         EspressoFrame.putFloat(frame, resultAt, result);
         return stackEffect;
     }
 
     public final int pushResult(VirtualFrame frame, double result) {
+        clearArgumentAnnotations(frame);
         EspressoFrame.putDouble(frame, resultAt, result);
         return stackEffect;
     }
 
+    /**
+     * Removes the annotations of the argument slots (and of the slots of the result): nodes that do not pop the
+     * arguments (e.g. substitutions inlined in the bytecode) would leave the term of a reference argument in the slot
+     * of the result.
+     */
+    private void clearArgumentAnnotations(VirtualFrame frame) {
+        int end = Math.max(top, resultAt + 2);
+        for (int slot = resultAt; slot < end; slot++) {
+            AnnotatedVM.clearAnnotations(frame, slot);
+        }
+    }
+
     public final int pushResult(VirtualFrame frame, StaticObject result) {
+        clearArgumentAnnotations(frame);
         getBytecodeNode().checkNoForeignObjectAssumption(result);
         EspressoFrame.putObject(frame, resultAt, result);
         // the term of the returned reference (see SPouT.setReturned)
@@ -110,6 +127,7 @@ public abstract class InvokeQuickNode extends QuickNode {
     }
 
     public final int pushResult(VirtualFrame frame, Object result) {
+        clearArgumentAnnotations(frame);
         if (!returnsPrimitive) {
             getBytecodeNode().checkNoForeignObjectAssumption((StaticObject) result);
         }
