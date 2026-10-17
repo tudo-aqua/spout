@@ -737,6 +737,77 @@ public class SPouT {
         }
     }
 
+    /**
+     * Arguments of the substituted methods being executed (innermost last) with the annotations of their slots: the
+     * substitutions of string methods find the terms of their string arguments here (see {@link #stringContent}).
+     */
+    private static final ThreadLocal<java.util.ArrayDeque<Object[]>> calls =
+            ThreadLocal.withInitial(java.util.ArrayDeque::new);
+
+    /** @return a token for {@link #exitCall}, {@code null} if the arguments carry no annotations */
+    @CompilerDirectives.TruffleBoundary
+    public static Object enterCall(Object[] args) {
+        if (!analyze) return null;
+        return enterCall(args, takeArgumentAnnotations(args));
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static Object enterCall(Object[] args, Annotations[] annotations) {
+        if (annotations == null) return null;
+        Object[] call = {args, annotations};
+        calls.get().push(call);
+        return call;
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static void exitCall(Object token) {
+        if (token != null) {
+            calls.get().remove(token);
+        }
+    }
+
+    /**
+     * The annotations of the content of a string: {@code (str.val t)} if the string is an argument of the current
+     * substituted method and its reference has the term {@code t}, the object annotation otherwise (the content of a
+     * string computed by the program, or of a nondet string).
+     */
+    @CompilerDirectives.TruffleBoundary
+    public static Annotations stringContent(StaticObject s) {
+        Annotations oa = Annotations.annotation(s.getAnnotations(), -1);
+        if (!analyze || config == null || !config.hasConcolicAnalysis() || StaticObject.isNull(s)
+                || s.getKlass() != getMeta().java_lang_String) {
+            return oa;
+        }
+        Object[] call = calls.get().peek();
+        if (call == null) {
+            return oa;
+        }
+        Object[] args = (Object[]) call[0];
+        Annotations[] annotations = (Annotations[]) call[1];
+        for (int i = 0; i < args.length && i < annotations.length; i++) {
+            if (args[i] == s) {
+                Object t = Annotations.annotation(annotations[i], config.getConcolicIdx());
+                if (tools.aqua.concolic.HeapModel.isObjectTerm(t)) {
+                    Object[] values = oa != null ? oa.getAnnotations().clone() : Annotations.create().getAnnotations();
+                    values[config.getConcolicIdx()] = config.getConcolicAnalysis().getHeap().contentTerm((Expression) t);
+                    return Annotations.create(values);
+                }
+            }
+        }
+        return oa;
+    }
+
+    /** @return whether the string has annotations (of any analysis), also by the term of its reference */
+    public static boolean hasStringAnnotations(StaticObject s) {
+        return s.hasAnnotations() || hasSymbolicContent(s);
+    }
+
+    /** @return whether the content of the string is symbolic */
+    public static boolean hasSymbolicContent(StaticObject s) {
+        return config != null && config.hasConcolicAnalysis()
+                && Annotations.annotation(stringContent(s), config.getConcolicIdx()) != null;
+    }
+
     /** the reference returned last and its annotation, until the caller pushes it */
     private static final ThreadLocal<Object[]> returned = new ThreadLocal<>();
 
@@ -1786,13 +1857,13 @@ public class SPouT {
         String concreteSelf = meta.toHostString(self);
         String other = meta.toHostString(s);
         boolean concreteRes = concreteSelf.contains(other);
-        if (!self.hasAnnotations() && !s.hasAnnotations() || !analyze) {
+        if (!hasStringAnnotations(self) && !hasStringAnnotations(s) || !analyze) {
             return concreteRes;
         }
         Annotations a = analysis.stringContains(concreteSelf,
                 other,
-                Annotations.annotation(self.getAnnotations(), -1),
-                Annotations.annotation(s.getAnnotations(), -1));
+                stringContent(self),
+                stringContent(s));
         return new AnnotatedValue(concreteRes, a);
     }
 
@@ -1818,8 +1889,9 @@ public class SPouT {
                 f.setInt(self, hash.getInt(other));
             }
         }
-        if (other.hasAnnotations()) {
-            self.setAnnotations(other.getAnnotations());
+        Annotations content = stringContent(other);
+        if (content != null) {
+            setStringAnnotations(self, content);
         }
     }
 
@@ -1828,21 +1900,19 @@ public class SPouT {
         String cSelf = meta.toHostString(self);
         String cOther = meta.toHostString(other);
         int concreteResult = cSelf.compareTo(cOther);
-        if (!analyze || !self.hasAnnotations() && !other.hasAnnotations()) {
+        if (!analyze || !hasStringAnnotations(self) && !hasStringAnnotations(other)) {
             return concreteResult;
         }
         Annotations a = analysis.stringCompareTo(cSelf, cOther,
-                Annotations.annotation(self.getAnnotations(), -1),
-                Annotations.annotation(other.getAnnotations(), -1));
+                stringContent(self),
+                stringContent(other));
         return new AnnotatedValue(concreteResult, a);
     }
 
 
     public static @JavaType(internalName = "I") Object stringCompareToIgnoreCase(@JavaType(String.class) StaticObject self, @JavaType(String.class) StaticObject other, @Inject Meta meta) {
-        boolean isSelfSymbolic = self.hasAnnotations()
-                && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
-        boolean isOtherSymbolic = other.hasAnnotations()
-                && other.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
+        boolean isSelfSymbolic = hasSymbolicContent(self);
+        boolean isOtherSymbolic = hasSymbolicContent(other);
         if (isSelfSymbolic || isOtherSymbolic) {losePrecision("StringCompareToIgnoreCase is not yet symobolically implemented", meta);
         return 0;}
         return meta.toHostString(self).compareToIgnoreCase(meta.toHostString(other));
@@ -1851,10 +1921,10 @@ public class SPouT {
     @CompilerDirectives.TruffleBoundary
     public static Object stringLength(StaticObject self, Meta meta) {
         int length = meta.toHostString(self).length();
-        if (!analyze || !self.hasAnnotations()) {
+        if (!analyze || !hasStringAnnotations(self)) {
             return length;
         }
-        Annotations aLength = analysis.stringLength(length, Annotations.annotation(self.getAnnotations(), -1));
+        Annotations aLength = analysis.stringLength(length, stringContent(self));
         return aLength != null ? new AnnotatedValue(length, aLength) : length;
     }
 
@@ -1863,13 +1933,13 @@ public class SPouT {
         String concreteSelf = meta.toHostString(self);
         String concreteOther = meta.toHostString(other);
         StaticObject result = meta.toGuestString(concreteSelf.concat(concreteOther));
-        if (!analyze || !self.hasAnnotations() && !other.hasAnnotations()) {
+        if (!analyze || !hasStringAnnotations(self) && !hasStringAnnotations(other)) {
             return result;
         }
         Annotations a = analysis.stringConcat(concreteSelf,
                 concreteOther,
-                Annotations.annotation(self.getAnnotations(), -1),
-                Annotations.annotation(other.getAnnotations(), -1));
+                stringContent(self),
+                stringContent(other));
         return setStringAnnotations(result, a);
 
     }
@@ -1879,7 +1949,7 @@ public class SPouT {
         String cSelf = meta.toHostString(self);
         String cOther = meta.toHostString(other);
         boolean areEqual = cSelf.equals(cOther);
-        if (!analyze || !self.hasAnnotations() && !other.hasAnnotations()) {
+        if (!analyze || !hasStringAnnotations(self) && !hasStringAnnotations(other)) {
             return areEqual;
         }
         Annotations a = analysis.stringEquals(cSelf,
@@ -2026,10 +2096,8 @@ public class SPouT {
         clen = (int) AnnotatedValue.value(len);
         boolean cres = meta.toHostString(self).regionMatches(ignore, ctoffset, meta.toHostString(other), cooffset, clen);
         if (analyze && config.hasConcolicAnalysis()) {
-            boolean isSelfSymbolic = self.hasAnnotations() && self.getAnnotations()[self.getAnnotations().length - 1] != null
-                    && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
-            boolean isOtherSymbolic = other.hasAnnotations() && other.getAnnotations()[self.getAnnotations().length - 1] != null
-                    && other.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
+            boolean isSelfSymbolic = hasSymbolicContent(self);
+            boolean isOtherSymbolic = hasSymbolicContent(other);
             if ((isSelfSymbolic || isOtherSymbolic) && analyze && config.hasConcolicAnalysis()) {
                 config.getConcolicAnalysis().regionMatches(self, other, ignore, ctoffset, cooffset, clen, cres, meta);
             }
@@ -2219,9 +2287,9 @@ public class SPouT {
     public static void stringBuxxGetChars(StaticObject self, Object srcBegin, Object srcEnd, StaticObject dst, Object dstBegin, Meta meta) {
         if (analyze && config.hasConcolicAnalysis() && AnnotatedValue.annotation(AnnotatedValue.svalue(srcBegin), config.getConcolicIdx()) != null
                 || AnnotatedValue.annotation(AnnotatedValue.svalue(srcEnd), config.getConcolicIdx()) != null
-                || config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(dst)
+                || config.hasConcolicAnalysis() && hasSymbolicContent(dst)
                 || AnnotatedValue.annotation(AnnotatedValue.svalue(dstBegin), config.getConcolicIdx()) != null
-                || config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(self)) {
+                || config.hasConcolicAnalysis() && hasSymbolicContent(self)) {
             SPouT.losePrecision("symbolic getChars is not supported", meta);
             srcBegin = AnnotatedValue.value(srcBegin);
             srcEnd = AnnotatedValue.value(srcEnd);
@@ -2426,8 +2494,7 @@ public class SPouT {
     }
 
     public static boolean stringIsEmpty(@JavaType(String.class) StaticObject self, @Inject Meta meta) {
-        boolean isSelfSymbolic = self.hasAnnotations()
-                && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
+        boolean isSelfSymbolic = hasSymbolicContent(self);
         if (isSelfSymbolic) {
             losePrecision("String.isEmpty() is not symbolically implemented yet", meta);
             return false;
@@ -2438,8 +2505,7 @@ public class SPouT {
 
     public static Object stringIndexOfIntInt(StaticObject self, Object cp, Object start, Meta meta) {
         if(analyze && config.hasConcolicAnalysis()) {
-            boolean isSelfSymbolic = self.hasAnnotations()
-                    && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
+            boolean isSelfSymbolic = hasSymbolicContent(self);
             boolean isCpSymbolic = AnnotatedValue.svalue(cp) != null && AnnotatedValue.svalue(cp).getAnnotations()[config.getConcolicIdx()] != null;
             boolean isStartSymbolic = AnnotatedValue.svalue(start) != null && AnnotatedValue.svalue(start).getAnnotations()[config.getConcolicIdx()] != null;
             if(isSelfSymbolic || isCpSymbolic ||isStartSymbolic) {
@@ -2484,10 +2550,8 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static Object split(StaticObject self, StaticObject regex, Meta meta) {
-        boolean isSelfSymbolic = self.hasAnnotations()
-                && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
-        boolean isRegexSymbolic = regex.hasAnnotations()
-                && regex.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
+        boolean isSelfSymbolic = hasSymbolicContent(self);
+        boolean isRegexSymbolic = hasSymbolicContent(regex);
 
         if (isSelfSymbolic || isRegexSymbolic) {
             losePrecision("Cannot split symbolic strings yet", meta);
@@ -2590,7 +2654,7 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static double parseDouble(StaticObject s, Meta meta) {
-        if (analyze && config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(s)) {
+        if (analyze && config.hasConcolicAnalysis() && hasSymbolicContent(s)) {
             losePrecision("Concolic type conversion from string to double is not supported", meta);
         }
         return Double.parseDouble(meta.toHostString(s));
@@ -2598,7 +2662,7 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static float parseFloat(StaticObject s, Meta meta) {
-        if (analyze && config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(s)) {
+        if (analyze && config.hasConcolicAnalysis() && hasSymbolicContent(s)) {
             losePrecision("Concolic type conversion from string to float is not supported", meta);
         }
         return Float.parseFloat(meta.toHostString(s));
@@ -2606,7 +2670,7 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static int parseInt(StaticObject s, Meta meta) {
-        if (analyze && config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(s)) {
+        if (analyze && config.hasConcolicAnalysis() && hasSymbolicContent(s)) {
             losePrecision("Concolic type conversion from string to int is not supported", meta);
         }
         return Integer.parseInt(meta.toHostString(s));
@@ -2675,21 +2739,12 @@ public class SPouT {
     }
 
     private static Annotations getStringAnnotations(StaticObject self) {
-        return Annotations.annotation(self.getAnnotations(), -1);
+        return stringContent(self);
     }
 
 
     private static boolean hasConcolicAnnotations(StaticObject v) {
-        //return v.hasAnnotations() && config.hasConcolicAnalysis() && v.getAnnotations()[config.getConcolicIdx()] != null;
-        Annotations[] stringAnnotation = v.getAnnotations();
-        if (stringAnnotation != null) {
-            Annotations annotations = stringAnnotation[stringAnnotation.length - 1];
-            if (annotations != null) {
-                return annotations.getAnnotations()[config.getConcolicIdx()] != null;
-            }
-            //FIXME: it can happen that no length annotation is present. Not sure if this is expected?
-        }
-        return false;
+        return hasSymbolicContent(v);
     }
 
     public static void makeConcatWithConstantsSymbolically(Object result, Object[] args, Meta meta) {

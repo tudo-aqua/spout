@@ -1384,9 +1384,9 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     private ConvRes convertArgToExpression(Object arg) {
         if (arg instanceof StaticObject) {
             StaticObject so = (StaticObject) arg;
-            Annotations[] a = so.getAnnotations();
-            return a != null && a[a.length - 1] != null && a[a.length - 1].getAnnotations()[config.getConcolicIdx()] != null ?
-                    new ConvRes((Expression) a[a.length - 1].getAnnotations()[config.getConcolicIdx()], true) :
+            Expression content = Annotations.annotation(SPouT.stringContent(so), config.getConcolicIdx());
+            return content != null ?
+                    new ConvRes(content, true) :
                     new ConvRes(Constant.fromConcreteValue(so.toString()), false);
         } else if (arg instanceof AnnotatedValue) {
             Object[] a = ((AnnotatedValue) arg).getAnnotations();
@@ -1586,10 +1586,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     public Object regionMatches(StaticObject self, StaticObject other, boolean ignore, int ctoffset, int cooffset, int clen, boolean cRes, Meta meta) {
         String cSelf = meta.toHostString(self);
         String cOther = meta.toHostString(other);
-        boolean isSelfSymbolic = self.hasAnnotations()
-                && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
-        boolean isOtherSymbolic = other.hasAnnotations()
-                && other.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
+        boolean isSelfSymbolic = SPouT.hasSymbolicContent(self);
+        boolean isOtherSymbolic = SPouT.hasSymbolicContent(other);
         boolean boundsCheck =
                 evaluateBoundRegionMatches(
                         cooffset,
@@ -1728,11 +1726,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     private Expression makeStringToExpr(StaticObject self, Meta meta) {
-        if (self.hasAnnotations()) {
-            Annotations[] fields = self.getAnnotations();
-            return (Expression) Annotations.annotation(fields[fields.length - 1], config.getConcolicIdx());
-        }
-        return Constant.fromConcreteValue(meta.toHostString(self));
+        Expression content = Annotations.annotation(SPouT.stringContent(self), config.getConcolicIdx());
+        return content != null ? content : Constant.fromConcreteValue(meta.toHostString(self));
     }
 
     private Expression makeStringLengthExpr(StaticObject self, Meta meta) {
@@ -1752,6 +1747,10 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     public boolean hasConcolicStringAnnotations(StaticObject self) {
+        return SPouT.hasSymbolicContent(self);
+    }
+
+    private boolean hasConcolicStringAnnotationsOfObject(StaticObject self) {
         //return stringAnnotation != null && stringAnnotation[stringAnnotation.length - 1].getAnnotations()[config.getConcolicIdx()] != null;
         Annotations[] stringAnnotation = self.getAnnotations();
         if (stringAnnotation != null) {

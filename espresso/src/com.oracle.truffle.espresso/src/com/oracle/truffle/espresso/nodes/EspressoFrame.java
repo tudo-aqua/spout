@@ -436,6 +436,8 @@ public final class EspressoFrame {
         CompilerAsserts.partialEvaluationConstant(SignatureSymbols.parameterCount(signature));
         CompilerAsserts.partialEvaluationConstant(signature);
         int extraParam = hasReceiver ? 1 : 0;
+        // annotations of reference arguments (terms of objects), passed on by SPouT
+        Annotations[] refAnnotations = null;
         int argAt = top - 1;
         for (int i = SignatureSymbols.parameterCount(signature) - 1; i >= 0; --i) {
             Symbol<Type> argType = SignatureSymbols.parameterType(signature, i);
@@ -451,7 +453,13 @@ public final class EspressoFrame {
                 case 'J' : args[i + extraParam] = (a == null) ? popLong(frame, argAt) : new AnnotatedValue(popLong(frame, argAt) , a);   --argAt; break;
                 case 'D' : args[i + extraParam] = (a == null) ? popDouble(frame, argAt) : new AnnotatedValue(popDouble(frame, argAt) , a); --argAt; break;
                 case '[' : // fall through
-                case 'L' : args[i + extraParam] = popObject(frame, argAt); break;
+                case 'L' :
+                    args[i + extraParam] = popObject(frame, argAt);
+                    if (a != null) {
+                        if (refAnnotations == null) refAnnotations = new Annotations[args.length];
+                        refAnnotations[i + extraParam] = a;
+                    }
+                    break;
                 default  :
                     CompilerDirectives.transferToInterpreterAndInvalidate();
                     throw EspressoError.shouldNotReachHere();
@@ -460,7 +468,15 @@ public final class EspressoFrame {
             --argAt;
         }
         if (hasReceiver) {
+            Annotations a = AnnotatedVM.popAnnotations(frame, argAt);
             args[0] = popObject(frame, argAt);
+            if (a != null) {
+                if (refAnnotations == null) refAnnotations = new Annotations[args.length];
+                refAnnotations[0] = a;
+            }
+        }
+        if (refAnnotations != null) {
+            SPouT.setArgumentAnnotations(args, refAnnotations);
         }
         return args;
     }

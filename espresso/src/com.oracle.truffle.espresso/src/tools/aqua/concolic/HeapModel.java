@@ -71,6 +71,8 @@ public class HeapModel {
     public static final String OWNER = "obj.owner";
     public static final String IDX = "obj.idx";
     public static final String LENGTH = "arr.length";
+    /** the content of a string (sort String): strings are objects, their content is a function of their identity */
+    public static final String STR_VAL = "str.val";
 
     private final Config config;
     private final Trace trace;
@@ -138,7 +140,7 @@ public class HeapModel {
 
     @CompilerDirectives.TruffleBoundary
     public Atom fieldTerm(Field f, Expression receiver) {
-        Types s = f.getTypeAsString().equals("Ljava/lang/String;") ? STRING : sort(f.getKind());
+        Types s = sort(f.getKind());
         declare(fieldFunction(f), s, OBJECT);
         return new FunctionTerm(fieldFunction(f), s, receiver);
     }
@@ -156,11 +158,18 @@ public class HeapModel {
         return new FunctionTerm(elementFunction(kind), s, array, index);
     }
 
+    /** the content of the string denoted by {@code string} */
+    @CompilerDirectives.TruffleBoundary
+    public Atom contentTerm(Expression string) {
+        declare(STR_VAL, STRING, OBJECT);
+        return new FunctionTerm(STR_VAL, STRING, string);
+    }
+
     /** the class of an object: {@code __object_k.cls} for a nondet object, {@code (obj.cls t)} otherwise */
     @CompilerDirectives.TruffleBoundary
     public Atom clsTerm(Atom object) {
         if (object instanceof FunctionTerm || object.toString().startsWith("__heap_")
-                || object.toString().startsWith("__static_")) {
+                || object.toString().startsWith("__static_") || object.toString().startsWith("__lit_")) {
             declare(CLS, KLASS, OBJECT);
             return new FunctionTerm(CLS, KLASS, object);
         }
@@ -194,17 +203,45 @@ public class HeapModel {
                 || field.getDeclaringKlass().getNameAsString().contains("ThreadLocal");
     }
 
-    /** objects that are not part of the symbolic heap: their references keep the annotations of their slots */
-    private static boolean isOpaque(StaticObject o, Meta meta) {
-        return StaticObject.isNull(o) || o.getKlass() == meta.java_lang_String || isVmShared(o, meta);
+    /**
+     * Objects that are not part of the symbolic heap: their references keep the annotations of their slots. Strings
+     * are part of it if their contents are symbolic ({@code concolic.symbolic.string.fields}).
+     */
+    private boolean isOpaque(StaticObject o, Meta meta) {
+        return StaticObject.isNull(o) || isVmShared(o, meta) || (isString(o, meta) && !config.isSymbolicStringFields());
+    }
+
+    static boolean isString(StaticObject o, Meta meta) {
+        return StaticObject.notNull(o) && o.getKlass() == meta.java_lang_String;
+    }
+
+    /**
+     * Name of an interned string (e.g., a literal): interned strings are shared by all objects that refer to them,
+     * so their name depends only on their content.
+     */
+    private static String literalName(String content) {
+        if (content.length() <= 32) {
+            StringBuilder sb = new StringBuilder("__lit_");
+            for (char c : content.toCharArray()) {
+                sb.append(String.format("%04x", (int) c));
+            }
+            return sb.toString();
+        }
+        return "__lit_h" + Integer.toHexString(content.hashCode()) + "_" + content.length();
     }
 
     private static boolean isStringField(Field f, Meta meta) {
         return f.getType() == meta.java_lang_String.getType();
     }
 
-    /** the fields and array elements by which the heap of a summary is described, as (edge, target) pairs */
-    private static void edges(StaticObject o, Meta meta, EdgeVisitor visitor) {
+    /**
+     * The fields and array elements by which the heap of a summary is described, as (edge, target) pairs. Strings
+     * are described by their content, not by their fields.
+     */
+    private void edges(StaticObject o, Meta meta, EdgeVisitor visitor) {
+        if (isString(o, meta)) {
+            return;
+        }
         if (o.isArray()) {
             ArrayKlass ak = (ArrayKlass) o.getKlass();
             if (ak.getComponentType().isPrimitive()) {
@@ -218,7 +255,8 @@ public class HeapModel {
             return;
         }
         for (Field f : ((ObjectKlass) o.getKlass()).getFieldTable()) {
-            if (f.getKind().isObject() && !skipField(f, meta) && !isStringField(f, meta)) {
+            if (f.getKind().isObject() && !skipField(f, meta)
+                    && (config.isSymbolicStringFields() || !isStringField(f, meta))) {
                 visitor.visit(f, -1, f.getObject(o));
             }
         }
@@ -245,7 +283,8 @@ public class HeapModel {
         while (!queue.isEmpty() && count++ < MAX_OBJECTS) {
             StaticObject o = queue.poll();
             edges(o, meta, (field, index, target) -> {
-                if (!isOpaque(target, meta) && initial.add(target)) {
+                // strings are immutable: their fields are not read through terms, writes need no log
+                if (!isOpaque(target, meta) && !isString(target, meta) && initial.add(target)) {
                     queue.add(target);
                 }
             });
@@ -282,7 +321,7 @@ public class HeapModel {
             return slot;
         }
         StaticObject value = f.getKind().isObject() ? f.getObject(receiver) : null;
-        if (!string && value != null && isOpaque(value, meta) && !StaticObject.isNull(value)) {
+        if (value != null && isOpaque(value, meta) && !StaticObject.isNull(value)) {
             return slot;
         }
         List<Write> log = writes.get(f);
@@ -295,15 +334,8 @@ public class HeapModel {
             }
         }
         Expression read = widen(f.getKind(), fieldTerm(f, t));
-        if (string) {
-            // the symbolic value of a string is its object annotation (cf. nextSymbolicString)
-            if (!StaticObject.isNull(value)) {
-                Annotations.setObjectAnnotation(value, withTerm(Annotations.objectAnnotation(value), read));
-            }
-            return slot;
-        }
         if (value != null) {
-            nameObject(value, read);
+            nameObject(value, read, meta);
         }
         return withTerm(slot, read);
     }
@@ -349,8 +381,9 @@ public class HeapModel {
      * References lose their slot annotations in some places (e.g. receivers of substituted methods); such uses fall
      * back to the object annotation. Objects read through a term keep the first term as object annotation.
      */
-    private void nameObject(StaticObject value, Expression term) {
-        if (StaticObject.isNull(value) || value.isArray() || !(term instanceof Atom)) {
+    private void nameObject(StaticObject value, Expression term, Meta meta) {
+        // the object annotation of an array is its length, of a string its content
+        if (StaticObject.isNull(value) || value.isArray() || isString(value, meta) || !(term instanceof Atom)) {
             return;
         }
         if (Annotations.annotation(Annotations.objectAnnotation(value), config.getConcolicIdx()) == null) {
@@ -403,7 +436,7 @@ public class HeapModel {
         }
         Expression read = widen(kind, elementTerm(kind, t, idx));
         if (value != null) {
-            nameObject(value, read);
+            nameObject(value, read, meta);
         }
         return withTerm(slot, read);
     }
@@ -429,7 +462,9 @@ public class HeapModel {
      * {@code __static_<class>_<field>} for an object held by a static field), its class, its fields and array
      * elements (values, names of objects, or {@code null}), and its owner: objects allocated by the construction
      * belong to {@code __object_0} and are pairwise distinct ({@code obj.idx}); objects held by static fields
-     * existed before and belong to none ({@code obj.owner} = -1). Strings keep their concrete values.
+     * existed before and belong to none ({@code obj.owner} = -1). Strings are described by their content
+     * ({@code str.val}); interned strings (e.g. literals) are named by their content ({@code __lit_...}) and belong to
+     * none, as they are shared by all objects that refer to them.
      */
     @CompilerDirectives.TruffleBoundary
     public void summarize(StaticObject root, Atom rootName, Meta meta) {
@@ -457,6 +492,10 @@ public class HeapModel {
             Atom name = names.get(o);
             if (o.isArray()) {
                 summarizeArray(o, name, cIdx, meta);
+            } else if (isString(o, meta)) {
+                Expression e = Annotations.annotation(Annotations.objectAnnotation(o), cIdx);
+                trace.addElement(new ConstructorCondition(new ComplexExpression(STRINGEQ, contentTerm(name),
+                        e != null ? e : Constant.fromConcreteValue(meta.toHostString(o)))));
             } else {
                 summarizePrimitiveFields(o, name, cIdx, meta);
             }
@@ -476,10 +515,14 @@ public class HeapModel {
                         scanStatics(field.getDeclaringKlass(), statics, scanned, meta);
                     }
                     Atom n;
-                    if (statics.containsKey(target)) {
+                    boolean preexisting = true;
+                    if (isString(target, meta) && meta.getContext().getStrings().isInterned(target)) {
+                        n = new AuxiliaryVariable(literalName(meta.toHostString(target)), OBJECT);
+                    } else if (statics.containsKey(target)) {
                         n = new AuxiliaryVariable(statics.get(target), OBJECT);
                     } else if (next[0] < MAX_OBJECTS) {
                         n = new AuxiliaryVariable("__heap_0_" + next[0], OBJECT);
+                        preexisting = false;
                     } else {
                         truncated[0] = true;
                         return;
@@ -491,7 +534,7 @@ public class HeapModel {
                             new ComplexExpression(OBJECT_IS_NULL, n, Constant.NULL))));
                     trace.addElement(new ConstructorCondition(new ComplexExpression(STRINGEQ, clsTerm(n),
                             Expression.fromConstant(KLASS, target.getKlass()))));
-                    if (statics.containsKey(target)) {
+                    if (preexisting) {
                         trace.addElement(new ConstructorCondition(new ComplexExpression(BVEQ,
                                 new FunctionTerm(OWNER, INT, n), Constant.fromConcreteValue(-1))));
                     } else {
@@ -513,13 +556,13 @@ public class HeapModel {
     }
 
     /** objects held by static reference fields of {@code k} and its super classes, named by the field */
-    private static void scanStatics(Klass k, Map<StaticObject, String> statics, Set<Klass> scanned, Meta meta) {
+    private void scanStatics(Klass k, Map<StaticObject, String> statics, Set<Klass> scanned, Meta meta) {
         for (; k instanceof ObjectKlass ok && scanned.add(ok); k = ok.getSuperKlass()) {
             if (!ok.isInitialized()) {
                 continue;
             }
             for (Field f : ok.getStaticFieldTable()) {
-                if (!f.getKind().isObject() || isStringField(f, meta)) {
+                if (!f.getKind().isObject()) {
                     continue;
                 }
                 StaticObject v = f.getObject(ok.getStatics());
@@ -533,19 +576,7 @@ public class HeapModel {
     private void summarizePrimitiveFields(StaticObject o, Atom name, int cIdx, Meta meta) {
         Annotations[] objAnnotations = o.getAnnotations();
         for (Field f : ((ObjectKlass) o.getKlass()).getFieldTable()) {
-            if (skipField(f, meta)) {
-                continue;
-            }
-            if (isStringField(f, meta)) {
-                StaticObject value = f.getObject(o);
-                if (config.isSymbolicStringFields() && !StaticObject.isNull(value)) {
-                    Expression e = Annotations.annotation(Annotations.objectAnnotation(value), cIdx);
-                    trace.addElement(new ConstructorCondition(new ComplexExpression(STRINGEQ, fieldTerm(f, name),
-                            e != null ? e : Constant.fromConcreteValue(meta.toHostString(value)))));
-                }
-                continue;
-            }
-            if (!f.getKind().isPrimitive()) {
+            if (skipField(f, meta) || !f.getKind().isPrimitive()) {
                 continue;
             }
             Annotations a = objAnnotations != null ? objAnnotations[f.getSlot()] : null;
