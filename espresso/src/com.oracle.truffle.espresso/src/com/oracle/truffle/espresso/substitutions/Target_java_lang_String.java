@@ -46,7 +46,7 @@ public final class Target_java_lang_String {
         return SPouT.stringEquals(self, other, meta);
     }
 
-    @Substitution(hasReceiver = true)
+    @Substitution(passAnnotations = true, hasReceiver = true)
     public static @JavaType(internalName = "C") Object charAt(@JavaType(String.class) StaticObject self,
                                                                     @JavaType(internalName = "I") Object index,
                                                                     @Inject Meta meta) {
@@ -119,7 +119,7 @@ public final class Target_java_lang_String {
         return SPouT.splitWithLimit(self, regex, limit, meta);
     }
 
-    @Substitution(hasReceiver = true, methodName = "regionMatches")
+    @Substitution(passAnnotations = true, hasReceiver = true, methodName = "regionMatches")
     public static @JavaType(internalName = "Z") Object regionMatches_ignoreCase(@JavaType(String.class) StaticObject self,
                                                                                 @JavaType(internalName = "Z") Object ignoreCase,
                                                                                 @JavaType(internalName = "I") Object toffset,

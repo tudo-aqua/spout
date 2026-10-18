@@ -1550,6 +1550,18 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return new ComplexExpression(ITE, valid, stringIndexOf(s, c, from), Constant.fromConcreteValue(-1));
     }
 
+    /**
+     * An access to an element through a symbolic index whose elements are not terms: the index is fixed to its
+     * concrete value by a decision (the other indices are explored by negating it)
+     */
+    @CompilerDirectives.TruffleBoundary
+    public void concretizeIndex(Expression sIndex, int cIndex) {
+        if (sIndex == null || sIndex instanceof Constant) {
+            return;
+        }
+        decide(new ComplexExpression(OperatorComparator.BVEQ, sIndex, Constant.fromConcreteValue(cIndex)), true);
+    }
+
     /** records a fact that holds in every execution (a lemma that helps the solver), not a decision */
     public void lemma(Expression fact) {
         trace.addElement(new Assumption(fact, true));

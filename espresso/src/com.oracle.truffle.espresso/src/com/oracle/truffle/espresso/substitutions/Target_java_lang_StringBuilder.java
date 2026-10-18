@@ -55,7 +55,7 @@ public final class Target_java_lang_StringBuilder {
         return SPouT.stringBuxxToString(self, meta);
     }
 
-    @Substitution(hasReceiver = true, methodName = "insert")
+    @Substitution(passAnnotations = true, hasReceiver = true, methodName = "insert")
     public static @JavaType(StringBuilder.class) StaticObject insert_string(
             @JavaType(StringBuilder.class) StaticObject self,
             @JavaType(internalName = "I") Object offset,
@@ -64,7 +64,7 @@ public final class Target_java_lang_StringBuilder {
         return SPouT.stringBuxxInsert(self, offset, toInsert, meta);
     }
 
-    @Substitution(hasReceiver = true, methodName = "insert")
+    @Substitution(passAnnotations = true, hasReceiver = true, methodName = "insert")
     public static @JavaType(StringBuilder.class) StaticObject insert_char(
             @JavaType(StringBuilder.class) StaticObject self,
             @JavaType(internalName = "I") Object offset,
@@ -73,7 +73,7 @@ public final class Target_java_lang_StringBuilder {
         return SPouT.stringBuxxInsert(self, offset, toInsert, meta);
     }
 
-    @Substitution(hasReceiver = true)
+    @Substitution(passAnnotations = true, hasReceiver = true)
     public static @JavaType(internalName = "C") Object charAt(
             @JavaType(StringBuilder.class) StaticObject self,
             @JavaType(internalName = "I") Object index,

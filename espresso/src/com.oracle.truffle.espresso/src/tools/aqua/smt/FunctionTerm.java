@@ -53,6 +53,10 @@ public class FunctionTerm extends Atom {
 
     @Override
     public String toString() {
+        if (arguments.length == 0) {
+            // a declared constant
+            return name;
+        }
         StringBuilder sb = new StringBuilder("(").append(name);
         for (Expression a : arguments) {
             sb.append(' ').append(a);

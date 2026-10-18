@@ -161,12 +161,20 @@ public class AnnotatedVM {
     public static Object[] deAnnotateArguments(Object[] args, Method method) {
         for (int i=0; i<args.length; i++) {
             String methodName =method.getNameAsString();
+            if (!(args[i] instanceof AnnotatedValue) && SPouT.isConcolic(args[i])) {
+                SPouT.losePrecision("array with symbolic elements passed to " + method.getDeclaringKlass().getNameAsString()
+                        + "." + methodName + " (substituted or native)", getMeta());
+            }
             if (args[i] instanceof AnnotatedValue) {
                 SPouT.log("Warning: removing annotations before calling substituted/native method " +
                         method.getDeclaringKlass().getNameAsString() + "." + method.getNameAsString() + ": " + args[i]);
                 if (methodName.contains("doubleToRawLongBits") || methodName.contains("longBitsToDouble")
                         || methodName.contains("intBitsToFloat") || methodName.contains("floatToRawIntBits")){
                     SPouT.losePrecision("Stripping symbolic values from Float or Double methods that do not support them.", getMeta());
+                } else if (SPouT.isConcolic(args[i])) {
+                    // the method does not see the symbolic value: its result is concrete
+                    SPouT.losePrecision("symbolic argument of " + method.getDeclaringKlass().getNameAsString() + "."
+                            + methodName + " (substituted or native) is concretized", getMeta());
                 }
 
             }

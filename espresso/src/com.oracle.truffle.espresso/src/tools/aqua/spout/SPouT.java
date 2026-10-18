@@ -94,6 +94,8 @@ public class SPouT {
         trace = config.getTrace();
         gwit = new GWIT(trace);
         // TODO: should be deferred to latest possible point in time
+        analysisThread = Thread.currentThread();
+        pauseDepth = 0;
         analyze = true;
         oldAnalyze = true;
         SPouTNumeric.newPath(config, true);
@@ -1443,14 +1445,75 @@ public class SPouT {
 
         Annotations a = AnnotatedVM.getArrayAnnotations(array, cIndex);
         if (analyze && config.hasConcolicAnalysis()) {
-            a = config.getConcolicAnalysis().getHeap().readElement(array, aArray, cIndex, sIndex, a, getMeta());
+            tools.aqua.concolic.HeapModel heap = config.getConcolicAnalysis().getHeap();
+            boolean inBounds = 0 <= cIndex && cIndex < array.length(lang);
+            if (inBounds && !heap.hasElementTerms(array, aArray)
+                    && (heap.hasContentTerm(array) || (sIndex != null && heap.ensureContentTerm(array, getMeta())))) {
+                // an allocated array with a content term (theory of arrays)
+                AnnotatedVM.putAnnotations(frame, toSlot, heap.readContent(array, cIndex, sIndex, a));
+                return;
+            }
+            if (sIndex != null && !heap.hasElementTerms(array, aArray) && inBounds) {
+                // a large array: the element at the concrete index is read, only for this index
+                config.getConcolicAnalysis().concretizeIndex(sIndex, cIndex);
+            }
+            a = heap.readElement(array, aArray, cIndex, sIndex, a, getMeta());
         }
         AnnotatedVM.putAnnotations(frame, toSlot, a);
+    }
+
+    /** a concrete value (e.g. a byte for a boolean array) as a value of the element kind of the array */
+    @CompilerDirectives.TruffleBoundary
+    private static Object asElementValue(StaticObject array, Object v) {
+        if (v == null || !array.isArray()) {
+            return v;
+        }
+        com.oracle.truffle.espresso.classfile.JavaKind kind =
+                ((com.oracle.truffle.espresso.impl.ArrayKlass) array.getKlass()).getComponentType().getJavaKind();
+        long l = v instanceof Boolean ? ((Boolean) v ? 1 : 0) : v instanceof Character ? (Character) v
+                : v instanceof Number && !(v instanceof Float) && !(v instanceof Double) ? ((Number) v).longValue() : 0;
+        return switch (kind) {
+            case Boolean -> v instanceof Boolean ? v : l != 0;
+            case Byte -> (byte) l;
+            case Short -> (short) l;
+            case Char -> (char) l;
+            case Int -> (int) l;
+            case Long -> v instanceof Long ? v : l;
+            default -> v;
+        };
+    }
+
+    /** the concrete value of an array store (still on the operand stack), null for references */
+    private static Object concreteElementValue(VirtualFrame frame, StaticObject array, int slot) {
+        com.oracle.truffle.espresso.classfile.JavaKind kind =
+                ((com.oracle.truffle.espresso.impl.ArrayKlass) array.getKlass()).getComponentType().getJavaKind();
+        return switch (kind) {
+            case Boolean -> frame.getIntStatic(slot) != 0;
+            case Byte -> (byte) frame.getIntStatic(slot);
+            case Short -> (short) frame.getIntStatic(slot);
+            case Char -> (char) frame.getIntStatic(slot);
+            case Int -> frame.getIntStatic(slot);
+            case Long -> frame.getLongStatic(slot);
+            case Float -> frame.getFloatStatic(slot);
+            case Double -> frame.getDoubleStatic(slot);
+            default -> null;
+        };
     }
 
     public static void setArrayAnnotations(VirtualFrame frame, BytecodeNode bcn, int bci, StaticObject array,
                                            int cIndex, int fromValueSlot, int fromIndexSlot, EspressoLanguage lang) {
         if (!analyze) return;
+        // the value is still on the operand stack
+        setArrayAnnotations(frame, bcn, bci, array, cIndex, fromValueSlot, fromIndexSlot, lang,
+                concreteElementValue(frame, array, fromValueSlot));
+    }
+
+    /** an array store with the concrete value (e.g. already popped from the operand stack) */
+    public static void setArrayAnnotations(VirtualFrame frame, BytecodeNode bcn, int bci, StaticObject array,
+                                           int cIndex, int fromValueSlot, int fromIndexSlot, EspressoLanguage lang,
+                                           Object concreteValue) {
+        if (!analyze) return;
+        concreteValue = asElementValue(array, concreteValue);
 
         Annotations aIndex = AnnotatedVM.popAnnotations(frame, fromIndexSlot);
         Annotations aArray = refAnnotations(array, AnnotatedVM.popAnnotations(frame, fromIndexSlot - 1));
@@ -1477,7 +1540,19 @@ public class SPouT {
 
         Annotations aValue = AnnotatedVM.popAnnotations(frame, fromValueSlot);
         if (analyze && config.hasConcolicAnalysis()) {
-            config.getConcolicAnalysis().getHeap().writeElement(array, aArray, cIndex, sIndex, aValue);
+            tools.aqua.concolic.HeapModel heap = config.getConcolicAnalysis().getHeap();
+            boolean inBounds = 0 <= cIndex && cIndex < array.length(lang);
+            if (inBounds && !heap.hasElementTerms(array, aArray)
+                    && (heap.hasContentTerm(array) || (sIndex != null && heap.ensureContentTerm(array, getMeta())))) {
+                // an allocated array with a content term (theory of arrays)
+                heap.writeContent(array, cIndex, sIndex, aValue, concreteValue);
+            } else {
+                if (sIndex != null && !heap.hasElementTerms(array, aArray) && inBounds) {
+                    // a large array: the element at the concrete index is written, only for this index
+                    config.getConcolicAnalysis().concretizeIndex(sIndex, cIndex);
+                }
+                heap.writeElement(array, aArray, cIndex, sIndex, aValue, concreteValue);
+            }
         }
         AnnotatedVM.setArrayAnnotations(array, cIndex, aValue, lang);
     }
@@ -2328,9 +2403,8 @@ public class SPouT {
         Method length = abstractSB.lookupMethod(meta.getNames().getOrCreate("length"), EspressoSymbols.Signatures._int);
         Method isLatin = abstractSB.lookupMethod(meta.getNames().getOrCreate("isLatin1"), EspressoSymbols.Signatures._boolean);
         Annotations[] a = self.getAnnotations();
-        boolean wasAnalyzing = analyze;
         self.setAnnotations(null);
-        analyze = false;
+        pauseAnalyze();
         try {
             StaticObject bytes = (StaticObject) getValue.invokeDirect(self);
             int ilength = AnnotatedValue.value(length.invokeDirect(self));
@@ -2338,7 +2412,7 @@ public class SPouT {
                     ? (StaticObject) meta.java_lang_StringLatin1_newString.invokeDirect(bytes, 0, ilength)
                     : (StaticObject) meta.java_lang_StringUTF16_newString.invokeDirect(bytes, 0, ilength);
         } finally {
-            analyze = wasAnalyzing;
+            resumeAnalyze();
             self.setAnnotations(a);
         }
     }
@@ -2439,6 +2513,11 @@ public class SPouT {
         int bound = config.getUnrollBound();
         if (bound > 0 && srcEnd - srcBegin > bound) {
             losePrecision("copying more than " + bound + " characters of a symbolic string (concolic.unroll.bound)", meta);
+            return;
+        }
+        if (ca.getHeap().hasContentTerm(dst)) {
+            losePrecision("copying characters into an array with symbolic elements is not symbolically implemented",
+                    meta);
             return;
         }
         for (int k = 0; k < srcEnd - srcBegin; k++) {
@@ -2713,6 +2792,23 @@ public class SPouT {
         Expression e = Annotations.annotation(AnnotatedValue.svalue(v), config.getConcolicIdx());
         return e != null ? config.getConcolicAnalysis().convertCharToInt(e)
                 : Constant.fromConcreteValue((int) AnnotatedValue.<Integer>value(v));
+    }
+
+    /**
+     * whether a value has a concolic (symbolic) annotation, or is an array whose elements are a content term
+     * (a substituted or native method would see its concrete elements only)
+     */
+    @CompilerDirectives.TruffleBoundary
+    public static boolean isConcolic(Object v) {
+        if (config == null || !config.hasConcolicAnalysis()) {
+            return false;
+        }
+        if (v instanceof StaticObject && !StaticObject.isNull((StaticObject) v) && ((StaticObject) v).isArray()) {
+            // also called before the analysis is set up (e.g. when threads are created)
+            tools.aqua.concolic.ConcolicAnalysis ca = config.getConcolicAnalysis();
+            return ca != null && ca.getHeap() != null && ca.getHeap().hasContentTerm((StaticObject) v);
+        }
+        return v instanceof AnnotatedValue && isSymbolic(v);
     }
 
     private static boolean isSymbolic(Object v) {
@@ -3292,13 +3388,34 @@ public class SPouT {
         }
     }
 
+    /** the thread that runs the analyzed program (it starts the path) */
+    private static volatile Thread analysisThread;
+    /** nested pauses of the analysis (by the analysis thread) */
+    private static int pauseDepth = 0;
+
+    /**
+     * Pauses the analysis (e.g. while a call site is bootstrapped), nested. Only the analysis thread pauses: other
+     * threads of the VM (e.g. when threads are created) would switch the analysis off for the program.
+     */
+    @CompilerDirectives.TruffleBoundary
     public static void pauseAnalyze() {
-        oldAnalyze = analyze;
-        analyze = false;
+        if (analysisThread != null && Thread.currentThread() != analysisThread) {
+            return;
+        }
+        if (pauseDepth++ == 0) {
+            oldAnalyze = analyze;
+            analyze = false;
+        }
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static void resumeAnalyze() {
-        analyze = oldAnalyze;
+        if (analysisThread != null && Thread.currentThread() != analysisThread) {
+            return;
+        }
+        if (pauseDepth > 0 && --pauseDepth == 0) {
+            analyze = oldAnalyze;
+        }
     }
 
     public class NullCheckResult {

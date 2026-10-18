@@ -108,6 +108,17 @@ public class HeapModel {
         }
     }
 
+    /** declares a constant of an explicit sort (e.g. arrays) */
+    private void declareConstant(String name, String sortName) {
+        if (declared.isEmpty()) {
+            declared.add(CLS);
+            trace.addElement(new FunctionDeclaration(CLS, KLASS, OBJECT));
+        }
+        if (declared.add(name)) {
+            trace.addElement(new FunctionDeclaration(name, sortName));
+        }
+    }
+
     static String fieldFunction(Field f) {
         return "fld." + f.getDeclaringKlass().getNameAsString() + "." + f.getNameAsString();
     }
@@ -158,6 +169,140 @@ public class HeapModel {
         Types s = sort(kind);
         declare(elementFunction(kind), s, OBJECT, INT);
         return new FunctionTerm(elementFunction(kind), s, array, index);
+    }
+
+    /*
+     * The elements of primitive arrays of initial objects are a memory per element kind K, an array from object
+     * identities to contents, (Array Int (Array Int K)), with a new version per write: mem.K.0 is the initial
+     * memory (described by summaries), mem.K.n+1 = (store mem.K.n t (store (select mem.K.n t) i v)) for a write
+     * through term t at index i. Reads are (select (select mem.K.n t) i) of the current version: whether a write
+     * through another term aliases is up to the solver, no decisions.
+     */
+
+    /** the current version of the memory per element kind */
+    private final Map<Character, Integer> memoryVersions = new HashMap<>();
+
+    private static String memorySort(JavaKind kind) {
+        return "(Array Int (Array Int " + sort(kind) + "))";
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    private Atom memory(JavaKind kind, int version) {
+        String name = "mem." + kind.getTypeChar() + "." + version;
+        declareConstant(name, memorySort(kind));
+        return new FunctionTerm(name, ARRAY);
+    }
+
+    private int memoryVersion(JavaKind kind) {
+        return memoryVersions.getOrDefault(kind.getTypeChar(), 0);
+    }
+
+    /*
+     * Arrays allocated by the program (not initial objects: their identity is concrete, they do not alias input
+     * arrays) get a content term (Array Int K) when they are accessed through a symbolic index, if they are small:
+     * a constant (default) array with stores of the other elements. Then reads are selects and writes stores, also
+     * at concrete indices (a write through a symbolic index may have changed any element).
+     */
+
+    /** the largest arrays that get content terms (larger ones fix symbolic indices by decisions) */
+    public static final int MAX_CONTENT_ELEMENTS = 256;
+
+    private final Map<StaticObject, Expression> contents = new IdentityHashMap<>();
+    private int contentCounter = 0;
+
+    /** @return whether the elements of the allocated array are a content term */
+    @CompilerDirectives.TruffleBoundary
+    public boolean hasContentTerm(StaticObject array) {
+        return contents.containsKey(array);
+    }
+
+    private static String contentSort(JavaKind kind) {
+        return "(Array Int " + sort(kind) + ")";
+    }
+
+    /** names a content term by a fresh constant (keeps terms small) */
+    private Expression nameContent(JavaKind kind, Expression content) {
+        String name = "arr.content." + (contentCounter++);
+        declareConstant(name, contentSort(kind));
+        Atom c = new FunctionTerm(name, ARRAY);
+        trace.addElement(new Assumption(new ComplexExpression(OBJECT_EQ, c, content), true));
+        return c;
+    }
+
+    /**
+     * Switches the allocated array to a content term, if it has primitive elements and at most
+     * {@link #MAX_CONTENT_ELEMENTS}: @return whether it has a content term
+     */
+    @CompilerDirectives.TruffleBoundary
+    public boolean ensureContentTerm(StaticObject array, Meta meta) {
+        if (contents.containsKey(array)) {
+            return true;
+        }
+        JavaKind kind = ((ArrayKlass) array.getKlass()).getComponentType().getJavaKind();
+        int length = array.length(meta.getLanguage());
+        if (!kind.isPrimitive() || length > MAX_CONTENT_ELEMENTS) {
+            return false;
+        }
+        Annotations[] aa = array.getAnnotations();
+        Object zero = elementValue(kind, defaultValue(kind), null).toString();
+        Expression content = new FunctionTerm("(as const " + contentSort(kind) + ")", ARRAY,
+                elementValue(kind, defaultValue(kind), null));
+        for (int j = 0; j < length; j++) {
+            Expression symbolic = aa != null ? Annotations.annotation(aa[j], config.getConcolicIdx()) : null;
+            Expression v = elementValue(kind, elementValue(array, j, kind, meta), symbolic);
+            if (symbolic != null || !v.toString().equals(zero)) {
+                content = new FunctionTerm("store", ARRAY, content, Constant.createNatConstant(j), v);
+            }
+        }
+        contents.put(array, nameContent(kind, content));
+        return true;
+    }
+
+    private static Object defaultValue(JavaKind kind) {
+        return switch (kind) {
+            case Boolean -> false;
+            case Byte -> (byte) 0;
+            case Short -> (short) 0;
+            case Char -> (char) 0;
+            case Int -> 0;
+            case Long -> 0L;
+            case Float -> 0f;
+            case Double -> 0d;
+            default -> throw new IllegalArgumentException("not a primitive kind: " + kind);
+        };
+    }
+
+    /** a read of the allocated array with a content term: the annotations of the element */
+    @CompilerDirectives.TruffleBoundary
+    public Annotations readContent(StaticObject array, int index, Expression indexExpr, Annotations slot) {
+        JavaKind kind = ((ArrayKlass) array.getKlass()).getComponentType().getJavaKind();
+        return withTerm(slot, widen(kind, new FunctionTerm("select", sort(kind), contents.get(array),
+                natIndex(indexExpr, index))));
+    }
+
+    /** a write to the allocated array with a content term */
+    @CompilerDirectives.TruffleBoundary
+    public void writeContent(StaticObject array, int index, Expression indexExpr, Annotations value,
+                             Object concreteValue) {
+        JavaKind kind = ((ArrayKlass) array.getKlass()).getComponentType().getJavaKind();
+        Expression v = elementValue(kind, concreteValue, Annotations.annotation(value, config.getConcolicIdx()));
+        contents.put(array, nameContent(kind, new FunctionTerm("store", ARRAY, contents.get(array),
+                natIndex(indexExpr, index), v)));
+    }
+
+    /** the index as an integer (the theory of arrays has Int indices) */
+    static Expression natIndex(Expression indexExpr, int index) {
+        if (indexExpr == null || indexExpr instanceof Constant) {
+            return Constant.createNatConstant(index);
+        }
+        return new ComplexExpression(BV2NAT, indexExpr);
+    }
+
+    /** element {@code index} of the primitive array denoted by {@code array} in memory version {@code version} */
+    @CompilerDirectives.TruffleBoundary
+    public Atom memoryElementTerm(JavaKind kind, Expression array, Expression natIndex, int version) {
+        Atom content = new FunctionTerm("select", ARRAY, memory(kind, version), array);
+        return new FunctionTerm("select", sort(kind), content, natIndex);
     }
 
     /** the content of the string denoted by {@code string} */
@@ -455,6 +600,15 @@ public class HeapModel {
         return lengthTerm(t);
     }
 
+    /**
+     * @return whether the elements of the array, referenced with {@code arrayA}, are terms of the heap model (an
+     * initial object read through its term), which also takes symbolic indices
+     */
+    @CompilerDirectives.TruffleBoundary
+    public boolean hasElementTerms(StaticObject array, Annotations arrayA) {
+        return term(arrayA) != null && initial.contains(array);
+    }
+
     @CompilerDirectives.TruffleBoundary
     public Annotations readElement(StaticObject array, Annotations arrayA, int index, Expression indexExpr,
                                    Annotations slot, Meta meta) {
@@ -471,6 +625,14 @@ public class HeapModel {
             }
         }
         Expression idx = indexExpr != null ? indexExpr : Constant.fromConcreteValue(index);
+        if (kind.isPrimitive()) {
+            int version = memoryVersion(kind);
+            if (index >= MAX_ARRAY_ELEMENTS && version == 0) {
+                // not described by summaries, not written
+                return slot;
+            }
+            return withTerm(slot, widen(kind, memoryElementTerm(kind, t, natIndex(indexExpr, index), version)));
+        }
         List<Write> log = writes.get(kind.getTypeChar());
         if (log != null) {
             for (int i = log.size() - 1; i >= 0; i--) {
@@ -491,11 +653,28 @@ public class HeapModel {
         return withTerm(slot, read);
     }
 
+    /**
+     * A write of {@code value} (annotations, and the concrete value for primitive arrays) to an element of an array.
+     */
     @CompilerDirectives.TruffleBoundary
     public void writeElement(StaticObject array, Annotations arrayA, int index, Expression indexExpr,
-                             Annotations value) {
+                             Annotations value, Object concreteValue) {
         if (initial.contains(array)) {
             JavaKind kind = ((ArrayKlass) array.getKlass()).getComponentType().getJavaKind();
+            Expression t = term(arrayA);
+            if (kind.isPrimitive() && t != null) {
+                int version = memoryVersion(kind);
+                Atom before = memory(kind, version);
+                Atom after = memory(kind, version + 1);
+                Expression content = new FunctionTerm("select", ARRAY, before, t);
+                Expression v = elementValue(kind, concreteValue,
+                        Annotations.annotation(value, config.getConcolicIdx()));
+                Expression stored = new FunctionTerm("store", ARRAY, before, t,
+                        new FunctionTerm("store", ARRAY, content, natIndex(indexExpr, index), v));
+                trace.addElement(new Assumption(new ComplexExpression(OBJECT_EQ, after, stored), true));
+                memoryVersions.put(kind.getTypeChar(), version + 1);
+                return;
+            }
             Expression idx = indexExpr != null ? indexExpr : Constant.fromConcreteValue(index);
             writes.computeIfAbsent(kind.getTypeChar(), k -> new ArrayList<>())
                     .add(new Write(array, term(arrayA), index, idx, value));
@@ -657,7 +836,8 @@ public class HeapModel {
         for (int j = 0; j < n; j++) {
             Expression e = aa != null ? Annotations.annotation(aa[j], cIdx) : null;
             trace.addElement(new ConstructorCondition(valueEquation(kind,
-                    elementTerm(kind, name, Constant.fromConcreteValue(j)), elementValue(array, j, kind, meta), e)));
+                    memoryElementTerm(kind, name, Constant.createNatConstant(j), 0), elementValue(array, j, kind, meta),
+                    e)));
         }
     }
 
@@ -679,6 +859,21 @@ public class HeapModel {
      * {@code (= slot value)} for a primitive slot: the symbolic value if there is one (narrowed to the sort of the
      * slot: values on the operand stack are ints), the concrete value otherwise.
      */
+    /** the value of a primitive slot of the given kind: symbolic (narrowed from the operand stack) or concrete */
+    static Expression elementValue(JavaKind kind, Object value, Expression symbolic) {
+        return switch (kind) {
+            case Boolean -> symbolic != null ? symbolic : Constant.fromConcreteValue((boolean) value);
+            case Byte -> symbolic != null ? new ComplexExpression(I2B, symbolic) : Constant.fromConcreteValue((byte) value);
+            case Short -> symbolic != null ? new ComplexExpression(I2S, symbolic) : Constant.fromConcreteValue((short) value);
+            case Char -> symbolic != null ? new ComplexExpression(I2C, symbolic) : Constant.fromConcreteValue((char) value);
+            case Int -> symbolic != null ? symbolic : Constant.fromConcreteValue((int) value);
+            case Long -> symbolic != null ? symbolic : Constant.fromConcreteValue((long) value);
+            case Float -> symbolic != null ? symbolic : Constant.fromConcreteValue((float) value);
+            case Double -> symbolic != null ? symbolic : Constant.fromConcreteValue((double) value);
+            default -> throw new IllegalArgumentException("not a primitive kind: " + kind);
+        };
+    }
+
     static Expression valueEquation(JavaKind kind, Atom slot, Object value, Expression symbolic) {
         return switch (kind) {
             case Boolean -> new ComplexExpression(BEQUIV, slot,

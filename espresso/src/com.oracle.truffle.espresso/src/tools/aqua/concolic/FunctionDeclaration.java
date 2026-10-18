@@ -34,14 +34,29 @@ public class FunctionDeclaration extends TraceElement {
     private final Types[] argumentTypes;
     private final Types resultType;
 
+    /** the sort of a constant, if given explicitly (e.g. array sorts), null otherwise */
+    private final String rawResultSort;
+
     public FunctionDeclaration(String name, Types resultType, Types... argumentTypes) {
         this.name = name;
         this.argumentTypes = argumentTypes;
         this.resultType = resultType;
+        this.rawResultSort = null;
+    }
+
+    /** a constant of the given sort, e.g. {@code (Array Int (Array Int (_ BitVec 32)))} */
+    public FunctionDeclaration(String name, String sort) {
+        this.name = name;
+        this.argumentTypes = new Types[0];
+        this.resultType = null;
+        this.rawResultSort = sort;
     }
 
     @Override
     public String toString() {
+        if (rawResultSort != null) {
+            return "[DECLARE] (declare-fun " + name + " () " + rawResultSort + ")";
+        }
         StringBuilder sb = new StringBuilder("[DECLARE] (declare-fun ").append(name).append(" (");
         for (int i = 0; i < argumentTypes.length; i++) {
             sb.append(i > 0 ? " " : "").append(argumentTypes[i]);
