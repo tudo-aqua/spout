@@ -210,6 +210,9 @@ public final class Arguments {
                             case "concolic.symbolic.string.fields":
                                 concolicOptions += "concolic.symbolic.string.fields:" + value + " ";
                                 break;
+                            case "concolic.unroll.bound":
+                                concolicOptions += "concolic.unroll.bound:" + value + " ";
+                                break;
                             case "concolic.execution":
                                 concolicOptions += "concolic.execution:" + value + " ";
                                 break;

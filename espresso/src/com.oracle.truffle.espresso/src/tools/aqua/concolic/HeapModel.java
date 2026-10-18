@@ -73,6 +73,8 @@ public class HeapModel {
     public static final String LENGTH = "arr.length";
     /** the content of a string (sort String): strings are objects, their content is a function of their identity */
     public static final String STR_VAL = "str.val";
+    /** the content of a StringBuilder or StringBuffer (sort String), a ghost field written by their mutations */
+    public static final String SB_VAL = "sb.val";
 
     private final Config config;
     private final Trace trace;
@@ -165,6 +167,13 @@ public class HeapModel {
         return new FunctionTerm(STR_VAL, STRING, string);
     }
 
+    /** the initial content of the builder denoted by {@code builder} */
+    @CompilerDirectives.TruffleBoundary
+    public Atom builderContentTerm(Expression builder) {
+        declare(SB_VAL, STRING, OBJECT);
+        return new FunctionTerm(SB_VAL, STRING, builder);
+    }
+
     /** the class of an object: {@code __object_k.cls} for a nondet object, {@code (obj.cls t)} otherwise */
     @CompilerDirectives.TruffleBoundary
     public Atom clsTerm(Atom object) {
@@ -215,6 +224,15 @@ public class HeapModel {
         return StaticObject.notNull(o) && o.getKlass() == meta.java_lang_String;
     }
 
+    /** StringBuilder and StringBuffer: described by their content (sb.val), not by their internal fields */
+    public static boolean isBuilder(StaticObject o) {
+        if (StaticObject.isNull(o) || o.isArray()) {
+            return false;
+        }
+        String name = o.getKlass().getNameAsString();
+        return name.equals("java/lang/StringBuilder") || name.equals("java/lang/StringBuffer");
+    }
+
     /**
      * Name of an interned string (e.g., a literal): interned strings are shared by all objects that refer to them,
      * so their name depends only on their content.
@@ -239,7 +257,7 @@ public class HeapModel {
      * are described by their content, not by their fields.
      */
     private void edges(StaticObject o, Meta meta, EdgeVisitor visitor) {
-        if (isString(o, meta)) {
+        if (isString(o, meta) || isBuilder(o)) {
             return;
         }
         if (o.isArray()) {
@@ -313,7 +331,8 @@ public class HeapModel {
     @CompilerDirectives.TruffleBoundary
     public Annotations readField(StaticObject receiver, Annotations receiverA, Field f, Annotations slot, Meta meta) {
         Expression t = term(receiverA);
-        if (t == null || !initial.contains(receiver) || skipField(f, meta)) {
+        if (t == null || !initial.contains(receiver) || skipField(f, meta) || isBuilder(receiver)) {
+            // the internal fields of builders are not described by summaries (their content is, see sb.val)
             return slot;
         }
         boolean string = isStringField(f, meta);
@@ -338,6 +357,37 @@ public class HeapModel {
             nameObject(value, read, meta);
         }
         return withTerm(slot, read);
+    }
+
+    /**
+     * The content of a builder that is read through a reference with annotation {@code ref}: the content of the
+     * newest aliasing write (mutation) of an initial builder, its initial content {@code (sb.val t)} if there is
+     * none; {@code null} if the reference has no term (the content is the object annotation).
+     */
+    @CompilerDirectives.TruffleBoundary
+    public Annotations readBuilderContent(StaticObject builder, Annotations ref) {
+        Expression t = term(ref);
+        if (t == null || !initial.contains(builder)) {
+            return null;
+        }
+        List<Write> log = writes.get(SB_VAL);
+        if (log != null) {
+            for (int i = log.size() - 1; i >= 0; i--) {
+                Write w = log.get(i);
+                if (aliases(w, builder, t, null, -1)) {
+                    return w.value();
+                }
+            }
+        }
+        return withTerm(null, builderContentTerm(t));
+    }
+
+    /** a mutation of a builder through a reference with annotation {@code ref}: a write of its content */
+    @CompilerDirectives.TruffleBoundary
+    public void writeBuilderContent(StaticObject builder, Annotations ref, Annotations content) {
+        if (initial.contains(builder)) {
+            writes.computeIfAbsent(SB_VAL, k -> new ArrayList<>()).add(new Write(builder, term(ref), -1, null, content));
+        }
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -496,6 +546,10 @@ public class HeapModel {
                 Expression e = Annotations.annotation(Annotations.objectAnnotation(o), cIdx);
                 trace.addElement(new ConstructorCondition(new ComplexExpression(STRINGEQ, contentTerm(name),
                         e != null ? e : Constant.fromConcreteValue(meta.toHostString(o)))));
+            } else if (isBuilder(o)) {
+                Expression e = Annotations.annotation(Annotations.objectAnnotation(o), cIdx);
+                trace.addElement(new ConstructorCondition(new ComplexExpression(STRINGEQ, builderContentTerm(name),
+                        e != null ? e : Constant.fromConcreteValue(SPouT.builderToHostString(o, meta)))));
             } else {
                 summarizePrimitiveFields(o, name, cIdx, meta);
             }

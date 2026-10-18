@@ -140,6 +140,10 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         annotations[annotations.length - 1] = stringDescription;
         guestString.setAnnotations(annotations);
         trace.addElement(new SymbolDeclaration(ssv.symbolic));
+        // Java strings are shorter than 2^31: lengths are converted to 32-bit ints, which would otherwise wrap
+        // around (and the solver would look for strings of more than 2^31 characters)
+        trace.addElement(new Assumption(new ComplexExpression(LE, new ComplexExpression(SLENGTH, ssv.symbolic),
+                Constant.createNatConstant(Integer.MAX_VALUE)), true));
         return guestString;
     }
 
@@ -1511,6 +1515,69 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         Expression left = new ComplexExpression(SSUBSTR, a1, NAT_ZERO, a3);
         Expression right = new ComplexExpression(SSUBSTR, a1, new ComplexExpression(NATADD, a3, NAT_ONE), new ComplexExpression(SLENGTH, a1));
         return new ComplexExpression(SCONCAT, new ComplexExpression(SCONCAT, left, a2), right);
+    }
+
+    /** {@code s.isEmpty()} */
+    public Expression stringIsEmpty(Expression s) {
+        return new ComplexExpression(BVEQ, new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, s)), INT_ZERO);
+    }
+
+    /**
+     * {@code s.indexOf(t, from)} with Java's semantics: a negative {@code from} counts as 0, and a {@code from}
+     * beyond the length finds only the empty string (at the length). SMT's {@code str.indexof} is -1 for indices
+     * outside of the string.
+     */
+    public Expression stringIndexOf(Expression s, Expression t, Expression from) {
+        Expression len = new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, s));
+        Expression f = new ComplexExpression(ITE, new ComplexExpression(BVLT, from, INT_ZERO), INT_ZERO, from);
+        Expression found = new ComplexExpression(NAT2BV32,
+                new ComplexExpression(SINDEXOF, s, t, new ComplexExpression(BV2NAT, f)));
+        Expression tEmpty = new ComplexExpression(BVEQ,
+                new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, t)), INT_ZERO);
+        return new ComplexExpression(ITE, new ComplexExpression(BVGT, f, len),
+                new ComplexExpression(ITE, tEmpty, len, Constant.fromConcreteValue(-1)), found);
+    }
+
+    /**
+     * {@code s.indexOf(ch, from)} for a character code {@code ch}: -1 for a negative code. Codes beyond the basic
+     * multilingual plane (surrogate pairs in the string) are not encoded: the caller records the decision
+     * {@code ch <= 0xFFFF} and loses precision on the other branch.
+     */
+    public Expression stringIndexOfChar(Expression s, Expression ch, Expression from) {
+        Expression valid = new ComplexExpression(BAND, new ComplexExpression(BVLE, INT_ZERO, ch),
+                new ComplexExpression(BVLE, ch, INT_CHAR_MAX));
+        Expression c = new ComplexExpression(SFROMCODE, new ComplexExpression(BV2NAT, ch));
+        return new ComplexExpression(ITE, valid, stringIndexOf(s, c, from), Constant.fromConcreteValue(-1));
+    }
+
+    /** records a fact that holds in every execution (a lemma that helps the solver), not a decision */
+    public void lemma(Expression fact) {
+        trace.addElement(new Assumption(fact, true));
+    }
+
+    /** records the decision {@code cond} with its concrete value in this execution */
+    public void decide(Expression cond, boolean value) {
+        trace.addElement(new PathCondition(value ? cond : new ComplexExpression(BNEG, cond),
+                value ? SUCCESS : FAILURE, BINARY_SPLIT));
+    }
+
+    /** {@code s.substring(from, from + length)} for int (bit-vector) positions within the string */
+    public Expression stringSubstring(Expression s, Expression from, Expression length) {
+        return new ComplexExpression(SSUBSTR, s, new ComplexExpression(BV2NAT, from),
+                new ComplexExpression(BV2NAT, length));
+    }
+
+    /** {@code s.length()} */
+    public Expression stringLengthExpression(Expression s) {
+        return new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, s));
+    }
+
+    /** records the decision whether the character code {@code ch} is in the basic multilingual plane */
+    public void decideBasicPlane(Expression ch, int cCh) {
+        Expression bmp = new ComplexExpression(BVLE, ch, INT_CHAR_MAX);
+        boolean inBmp = cCh <= 0xFFFF;
+        trace.addElement(new PathCondition(inBmp ? bmp : new ComplexExpression(BNEG, bmp),
+                inBmp ? SUCCESS : FAILURE, BINARY_SPLIT));
     }
 
     @Override

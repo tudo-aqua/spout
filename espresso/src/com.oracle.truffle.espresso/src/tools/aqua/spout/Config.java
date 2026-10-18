@@ -78,6 +78,13 @@ public class Config {
     /** whether String fields of symbolic objects are annotated (symbolic) or keep their concrete values */
     private boolean symbolicStringFields = true;
 
+    /**
+     * Maximal number of iterations that an unrolled operation (e.g. splitting a symbolic string: one decision per
+     * separator) records symbolically per execution of the operation; 0: no bound. Further iterations are concrete
+     * (precision loss).
+     */
+    private int unrollBound = 0;
+
     private TaintType taintType = TaintType.OFF;
 
     private final Trace trace;
@@ -135,6 +142,7 @@ public class Config {
         SPouT.log("Concolic Analysis: " + hasConcolicAnalysis);
         SPouT.log("Concolic Object Max. Annotation Depth: " + maxObjectAnnotationDepth);
         SPouT.log("Concolic Symbolic String Fields: " + symbolicStringFields);
+        SPouT.log("Concolic Unroll Bound: " + (unrollBound > 0 ? unrollBound : "none"));
         SPouT.log("Constructor Summary: " + constructorSummary);
         SPouT.log("Taint Analysis: " + taintType);
         SPouT.log("Seeded Bool Values: " + Arrays.toString(seedsBooleanValues));
@@ -167,6 +175,9 @@ public class Config {
                         break;
                     case "concolic.symbolic.string.fields":
                         symbolicStringFields = Boolean.parseBoolean(value.trim());
+                        break;
+                    case "concolic.unroll.bound":
+                        unrollBound = Integer.parseInt(value.trim());
                         break;
                     case "concolic.object.factories":
                         parseFactories(value);
@@ -938,6 +949,10 @@ public class Config {
 
     public boolean useObjectFactories() {
         return useObjectFactories;
+    }
+
+    public int getUnrollBound() {
+        return unrollBound;
     }
 
     public boolean isSymbolicStringFields() {

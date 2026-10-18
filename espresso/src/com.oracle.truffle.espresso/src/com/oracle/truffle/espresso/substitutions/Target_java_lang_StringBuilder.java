@@ -48,16 +48,12 @@ public final class Target_java_lang_StringBuilder {
         return SPouT.stringBuXXAppendString(self, string, meta);
     }
 
-    // TODO: causes exception
-
-    /*
     @Substitution(hasReceiver = true)
     public static @JavaType(String.class) StaticObject toString(
             @JavaType(StringBuilder.class) StaticObject self,
             @Inject Meta meta) {
         return SPouT.stringBuxxToString(self, meta);
     }
-    */
 
     @Substitution(hasReceiver = true, methodName = "insert")
     public static @JavaType(StringBuilder.class) StaticObject insert_string(

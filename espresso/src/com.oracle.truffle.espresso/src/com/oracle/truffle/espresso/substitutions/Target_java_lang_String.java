@@ -95,6 +95,30 @@ public final class Target_java_lang_String {
         return SPouT.split(self, regex, meta);
     }
 
+    @Substitution(hasReceiver = true, passAnnotations = true, methodName = "getChars")
+    public static void getChars(@JavaType(String.class) StaticObject self,
+                                @JavaType(internalName = "I") Object srcBegin,
+                                @JavaType(internalName = "I") Object srcEnd,
+                                @JavaType(char[].class) StaticObject dst,
+                                @JavaType(internalName = "I") Object dstBegin,
+                                @Inject Meta meta) {
+        SPouT.stringGetChars(self, srcBegin, srcEnd, dst, dstBegin, meta);
+    }
+
+    @Substitution(hasReceiver = true)
+    public static @JavaType(char[].class) StaticObject toCharArray(@JavaType(String.class) StaticObject self,
+                                                                   @Inject Meta meta) {
+        return SPouT.stringToCharArray(self, meta);
+    }
+
+    @Substitution(hasReceiver = true, passAnnotations = true, methodName = "split")
+    public static @JavaType(String[].class) Object split_limit(@JavaType(String.class) StaticObject self,
+                                                         @JavaType(String.class) StaticObject regex,
+                                                         @JavaType(internalName = "I") Object limit,
+                                                         @Inject Meta meta){
+        return SPouT.splitWithLimit(self, regex, limit, meta);
+    }
+
     @Substitution(hasReceiver = true, methodName = "regionMatches")
     public static @JavaType(internalName = "Z") Object regionMatches_ignoreCase(@JavaType(String.class) StaticObject self,
                                                                                 @JavaType(internalName = "Z") Object ignoreCase,
@@ -183,13 +207,16 @@ public final class Target_java_lang_String {
     }
 
     @Substitution(hasReceiver = true)
-    public static boolean isEmpty(@JavaType(String.class) StaticObject self, @Inject Meta meta) {
+    public static @JavaType(internalName = "Z") Object isEmpty(@JavaType(String.class) StaticObject self, @Inject Meta meta) {
         return  SPouT.stringIsEmpty(self, meta);
     }
 
-    // TODO: blacklisted.
+    @Substitution(hasReceiver = true, passAnnotations = true, methodName = "indexOf")
+    public static @JavaType(internalName = "I") Object indexOf_int(@JavaType(String.class) StaticObject self,
+                                                                   @JavaType(internalName = "I") Object cP, @Inject Meta meta) {
+        return SPouT.stringIndexOfIntInt(self, cP, 0, meta);
+    }
 
-    /*
     @Substitution(hasReceiver = true, passAnnotations = true, methodName = "indexOf")
     public static @JavaType(internalName = "I") Object indexOf_int_int(@JavaType(String.class) StaticObject self,
                                                                    @JavaType(internalName = "I") Object cP,
@@ -206,6 +233,5 @@ public final class Target_java_lang_String {
     public static @JavaType(internalName = "I") Object indexOfStringInt(@JavaType(String.class) StaticObject self, @JavaType(String.class) StaticObject other, @JavaType(internalName = "I") Object start, @Inject Meta meta) {
         return SPouT.stringIndexOfWithStart(self, other, start, meta);
     }
-    */
 
 }
