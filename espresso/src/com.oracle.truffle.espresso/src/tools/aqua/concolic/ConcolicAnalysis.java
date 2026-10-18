@@ -1550,16 +1550,25 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return new ComplexExpression(ITE, valid, stringIndexOf(s, c, from), Constant.fromConcreteValue(-1));
     }
 
+    /** the largest arrays whose elements are selected by a decision on the symbolic index */
+    public static final int MAX_INDEX_SPLIT = 4096;
+
     /**
-     * An access to an element through a symbolic index whose elements are not terms: the index is fixed to its
-     * concrete value by a decision (the other indices are explored by negating it)
+     * An access to an element through a symbolic index whose elements are not terms: a decision on the index like a
+     * switch over the indices of the array (branch {@code i} for {@code index == i}, stable across executions, in
+     * contrast to a decision {@code index == concrete index}); larger arrays lose precision.
      */
     @CompilerDirectives.TruffleBoundary
-    public void concretizeIndex(Expression sIndex, int cIndex) {
+    public void concretizeIndex(Expression sIndex, int cIndex, int length) {
         if (sIndex == null || sIndex instanceof Constant) {
             return;
         }
-        decide(new ComplexExpression(OperatorComparator.BVEQ, sIndex, Constant.fromConcreteValue(cIndex)), true);
+        if (length > MAX_INDEX_SPLIT) {
+            tools.aqua.spout.SPouT.losePrecision("an element of an array with more than " + MAX_INDEX_SPLIT
+                    + " elements is accessed through a symbolic index", null);
+            return;
+        }
+        tableSwitch(null, null, 0, 0, length - 1, cIndex, sIndex);
     }
 
     /** records a fact that holds in every execution (a lemma that helps the solver), not a decision */

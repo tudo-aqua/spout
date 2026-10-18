@@ -1455,7 +1455,7 @@ public class SPouT {
             }
             if (sIndex != null && !heap.hasElementTerms(array, aArray) && inBounds) {
                 // a large array: the element at the concrete index is read, only for this index
-                config.getConcolicAnalysis().concretizeIndex(sIndex, cIndex);
+                config.getConcolicAnalysis().concretizeIndex(sIndex, cIndex, array.length(lang));
             }
             a = heap.readElement(array, aArray, cIndex, sIndex, a, getMeta());
         }
@@ -1549,7 +1549,7 @@ public class SPouT {
             } else {
                 if (sIndex != null && !heap.hasElementTerms(array, aArray) && inBounds) {
                     // a large array: the element at the concrete index is written, only for this index
-                    config.getConcolicAnalysis().concretizeIndex(sIndex, cIndex);
+                    config.getConcolicAnalysis().concretizeIndex(sIndex, cIndex, array.length(lang));
                 }
                 heap.writeElement(array, aArray, cIndex, sIndex, aValue, concreteValue);
             }
