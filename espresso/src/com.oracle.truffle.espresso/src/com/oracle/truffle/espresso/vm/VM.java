@@ -1572,6 +1572,8 @@ public final class VM extends NativeEnv {
         } catch (Throwable t) {
             context.getLogger().severe("Host exception thrown while trying to terminate thread");
             t.printStackTrace();
+            // a bug of the executor (e.g. in an analysis): the path is not explored faithfully
+            SPouT.losePrecision("host exception in the executor: " + t, meta);
         } finally {
             context.unregisterThread(currentThread);
         }

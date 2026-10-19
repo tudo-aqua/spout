@@ -802,6 +802,33 @@ public class SPouT {
      */
     @CompilerDirectives.TruffleBoundary
     public static Annotations stringContent(StaticObject s) {
+        Annotations content = stringContent0(s);
+        if (analyze && config != null && config.hasConcolicAnalysis() && !StaticObject.isNull(s)
+                && Annotations.annotation(content, config.getConcolicIdx()) == null
+                && s.getKlass() == getMeta().java_lang_String && hasSymbolicElements(s)) {
+            // a string built from symbolic characters by code without symbolic implementation (e.g.
+            // Integer.toHexString, new String(char[])): its content is concrete only
+            losePrecision("a string is created from symbolic characters (its content is concretized)", getMeta());
+        }
+        return content;
+    }
+
+    /** whether the internal array of a string has symbolic elements */
+    private static boolean hasSymbolicElements(StaticObject s) {
+        StaticObject value = getMeta().java_lang_String_value.getObject(s);
+        if (StaticObject.isNull(value) || !value.hasAnnotations()) {
+            return false;
+        }
+        Annotations[] elements = value.getAnnotations();
+        for (int i = 0; i < elements.length - 1; i++) {
+            if (Annotations.annotation(elements[i], config.getConcolicIdx()) != null) {
+                return true;
+            }
+        }
+        return config.getConcolicAnalysis().getHeap().hasContentTerm(value);
+    }
+
+    private static Annotations stringContent0(StaticObject s) {
         Annotations oa = Annotations.annotation(s.getAnnotations(), -1);
         if (!analyze || config == null || !config.hasConcolicAnalysis() || StaticObject.isNull(s)) {
             return oa;
@@ -3442,6 +3469,17 @@ public class SPouT {
             this.object = object;
             this.result = result;
         }
+    }
+
+    /** an argument with annotations of a method inlined in the bytecode, which ignores annotations */
+    @CompilerDirectives.TruffleBoundary
+    public static void inlinedCallWithAnnotations(Annotations a, Method m) {
+        if (!analyze || config == null || !config.hasConcolicAnalysis()
+                || Annotations.annotation(a, config.getConcolicIdx()) == null) {
+            return;
+        }
+        losePrecision("symbolic argument of " + m.getDeclaringKlass().getNameAsString() + "." + m.getNameAsString()
+                + " (inlined in the bytecode) is concretized", getMeta());
     }
 
     public static boolean hasAnalysis() {
