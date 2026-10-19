@@ -143,8 +143,6 @@ public enum OperatorComparator {
     STOSTR,
     SREPLACE,
     SREPLACEALL,
-    STOLOWER,
-    STOUPPER,
     SLENGTH,
     SINDEXOF,
     STOINT,
@@ -154,6 +152,7 @@ public enum OperatorComparator {
     BV2NAT,
     NATADD,
     NATMINUS,
+    NATEQ,
     SLT,
     NAT2BV16,
     MATHSIN,
@@ -213,24 +212,24 @@ public enum OperatorComparator {
                 return "bvxor";
             case INEG:
             case LNEG:
-                return "-";
+                return "bvneg";
 
             // float and double
             case FADD:
             case DADD:
-                return "fp.add (RNE RoundingMode)";
+                return "fp.add RNE";
             case FSUB:
             case DSUB:
-                return "fp.sub (RNE RoundingMode)";
+                return "fp.sub RNE";
             case FMUL:
             case DMUL:
-                return "fp.mul (RNE RoundingMode)";
+                return "fp.mul RNE";
             case FDIV:
             case DDIV:
-                return "fp.div (RNE RoundingMode)";
+                return "fp.div RNE";
             case FREM:
             case DREM:
-                return "fp.rem (RNE RoundingMode)";
+                return "fp.rem";
             case FNEG:
             case DNEG:
                 return "fp.neg";
@@ -243,6 +242,8 @@ public enum OperatorComparator {
                 return "or";
             case BXOR:
                 return "xor";
+            case BIMPLIES:
+                return "=>";
             case FPEQ:
                 return "fp.eq";
             case FPLT:
@@ -259,7 +260,8 @@ public enum OperatorComparator {
                 return "=";
             case BVNE:
             case STRINGNE:
-                return "!=";
+                // printed as (not (= a b)) by ComplexExpression
+                return "=";
             case BVGT:
                 return "bvsgt";
             case BVGE:
@@ -277,22 +279,22 @@ public enum OperatorComparator {
                 return "(_ sign_extend 32)";
             case I2F:
             case L2F:
-                return "(_ to_fp 8 24) (RNE RoundingMode)";
+                return "(_ to_fp 8 24) RNE";
             case I2D:
             case L2D:
-                return "(_ to_fp 11 53) (RNE RoundingMode)";
+                return "(_ to_fp 11 53) RNE";
             case L2I:
                 return "(_ extract 31 0)";
             case F2I:
             case D2I:
-                return "(_ fp.to_sbv 32) (RNE RoundingMode)";
+                return "(_ fp.to_sbv 32) RNE";
             case F2L:
             case D2L:
-                return "(_ fp.to_sbv 64) (RNE RoundingMode)";
+                return "(_ fp.to_sbv 64) RNE";
             case F2D:
-                return "(_ to_fp 11 53) (RNE RoundingMode)";
+                return "(_ to_fp 11 53) RNE";
             case D2F:
-                return "(_ to_fp 8 24) (RNE RoundingMode)";
+                return "(_ to_fp 8 24) RNE";
 
             case FP_ISNAN:
                 return "fp.isNaN";
@@ -304,16 +306,16 @@ public enum OperatorComparator {
                 return "fp.max";
             case F2I_RTZ:
             case D2I_RTZ:
-                return "(_ fp.to_sbv 32) (RTZ RoundingMode)";
+                return "(_ fp.to_sbv 32) RTZ";
             case F2L_RTZ:
             case D2L_RTZ:
-                return "(_ fp.to_sbv 64) (RTZ RoundingMode)";
+                return "(_ fp.to_sbv 64) RTZ";
             case I2F_RTZ:
             case L2F_RTZ:
-                return "(_ to_fp 8 24) (RTZ RoundingMode)";
+                return "(_ to_fp 8 24) RTZ";
             case I2D_RTZ:
             case L2D_RTZ:
-                return "(_ to_fp 11 53) (RTZ RoundingMode)";
+                return "(_ to_fp 11 53) RTZ";
             case ITE:
                 return "ite";
             case B2I:
@@ -329,11 +331,7 @@ public enum OperatorComparator {
             case SINDEXOF:
                 return "str.indexof";
             case STOINT:
-                return "str.to.int";
-            case STOLOWER:
-                return "str.lower";
-            case STOUPPER:
-                return "str.upper";
+                return "str.to_int";
             case SAT:
                 return "str.at";
             case SCONCAT:
@@ -348,12 +346,16 @@ public enum OperatorComparator {
                 return "str.from_code";
             case SSUBSTR:
                 return "str.substr";
+            case SREPLACE:
+                return "str.replace";
+            case SREPLACEALL:
+                return "str.replace_all";
             case NAT2BV32:
-                return "(_ int2bv 32)";
+                return "(_ int_to_bv 32)";
             case NAT2BV16:
-                return "(_ int2bv 16)";
+                return "(_ int_to_bv 16)";
             case BV2NAT:
-                return "bv2int";
+                return "ubv_to_int";
             case LT:
                 return "<";
             case GT:
@@ -366,6 +368,8 @@ public enum OperatorComparator {
                 return "+";
             case NATMINUS:
                 return "-";
+            case NATEQ:
+                return "=";
             case MATHTAN:
                 return "TAN";
             case MATHCOS:
@@ -398,16 +402,14 @@ public enum OperatorComparator {
         }
     }
 
-    // RTZ RoundingMode
-
     static EnumSet<OperatorComparator> stringOps = null;
     static EnumSet<OperatorComparator> boolOps = null;
     static EnumSet<OperatorComparator> cmpOps = null;
 
     public static void initialize() {
         // FIXME: complete set
-        stringOps = EnumSet.of(SSUBSTR, SREPLACE, SREPLACEALL, STOLOWER, STOUPPER, SCONCAT, SAT);
-        boolOps = EnumSet.of(BVEQ, STRINGEQ, BVNE, STRINGNE, BVLT, BVLE, BVGT, BVGE, BNEG, BAND, BOR, BXOR, BEQUIV, BIMPLIES, SCONTAINS, OBJECT_EXTENDS);
+        stringOps = EnumSet.of(SSUBSTR, SREPLACE, SREPLACEALL, SCONCAT, SAT);
+        boolOps = EnumSet.of(BVEQ, STRINGEQ, BVNE, STRINGNE, BVLT, BVLE, BVGT, BVGE, BNEG, BAND, BOR, BXOR, BEQUIV, BIMPLIES, SCONTAINS, OBJECT_EXTENDS, NATEQ);
         cmpOps = EnumSet.of(LCMP, FCMPL, FCMPG, DCMPL, DCMPG);
     }
 

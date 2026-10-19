@@ -791,6 +791,13 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                     && ((opcode == IFEQ && !takeBranch) || (opcode == IFNE && takeBranch))) {
                 expr = new ComplexExpression(BNEG, expr);
             }
+                    if (negated == takeBranch) {
+                        expr = new ComplexExpression(BNEG, expr);
+                    }
+                    trace.addElement(new PathCondition(expr, takeBranch ? FAILURE : SUCCESS, BINARY_SPLIT));
+                    return;
+            }
+            expr = new ComplexExpression(op, convertCharsToInt(ce.getSubExpressions()));
         } else {
             switch (opcode) {
                 case IFEQ:
@@ -1272,19 +1279,19 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         boolean sat2 = (cIndex < concreteString.length());
         if (!sat1 && concolicIndex) {
             Expression indexGreaterEqualsZero =
-                    new ComplexExpression(GT, INT_ZERO, sIndex);
+                    new ComplexExpression(BVGT, INT_ZERO, sIndex);
             trace.addElement(new PathCondition(indexGreaterEqualsZero, FAILURE, BINARY_SPLIT));
         } else if (sat1 && concolicIndex) {
             Expression indexGreaterEqualsZero =
-                    new ComplexExpression(LE, INT_ZERO, sIndex);
+                    new ComplexExpression(BVLE, INT_ZERO, sIndex);
             trace.addElement(new PathCondition(indexGreaterEqualsZero, SUCCESS, BINARY_SPLIT));
         }
 
         if (!sat2) {
-            Expression indexLTSymbolicStringLength = new ComplexExpression(GE, sIndex, bvSymbolicStrLen);
+            Expression indexLTSymbolicStringLength = new ComplexExpression(BVGE, sIndex, bvSymbolicStrLen);
             trace.addElement(new PathCondition(indexLTSymbolicStringLength, FAILURE, BINARY_SPLIT));
         } else {
-            Expression indexLTSymbolicStringLength = new ComplexExpression(LT, sIndex, bvSymbolicStrLen);
+            Expression indexLTSymbolicStringLength = new ComplexExpression(BVLT, sIndex, bvSymbolicStrLen);
             trace.addElement(new PathCondition(indexLTSymbolicStringLength, SUCCESS, BINARY_SPLIT));
         }
         return null;
@@ -1313,12 +1320,12 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression stringToLowerCase(String self, Expression a1) {
-        return a1 == null ? null : new ComplexExpression(STOLOWER, a1);
+        return a1 == null ? null : asciiCaseMapping(self, a1, false);
     }
 
     @Override
     public Expression stringToUpperCase(String self, Expression a1) {
-        return a1 == null ? null : new ComplexExpression(STOUPPER, a1);
+        return a1 == null ? null : asciiCaseMapping(self, a1, true);
     }
 
 
@@ -1336,7 +1343,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         Expression maxLength = new ComplexExpression(NATMINUS, a3, a2);
         Expression indexWithinBound = new ComplexExpression(BAND,
                 new ComplexExpression(LE, NAT_ZERO, a2),
-                new ComplexExpression(LT, a3, new ComplexExpression(SLENGTH, a1)));
+                // Java allows end == length
+                new ComplexExpression(LE, a3, new ComplexExpression(SLENGTH, a1)));
         indexWithinBound = new ComplexExpression(BAND, indexWithinBound,
                 new ComplexExpression(LE, a2, a3));
         if (success) {
@@ -1620,12 +1628,86 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression characterToLowerCase(char self, Expression a1) {
-        return new ComplexExpression(STOLOWER, a1);
+        return a1 == null ? null : asciiCaseMapping(self, convertCharToInt(a1), false);
     }
 
     @Override
     public Expression characterToUpperCase(char self, Expression a1) {
-        return new ComplexExpression(STOUPPER, a1);
+        return a1 == null ? null : asciiCaseMapping(self, convertCharToInt(a1), true);
+    }
+
+    /*
+     * Case mapping. SMT-LIB has no case mapping, so it is encoded for ASCII letters only (A-Z <-> a-z), which
+     * Java maps by adding or subtracting 32 in every locale except Turkish and Azeri ('I'/'i'). Other
+     * characters are left unchanged by the encoding, which is wrong for letters outside of ASCII with a case
+     * mapping (e.g. 'Ä', or 'ß' -> "SS"): the concrete execution reports a precision loss if it sees one.
+     */
+
+    private static boolean isAscii(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            if (s.charAt(i) > 0x7f) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    private static void checkAsciiCaseMapping(String concrete, boolean upper) {
+        if (!isAscii(concrete)) {
+            SPouT.losePrecision("case mapping (" + (upper ? "toUpperCase" : "toLowerCase")
+                    + ") is encoded for ASCII letters only", null);
+        }
+    }
+
+    /** {@code Character.toLowerCase(c)} / {@code toUpperCase} on a char given as an int (bit-vector) */
+    @CompilerDirectives.TruffleBoundary
+    private static Expression asciiCaseMapping(char concrete, Expression c, boolean upper) {
+        checkAsciiCaseMapping(String.valueOf(concrete), upper);
+        Expression from = Constant.fromConcreteValue((int) (upper ? 'a' : 'A'));
+        Expression to = Constant.fromConcreteValue((int) (upper ? 'z' : 'Z'));
+        Expression isLetter = new ComplexExpression(BAND, new ComplexExpression(BVLE, from, c),
+                new ComplexExpression(BVLE, c, to));
+        Expression mapped = new ComplexExpression(upper ? OperatorComparator.ISUB : OperatorComparator.IADD, c,
+                Constant.fromConcreteValue(32));
+        return new ComplexExpression(ITE, isLetter, mapped, c);
+    }
+
+    /**
+     * {@code s.toLowerCase()} / {@code toUpperCase}: the mapping is unrolled over the characters, so the length
+     * of {@code s} is decided to be the concrete length (flipping the decision explores other lengths).
+     */
+    @CompilerDirectives.TruffleBoundary
+    private Expression asciiCaseMapping(String concrete, Expression s, boolean upper) {
+        int bound = config.getUnrollBound();
+        if (bound > 0 && concrete.length() > bound) {
+            SPouT.losePrecision("case mapping of a string longer than " + bound + " characters (concolic.unroll.bound)", null);
+            return null;
+        }
+        decide(new ComplexExpression(NATEQ, new ComplexExpression(SLENGTH, s),
+                Constant.createNatConstant(concrete.length())), true);
+        return asciiCaseMapping(concrete, s, concrete.length(), upper);
+    }
+
+    /** case mapping of the first {@code length} characters of {@code s}, which has at least that many */
+    @CompilerDirectives.TruffleBoundary
+    private static Expression asciiCaseMapping(String concrete, Expression s, int length, boolean upper) {
+        checkAsciiCaseMapping(concrete, upper);
+        Expression from = Constant.createNatConstant(upper ? 'a' : 'A');
+        Expression to = Constant.createNatConstant(upper ? 'z' : 'Z');
+        Expression delta = Constant.createNatConstant(32);
+        Expression result = null;
+        for (int i = 0; i < length; i++) {
+            Expression c = new ComplexExpression(SAT, s, Constant.createNatConstant(i));
+            Expression code = new ComplexExpression(STOCODE, c);
+            Expression isLetter = new ComplexExpression(BAND, new ComplexExpression(LE, from, code),
+                    new ComplexExpression(LE, code, to));
+            Expression mapped = new ComplexExpression(SFROMCODE,
+                    new ComplexExpression(upper ? NATMINUS : NATADD, code, delta));
+            Expression mappedChar = new ComplexExpression(ITE, isLetter, mapped, c);
+            result = result == null ? mappedChar : new ComplexExpression(SCONCAT, result, mappedChar);
+        }
+        return result != null ? result : Constant.fromConcreteValue("");
     }
 
     @Override
@@ -1692,6 +1774,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             return regionMatchesSymbolic(
                     makeStringToExpr(self, meta),
                     Constant.fromConcreteValue(cOther),
+                    cSelf,
+                    cOther,
                     ctoffset,
                     cooffset,
                     clen,
@@ -1701,6 +1785,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             return regionMatchesSymbolic(
                     makeStringToExpr(other, meta),
                     Constant.fromConcreteValue(cSelf),
+                    cOther,
+                    cSelf,
                     cooffset,
                     ctoffset,
                     clen,
@@ -1710,6 +1796,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             return regionMatchesSymbolic(
                     makeStringToExpr(self, meta),
                     makeStringToExpr(other, meta),
+                    cSelf,
+                    cOther,
                     ctoffset,
                     cooffset,
                     clen,
@@ -1721,6 +1809,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     private Object regionMatchesSymbolic(
             Expression symbolicSelf,
             Expression symbolicOther,
+            String cSelf,
+            String cOther,
             int ctoffset,
             int cooffset,
             int clen,
@@ -1738,9 +1828,10 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                         symbolicOther,
                         Constant.createNatConstant(cooffset),
                         Constant.createNatConstant(clen));
-        if (ignore) {
-            symbolicSubSelf = new ComplexExpression(STOLOWER, symbolicSubSelf);
-            symbolicSubOther = new ComplexExpression(STOLOWER, symbolicSubOther);
+        if (ignore && clen > 0) {
+            // the bounds have been checked: both substrings have exactly clen characters
+            symbolicSubSelf = asciiCaseMapping(cSelf.substring(ctoffset, ctoffset + clen), symbolicSubSelf, clen, false);
+            symbolicSubOther = asciiCaseMapping(cOther.substring(cooffset, cooffset + clen), symbolicSubOther, clen, false);
         }
         PathCondition pc;
         if (cRes) {
@@ -1769,7 +1860,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             Expression tSymLen) {
         boolean upperOBound = (ooffset + len) > olen;
         Expression upperOBoundE =
-                new ComplexExpression(LT, otherSymLen, Constant.fromConcreteValue(ooffset + len));
+                new ComplexExpression(BVLT, otherSymLen, Constant.fromConcreteValue(ooffset + len));
 
         boolean lowerOBound = (ooffset + len) < 0;
 
@@ -1777,7 +1868,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
         boolean upperTBound = (toffset + len) > tlen;
         Expression upperTBoundE =
-                new ComplexExpression(LT, tSymLen, Constant.fromConcreteValue(toffset + len));
+                new ComplexExpression(BVLT, tSymLen, Constant.fromConcreteValue(toffset + len));
         Expression check0 = new ComplexExpression(BAND, upperOBoundE, upperTBoundE);
         Expression check1 =
                 new ComplexExpression(BAND, upperOBoundE, new ComplexExpression(BNEG, upperTBoundE));

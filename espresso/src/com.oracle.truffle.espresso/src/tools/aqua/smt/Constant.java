@@ -54,6 +54,13 @@ public abstract class Constant extends Atom {
         NatConstant(int value){
             super(Types.NAT, value);
         }
+
+        /** SMT-LIB has no negative numerals: {@code -1} is written {@code (- 1)} */
+        @Override
+        public String toString() {
+            long v = (int) getValue();
+            return v < 0 ? "(- " + (-v) + ")" : Long.toString(v);
+        }
     }
 
     private final static class IntConstant extends Constant {
@@ -77,7 +84,9 @@ public abstract class Constant extends Atom {
         @Override
         @CompilerDirectives.TruffleBoundary
         public String toString() {
-            return "#x" + String.format("%1$0" + (bytes * 2) +"x", getValue());
+            // the value is sign-extended to an int: keep only the low bytes (e.g. byte -1 is #xff, not #xffffffff)
+            long masked = getValue() & ((1L << (bytes * 8)) - 1);
+            return "#x" + String.format("%1$0" + (bytes * 2) + "x", masked);
         }
     }
 

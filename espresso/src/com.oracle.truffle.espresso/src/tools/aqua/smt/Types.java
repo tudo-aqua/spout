@@ -56,7 +56,7 @@ public enum Types {
             // but sometimes we need Variables that are Integer in the SMT-Lib theory to encode string constraints.
             // I call them NAT as this is sometimes used in the SMT-Lib context to distinguish Integer and BV representations.
             case NAT:
-                return "Integer";
+                return "Int";
             default:
                 return super.toString();
         }

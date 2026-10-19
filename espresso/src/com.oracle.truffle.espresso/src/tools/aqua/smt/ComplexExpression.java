@@ -51,6 +51,34 @@ public class ComplexExpression implements Expression {
 
     @Override
     public String toString() {
+        switch (operator) {
+            case BVNE:
+            case STRINGNE:
+                return "(not " + application() + ")";
+            case FREM:
+            case DREM:
+                return javaRemainder(subExpressions[0], subExpressions[1]);
+            default:
+                return application();
+        }
+    }
+
+    /**
+     * Java's {@code %} on floating-point numbers is the truncating remainder (C's {@code fmod}): the result has the
+     * sign of the dividend. SMT-LIB's {@code fp.rem} is the IEEE remainder (quotient rounded to nearest even), so
+     * its result is corrected by the divisor if the signs differ. The corrected value is the exact {@code fmod}
+     * result, which is representable, so the addition does not round. NaN, infinities and zeros are handled by
+     * {@code fp.rem} as in Java ({@code fp.rem} returns zeros with the sign of the dividend).
+     */
+    private static String javaRemainder(Expression dividend, Expression divisor) {
+        return "(let ((__rem_x " + dividend + ") (__rem_y " + divisor + "))" +
+                " (let ((__rem_r (fp.rem __rem_x __rem_y)))" +
+                " (ite (and (not (fp.isZero __rem_r)) (not (= (fp.isNegative __rem_r) (fp.isNegative __rem_x))))" +
+                " (ite (fp.isNegative __rem_x) (fp.sub RNE __rem_r (fp.abs __rem_y)) (fp.add RNE __rem_r (fp.abs __rem_y)))" +
+                " __rem_r)))";
+    }
+
+    private String application() {
         return "(" + operator + " " + String.join(" ", new Iterable<CharSequence>() {
             @Override
             public Iterator<CharSequence> iterator() {

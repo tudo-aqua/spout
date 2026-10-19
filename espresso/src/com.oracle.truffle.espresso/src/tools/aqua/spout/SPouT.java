@@ -1141,7 +1141,7 @@ public class SPouT {
         putFloat(frame, top - 2, c1);
         if (analyze)
             AnnotatedVM.putAnnotations(frame, top - 2, analysis.l2f(c1,
-                    AnnotatedVM.popAnnotations(frame, top - 2)));
+                    AnnotatedVM.popAnnotations(frame, top - 1)));
     }
 
     public static void l2d(VirtualFrame frame, int top) {
@@ -1149,7 +1149,7 @@ public class SPouT {
         putDouble(frame, top - 2, c1);
         if (analyze)
             AnnotatedVM.putAnnotations(frame, top - 1, analysis.l2d(c1,
-                    AnnotatedVM.popAnnotations(frame, top - 2)));
+                    AnnotatedVM.popAnnotations(frame, top - 1)));
     }
 
     public static void f2i(VirtualFrame frame, int top) {
