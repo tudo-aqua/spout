@@ -765,32 +765,43 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                 case FCMPG: //float
                 case DCMPL: //double
                 case DCMPG: //double
-                    // 0 if x == y; less than 0 if x < y; greater than 0 if x > y
+                    // 0 if x == y; less than 0 if x < y; greater than 0 if x > y;
+                    // if x or y is NaN: -1 for xCMPL, 1 for xCMPG. All FP comparisons are false on NaN, so the
+                    // branch condition is either a comparison or a negated comparison, and a branch not taken is
+                    // always the negation of the taken condition (never the complementary comparison).
+                    boolean nanIsLess = ce.getOperator() == OperatorComparator.FCMPL
+                            || ce.getOperator() == OperatorComparator.DCMPL;
+                    boolean negated;
                     switch (opcode) {
                         case IFEQ:
+                            op = OperatorComparator.FPEQ;
+                            negated = false;
+                            break;
                         case IFNE:
                             op = OperatorComparator.FPEQ;
+                            negated = true;
                             break;
                         case IFLT:
-                            op = takeBranch ? OperatorComparator.FPLT : OperatorComparator.FPGE;
+                            op = nanIsLess ? OperatorComparator.FPGE : OperatorComparator.FPLT;
+                            negated = nanIsLess;
                             break;
                         case IFGE:
-                            op = takeBranch ? OperatorComparator.FPGE : OperatorComparator.FPLT;
+                            op = nanIsLess ? OperatorComparator.FPGE : OperatorComparator.FPLT;
+                            negated = !nanIsLess;
                             break;
                         case IFGT:
-                            op = takeBranch ? OperatorComparator.FPGT : OperatorComparator.FPLE;
+                            op = nanIsLess ? OperatorComparator.FPGT : OperatorComparator.FPLE;
+                            negated = !nanIsLess;
                             break;
                         case IFLE:
-                            op = takeBranch ? OperatorComparator.FPLE : OperatorComparator.FPGT;
+                            op = nanIsLess ? OperatorComparator.FPGT : OperatorComparator.FPLE;
+                            negated = nanIsLess;
                             break;
+                        default:
+                            CompilerDirectives.transferToInterpreter();
+                            throw EspressoError.shouldNotReachHere("expecting IFEQ,IFNE,IFLT,IFGE,IFGT,IFLE");
                     }
-                    break;
-            }
-            expr = new ComplexExpression(op, convertCharsToInt(ce.getSubExpressions()));
-            if (!ce.getOperator().equals(OperatorComparator.LCMP)
-                    && ((opcode == IFEQ && !takeBranch) || (opcode == IFNE && takeBranch))) {
-                expr = new ComplexExpression(BNEG, expr);
-            }
+                    expr = new ComplexExpression(op, convertCharsToInt(ce.getSubExpressions()));
                     if (negated == takeBranch) {
                         expr = new ComplexExpression(BNEG, expr);
                     }
