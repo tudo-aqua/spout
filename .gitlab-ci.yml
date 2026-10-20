@@ -21,7 +21,7 @@ development-image:
     - changes:
       - scripts/graal-image.Dockerfile
   tags:
-    - dind
+    - priviledged
 
 build:
   stage: build
