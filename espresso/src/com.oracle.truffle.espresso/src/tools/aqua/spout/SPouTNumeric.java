@@ -273,7 +273,10 @@ public class SPouTNumeric {
     @CompilerDirectives.TruffleBoundary
     public static StaticObject booleanToString(Object b, Meta meta){
         if(AnnotatedValue.svalue(b) != null) SPouT.losePrecision("Boolean.toString is not symbolically implemented yet", meta);
-        return meta.toGuestString(Integer.toString((AnnotatedValue.value(b))));
+        Object v = AnnotatedValue.value(b);
+        // booleans may be ints (0 / 1) on the operand stack
+        boolean value = v instanceof Boolean ? (Boolean) v : ((Number) v).intValue() != 0;
+        return meta.toGuestString(Boolean.toString(value));
     }
 
     @CompilerDirectives.TruffleBoundary

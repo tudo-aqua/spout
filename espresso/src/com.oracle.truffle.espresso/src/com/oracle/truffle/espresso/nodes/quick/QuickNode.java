@@ -42,6 +42,18 @@ public abstract class QuickNode extends BaseQuickNode {
     @Override
     public abstract int execute(VirtualFrame frame, boolean isContinuationResume);
 
+    /** null check of the receiver {@code args[0]} of a call, with the annotation of its slot */
+    protected final StaticObject nullCheckReceiver(Object[] args) {
+        StaticObject value = (StaticObject) args[0];
+        if (StaticObject.isNull(value)) {
+            SPouT.checkNull(value, true, SPouT.argumentAnnotation(args, 0));
+            getBytecodeNode().enterImplicitExceptionProfile();
+            throw getMeta().throwNullPointerException();
+        }
+        SPouT.checkNull(value, false, SPouT.argumentAnnotation(args, 0));
+        return value;
+    }
+
     protected final StaticObject nullCheck(StaticObject value) {
         if (StaticObject.isNull(value)) {
             //logs StaticObject == null to the trace

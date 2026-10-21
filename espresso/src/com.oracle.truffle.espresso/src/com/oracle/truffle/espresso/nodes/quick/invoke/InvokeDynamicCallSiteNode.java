@@ -38,6 +38,7 @@ import com.oracle.truffle.espresso.nodes.quick.QuickNode;
 import com.oracle.truffle.espresso.runtime.EspressoThreadLocalState;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
 import tools.aqua.spout.AnnotatedValue;
+import tools.aqua.spout.Annotations;
 import tools.aqua.spout.SPouT;
 
 public final class InvokeDynamicCallSiteNode extends QuickNode {
@@ -86,7 +87,10 @@ public final class InvokeDynamicCallSiteNode extends QuickNode {
         int argCount = SignatureSymbols.parameterCount(parsedSignature);
         Object[] args = EspressoFrame.popBasicArgumentsWithArray(frame, top, parsedSignature, false, new Object[argCount + (hasAppendix ? 1 : 0)]);
         Object[] args2 = null;
+        Annotations[] argAnnotations = null;
         if(originalLinkName.equals(getNames().getOrCreate("makeConcatWithConstants"))) {
+            // the terms of string arguments, for the symbolic content of the result
+            argAnnotations = SPouT.takeArgumentAnnotations(args);
             SPouT.pauseAnalyze();
             args2 = args.clone();
         }
@@ -102,7 +106,12 @@ public final class InvokeDynamicCallSiteNode extends QuickNode {
             tls.unblockContinuationSuspension();
             if (originalLinkName.equals(getNames().getOrCreate("makeConcatWithConstants"))) {
                 SPouT.resumeAnalyze();
-                SPouT.makeConcatWithConstantsSymbolically(result, args2, getMeta());
+                Object call = SPouT.enterCall(args2, argAnnotations);
+                try {
+                    SPouT.makeConcatWithConstantsSymbolically(result, args2, getMeta());
+                } finally {
+                    SPouT.exitCall(call);
+                }
             }
         }
         if (!returnsPrimitiveType) {
