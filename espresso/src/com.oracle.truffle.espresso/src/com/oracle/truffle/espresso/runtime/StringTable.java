@@ -77,6 +77,13 @@ public final class StringTable {
         return value.toString();
     }
 
+    /** @return whether the string is the interned instance of its value (e.g. a literal), without interning it */
+    @TruffleBoundary
+    public boolean isInterned(@JavaType(String.class) StaticObject guestString) {
+        return StaticObject.notNull(guestString)
+                        && interned.get(context.getMeta().toHostString(guestString)) == guestString;
+    }
+
     @TruffleBoundary
     public @JavaType(String.class) StaticObject intern(@JavaType(String.class) StaticObject guestString) {
         assert StaticObject.notNull(guestString);

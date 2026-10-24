@@ -197,9 +197,23 @@ public abstract class Constant extends Atom {
             return (String) super.getValue();
         }
 
+        /**
+         * SMT-LIB string literal: a double quote is written twice, characters outside of printable ASCII as
+         * {@code \\u{...}} (also the backslash, which would otherwise start an escape sequence).
+         */
         @Override
         public String toString() {
-            return "\"" + getValue() + "\"";
+            StringBuilder sb = new StringBuilder("\"");
+            for (char c : getValue().toCharArray()) {
+                if (c == '"') {
+                    sb.append("\"\"");
+                } else if (c < 0x20 || c > 0x7e || c == '\\') {
+                    sb.append("\\u{").append(Integer.toHexString(c)).append('}');
+                } else {
+                    sb.append(c);
+                }
+            }
+            return sb.append('"').toString();
         }
     }
 

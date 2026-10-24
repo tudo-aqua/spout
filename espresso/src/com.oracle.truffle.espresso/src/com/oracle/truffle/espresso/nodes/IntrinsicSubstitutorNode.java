@@ -39,6 +39,7 @@ import com.oracle.truffle.espresso.substitutions.JavaSubstitution;
 import com.oracle.truffle.espresso.threads.ThreadState;
 import com.oracle.truffle.espresso.vm.VM;
 import tools.aqua.spout.AnnotatedVM;
+import tools.aqua.spout.SPouT;
 
 
 @ExportLibrary(NodeLibrary.class)
@@ -77,6 +78,8 @@ public final class IntrinsicSubstitutorNode extends EspressoInstrumentableRootNo
     Object execute(VirtualFrame frame) {
         EspressoThreadLocalState tls = getContext().getLanguage().getThreadLocalState();
         tls.blockContinuationSuspension();
+        // the annotations of reference arguments (e.g. terms of strings) for the substitution
+        Object call = SPouT.enterCall(frame.getArguments());
         try {
             // We consider substitutions non-native, as they are in Espresso's control.
             assert ThreadState.currentThreadInEspresso(getContext());
@@ -87,6 +90,7 @@ public final class IntrinsicSubstitutorNode extends EspressoInstrumentableRootNo
             }
             return substitution.invoke(frame.getArguments());
         } finally {
+            SPouT.exitCall(call);
             tls.unblockContinuationSuspension();
         }
     }

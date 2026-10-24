@@ -1023,7 +1023,7 @@ public class MetaAnalysis implements Analysis<Annotations> {
 
     @Override
     public Annotations stringCompareTo(String self, String other, Annotations a1, Annotations a2) {
-        return sexecute(self, other, a1, a2, Analysis::stringContains);
+        return sexecute(self, other, a1, a2, Analysis::stringCompareTo);
     }
 
     @Override

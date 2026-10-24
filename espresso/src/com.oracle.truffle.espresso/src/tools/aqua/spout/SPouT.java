@@ -51,7 +51,10 @@ import tools.aqua.taint.PostDominatorAnalysis;
 import tools.aqua.taint.Taint;
 import tools.aqua.witnesses.GWIT;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.IdentityHashMap;
+import java.util.Map;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
@@ -85,11 +88,14 @@ public class SPouT {
     public static void newPath(String options) {
         System.out.println("======================== START PATH [BEGIN].");
         config = new Config();
+        reportedPrecisionLosses.clear();
         config.parseAnalysesConfig(options, getMeta());
         analysis = new MetaAnalysis(config);
         trace = config.getTrace();
         gwit = new GWIT(trace);
         // TODO: should be deferred to latest possible point in time
+        analysisThread = Thread.currentThread();
+        pauseDepth = 0;
         analyze = true;
         oldAnalyze = true;
         SPouTNumeric.newPath(config, true);
@@ -146,8 +152,15 @@ public class SPouT {
         // TODO: configure stopping the analysis
         // TODO: sometimes called with meta == null
         SPouT.log(message);
+        // the path is not explored completely: reported in the trace (once per reason)
+        if (analyze && trace != null && reportedPrecisionLosses.add(message)) {
+            trace.addElement(new PrecisionLoss(message));
+        }
         //stopRecording(message, meta);
     }
+
+    /** reasons of precision losses reported in the trace of the current path */
+    private static final java.util.Set<String> reportedPrecisionLosses = new java.util.HashSet<>();
 
     @CompilerDirectives.TruffleBoundary
     public static void notImplementedYet(String message, Meta meta) {
@@ -648,9 +661,290 @@ public class SPouT {
     }
 
     public static void checkNull(StaticObject staticObject, boolean isNull) {
+        checkNull(staticObject, isNull, null);
+    }
+
+    /** @param a the annotation of the slot of the reference */
+    public static void checkNull(StaticObject staticObject, boolean isNull, Annotations a) {
         if (analyze) {
-            analysis.checkNull(staticObject, isNull, Annotations.objectAnnotation(staticObject));
+            analysis.checkNull(staticObject, isNull, refAnnotations(staticObject, a));
         }
+    }
+
+    // --------------------------------------------------------------------------
+    //
+    // heap model: references carry the terms of the objects in the annotations of their slots (see HeapModel)
+
+    /**
+     * Annotation of a reference: the annotation of its slot if it has a term, the object annotation otherwise (the
+     * symbolic value of a string, the length of an array, the identity of a nondet object, or the first term by
+     * which the object was read).
+     */
+    @CompilerDirectives.TruffleBoundary
+    public static Annotations refAnnotations(StaticObject o, Annotations slot) {
+        Annotations oa = Annotations.objectAnnotation(o);
+        if (slot == null || config == null || !config.hasConcolicAnalysis()
+                || Annotations.annotation(slot, config.getConcolicIdx()) == null) {
+            return oa;
+        }
+        if (oa == null) {
+            return slot;
+        }
+        Object[] values = oa.getAnnotations().clone();
+        values[config.getConcolicIdx()] = Annotations.annotation(slot, config.getConcolicIdx());
+        return Annotations.create(values);
+    }
+
+    private static boolean hasHeapModel() {
+        return analyze && config.hasConcolicAnalysis();
+    }
+
+    /** annotation of a field read through a reference with annotation {@code receiverA} */
+    @CompilerDirectives.TruffleBoundary
+    public static Annotations getFieldAnnotation(StaticObject receiver, Annotations receiverA, Field f) {
+        Annotations slot = AnnotatedVM.getFieldAnnotation(receiver, f);
+        if (analyze && !f.isStatic() && tools.aqua.concolic.HeapModel.isBuilder(receiver)
+                && isSymbolicBuilder(receiver, receiverA)) {
+            // a method without symbolic implementation runs on the concrete characters of a symbolic builder
+            losePrecision("internal field " + f.getNameAsString() + " of a builder with symbolic content is read, "
+                    + "its symbolic content is concretized", getMeta());
+        }
+        if (analyze && !f.isStatic() && receiver.getKlass() == getMeta().java_lang_String && isSymbolicString(receiver, receiverA)) {
+            // a method without symbolic implementation runs on the concrete characters of a symbolic string
+            losePrecision("internal field String." + f.getNameAsString() + " of a symbolic string is read, its "
+                    + "symbolic content is concretized", getMeta());
+        }
+        if (!hasHeapModel() || f.isStatic()) {
+            return slot;
+        }
+        return config.getConcolicAnalysis().getHeap().readField(receiver, refAnnotations(receiver, receiverA), f, slot,
+                getMeta());
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static void setFieldAnnotation(StaticObject receiver, Annotations receiverA, Field f, Annotations value) {
+        if (analyze && !f.isStatic() && tools.aqua.concolic.HeapModel.isBuilder(receiver)
+                && isSymbolicBuilder(receiver, receiverA)) {
+            // a mutation without symbolic implementation (e.g. reverse, delete): the symbolic content is stale
+            losePrecision("internal field " + f.getNameAsString() + " of a builder with symbolic content is written, "
+                    + "its symbolic content is dropped", getMeta());
+            Annotations.setObjectAnnotation(receiver, null);
+        }
+        if (hasHeapModel() && !f.isStatic()) {
+            config.getConcolicAnalysis().getHeap().writeField(receiver, refAnnotations(receiver, receiverA), f, value);
+        }
+        AnnotatedVM.setFieldAnnotation(receiver, f, value);
+    }
+
+    /** annotations of the reference arguments of calls, from popping them until the callee initializes its frame */
+    private static final Map<Object[], Annotations[]> argumentAnnotations = new IdentityHashMap<>();
+
+    @CompilerDirectives.TruffleBoundary
+    public static void setArgumentAnnotations(Object[] args, Annotations[] annotations) {
+        if (!analyze) return;
+        synchronized (argumentAnnotations) {
+            if (argumentAnnotations.size() > 10_000) {
+                // left by calls of native or substituted methods
+                argumentAnnotations.clear();
+            }
+            argumentAnnotations.put(args, annotations);
+        }
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static Annotations[] takeArgumentAnnotations(Object[] args) {
+        synchronized (argumentAnnotations) {
+            return argumentAnnotations.isEmpty() ? null : argumentAnnotations.remove(args);
+        }
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static Annotations argumentAnnotation(Object[] args, int i) {
+        synchronized (argumentAnnotations) {
+            Annotations[] a = argumentAnnotations.isEmpty() ? null : argumentAnnotations.get(args);
+            return a != null ? a[i] : null;
+        }
+    }
+
+    /**
+     * Arguments of the substituted methods being executed (innermost last) with the annotations of their slots: the
+     * substitutions of string methods find the terms of their string arguments here (see {@link #stringContent}).
+     */
+    private static final ThreadLocal<java.util.ArrayDeque<Object[]>> calls =
+            ThreadLocal.withInitial(java.util.ArrayDeque::new);
+
+    /** @return a token for {@link #exitCall}, {@code null} if the arguments carry no annotations */
+    @CompilerDirectives.TruffleBoundary
+    public static Object enterCall(Object[] args) {
+        if (!analyze) return null;
+        return enterCall(args, takeArgumentAnnotations(args));
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static Object enterCall(Object[] args, Annotations[] annotations) {
+        if (annotations == null) return null;
+        Object[] call = {args, annotations};
+        calls.get().push(call);
+        return call;
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static void exitCall(Object token) {
+        if (token != null) {
+            calls.get().remove(token);
+        }
+    }
+
+    /**
+     * The annotations of the content of a string: {@code (str.val t)} if the string is an argument of the current
+     * substituted method and its reference has the term {@code t}, the object annotation otherwise (the content of a
+     * string computed by the program, or of a nondet string).
+     */
+    @CompilerDirectives.TruffleBoundary
+    public static Annotations stringContent(StaticObject s) {
+        Annotations content = stringContent0(s);
+        if (analyze && config != null && config.hasConcolicAnalysis() && !StaticObject.isNull(s)
+                && Annotations.annotation(content, config.getConcolicIdx()) == null
+                && s.getKlass() == getMeta().java_lang_String && hasSymbolicElements(s)) {
+            // a string built from symbolic characters by code without symbolic implementation (e.g.
+            // Integer.toHexString, new String(char[])): its content is concrete only
+            losePrecision("a string is created from symbolic characters (its content is concretized)", getMeta());
+        }
+        return content;
+    }
+
+    /** whether the internal array of a string has symbolic elements */
+    private static boolean hasSymbolicElements(StaticObject s) {
+        StaticObject value = getMeta().java_lang_String_value.getObject(s);
+        if (StaticObject.isNull(value) || !value.hasAnnotations()) {
+            return false;
+        }
+        Annotations[] elements = value.getAnnotations();
+        for (int i = 0; i < elements.length - 1; i++) {
+            if (Annotations.annotation(elements[i], config.getConcolicIdx()) != null) {
+                return true;
+            }
+        }
+        return config.getConcolicAnalysis().getHeap().hasContentTerm(value);
+    }
+
+    private static Annotations stringContent0(StaticObject s) {
+        Annotations oa = Annotations.annotation(s.getAnnotations(), -1);
+        if (!analyze || config == null || !config.hasConcolicAnalysis() || StaticObject.isNull(s)) {
+            return oa;
+        }
+        if (tools.aqua.concolic.HeapModel.isBuilder(s)) {
+            // a builder read through a term: its content in the heap model (initial content and mutations)
+            Annotations heapContent = config.getConcolicAnalysis().getHeap().readBuilderContent(s, callAnnotation(s));
+            if (heapContent == null) {
+                return oa;
+            }
+            Object[] values = oa != null ? oa.getAnnotations().clone() : Annotations.create().getAnnotations();
+            values[config.getConcolicIdx()] = Annotations.annotation(heapContent, config.getConcolicIdx());
+            return Annotations.create(values);
+        }
+        if (s.getKlass() != getMeta().java_lang_String) {
+            return oa;
+        }
+        Object[] call = calls.get().peek();
+        if (call == null) {
+            return oa;
+        }
+        Object[] args = (Object[]) call[0];
+        Annotations[] annotations = (Annotations[]) call[1];
+        for (int i = 0; i < args.length && i < annotations.length; i++) {
+            if (args[i] == s) {
+                Object t = Annotations.annotation(annotations[i], config.getConcolicIdx());
+                if (tools.aqua.concolic.HeapModel.isObjectTerm(t)) {
+                    Object[] values = oa != null ? oa.getAnnotations().clone() : Annotations.create().getAnnotations();
+                    values[config.getConcolicIdx()] = config.getConcolicAnalysis().getHeap().contentTerm((Expression) t);
+                    return Annotations.create(values);
+                }
+            }
+        }
+        return oa;
+    }
+
+    /** @return whether the content of a builder, referenced with slot annotation {@code a}, is symbolic */
+    private static boolean isSymbolicBuilder(StaticObject b, Annotations a) {
+        if (config == null || !config.hasConcolicAnalysis()) return false;
+        Object[] call = calls.get().peek();
+        if (call != null && ((Object[]) call[0]).length > 0 && ((Object[]) call[0])[0] == b) {
+            // inside a substituted method of the builder: its implementation uses the internal fields on purpose
+            return false;
+        }
+        if (Annotations.annotation(Annotations.objectAnnotation(b), config.getConcolicIdx()) != null) return true;
+        return tools.aqua.concolic.HeapModel.isObjectTerm(Annotations.annotation(a, config.getConcolicIdx()));
+    }
+
+    /** @return whether the content of a string, referenced with slot annotation {@code a}, is symbolic */
+    private static boolean isSymbolicString(StaticObject s, Annotations a) {
+        if (config == null || !config.hasConcolicAnalysis()) return false;
+        if (Annotations.annotation(Annotations.objectAnnotation(s), config.getConcolicIdx()) != null) return true;
+        return config.isSymbolicStringFields()
+                && tools.aqua.concolic.HeapModel.isObjectTerm(Annotations.annotation(a, config.getConcolicIdx()));
+    }
+
+    /** @return whether the string has annotations (of any analysis), also by the term of its reference */
+    public static boolean hasStringAnnotations(StaticObject s) {
+        return s.hasAnnotations() || hasSymbolicContent(s);
+    }
+
+    /** the annotation of the slot of {@code o} as argument of the current substituted method, or null */
+    private static Annotations callAnnotation(StaticObject o) {
+        Object[] call = calls.get().peek();
+        if (call == null) {
+            return null;
+        }
+        Object[] args = (Object[]) call[0];
+        Annotations[] annotations = (Annotations[]) call[1];
+        for (int i = 0; i < args.length && i < annotations.length; i++) {
+            if (args[i] == o) {
+                return annotations[i];
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Sets the content of a builder after a mutation: its object annotation, and, if the builder is referenced
+     * through a term of the heap model, a write of its content (later reads through aliases see it).
+     */
+    private static void setBuilderContent(StaticObject self, Annotations content) {
+        setStringAnnotations(self, content);
+        if (analyze && config.hasConcolicAnalysis() && content != null) {
+            config.getConcolicAnalysis().getHeap().writeBuilderContent(self, callAnnotation(self), content);
+        }
+    }
+
+    /** the concrete content of a builder (toString without analysis and annotations) */
+    @CompilerDirectives.TruffleBoundary
+    public static String builderToHostString(StaticObject builder, Meta meta) {
+        return meta.toHostString(concreteBuilderString(builder, meta));
+    }
+
+    /** @return whether the content of the string is symbolic */
+    public static boolean hasSymbolicContent(StaticObject s) {
+        return config != null && config.hasConcolicAnalysis()
+                && Annotations.annotation(stringContent(s), config.getConcolicIdx()) != null;
+    }
+
+    /** the reference returned last and its annotation, until the caller pushes it */
+    private static final ThreadLocal<Object[]> returned = new ThreadLocal<>();
+
+    @CompilerDirectives.TruffleBoundary
+    public static void setReturned(Object value, Annotations a) {
+        if (!analyze) return;
+        returned.set(a == null ? null : new Object[]{value, a});
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static Annotations takeReturned(Object value) {
+        if (!analyze) return null;
+        Object[] r = returned.get();
+        if (r == null) return null;
+        returned.set(null);
+        return r[0] == value ? (Annotations) r[1] : null;
     }
 
 
@@ -1124,7 +1418,21 @@ public class SPouT {
     }
 
     public static void arrayLength(VirtualFrame frame, int top, StaticObject arr) {
-        if (!analyze || !arr.hasAnnotations()) return;
+        if (!analyze) return;
+        if (config.hasConcolicAnalysis()) {
+            Expression length = config.getConcolicAnalysis().getHeap().arrayLength(arr,
+                    AnnotatedVM.peekAnnotations(frame, top - 1));
+            if (length != null) {
+                Annotations a = Annotations.create();
+                a.set(config.getConcolicIdx(), length);
+                AnnotatedVM.putAnnotations(frame, top - 1, a);
+                return;
+            }
+        }
+        if (!arr.hasAnnotations()) {
+            AnnotatedVM.putAnnotations(frame, top - 1, null);
+            return;
+        }
         Annotations[] annotations = arr.getAnnotations();
         Annotations aLength = annotations[annotations.length - 1];
         AnnotatedVM.putAnnotations(frame, top - 1, aLength);
@@ -1135,9 +1443,20 @@ public class SPouT {
         if (!analyze) return;
 
         Annotations aIndex = AnnotatedVM.popAnnotations(frame, fromIndexSlot);
+        // the slot of the array reference: the value of a two-slot load (long, double) is annotated in its upper
+        // slot, a stale annotation in the lower slot would be read by later instructions. The array reference is
+        // directly below the index, and the value replaces both (one-slot value: toSlot is the array reference's
+        // slot, two-slot value: toSlot is the index's slot).
+        assert toSlot == fromIndexSlot - 1 || toSlot == fromIndexSlot : "unexpected slots of an array load";
+        Annotations aArray = refAnnotations(array, AnnotatedVM.popAnnotations(frame, fromIndexSlot - 1));
+        Expression sIndex = null;
         if (analyze && config.hasConcolicAnalysis()) {
-            config.getConcolicAnalysis().checkArrayAccessPathConstraint(
-                    array, cIndex, Annotations.annotation(aIndex, config.getConcolicIdx()), lang);
+            sIndex = Annotations.annotation(aIndex, config.getConcolicIdx());
+            if (sIndex != null) {
+                sIndex = config.getConcolicAnalysis().convertCharToInt(sIndex);
+            }
+            config.getConcolicAnalysis().checkArrayAccessPathConstraint(array, cIndex, sIndex,
+                    config.getConcolicAnalysis().getHeap().arrayLength(array, aArray), lang);
         }
 
         if (analyze && config.hasTaintAnalysis() && array.hasAnnotations()) {
@@ -1152,17 +1471,87 @@ public class SPouT {
         }
 
         Annotations a = AnnotatedVM.getArrayAnnotations(array, cIndex);
+        if (analyze && config.hasConcolicAnalysis()) {
+            tools.aqua.concolic.HeapModel heap = config.getConcolicAnalysis().getHeap();
+            boolean inBounds = 0 <= cIndex && cIndex < array.length(lang);
+            if (inBounds && !heap.hasElementTerms(array, aArray)
+                    && (heap.hasContentTerm(array) || (sIndex != null && heap.ensureContentTerm(array, getMeta())))) {
+                // an allocated array with a content term (theory of arrays)
+                AnnotatedVM.putAnnotations(frame, toSlot, heap.readContent(array, cIndex, sIndex, a));
+                return;
+            }
+            if (sIndex != null && !heap.hasElementTerms(array, aArray) && inBounds) {
+                // a large array: the element at the concrete index is read, only for this index
+                config.getConcolicAnalysis().concretizeIndex(sIndex, cIndex, array.length(lang));
+            }
+            a = heap.readElement(array, aArray, cIndex, sIndex, a, getMeta());
+        }
         AnnotatedVM.putAnnotations(frame, toSlot, a);
+    }
+
+    /** a concrete value (e.g. a byte for a boolean array) as a value of the element kind of the array */
+    @CompilerDirectives.TruffleBoundary
+    private static Object asElementValue(StaticObject array, Object v) {
+        if (v == null || !array.isArray()) {
+            return v;
+        }
+        com.oracle.truffle.espresso.classfile.JavaKind kind =
+                ((com.oracle.truffle.espresso.impl.ArrayKlass) array.getKlass()).getComponentType().getJavaKind();
+        long l = v instanceof Boolean ? ((Boolean) v ? 1 : 0) : v instanceof Character ? (Character) v
+                : v instanceof Number && !(v instanceof Float) && !(v instanceof Double) ? ((Number) v).longValue() : 0;
+        return switch (kind) {
+            case Boolean -> v instanceof Boolean ? v : l != 0;
+            case Byte -> (byte) l;
+            case Short -> (short) l;
+            case Char -> (char) l;
+            case Int -> (int) l;
+            case Long -> v instanceof Long ? v : l;
+            default -> v;
+        };
+    }
+
+    /** the concrete value of an array store (still on the operand stack), null for references */
+    private static Object concreteElementValue(VirtualFrame frame, StaticObject array, int slot) {
+        com.oracle.truffle.espresso.classfile.JavaKind kind =
+                ((com.oracle.truffle.espresso.impl.ArrayKlass) array.getKlass()).getComponentType().getJavaKind();
+        return switch (kind) {
+            case Boolean -> frame.getIntStatic(slot) != 0;
+            case Byte -> (byte) frame.getIntStatic(slot);
+            case Short -> (short) frame.getIntStatic(slot);
+            case Char -> (char) frame.getIntStatic(slot);
+            case Int -> frame.getIntStatic(slot);
+            case Long -> frame.getLongStatic(slot);
+            case Float -> frame.getFloatStatic(slot);
+            case Double -> frame.getDoubleStatic(slot);
+            default -> null;
+        };
     }
 
     public static void setArrayAnnotations(VirtualFrame frame, BytecodeNode bcn, int bci, StaticObject array,
                                            int cIndex, int fromValueSlot, int fromIndexSlot, EspressoLanguage lang) {
         if (!analyze) return;
+        // the value is still on the operand stack
+        setArrayAnnotations(frame, bcn, bci, array, cIndex, fromValueSlot, fromIndexSlot, lang,
+                concreteElementValue(frame, array, fromValueSlot));
+    }
+
+    /** an array store with the concrete value (e.g. already popped from the operand stack) */
+    public static void setArrayAnnotations(VirtualFrame frame, BytecodeNode bcn, int bci, StaticObject array,
+                                           int cIndex, int fromValueSlot, int fromIndexSlot, EspressoLanguage lang,
+                                           Object concreteValue) {
+        if (!analyze) return;
+        concreteValue = asElementValue(array, concreteValue);
 
         Annotations aIndex = AnnotatedVM.popAnnotations(frame, fromIndexSlot);
+        Annotations aArray = refAnnotations(array, AnnotatedVM.popAnnotations(frame, fromIndexSlot - 1));
+        Expression sIndex = null;
         if (analyze && config.hasConcolicAnalysis()) {
-            config.getConcolicAnalysis().checkArrayAccessPathConstraint(
-                    array, cIndex, Annotations.annotation(aIndex, config.getConcolicIdx()), lang);
+            sIndex = Annotations.annotation(aIndex, config.getConcolicIdx());
+            if (sIndex != null) {
+                sIndex = config.getConcolicAnalysis().convertCharToInt(sIndex);
+            }
+            config.getConcolicAnalysis().checkArrayAccessPathConstraint(array, cIndex, sIndex,
+                    config.getConcolicAnalysis().getHeap().arrayLength(array, aArray), lang);
         }
 
         if (analyze && config.hasTaintAnalysis() && array.hasAnnotations()) {
@@ -1177,6 +1566,21 @@ public class SPouT {
         }
 
         Annotations aValue = AnnotatedVM.popAnnotations(frame, fromValueSlot);
+        if (analyze && config.hasConcolicAnalysis()) {
+            tools.aqua.concolic.HeapModel heap = config.getConcolicAnalysis().getHeap();
+            boolean inBounds = 0 <= cIndex && cIndex < array.length(lang);
+            if (inBounds && !heap.hasElementTerms(array, aArray)
+                    && (heap.hasContentTerm(array) || (sIndex != null && heap.ensureContentTerm(array, getMeta())))) {
+                // an allocated array with a content term (theory of arrays)
+                heap.writeContent(array, cIndex, sIndex, aValue, concreteValue);
+            } else {
+                if (sIndex != null && !heap.hasElementTerms(array, aArray) && inBounds) {
+                    // a large array: the element at the concrete index is written, only for this index
+                    config.getConcolicAnalysis().concretizeIndex(sIndex, cIndex, array.length(lang));
+                }
+                heap.writeElement(array, aArray, cIndex, sIndex, aValue, concreteValue);
+            }
+        }
         AnnotatedVM.setArrayAnnotations(array, cIndex, aValue, lang);
     }
 
@@ -1189,8 +1593,10 @@ public class SPouT {
                                  BytecodeNode bcn,
                                  int bci,
                                  boolean isInstance) {
-        if (!analyze || !obj.hasAnnotations()) return;
-        analysis.checkcast(frame, bcn, bci, obj, Annotations.objectAnnotation(obj), typeToCast, isInstance);
+        if (!analyze) return;
+        Annotations a = refAnnotations(obj, AnnotatedVM.peekAnnotations(frame, top));
+        if (a == null) return;
+        analysis.checkcast(frame, bcn, bci, obj, a, typeToCast, isInstance);
     }
 
     public static boolean takeBranchPrimitive1(VirtualFrame frame, int top, int opcode, BytecodeNode bcn, int bci) {
@@ -1301,6 +1707,16 @@ public class SPouT {
                                          int bci,
                                          StaticObject operand,
                                          int opcode) {
+        return takeBranchRef1(frame, bcn, bci, null, operand, opcode);
+    }
+
+    /** @param a the annotation of the slot of the operand */
+    public static boolean takeBranchRef1(VirtualFrame frame,
+                                         BytecodeNode bcn,
+                                         int bci,
+                                         Annotations a,
+                                         StaticObject operand,
+                                         int opcode) {
         assert IFNULL <= opcode && opcode <= IFNONNULL;
         // @formatter:off
         boolean result;
@@ -1313,8 +1729,7 @@ public class SPouT {
         }
         // @formatter:on
         if (analyze) {
-            analysis.takeBranchRef1(frame, bcn, bci, opcode, result, operand,
-                    Annotations.objectAnnotation(operand));
+            analysis.takeBranchRef1(frame, bcn, bci, opcode, result, operand, refAnnotations(operand, a));
         }
         return result;
     }
@@ -1352,6 +1767,18 @@ public class SPouT {
                                          StaticObject operand1,
                                          StaticObject operand2,
                                          int opcode) {
+        return takeBranchRef2(frame, bcn, bci, null, null, operand1, operand2, opcode);
+    }
+
+    /** @param a1 the annotation of the slot of operand1, a2 of operand2 */
+    public static boolean takeBranchRef2(VirtualFrame frame,
+                                         BytecodeNode bcn,
+                                         int bci,
+                                         Annotations a1,
+                                         Annotations a2,
+                                         StaticObject operand1,
+                                         StaticObject operand2,
+                                         int opcode) {
         assert IF_ACMPEQ <= opcode && opcode <= IF_ACMPNE;
         boolean result;
         // @formatter:off
@@ -1367,7 +1794,7 @@ public class SPouT {
 
         if (analyze) {
             analysis.takeBranchRef2(frame, bcn, bci, opcode, result, operand1, operand2,
-                    Annotations.objectAnnotation(operand1), Annotations.objectAnnotation(operand2));
+                    refAnnotations(operand1, a1), refAnnotations(operand2, a2));
 
         }
         return result;
@@ -1393,8 +1820,14 @@ public class SPouT {
     // Objects
 
     public static void instanceOf(VirtualFrame frame, StaticObject object, boolean isInstance, int top, Klass typeToCheck) {
-        if (!analyze || !object.hasAnnotations()) return;
-        Annotations a = analysis.instanceOf(object, Annotations.objectAnnotation(object), typeToCheck, isInstance);
+        if (!analyze) return;
+        // the slot of the object, replaced by the result
+        Annotations ao = refAnnotations(object, AnnotatedVM.peekAnnotations(frame, top));
+        if (ao == null) {
+            AnnotatedVM.putAnnotations(frame, top, null);
+            return;
+        }
+        Annotations a = analysis.instanceOf(object, ao, typeToCheck, isInstance);
         AnnotatedVM.putAnnotations(frame, top, a);
     }
 
@@ -1418,6 +1851,16 @@ public class SPouT {
         if (!analyze || !object.hasAnnotations()) return;
         //if (object.hasAnnotations()) logi(i);
         analysis.polymorphicMethodAccess(object, m, Annotations.objectAnnotation(object));
+    }
+
+    /** dispatch on the receiver {@code args[0]} of a call */
+    @CompilerDirectives.TruffleBoundary
+    public static void polymorphicMethodAccess(Object[] args, Method m, int i) {
+        if (!analyze) return;
+        StaticObject object = (StaticObject) args[0];
+        Annotations a = refAnnotations(object, argumentAnnotation(args, 0));
+        if (a == null) return;
+        analysis.polymorphicMethodAccess(object, m, a);
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -1608,13 +2051,13 @@ public class SPouT {
         String concreteSelf = meta.toHostString(self);
         String other = meta.toHostString(s);
         boolean concreteRes = concreteSelf.contains(other);
-        if (!self.hasAnnotations() && !s.hasAnnotations() || !analyze) {
+        if (!hasStringAnnotations(self) && !hasStringAnnotations(s) || !analyze) {
             return concreteRes;
         }
         Annotations a = analysis.stringContains(concreteSelf,
                 other,
-                Annotations.annotation(self.getAnnotations(), -1),
-                Annotations.annotation(s.getAnnotations(), -1));
+                stringContent(self),
+                stringContent(s));
         return new AnnotatedValue(concreteRes, a);
     }
 
@@ -1640,8 +2083,9 @@ public class SPouT {
                 f.setInt(self, hash.getInt(other));
             }
         }
-        if (other.hasAnnotations()) {
-            self.setAnnotations(other.getAnnotations());
+        Annotations content = stringContent(other);
+        if (content != null) {
+            setStringAnnotations(self, content);
         }
     }
 
@@ -1650,21 +2094,22 @@ public class SPouT {
         String cSelf = meta.toHostString(self);
         String cOther = meta.toHostString(other);
         int concreteResult = cSelf.compareTo(cOther);
-        if (!analyze || !self.hasAnnotations() && !other.hasAnnotations()) {
+        if (!analyze || !hasStringAnnotations(self) && !hasStringAnnotations(other)) {
             return concreteResult;
         }
-        Annotations a = analysis.stringCompareTo(cSelf, cOther,
-                Annotations.annotation(self.getAnnotations(), -1),
-                Annotations.annotation(other.getAnnotations(), -1));
-        return new AnnotatedValue(concreteResult, a);
+        // records the decision on the sign of the result (less, equal, greater)
+        analysis.stringCompareTo(cSelf, cOther,
+                stringContent(self),
+                stringContent(other));
+        // the value itself (difference of the first different characters, or of the lengths) is not encoded
+        losePrecision("the value of String.compareTo is concretized (its sign is decided)", meta);
+        return concreteResult;
     }
 
 
     public static @JavaType(internalName = "I") Object stringCompareToIgnoreCase(@JavaType(String.class) StaticObject self, @JavaType(String.class) StaticObject other, @Inject Meta meta) {
-        boolean isSelfSymbolic = self.hasAnnotations()
-                && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
-        boolean isOtherSymbolic = other.hasAnnotations()
-                && other.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
+        boolean isSelfSymbolic = hasSymbolicContent(self);
+        boolean isOtherSymbolic = hasSymbolicContent(other);
         if (isSelfSymbolic || isOtherSymbolic) {losePrecision("StringCompareToIgnoreCase is not yet symobolically implemented", meta);
         return 0;}
         return meta.toHostString(self).compareToIgnoreCase(meta.toHostString(other));
@@ -1673,10 +2118,10 @@ public class SPouT {
     @CompilerDirectives.TruffleBoundary
     public static Object stringLength(StaticObject self, Meta meta) {
         int length = meta.toHostString(self).length();
-        if (!analyze || !self.hasAnnotations()) {
+        if (!analyze || !hasStringAnnotations(self)) {
             return length;
         }
-        Annotations aLength = analysis.stringLength(length, Annotations.annotation(self.getAnnotations(), -1));
+        Annotations aLength = analysis.stringLength(length, stringContent(self));
         return aLength != null ? new AnnotatedValue(length, aLength) : length;
     }
 
@@ -1685,13 +2130,13 @@ public class SPouT {
         String concreteSelf = meta.toHostString(self);
         String concreteOther = meta.toHostString(other);
         StaticObject result = meta.toGuestString(concreteSelf.concat(concreteOther));
-        if (!analyze || !self.hasAnnotations() && !other.hasAnnotations()) {
+        if (!analyze || !hasStringAnnotations(self) && !hasStringAnnotations(other)) {
             return result;
         }
         Annotations a = analysis.stringConcat(concreteSelf,
                 concreteOther,
-                Annotations.annotation(self.getAnnotations(), -1),
-                Annotations.annotation(other.getAnnotations(), -1));
+                stringContent(self),
+                stringContent(other));
         return setStringAnnotations(result, a);
 
     }
@@ -1701,7 +2146,7 @@ public class SPouT {
         String cSelf = meta.toHostString(self);
         String cOther = meta.toHostString(other);
         boolean areEqual = cSelf.equals(cOther);
-        if (!analyze || !self.hasAnnotations() && !other.hasAnnotations()) {
+        if (!analyze || !hasStringAnnotations(self) && !hasStringAnnotations(other)) {
             return areEqual;
         }
         Annotations a = analysis.stringEquals(cSelf,
@@ -1848,10 +2293,8 @@ public class SPouT {
         clen = (int) AnnotatedValue.value(len);
         boolean cres = meta.toHostString(self).regionMatches(ignore, ctoffset, meta.toHostString(other), cooffset, clen);
         if (analyze && config.hasConcolicAnalysis()) {
-            boolean isSelfSymbolic = self.hasAnnotations() && self.getAnnotations()[self.getAnnotations().length - 1] != null
-                    && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
-            boolean isOtherSymbolic = other.hasAnnotations() && other.getAnnotations()[self.getAnnotations().length - 1] != null
-                    && other.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
+            boolean isSelfSymbolic = hasSymbolicContent(self);
+            boolean isOtherSymbolic = hasSymbolicContent(other);
             if ((isSelfSymbolic || isOtherSymbolic) && analyze && config.hasConcolicAnalysis()) {
                 config.getConcolicAnalysis().regionMatches(self, other, ignore, ctoffset, cooffset, clen, cres, meta);
             }
@@ -1867,8 +2310,9 @@ public class SPouT {
         Method m = self.getKlass().lookupMethod(meta.getNames().getOrCreate("toString"),
                 meta.getLanguage().getSignatures().lookupValidSignature("()Ljava/lang/String;"));
         StaticObject stringValue = (StaticObject) m.invokeDirect(self);
-        if (self.hasAnnotations()) {
-            stringValue.setAnnotations(self.getAnnotations());
+        Annotations content = getStringAnnotations(self);
+        if (content != null) {
+            setStringAnnotations(stringValue, content);
         }
         return stringCharAt(stringValue, index, meta);
     }
@@ -1944,6 +2388,9 @@ public class SPouT {
         m.invokeDirect(self, string);
         self.setAnnotations(selfAnnotations);
         string.setAnnotations(stringAnnotations);
+        if (analyze && selfAnnotations != null) {
+            setBuilderContent(self, selfAnnotations[selfAnnotations.length - 1]);
+        }
         return self;
     }
 
@@ -1964,25 +2411,37 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static StaticObject stringBuxxToString(StaticObject self, Meta meta) {
-        Klass abstractSB = self.getKlass().getSuperKlass();
-        Method getValue = abstractSB.lookupMethod(meta.getNames().getOrCreate("getValue"), EspressoSymbols.Signatures._byte_array);
-        Method length = abstractSB.lookupMethod(meta.getNames().getOrCreate("length"), EspressoSymbols.Signatures._int);
-        Method isLatin = abstractSB.lookupMethod(meta.getNames().getOrCreate("isLatin1"), EspressoSymbols.Signatures._boolean);
-        StaticObject bytes = (StaticObject) getValue.invokeDirect(self);
-        Object xlength = length.invokeDirect(self);
-        int ilength = AnnotatedValue.value(xlength);
-        StaticObject result =
-                // FIXME: Not sure if annotations should be able to reach here?
-                (boolean) AnnotatedValue.value(isLatin.invokeDirect(self))
-                        ?
-                        (StaticObject) meta.java_lang_StringLatin1_newString.invokeDirect( bytes, 0, ilength)
-                        :
-                        (StaticObject) meta.java_lang_StringUTF16_newString.invokeDirect( bytes, 0, ilength);
+        StaticObject result = concreteBuilderString(self, meta);
         if (analyze && config.hasConcolicAnalysis()) {
             setStringAnnotations(result,
                     analysis.stringBuxxToString(meta.toHostString(result), getStringAnnotations(self)));
         }
         return result;
+    }
+
+    /**
+     * A new string with the concrete characters of a builder, from its internal fields, without analysis (not via
+     * toString, which may be substituted).
+     */
+    @CompilerDirectives.TruffleBoundary
+    private static StaticObject concreteBuilderString(StaticObject self, Meta meta) {
+        Klass abstractSB = self.getKlass().getSuperKlass();
+        Method getValue = abstractSB.lookupMethod(meta.getNames().getOrCreate("getValue"), EspressoSymbols.Signatures._byte_array);
+        Method length = abstractSB.lookupMethod(meta.getNames().getOrCreate("length"), EspressoSymbols.Signatures._int);
+        Method isLatin = abstractSB.lookupMethod(meta.getNames().getOrCreate("isLatin1"), EspressoSymbols.Signatures._boolean);
+        Annotations[] a = self.getAnnotations();
+        self.setAnnotations(null);
+        pauseAnalyze();
+        try {
+            StaticObject bytes = (StaticObject) getValue.invokeDirect(self);
+            int ilength = AnnotatedValue.value(length.invokeDirect(self));
+            return (boolean) AnnotatedValue.value(isLatin.invokeDirect(self))
+                    ? (StaticObject) meta.java_lang_StringLatin1_newString.invokeDirect(bytes, 0, ilength)
+                    : (StaticObject) meta.java_lang_StringUTF16_newString.invokeDirect(bytes, 0, ilength);
+        } finally {
+            resumeAnalyze();
+            self.setAnnotations(a);
+        }
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -2031,7 +2490,7 @@ public class SPouT {
                     getStringAnnotations(self),
                     getStringAnnotations(toInsert),
                     null);
-            setStringAnnotations(self, a);
+            setBuilderContent(self, a);
         }
         Method m = self.getKlass().getSuperKlass().lookupMethod(meta.getNames().getOrCreate("insert"), EspressoSymbols.Signatures.java_lang_AbstractStringBuilder_int_java_lang_String);
         return (StaticObject) m.invokeDirect(self, concreteOffset, toInsert);
@@ -2039,18 +2498,111 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static void stringBuxxGetChars(StaticObject self, Object srcBegin, Object srcEnd, StaticObject dst, Object dstBegin, Meta meta) {
-        if (analyze && config.hasConcolicAnalysis() && AnnotatedValue.annotation(AnnotatedValue.svalue(srcBegin), config.getConcolicIdx()) != null
-                || AnnotatedValue.annotation(AnnotatedValue.svalue(srcEnd), config.getConcolicIdx()) != null
-                || config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(dst)
-                || AnnotatedValue.annotation(AnnotatedValue.svalue(dstBegin), config.getConcolicIdx()) != null
-                || config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(self)) {
-            SPouT.losePrecision("symbolic getChars is not supported", meta);
-            srcBegin = AnnotatedValue.value(srcBegin);
-            srcEnd = AnnotatedValue.value(srcEnd);
-            dstBegin = AnnotatedValue.value(dstBegin);
+        boolean symbolicIndex = analyze && config.hasConcolicAnalysis()
+                && (isSymbolic(srcBegin) || isSymbolic(srcEnd) || isSymbolic(dstBegin));
+        if (symbolicIndex) {
+            SPouT.losePrecision("getChars with symbolic indices is not supported", meta);
         }
+        int cSrcBegin = AnnotatedValue.value(srcBegin);
+        int cSrcEnd = AnnotatedValue.value(srcEnd);
+        int cDstBegin = AnnotatedValue.value(dstBegin);
+        // the content of the builder (before the concrete call, which does not change it)
+        Annotations content = analyze && config.hasConcolicAnalysis() ? getStringAnnotations(self) : null;
+        String cContent = meta.toHostString(self);
         Method m = self.getKlass().getSuperKlass().lookupMethod(meta.getNames().getOrCreate("getChars"), EspressoSymbols.Signatures._void_int_int_char_array_int);
-        m.invokeDirect(self, srcBegin, srcEnd, dst, dstBegin);
+        Annotations[] selfAnnotations = self.getAnnotations();
+        self.setAnnotations(null);
+        try {
+            m.invokeDirect(self, cSrcBegin, cSrcEnd, dst, cDstBegin);
+        } finally {
+            self.setAnnotations(selfAnnotations);
+        }
+        Expression e = Annotations.annotation(content, config.getConcolicIdx());
+        if (e != null && !symbolicIndex) {
+            copyCharsSymbolically(cContent, e, cSrcBegin, cSrcEnd, dst, cDstBegin, true, meta);
+        }
+    }
+
+    /**
+     * The characters {@code srcBegin .. srcEnd - 1} of a string with symbolic content, copied to {@code dst} from
+     * {@code dstBegin} (getChars, toCharArray): one element annotation per character (concrete range; a symbolic
+     * range would need array theory). The concrete copy has already succeeded, so the range is within the string:
+     * recorded as a decision on the symbolic length.
+     */
+    private static void copyCharsSymbolically(String cContent, Expression content, int srcBegin, int srcEnd,
+                                              StaticObject dst, int dstBegin, boolean decideBounds, Meta meta) {
+        tools.aqua.concolic.ConcolicAnalysis ca = config.getConcolicAnalysis();
+        if (decideBounds) {
+            // in integers: srcEnd <= length (the decision is recorded for every call, at the same position)
+            ca.decide(new ComplexExpression(OperatorComparator.LE, Constant.createNatConstant(srcEnd),
+                    new ComplexExpression(OperatorComparator.SLENGTH, content)), srcEnd <= cContent.length());
+        }
+        int bound = config.getUnrollBound();
+        if (bound > 0 && srcEnd - srcBegin > bound) {
+            losePrecision("copying more than " + bound + " characters of a symbolic string (concolic.unroll.bound)", meta);
+            return;
+        }
+        if (ca.getHeap().hasContentTerm(dst)) {
+            losePrecision("copying characters into an array with symbolic elements is not symbolically implemented",
+                    meta);
+            return;
+        }
+        for (int k = 0; k < srcEnd - srcBegin; k++) {
+            Annotations a = Annotations.create();
+            a.set(config.getConcolicIdx(), ca.charAt(cContent, srcBegin + k, content, null));
+            AnnotatedVM.setArrayAnnotations(dst, dstBegin + k, a, meta.getLanguage());
+        }
+    }
+
+    /** {@code self.getChars(srcBegin, srcEnd, dst, dstBegin)} of a String */
+    @CompilerDirectives.TruffleBoundary
+    public static void stringGetChars(StaticObject self, Object srcBegin, Object srcEnd, StaticObject dst, Object dstBegin, Meta meta) {
+        int cSrcBegin = AnnotatedValue.value(srcBegin);
+        int cSrcEnd = AnnotatedValue.value(srcEnd);
+        int cDstBegin = AnnotatedValue.value(dstBegin);
+        String cContent = meta.toHostString(self);
+        if (StaticObject.isNull(dst)) {
+            throw meta.throwNullPointerException();
+        }
+        char[] target = dst.unwrap(meta.getLanguage());
+        // throws the same exceptions as String.getChars (host exceptions are translated by the caller)
+        if (cSrcBegin < 0 || cSrcBegin > cSrcEnd || cSrcEnd > cContent.length()
+                || cDstBegin < 0 || cDstBegin + (cSrcEnd - cSrcBegin) > target.length) {
+            throw meta.throwExceptionWithMessage(meta.java_lang_StringIndexOutOfBoundsException,
+                    "begin " + cSrcBegin + ", end " + cSrcEnd + ", length " + cContent.length());
+        }
+        cContent.getChars(cSrcBegin, cSrcEnd, target, cDstBegin);
+        if (!analyze || !config.hasConcolicAnalysis() || !hasSymbolicContent(self)) {
+            return;
+        }
+        if (isSymbolic(srcBegin) || isSymbolic(srcEnd) || isSymbolic(dstBegin)) {
+            losePrecision("getChars with symbolic indices is not supported", meta);
+            return;
+        }
+        copyCharsSymbolically(cContent, Annotations.annotation(stringContent(self), config.getConcolicIdx()),
+                cSrcBegin, cSrcEnd, dst, cDstBegin, true, meta);
+    }
+
+    /** {@code self.toCharArray()}: the length of the array is the (symbolic) length of the string */
+    @CompilerDirectives.TruffleBoundary
+    public static StaticObject stringToCharArray(StaticObject self, Meta meta) {
+        String cContent = meta.toHostString(self);
+        StaticObject result = StaticObject.wrap(cContent.toCharArray(), meta);
+        if (!analyze || !config.hasConcolicAnalysis() || !hasSymbolicContent(self)) {
+            return result;
+        }
+        Expression content = Annotations.annotation(stringContent(self), config.getConcolicIdx());
+        // the whole string: the range needs no decision
+        copyCharsSymbolically(cContent, content, 0, cContent.length(), result, 0, false, meta);
+        Annotations length = Annotations.create();
+        length.set(config.getConcolicIdx(), config.getConcolicAnalysis().stringLengthExpression(content));
+        Annotations[] annotations = result.getAnnotations();
+        if (annotations == null) {
+            annotations = new Annotations[cContent.length() + 1];
+            result.setAnnotations(annotations);
+        }
+        annotations[cContent.length()] = length;
+        return result;
     }
 
     public static void setBuxxCharAt(StaticObject self, Object i, Object ch, Meta meta) {
@@ -2074,7 +2626,7 @@ public class SPouT {
         m.invokeDirect(self, i, ch);
         self.setAnnotations(a);
         if (analyze) {
-            setStringAnnotations(self,
+            setBuilderContent(self,
                     analysis.stringBuxxCharAt(meta.toHostString(self), val, index, getStringAnnotations(self), null, null));
         }
     }
@@ -2247,81 +2799,430 @@ public class SPouT {
         return cres;
     }
 
-    public static boolean stringIsEmpty(@JavaType(String.class) StaticObject self, @Inject Meta meta) {
-        boolean isSelfSymbolic = self.hasAnnotations()
-                && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
-        if (isSelfSymbolic) {
-            losePrecision("String.isEmpty() is not symbolically implemented yet", meta);
+    @CompilerDirectives.TruffleBoundary
+    public static Object stringIsEmpty(@JavaType(String.class) StaticObject self, @Inject Meta meta) {
+        boolean cRes = meta.toHostString(self).isEmpty();
+        if (!analyze || !config.hasConcolicAnalysis() || !hasSymbolicContent(self)) {
+            return cRes;
+        }
+        return symbolicResult(cRes, config.getConcolicAnalysis().stringIsEmpty(stringExpression(self, meta)));
+    }
+
+    /** the symbolic content of a string, or its concrete content */
+    private static Expression stringExpression(StaticObject s, Meta meta) {
+        Expression e = Annotations.annotation(stringContent(s), config.getConcolicIdx());
+        return e != null ? e : Constant.fromConcreteValue(meta.toHostString(s));
+    }
+
+    /** the symbolic value of an int argument (characters as ints), or its concrete value */
+    private static Expression intExpression(Object v) {
+        Expression e = Annotations.annotation(AnnotatedValue.svalue(v), config.getConcolicIdx());
+        return e != null ? config.getConcolicAnalysis().convertCharToInt(e)
+                : Constant.fromConcreteValue((int) AnnotatedValue.<Integer>value(v));
+    }
+
+    /**
+     * whether a value has a concolic (symbolic) annotation, or is an array whose elements are a content term
+     * (a substituted or native method would see its concrete elements only)
+     */
+    @CompilerDirectives.TruffleBoundary
+    public static boolean isConcolic(Object v) {
+        if (config == null || !config.hasConcolicAnalysis()) {
             return false;
-        } else {
-            return meta.toHostString(self).isEmpty();
         }
+        if (v instanceof StaticObject && !StaticObject.isNull((StaticObject) v) && ((StaticObject) v).isArray()) {
+            // also called before the analysis is set up (e.g. when threads are created)
+            tools.aqua.concolic.ConcolicAnalysis ca = config.getConcolicAnalysis();
+            return ca != null && ca.getHeap() != null && ca.getHeap().hasContentTerm((StaticObject) v);
+        }
+        return v instanceof AnnotatedValue && isSymbolic(v);
     }
 
+    private static boolean isSymbolic(Object v) {
+        return Annotations.annotation(AnnotatedValue.svalue(v), config.getConcolicIdx()) != null;
+    }
+
+    private static Object symbolicResult(Object concrete, Expression e) {
+        Annotations a = Annotations.create();
+        a.set(config.getConcolicIdx(), e);
+        return new AnnotatedValue(concrete, a);
+    }
+
+    /** {@code self.indexOf(cp, start)} for a character code {@code cp} */
+    @CompilerDirectives.TruffleBoundary
     public static Object stringIndexOfIntInt(StaticObject self, Object cp, Object start, Meta meta) {
-        if(analyze && config.hasConcolicAnalysis()) {
-            boolean isSelfSymbolic = self.hasAnnotations()
-                    && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
-            boolean isCpSymbolic = AnnotatedValue.svalue(cp) != null && AnnotatedValue.svalue(cp).getAnnotations()[config.getConcolicIdx()] != null;
-            boolean isStartSymbolic = AnnotatedValue.svalue(start) != null && AnnotatedValue.svalue(start).getAnnotations()[config.getConcolicIdx()] != null;
-            if(isSelfSymbolic || isCpSymbolic ||isStartSymbolic) {
-                losePrecision("String.indexOf(int cp) is not symbolically implemented yet", meta);
+        int cCp = AnnotatedValue.value(cp);
+        int cRes = meta.toHostString(self).indexOf(cCp, (int) AnnotatedValue.<Integer>value(start));
+        if (!analyze || !config.hasConcolicAnalysis()
+                || !(hasSymbolicContent(self) || isSymbolic(cp) || isSymbolic(start))) {
+            return cRes;
+        }
+        Expression ch = intExpression(cp);
+        if (isSymbolic(cp)) {
+            config.getConcolicAnalysis().decideBasicPlane(ch, cCp);
+        }
+        if (cCp > 0xFFFF) {
+            losePrecision("String.indexOf(int) for a character beyond the basic multilingual plane is not "
+                    + "symbolically implemented", meta);
+            return cRes;
+        }
+        String cSelf = meta.toHostString(self);
+        int cStart = Math.max(0, (int) AnnotatedValue.<Integer>value(start));
+        if (!hasSymbolicContent(self) && !isSymbolic(start) && cSelf.length() - cStart <= 256) {
+            // a concrete string (e.g. the delimiters of a StringTokenizer): comparisons of the character with each
+            // character of the string, without string theory
+            Expression chain = Constant.fromConcreteValue(-1);
+            for (int k = cSelf.length() - 1; k >= cStart; k--) {
+                chain = new ComplexExpression(OperatorComparator.ITE,
+                        new ComplexExpression(OperatorComparator.BVEQ, ch, Constant.fromConcreteValue((int) cSelf.charAt(k))),
+                        Constant.fromConcreteValue(k), chain);
             }
+            return symbolicResult(cRes, chain);
         }
-        return meta.toHostString(self).indexOf((int)AnnotatedValue.value(cp), AnnotatedValue.value(start));
-
+        return symbolicResult(cRes, config.getConcolicAnalysis().stringIndexOfChar(stringExpression(self, meta), ch,
+                intExpression(start)));
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static Object stringIndexOf(StaticObject self, StaticObject other, Meta meta){
-        String cSelf = meta.toHostString(self);
-        String cOther = meta.toHostString(other);
-        int cRes = cSelf.indexOf(cOther);
-        SPouT.debug("StringIndexOf annotations self", hasConcolicAnnotations(self));
-        SPouT.debug("StringIndexOf annotations self", self.getAnnotations());
-        SPouT.debug("StringIndexOf annotations other", hasConcolicAnnotations(other));
-        SPouT.debug("StringIndexOf annotations overall", analyze && (hasConcolicAnnotations(self) || hasConcolicAnnotations(other)));
-        if (analyze && (hasConcolicAnnotations(self) || hasConcolicAnnotations(other))) {
-            //return  new AnnotatedValue(cRes, analysis.stringindexOfString(cSelf, cOther, getStringAnnotations(self), getStringAnnotations(other)));
-            losePrecision("String.indexOf(String) is not symbolically implemented yet", meta);
-        }
-        return cRes;
-
+        return stringIndexOfWithStart(self, other, 0, meta);
     }
 
+    /** {@code self.indexOf(other, start)} */
+    @CompilerDirectives.TruffleBoundary
     public static Object stringIndexOfWithStart(StaticObject self, StaticObject other, Object start, Meta meta){
-        String cSelf = meta.toHostString(self);
-        String cOther = meta.toHostString(other);
-        int from = AnnotatedValue.value(start);
-        int cRes = cSelf.indexOf(cOther, from);
-        SPouT.debug("StringIndexOf annotations self", hasConcolicAnnotations(self));
-        SPouT.debug("StringIndexOf annotations ither", hasConcolicAnnotations(other));
-        SPouT.debug("StringIndexOf annotations overall", analyze && (hasConcolicAnnotations(self) || hasConcolicAnnotations(other)));
-        if (analyze && (hasConcolicAnnotations(self) || hasConcolicAnnotations(other))) {
-            losePrecision("String.indexOf(String) is not symbolically implemented yet", meta);
-            //return new AnnotatedValue(cRes, analysis.stringIndexOfStringWithInt(cSelf, cOther, from, getStringAnnotations(self), getStringAnnotations(other), AnnotatedValue.svalue(start)));
+        int cRes = meta.toHostString(self).indexOf(meta.toHostString(other), (int) AnnotatedValue.<Integer>value(start));
+        if (!analyze || !config.hasConcolicAnalysis()
+                || !(hasSymbolicContent(self) || hasSymbolicContent(other) || isSymbolic(start))) {
+            return cRes;
         }
-        return cRes;
-
+        return symbolicResult(cRes, config.getConcolicAnalysis().stringIndexOf(stringExpression(self, meta),
+                stringExpression(other, meta), intExpression(start)));
     }
 
     @CompilerDirectives.TruffleBoundary
     public static Object split(StaticObject self, StaticObject regex, Meta meta) {
-        boolean isSelfSymbolic = self.hasAnnotations()
-                && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
-        boolean isRegexSymbolic = regex.hasAnnotations()
-                && regex.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
+        return split(self, regex, 0, meta);
+    }
 
-        if (isSelfSymbolic || isRegexSymbolic) {
-            losePrecision("Cannot split symbolic strings yet", meta);
-        }
+    /**
+     * {@code self.split(regex, limit)}. For a literal separator (Java's fast path: a character that is not a
+     * metacharacter of regular expressions, or an escaped one; or a string without metacharacters), the split is
+     * unrolled like a loop over {@code indexOf}: one decision per separator ({@code concolic.unroll.bound} bounds
+     * their number), the parts are substrings of the symbolic string. With limit 0, trailing empty strings are
+     * removed (one decision each). Other regular expressions lose precision.
+     */
+    @CompilerDirectives.TruffleBoundary
+    public static Object split(StaticObject self, StaticObject regex, int limit, Meta meta) {
         String s = meta.toHostString(self);
         String r = meta.toHostString(regex);
-        String[] res = s.split(r);
+        String[] res = s.split(r, limit);
         StaticObject[] resSO = new StaticObject[res.length];
         for (int i = 0; i < res.length; i++) {
             resSO[i] = meta.toGuestString(res[i]);
         }
-        return StaticObject.createArray(self.getKlass().array(), resSO, meta.getContext());
+        StaticObject result = StaticObject.createArray(self.getKlass().array(), resSO, meta.getContext());
+        if (!analyze || !config.hasConcolicAnalysis() || !(hasSymbolicContent(self) || hasSymbolicContent(regex))) {
+            return result;
+        }
+        String separator = literalSeparator(r);
+        if (separator == null || hasSymbolicContent(regex)) {
+            losePrecision("String.split with a regular expression (or a symbolic one) is not symbolically implemented", meta);
+            return result;
+        }
+        tools.aqua.concolic.ConcolicAnalysis ca = config.getConcolicAnalysis();
+        // positions in the integer domain of the string theory (no conversions to bit-vectors, which are hard for
+        // the solver): the start position of the search is always within the string
+        Expression str = stringExpression(self, meta);
+        Expression sep = Constant.fromConcreteValue(separator);
+        Expression sepLength = Constant.createNatConstant(separator.length());
+        Expression zero = Constant.createNatConstant(0);
+        List<Expression> parts = new ArrayList<>();
+        List<String> cParts = new ArrayList<>();
+        Expression from = zero;
+        int cFrom = 0;
+        int bound = config.getUnrollBound();
+        while (true) {
+            if (limit > 0 && parts.size() == limit - 1) {
+                break;   // the last part is the rest of the string
+            }
+            if (bound > 0 && parts.size() >= bound) {
+                losePrecision("String.split: more than " + bound + " separators (concolic.unroll.bound)", meta);
+                return result;
+            }
+            Expression index = new ComplexExpression(OperatorComparator.SINDEXOF, str, sep, from);
+            int cIndex = s.indexOf(separator, cFrom);
+            ca.decide(new ComplexExpression(OperatorComparator.GE, index, zero), cIndex >= 0);
+            if (cIndex < 0) {
+                break;
+            }
+            parts.add(new ComplexExpression(OperatorComparator.SSUBSTR, str, from,
+                    new ComplexExpression(OperatorComparator.NATMINUS, index, from)));
+            cParts.add(s.substring(cFrom, cIndex));
+            from = new ComplexExpression(OperatorComparator.NATADD, index, sepLength);
+            cFrom = cIndex + separator.length();
+        }
+        if (parts.isEmpty()) {
+            // no separator: the result is the string itself
+            return annotateParts(result, List.of(str), meta);
+        }
+        parts.add(new ComplexExpression(OperatorComparator.SSUBSTR, str, from,
+                new ComplexExpression(OperatorComparator.NATMINUS,
+                        new ComplexExpression(OperatorComparator.SLENGTH, str), from)));
+        cParts.add(s.substring(cFrom));
+        if (limit == 0) {
+            // trailing empty strings are removed
+            while (!parts.isEmpty()) {
+                boolean empty = cParts.get(cParts.size() - 1).isEmpty();
+                ca.decide(new ComplexExpression(OperatorComparator.BVEQ,
+                        new ComplexExpression(OperatorComparator.SLENGTH, parts.get(parts.size() - 1)), zero), empty);
+                if (!empty) {
+                    break;
+                }
+                parts.remove(parts.size() - 1);
+                cParts.remove(cParts.size() - 1);
+            }
+        }
+        if (!cParts.equals(Arrays.asList(res))) {
+            losePrecision("String.split: unexpected result of the symbolic split", meta);
+            return result;
+        }
+        return annotateParts(result, parts, meta);
+    }
+
+    /** the state of a {@code java.util.StringTokenizer} (concrete, and the symbolic content of its string) */
+    private static final class Tokenizer {
+        final String str;
+        final String delimiters;
+        final int maxPosition;
+        final boolean retDelims;
+        final boolean hasSurrogates;
+        /** the symbolic content of the string, or null */
+        final Expression symbolicStr;
+        final boolean symbolicDelimiters;
+
+        Tokenizer(StaticObject self, Meta meta) {
+            Field fStr = tokenizerField(self, "str", EspressoSymbols.Types.java_lang_String, meta);
+            Field fDelims = tokenizerField(self, "delimiters", EspressoSymbols.Types.java_lang_String, meta);
+            StaticObject s = fStr.getObject(self);
+            StaticObject d = fDelims.getObject(self);
+            if (StaticObject.isNull(d)) {
+                throw meta.throwNullPointerException();
+            }
+            str = meta.toHostString(s);
+            delimiters = meta.toHostString(d);
+            maxPosition = tokenizerField(self, "maxPosition", EspressoSymbols.Types._int, meta).getInt(self);
+            retDelims = tokenizerField(self, "retDelims", EspressoSymbols.Types._boolean, meta).getBoolean(self);
+            hasSurrogates = tokenizerField(self, "hasSurrogates", EspressoSymbols.Types._boolean, meta).getBoolean(self);
+            boolean concolic = analyze && config.hasConcolicAnalysis();
+            symbolicStr = concolic ? fieldStringContent(self, fStr, s) : null;
+            symbolicDelimiters = concolic && fieldStringContent(self, fDelims, d) != null;
+        }
+
+        boolean isDelimiter(int c) {
+            return delimiters.indexOf(c) >= 0;
+        }
+
+        int codePointAt(int pos) {
+            return hasSurrogates ? str.codePointAt(pos) : str.charAt(pos);
+        }
+
+        int next(int pos, int c) {
+            return hasSurrogates ? pos + Character.charCount(c) : pos + 1;
+        }
+
+        /** whether positions can be symbolic: one char per code unit, no tokens of delimiters */
+        boolean symbolic(Object startPos, String method, Meta meta) {
+            if (!analyze || !config.hasConcolicAnalysis() || (symbolicStr == null && !isSymbolic(startPos))) {
+                return false;
+            }
+            if (retDelims || hasSurrogates || symbolicDelimiters) {
+                losePrecision("StringTokenizer." + method + " with returned delimiters, surrogates, or symbolic "
+                        + "delimiters is not symbolically implemented", meta);
+                return false;
+            }
+            return true;
+        }
+
+        Expression strExpression() {
+            return symbolicStr != null ? symbolicStr : Constant.fromConcreteValue(str);
+        }
+
+        /** the distinct delimiter characters */
+        String distinctDelimiters() {
+            StringBuilder sb = new StringBuilder();
+            for (char c : delimiters.toCharArray()) {
+                if (sb.indexOf(String.valueOf(c)) < 0) {
+                    sb.append(c);
+                }
+            }
+            return sb.toString();
+        }
+    }
+
+    private static Field tokenizerField(StaticObject self, String name,
+                                        com.oracle.truffle.espresso.classfile.descriptors.Symbol<
+                                                com.oracle.truffle.espresso.classfile.descriptors.Type> type,
+                                        Meta meta) {
+        return self.getKlass().lookupField(meta.getNames().getOrCreate(name), type);
+    }
+
+    /** the symbolic content of the string in field {@code f} of {@code holder}, or null */
+    private static Expression fieldStringContent(StaticObject holder, Field f, StaticObject s) {
+        if (StaticObject.isNull(s)) {
+            return null;
+        }
+        Expression e = (Expression) Annotations.annotation(Annotations.objectAnnotation(s), config.getConcolicIdx());
+        if (e != null) {
+            return e;
+        }
+        Object t = Annotations.annotation(AnnotatedVM.getFieldAnnotation(holder, f), config.getConcolicIdx());
+        if (config.isSymbolicStringFields() && tools.aqua.concolic.HeapModel.isObjectTerm(t)) {
+            return config.getConcolicAnalysis().getHeap().contentTerm((Expression) t);
+        }
+        return null;
+    }
+
+    /**
+     * {@code StringTokenizer.skipDelimiters(startPos)}: the position of the first character that is no delimiter.
+     * Symbolically two decisions per position (within the string, a delimiter).
+     */
+    @CompilerDirectives.TruffleBoundary
+    public static Object tokenizerSkipDelimiters(StaticObject self, Object startPos, Meta meta) {
+        Tokenizer t = new Tokenizer(self, meta);
+        int start = AnnotatedValue.value(startPos);
+        int pos = start;
+        while (!t.retDelims && pos < t.maxPosition) {
+            int c = t.codePointAt(pos);
+            if (!t.isDelimiter(c)) {
+                break;
+            }
+            pos = t.next(pos, c);
+        }
+        if (!t.symbolic(startPos, "skipDelimiters", meta)) {
+            return pos;
+        }
+        tools.aqua.concolic.ConcolicAnalysis ca = config.getConcolicAnalysis();
+        Expression s = t.strExpression();
+        Expression len = ca.stringLengthExpression(s);
+        Expression p = intExpression(startPos);
+        String delims = t.distinctDelimiters();
+        for (int c = start; ; c++) {
+            boolean inBounds = c < t.maxPosition;
+            ca.decide(new ComplexExpression(OperatorComparator.BVLT, p, len), inBounds);
+            if (!inBounds) {
+                break;
+            }
+            boolean delimiter = t.isDelimiter(t.str.charAt(c));
+            Expression at = new ComplexExpression(OperatorComparator.SAT, s,
+                    new ComplexExpression(OperatorComparator.BV2NAT, p));
+            Expression isDelimiter = null;
+            for (char d : delims.toCharArray()) {
+                Expression eq = new ComplexExpression(OperatorComparator.STRINGEQ, at,
+                        Constant.fromConcreteValue(String.valueOf(d)));
+                isDelimiter = isDelimiter == null ? eq : new ComplexExpression(OperatorComparator.BOR, isDelimiter, eq);
+            }
+            if (isDelimiter == null) {
+                // no delimiters: the loop stops at once
+                break;
+            }
+            ca.decide(isDelimiter, delimiter);
+            if (!delimiter) {
+                break;
+            }
+            p = new ComplexExpression(OperatorComparator.IADD, p, Constant.fromConcreteValue(1));
+        }
+        return symbolicResult(pos, p);
+    }
+
+    /**
+     * {@code StringTokenizer.scanToken(startPos)}: the position of the next delimiter, or the end of the string.
+     * Symbolically the minimum of {@code indexOf} over the delimiters, without decisions.
+     */
+    @CompilerDirectives.TruffleBoundary
+    public static Object tokenizerScanToken(StaticObject self, Object startPos, Meta meta) {
+        Tokenizer t = new Tokenizer(self, meta);
+        int start = AnnotatedValue.value(startPos);
+        int pos = start;
+        while (pos < t.maxPosition) {
+            int c = t.codePointAt(pos);
+            if (t.isDelimiter(c)) {
+                break;
+            }
+            pos = t.next(pos, c);
+        }
+        if (t.retDelims && start == pos && pos < t.maxPosition) {
+            int c = t.codePointAt(pos);
+            if (t.isDelimiter(c)) {
+                pos = t.next(pos, c);
+            }
+        }
+        if (!t.symbolic(startPos, "scanToken", meta)) {
+            return pos;
+        }
+        tools.aqua.concolic.ConcolicAnalysis ca = config.getConcolicAnalysis();
+        Expression s = t.strExpression();
+        Expression p = intExpression(startPos);
+        Expression end = ca.stringLengthExpression(s);
+        Expression zero = Constant.fromConcreteValue(0);
+        for (char d : t.distinctDelimiters().toCharArray()) {
+            Expression delimiter = Constant.fromConcreteValue(String.valueOf(d));
+            Expression natIndex = new ComplexExpression(OperatorComparator.SINDEXOF, s, delimiter,
+                    new ComplexExpression(OperatorComparator.BV2NAT, p));
+            // the delimiter is at the position found (which the solver does not derive easily)
+            ca.lemma(new ComplexExpression(OperatorComparator.BOR, new ComplexExpression(OperatorComparator.BNEG,
+                    new ComplexExpression(OperatorComparator.GE, natIndex, Constant.createNatConstant(0))),
+                    new ComplexExpression(OperatorComparator.STRINGEQ,
+                            new ComplexExpression(OperatorComparator.SAT, s, natIndex), delimiter)));
+            Expression index = new ComplexExpression(OperatorComparator.NAT2BV32, natIndex);
+            end = new ComplexExpression(OperatorComparator.ITE,
+                    new ComplexExpression(OperatorComparator.BAND,
+                            new ComplexExpression(OperatorComparator.BVGE, index, zero),
+                            new ComplexExpression(OperatorComparator.BVLT, index, end)),
+                    index, end);
+        }
+        return symbolicResult(pos, end);
+    }
+
+    /** {@code self.split(regex, limit)}, the limit possibly symbolic */
+    @CompilerDirectives.TruffleBoundary
+    public static Object splitWithLimit(StaticObject self, StaticObject regex, Object limit, Meta meta) {
+        if (analyze && config.hasConcolicAnalysis() && isSymbolic(limit)) {
+            losePrecision("String.split with a symbolic limit is not symbolically implemented", meta);
+        }
+        return split(self, regex, (int) AnnotatedValue.<Integer>value(limit), meta);
+    }
+
+    /** the parts of a split with their symbolic contents */
+    private static StaticObject annotateParts(StaticObject array, List<Expression> parts, Meta meta) {
+        StaticObject[] elements = array.unwrap(meta.getLanguage());
+        for (int i = 0; i < elements.length && i < parts.size(); i++) {
+            Annotations a = Annotations.create();
+            a.set(config.getConcolicIdx(), parts.get(i));
+            setStringAnnotations(elements[i], a);
+        }
+        return array;
+    }
+
+    /**
+     * The separator of a regular expression that matches exactly one literal string (Java's fast path of split: one
+     * character that is no metacharacter, or an escaped character that is no letter or digit; or a string without
+     * metacharacters), {@code null} otherwise.
+     */
+    static String literalSeparator(String regex) {
+        String meta = ".$|()[{^?*+\\";
+        if (regex.length() == 2 && regex.charAt(0) == '\\' && !Character.isLetterOrDigit(regex.charAt(1))) {
+            return regex.substring(1);
+        }
+        if (regex.isEmpty()) {
+            return null;
+        }
+        for (char c : regex.toCharArray()) {
+            if (meta.indexOf(c) >= 0 || Character.isSurrogate(c)) {
+                return null;
+            }
+        }
+        return regex;
     }
 
     public static StaticObject valueOf_bool(Object v, Meta meta) {
@@ -2412,7 +3313,7 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static double parseDouble(StaticObject s, Meta meta) {
-        if (analyze && config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(s)) {
+        if (analyze && config.hasConcolicAnalysis() && hasSymbolicContent(s)) {
             losePrecision("Concolic type conversion from string to double is not supported", meta);
         }
         return Double.parseDouble(meta.toHostString(s));
@@ -2420,7 +3321,7 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static float parseFloat(StaticObject s, Meta meta) {
-        if (analyze && config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(s)) {
+        if (analyze && config.hasConcolicAnalysis() && hasSymbolicContent(s)) {
             losePrecision("Concolic type conversion from string to float is not supported", meta);
         }
         return Float.parseFloat(meta.toHostString(s));
@@ -2428,7 +3329,7 @@ public class SPouT {
 
     @CompilerDirectives.TruffleBoundary
     public static int parseInt(StaticObject s, Meta meta) {
-        if (analyze && config.hasConcolicAnalysis() && config.getConcolicAnalysis().hasConcolicStringAnnotations(s)) {
+        if (analyze && config.hasConcolicAnalysis() && hasSymbolicContent(s)) {
             losePrecision("Concolic type conversion from string to int is not supported", meta);
         }
         return Integer.parseInt(meta.toHostString(s));
@@ -2497,21 +3398,12 @@ public class SPouT {
     }
 
     private static Annotations getStringAnnotations(StaticObject self) {
-        return Annotations.annotation(self.getAnnotations(), -1);
+        return stringContent(self);
     }
 
 
     private static boolean hasConcolicAnnotations(StaticObject v) {
-        //return v.hasAnnotations() && config.hasConcolicAnalysis() && v.getAnnotations()[config.getConcolicIdx()] != null;
-        Annotations[] stringAnnotation = v.getAnnotations();
-        if (stringAnnotation != null) {
-            Annotations annotations = stringAnnotation[stringAnnotation.length - 1];
-            if (annotations != null) {
-                return annotations.getAnnotations()[config.getConcolicIdx()] != null;
-            }
-            //FIXME: it can happen that no length annotation is present. Not sure if this is expected?
-        }
-        return false;
+        return hasSymbolicContent(v);
     }
 
     public static void makeConcatWithConstantsSymbolically(Object result, Object[] args, Meta meta) {
@@ -2523,13 +3415,34 @@ public class SPouT {
         }
     }
 
+    /** the thread that runs the analyzed program (it starts the path) */
+    private static volatile Thread analysisThread;
+    /** nested pauses of the analysis (by the analysis thread) */
+    private static int pauseDepth = 0;
+
+    /**
+     * Pauses the analysis (e.g. while a call site is bootstrapped), nested. Only the analysis thread pauses: other
+     * threads of the VM (e.g. when threads are created) would switch the analysis off for the program.
+     */
+    @CompilerDirectives.TruffleBoundary
     public static void pauseAnalyze() {
-        oldAnalyze = analyze;
-        analyze = false;
+        if (analysisThread != null && Thread.currentThread() != analysisThread) {
+            return;
+        }
+        if (pauseDepth++ == 0) {
+            oldAnalyze = analyze;
+            analyze = false;
+        }
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static void resumeAnalyze() {
-        analyze = oldAnalyze;
+        if (analysisThread != null && Thread.currentThread() != analysisThread) {
+            return;
+        }
+        if (pauseDepth > 0 && --pauseDepth == 0) {
+            analyze = oldAnalyze;
+        }
     }
 
     public class NullCheckResult {
@@ -2556,6 +3469,17 @@ public class SPouT {
             this.object = object;
             this.result = result;
         }
+    }
+
+    /** an argument with annotations of a method inlined in the bytecode, which ignores annotations */
+    @CompilerDirectives.TruffleBoundary
+    public static void inlinedCallWithAnnotations(Annotations a, Method m) {
+        if (!analyze || config == null || !config.hasConcolicAnalysis()
+                || Annotations.annotation(a, config.getConcolicIdx()) == null) {
+            return;
+        }
+        losePrecision("symbolic argument of " + m.getDeclaringKlass().getNameAsString() + "." + m.getNameAsString()
+                + " (inlined in the bytecode) is concretized", getMeta());
     }
 
     public static boolean hasAnalysis() {

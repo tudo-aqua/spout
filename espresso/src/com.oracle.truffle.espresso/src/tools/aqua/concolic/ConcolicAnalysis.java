@@ -66,9 +66,16 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     private final Trace trace;
 
+    private final HeapModel heap;
+
     public ConcolicAnalysis(Config config) {
         this.config = config;
         this.trace = config.getTrace();
+        this.heap = new HeapModel(config);
+    }
+
+    public HeapModel getHeap() {
+        return heap;
     }
 
     public Object nextSymbolicInt() {
@@ -133,315 +140,13 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         annotations[annotations.length - 1] = stringDescription;
         guestString.setAnnotations(annotations);
         trace.addElement(new SymbolDeclaration(ssv.symbolic));
+        // Java strings are shorter than 2^31: lengths are converted to 32-bit ints, which would otherwise wrap
+        // around (and the solver would look for strings of more than 2^31 characters)
+        trace.addElement(new Assumption(new ComplexExpression(LE, new ComplexExpression(SLENGTH, ssv.symbolic),
+                Constant.createNatConstant(Integer.MAX_VALUE)), true));
         return guestString;
     }
 
-    private Object getArrayValue(StaticObject array, int idx, Meta meta) {
-        switch ( ((ArrayKlass)array.getKlass()).getComponentType().getJavaKind() ) {
-            case Boolean:
-                boolean[] boolArr = array.unwrap(meta.getLanguage());
-                return boolArr[idx];
-            case Byte:
-                byte[] byteArr = array.unwrap(meta.getLanguage());
-                return byteArr[idx];
-            case Char:
-                char[] charArr = array.unwrap(meta.getLanguage());
-                return charArr[idx];
-            case Short:
-                short[] shortArr = array.unwrap(meta.getLanguage());
-                return shortArr[idx];
-            case Int:
-                int[] iArr = array.unwrap(meta.getLanguage());
-                return iArr[idx];
-           case Long:
-                long[] lArr = array.unwrap(meta.getLanguage());
-                return lArr[idx];
-            case Float:
-                float[] fArr = array.unwrap(meta.getLanguage());
-                return fArr[idx];
-            case Double:
-                double[] dArr = array.unwrap(meta.getLanguage());
-                return dArr[idx];
-            case Object:
-                Object[] oArr = array.unwrap(meta.getLanguage());
-                return oArr[idx];
-            default:
-                SPouT.notImplementedYet("not implemented yet.", meta );
-        }
-        return null;
-    }
-
-    private void annotateArray(StaticObject array, int cIdx, int level, Meta meta, Atom arrayName) {
-        // get component type, length, and array annotations
-        ArrayKlass aClass = (ArrayKlass) array.getKlass();
-        int length = array.length(meta.getLanguage());
-        if (!array.hasAnnotations()) {
-            array.setAnnotations(new Annotations[length+1]);
-        }
-        Annotations[] aa = array.getAnnotations();
-        // log array length
-        Atom lengthVar = new AuxiliaryVariable(arrayName + ".length", INT);
-        trace.addElement(new SymbolDeclaration(lengthVar, false /*!config.isConstructorSummary()*/));
-        if (config.isConstructorSummary()) {
-            Annotations lengthAnnotations = Annotations.annotation(aa, -1);
-            Expression lengthExpr = Annotations.annotation(lengthAnnotations, cIdx);
-            logConstructorSummary(JavaKind.Int, lengthVar, length, lengthExpr);
-        } else {
-            if (aa[length] == null) aa[length] = Annotations.create();
-            aa[length].set(cIdx, lengthVar);
-        }
-        if (aClass.getComponentType().isPrimitive()) {
-            // primitive => annotate array
-            for (int j = 0; j < length; j++) {
-                Atom ajVar = getAuxiliaryArrayVariable(aClass.getComponentType(), arrayName, j);
-                trace.addElement(new SymbolDeclaration(ajVar, false /*!config.isConstructorSummary()*/));
-                if (config.isConstructorSummary()) {
-                    Expression ajExpr = Annotations.annotation(aa[j], cIdx);
-                    Object ajValue = getArrayValue(array, j, meta);
-                    logConstructorSummary(aClass.getComponentType().getJavaKind(), ajVar, ajValue, ajExpr);
-                } else {
-                    aa[j] = Annotations.create();
-                    aa[j].set(cIdx, ajVar);
-                }
-            }
-        } else if (aClass.getComponentType() == meta.java_lang_String) {
-            SPouT.notImplementedYet("String array during initial object annotations not supported", meta );
-        } else if (aClass.getComponentType().isArray()) {
-            SPouT.notImplementedYet("Array of arrays during initial object annotations not supported", meta );
-        } else { // objects
-            for (int j = 0; j < length; j++) {
-                Atom ajVar = getAuxiliaryArrayVariable(aClass.getComponentType(), arrayName, j);
-                StaticObject ajValue = (StaticObject) getArrayValue(array, j, meta);
-                if (ajValue == StaticObject.NULL) {
-                    ajValue = StaticObject.createNull(null);
-                    Object[] unwrapped = array.unwrap(meta.getLanguage());
-                    unwrapped[j] = ajValue;
-                }
-                trace.addElement(new SymbolDeclaration(ajVar, false /*!config.isConstructorSummary()*/));
-                AuxiliaryVariable fCls = new AuxiliaryVariable(ajVar + ".cls", STRING);
-                trace.addElement(new SymbolDeclaration(fCls, false /*!config.isConstructorSummary()*/));
-                if (Annotations.annotation(Annotations.objectAnnotation(ajValue), cIdx) != null  && !config.isConstructorSummary()) {
-                    Annotations fAnnot = Annotations.objectAnnotation(ajValue);
-                    trace.addElement(new ConstructorCondition(new ComplexExpression(
-                            OBJECT_EQ, ajVar, Annotations.annotation(fAnnot, cIdx))));
-                } else {
-                    Annotations ja = Annotations.create();
-                    ja.set(cIdx, ajVar);
-                    Annotations.setObjectAnnotation(ajValue, ja);
-                    annotateObject(ajValue, cIdx, level + 1, meta);
-                    if (config.isConstructorSummary()) {
-                        Annotations.setObjectAnnotation(ajValue, null);
-                    }
-                }
-            }
-            //SPouT.stopRecording("Object array during initial object annotations not supported", meta );
-        }
-    }
-
-    @CompilerDirectives.TruffleBoundary
-    private boolean skipField(Field field, Meta meta) {
-        if (field.getDeclaringKlass() == meta.java_lang_Throwable) {
-            SPouT.losePrecision("Skip field of Throwable during initial object annotation. May lose precision.", meta );
-            return true;
-        }
-        if (field.getDeclaringKlass() == meta.java_lang_Thread) {
-            SPouT.losePrecision("Skip field of Throwable during initial object annotation. May lose precision.", meta );
-            return true;
-        }
-        if (field.getDeclaringKlass().getNameAsString().contains("ThreadLocal")) {
-            SPouT.losePrecision("Skip field of Throwable during initial object annotation. May lose precision.", meta );
-            return true;
-        }
-        return false;
-    }
-
-    @CompilerDirectives.TruffleBoundary
-    private void annotateObject(StaticObject obj, int cIdx, int level, Meta meta) {
-        if (level > config.getMaxObjectAnnotationDepth()) return;
-        Atom oId = (Atom) Annotations.objectAnnotation(obj).getAnnotations()[cIdx];
-        Annotations[] objAnnotations = obj.getAnnotations();
-        ObjectKlass kls = (ObjectKlass) obj.getKlass();
-        if (config.isConstructorSummary()) {
-            AuxiliaryVariable oCls = new AuxiliaryVariable(oId + ".cls", STRING);
-            Expression nullExpr = new ComplexExpression(OBJECT_IS_NULL, oId ,Constant.NULL);
-            if (kls != null) {
-                nullExpr = new ComplexExpression(BNEG, nullExpr);
-            }
-            Expression clsExpr = new ComplexExpression(STRINGEQ, oCls, Expression.fromConstant(KLASS, kls));
-
-            trace.addElement(new ConstructorCondition(nullExpr));
-            // toplevel was logged in config already
-            if (level > 0) trace.addElement(new ConstructorCondition(clsExpr));
-        }
-        if (kls == null) { // null object
-            return;
-        }
-        Field[] fieldTable = kls.getFieldTable();
-        for (int i = 0; i < fieldTable.length; i++) {
-            Field field = fieldTable[i];
-            if (skipField(field, meta)) {
-                continue;
-            }
-            AuxiliaryVariable fName = getAuxiliaryVariable(field, oId);
-            Annotations fieldAnnotations = Annotations.create();
-            fieldAnnotations.set(cIdx, fName);
-            if (field.getKind().isPrimitive()) {
-                trace.addElement(new SymbolDeclaration(fName, false /*!config.isConstructorSummary()*/));
-                if (config.isConstructorSummary()) {
-                    Annotations constructedAnnotations = objAnnotations[field.getSlot()];
-                    Object fieldValue = field.getValue(obj);
-                    logConstructorSummary(field.getKind(), fName, fieldValue, Annotations.annotation(constructedAnnotations , cIdx ));
-                } else {
-                    objAnnotations[field.getSlot()] = fieldAnnotations;
-                }
-            } else if (field.getKind().isObject()) {
-                StaticObject fObj = field.getObject(obj);
-                if (field.getType() == meta.java_lang_String.getType()) {
-                    trace.addElement(new SymbolDeclaration(fName, false /*!config.isConstructorSummary()*/));
-                    if (config.isConstructorSummary()) {
-                        String fValue = meta.toHostString(fObj);
-                        Annotations fAnnot = Annotations.objectAnnotation(fObj);
-                        logConstructorSummary(field.getKind(), fName, fValue, Annotations.annotation(fAnnot, cIdx));
-                        Annotations.setObjectAnnotation(fObj, null);
-                    } else {
-                        Annotations strAnnot = Annotations.create();
-                        strAnnot.set(cIdx, fName);
-                        Annotations.setObjectAnnotation(fObj, strAnnot);
-                    }
-                } else {
-                    // this can happen if the null is created in a constructor
-                    if (fObj == StaticObject.NULL) {
-                        fObj = StaticObject.createNull(null);
-                        field.set(obj, fObj);
-                    }
-                    if (fObj.isArray()) {
-                        annotateArray(fObj, cIdx, level+1, meta, fName);
-                    } else {
-                        trace.addElement(new SymbolDeclaration(fName, false /*!config.isConstructorSummary()*/));
-                        AuxiliaryVariable fCls = new AuxiliaryVariable(fName + ".cls", STRING);
-                        trace.addElement(new SymbolDeclaration(fCls, false /*!config.isConstructorSummary()*/));
-                        if (Annotations.annotation(Annotations.objectAnnotation(fObj), cIdx) != null) {
-                            SPouT.losePrecision("Heap loop during initial object annotation. May lose precision.", meta );
-                            // Annotations fAnnot = Annotations.objectAnnotation(fObj);
-                            // trace.addElement(new ConstructorCondition(new ComplexExpression(
-                            //        OBJECT_EQ, fName, Annotations.annotation(fAnnot, cIdx))));
-                        } else {
-                            Annotations.setObjectAnnotation(fObj, fieldAnnotations);
-                            annotateObject(fObj, cIdx, level +1, meta);
-                            if (config.isConstructorSummary()) {
-                                Annotations.setObjectAnnotation(fObj, null);
-                            }
-                        }
-                    }
-                }
-            }
-            // TODO: arrays?
-            // TODO: name collisions
-        }
-        obj.setAnnotations(objAnnotations);
-    }
-
-    private void logConstructorSummary(JavaKind kind, Atom fieldName, Object fieldValue, Expression explanation) {
-        Expression summary = null;
-        switch (kind) {
-            case Boolean:
-                summary = new ComplexExpression(BEQUIV, fieldName,
-                    explanation != null ? explanation : Constant.fromConcreteValue( (boolean) fieldValue));
-                break;
-            case Byte:
-                summary = new ComplexExpression(BVEQ, fieldName,
-                        explanation != null ? explanation : Constant.fromConcreteValue( (byte) fieldValue));
-                break;
-            case Short:
-                summary = new ComplexExpression(BVEQ, fieldName,
-                        explanation != null ? explanation : Constant.fromConcreteValue( (short) fieldValue));
-                break;
-            case Char:
-                summary = new ComplexExpression(BVEQ, fieldName,
-                        explanation != null ? explanation : Constant.fromConcreteValue( (char) fieldValue));
-                break;
-            case Int:
-                summary = new ComplexExpression(BVEQ, fieldName,
-                    explanation != null ? explanation : Constant.fromConcreteValue( (int) fieldValue));
-                break;
-            case Long:
-                summary = new ComplexExpression(BVEQ, fieldName,
-                        explanation != null ? explanation : Constant.fromConcreteValue( (long) fieldValue));
-                break;
-            case Float:
-                summary = new ComplexExpression(FPEQ, fieldName,
-                        explanation != null ? explanation : Constant.fromConcreteValue( (float) fieldValue));
-                break;
-            case Double:
-                summary = new ComplexExpression(FPEQ, fieldName,
-                        explanation != null ? explanation : Constant.fromConcreteValue( (double) fieldValue));
-                break;
-            case Object:
-                if (fieldName.getType() == STRING) {
-                    summary = new ComplexExpression(STRINGEQ, fieldName,
-                            explanation != null ? explanation : Constant.fromConcreteValue((String) fieldValue));
-                } else {
-                    // should never happen
-                    summary = new ComplexExpression(OBJECT_EQ, fieldName,
-                        explanation != null ? explanation : Constant.fromConcreteValue((StaticObject) fieldValue));
-                }
-                break;
-            default:
-                assert false;
-        }
-        trace.addElement(new ConstructorCondition(summary));
-    }
-
-    private static AuxiliaryVariable getAuxiliaryVariable(Field field, Atom oId) {
-        String name = field.getDeclaringKlass().getNameAsString() + "_" + field.getNameAsString();
-        Types type = null;
-        switch (field.getKind()) {
-            case Boolean -> type = BOOL;
-            case Byte ->    type = BYTE;
-            case Short ->   type = SHORT;
-            case Char ->    type = CHAR;
-            case Int ->     type = INT;
-            case Float ->   type = FLOAT;
-            case Long ->    type = LONG;
-            case Double ->  type = DOUBLE;
-            case Object ->  {
-                if (field.getTypeAsString().equals("Ljava/lang/String;"))
-                    type = STRING;
-                else
-                    type = OBJECT;
-            }
-            default -> {
-                // unreachable
-            }
-        }
-        AuxiliaryVariable fName = new AuxiliaryVariable(oId + "." + name, type);
-        return fName;
-    }
-
-    private static AuxiliaryVariable getAuxiliaryArrayVariable(Klass compoentType, Atom oId, int index) {
-        Types type = null;
-        switch (compoentType.getJavaKind()) {
-            case Boolean -> type = BOOL;
-            case Byte ->    type = BYTE;
-            case Short ->   type = SHORT;
-            case Char ->    type = CHAR;
-            case Int ->     type = INT;
-            case Float ->   type = FLOAT;
-            case Long ->    type = LONG;
-            case Double ->  type = DOUBLE;
-            case Object ->  {
-                if (compoentType.getTypeAsString().equals("Ljava/lang/String"))
-                    type = STRING;
-                else
-                    type = OBJECT;
-            }
-            default -> {
-                // unreachable
-            }
-        }
-        AuxiliaryVariable fName = new AuxiliaryVariable(oId + "__" + index, type);
-        return fName;
-    }
 
     /***
      * Trys to create in the guest world a new Object according to the next element of -Dconcolic.constructors
@@ -455,7 +160,12 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         StaticObject obj = config.nextSymbolicObject(meta, typeBound);
         assert obj != null;
 
-        annotateObject(obj, config.getConcolicIdx(), 0, meta);
+        if (config.isConstructorSummary()) {
+            Atom oId = (Atom) Annotations.annotation(Annotations.objectAnnotation(obj), config.getConcolicIdx());
+            heap.summarize(obj, oId, meta);
+        } else {
+            heap.markInitial(obj, meta);
+        }
         return obj;
     }
 
@@ -949,10 +659,16 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     public boolean checkArrayAccessPathConstraint(StaticObject array, int cIndex, Expression sIndex, EspressoLanguage lang) {
+        return checkArrayAccessPathConstraint(array, cIndex, sIndex, null, lang);
+    }
+
+    /** @param lengthTerm the length of the array read through its term ({@code (arr.length a)}), or null */
+    public boolean checkArrayAccessPathConstraint(StaticObject array, int cIndex, Expression sIndex,
+                                                  Expression lengthTerm, EspressoLanguage lang) {
         assert array.isArray();
         int cLen = array.length(lang);
         boolean safe = 0 <= cIndex && cIndex < cLen;
-        if ((array.hasAnnotations() && array.getAnnotations()[cLen] != null) || sIndex != null) {
+        if ((array.hasAnnotations() && array.getAnnotations()[cLen] != null) || sIndex != null || lengthTerm != null) {
 
             if (sIndex == null) {
                 sIndex = Constant.fromConcreteValue(cIndex);
@@ -960,8 +676,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                 sIndex = convertCharToInt(sIndex);
             }
 
-            Expression sLen = null;
-            if (array.hasAnnotations()) {
+            Expression sLen = lengthTerm;
+            if (sLen == null && array.hasAnnotations()) {
                 sLen = Annotations.annotation(array.getAnnotations()[cLen], config.getConcolicIdx());
             }
             if (sLen == null) {
@@ -1116,10 +832,26 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
         // boolean
         if ((a1 == null || Expression.isBoolean(a1)) && (a2 == null || Expression.isBoolean(a2))) {
-            // assume that one is a constant.
+            // expr is the condition under which the branch is not taken (negated below if it is taken)
             if (a1 != null && a2 != null) {
-                CompilerDirectives.transferToInterpreter();
-                throw EspressoError.shouldNotReachHere("non-branching bytecode");
+                // two symbolic booleans, e.g., comparing the boolean fields of two objects
+                Expression equal = new ComplexExpression(BEQUIV, a1, a2);
+                switch (opcode) {
+                    case IF_ICMPEQ:
+                        expr = new ComplexExpression(BNEG, equal);
+                        break;
+                    case IF_ICMPNE:
+                        expr = equal;
+                        break;
+                    default:
+                        CompilerDirectives.transferToInterpreter();
+                        throw EspressoError.shouldNotReachHere("non-branching bytecode");
+                }
+                if (takeBranch) {
+                    expr = new ComplexExpression(BNEG, expr);
+                }
+                trace.addElement(new PathCondition(expr, takeBranch ? FAILURE : SUCCESS, BINARY_SPLIT));
+                return;
             }
 
             expr = a1 != null ? a1 : a2;
@@ -1207,6 +939,11 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                                StaticObject c,
                                Expression a) {
 
+        if (!(a instanceof Atom)) {
+            // only variables denote objects; e.g. the length annotation (an expression) of an array: (= <length>
+            // null) is ill-typed, record nothing (and keep the annotation: it is the symbolic length)
+            return;
+        }
         if (a instanceof Atom) {
             // todo: we skip logging null checks on class variables here
             //  (as I think they cannot become true and break getClass()....() calls)
@@ -1221,7 +958,12 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                 SPouT.debug("  annotation ", atom);
                 SPouT.debug("  object", c);
                 SPouT.debug("  take branch", takeBranch);
-                Annotations.setObjectAnnotation(c, null);
+                if (!c.isArray()) {
+                    // for an array, the annotation is its symbolic length, which is kept
+                    Annotations.setObjectAnnotation(c, null);
+                }
+                // e.g. the length annotation of an array: (= <length> null) is ill-typed, record nothing
+                return;
             }
         }
 
@@ -1269,12 +1011,12 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                                StaticObject c2,
                                Expression a1,
                                Expression a2) {
-        if (a1 == null || a2 == null) {
+        // an object term, or null for a null reference without term (e.g. a constant)
+        Expression var1 = HeapModel.isObjectTerm(a1) ? a1 : StaticObject.isNull(c1) ? Constant.NULL : null;
+        Expression var2 = HeapModel.isObjectTerm(a2) ? a2 : StaticObject.isNull(c2) ? Constant.NULL : null;
+        if (var1 == null || var2 == null || (var1 == Constant.NULL && var2 == Constant.NULL)) {
             return;
         }
-        //todo: Get this variables with Assertions
-        Atom var1 = (Atom) a1;
-        Atom var2 = (Atom) a2;
 
 
         Expression expr = new ComplexExpression(OBJECT_EQ, var1, var2);
@@ -1301,18 +1043,11 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression instanceOf(StaticObject c, Expression a, Klass typeToCheck, boolean isInstance) {
-        if (a == null) {
+        if (!HeapModel.isObjectTerm(a)) {
+            // e.g. strings (their annotation is the symbolic string) and arrays (their symbolic length)
             return null;
         }
-
-        assert a instanceof Variable;
-        Atom atom = (Atom)a;
-        // todo: unproper extra handling of strings
-        if (atom.getType() == STRING) {
-            SPouT.log("unproper handling of strings in instanceof may lead to loss in precision");
-            return null;
-        }
-        Atom klassVar = Expression.getKlassVariable((Atom) a);
+        Atom klassVar = heap.clsTerm((Atom) a);
 
         Expression klassConstant = Expression.fromConstant(KLASS, typeToCheck);
         Expression instanceofExpr = new ComplexExpression(BAND,
@@ -1324,12 +1059,10 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public void polymorphicMethodAccess(StaticObject object, Method m, Expression aObj) {
-        if (aObj == null) return;
-        if (!(aObj instanceof Atom)) {
-            SPouT.log("not recording polymorphic method access for non-atom object as object is expression is complex (String?)");
+        if (!HeapModel.isObjectTerm(aObj)) {
             return;
         }
-        Atom aCls = Expression.getKlassVariable((Atom) aObj);
+        Atom aCls = heap.clsTerm((Atom) aObj);
         Expression klassExpression = Expression.fromConstant(KLASS, m.getDeclaringKlass());
         Expression aMethodName = Expression.fromConstant(STRING, m.getNameAsString());
         Expression aMethodSignature = Expression.fromConstant(STRING, m.getSignatureAsString());
@@ -1341,8 +1074,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression objectGetClass(StaticObject object, Expression aObj) {
-        if (aObj == null) return null;
-        return Expression.getKlassVariable((Atom) aObj);
+        if (!HeapModel.isObjectTerm(aObj)) return null;
+        return heap.clsTerm((Atom) aObj);
     }
 
     @Override
@@ -1353,16 +1086,10 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                                 Expression a,
                                 Klass typeToCheck,
                                 boolean isInstance) {
-        if (a == null) {
+        if (!HeapModel.isObjectTerm(a)) {
             return null;
         }
-        Atom atom = (Atom)a;
-        // todo: unproper extra handling of strings
-        if (atom.getType() == STRING) {
-            SPouT.log("unproper handling of strings in checkcast may lead to loss in precision");
-            return null;
-        }
-        Atom klassVar = Expression.getKlassVariable((Atom) a);
+        Atom klassVar = heap.clsTerm((Atom) a);
         Expression klassExpression = Expression.fromConstant(KLASS, typeToCheck);
         Expression finalExpr = new ComplexExpression(OBJECT_EXTENDS, klassVar, klassExpression);
 
@@ -1661,9 +1388,9 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     private ConvRes convertArgToExpression(Object arg) {
         if (arg instanceof StaticObject) {
             StaticObject so = (StaticObject) arg;
-            Annotations[] a = so.getAnnotations();
-            return a != null && a[a.length - 1] != null && a[a.length - 1].getAnnotations()[config.getConcolicIdx()] != null ?
-                    new ConvRes((Expression) a[a.length - 1].getAnnotations()[config.getConcolicIdx()], true) :
+            Expression content = Annotations.annotation(SPouT.stringContent(so), config.getConcolicIdx());
+            return content != null ?
+                    new ConvRes(content, true) :
                     new ConvRes(Constant.fromConcreteValue(so.toString()), false);
         } else if (arg instanceof AnnotatedValue) {
             Object[] a = ((AnnotatedValue) arg).getAnnotations();
@@ -1790,6 +1517,90 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return new ComplexExpression(SCONCAT, new ComplexExpression(SCONCAT, left, a2), right);
     }
 
+    /** {@code s.isEmpty()} */
+    public Expression stringIsEmpty(Expression s) {
+        return new ComplexExpression(BVEQ, new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, s)), INT_ZERO);
+    }
+
+    /**
+     * {@code s.indexOf(t, from)} with Java's semantics: a negative {@code from} counts as 0, and a {@code from}
+     * beyond the length finds only the empty string (at the length). SMT's {@code str.indexof} is -1 for indices
+     * outside of the string.
+     */
+    public Expression stringIndexOf(Expression s, Expression t, Expression from) {
+        Expression len = new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, s));
+        Expression f = new ComplexExpression(ITE, new ComplexExpression(BVLT, from, INT_ZERO), INT_ZERO, from);
+        Expression found = new ComplexExpression(NAT2BV32,
+                new ComplexExpression(SINDEXOF, s, t, new ComplexExpression(BV2NAT, f)));
+        Expression tEmpty = new ComplexExpression(BVEQ,
+                new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, t)), INT_ZERO);
+        return new ComplexExpression(ITE, new ComplexExpression(BVGT, f, len),
+                new ComplexExpression(ITE, tEmpty, len, Constant.fromConcreteValue(-1)), found);
+    }
+
+    /**
+     * {@code s.indexOf(ch, from)} for a character code {@code ch}: -1 for a negative code. Codes beyond the basic
+     * multilingual plane (surrogate pairs in the string) are not encoded: the caller records the decision
+     * {@code ch <= 0xFFFF} and loses precision on the other branch.
+     */
+    public Expression stringIndexOfChar(Expression s, Expression ch, Expression from) {
+        Expression valid = new ComplexExpression(BAND, new ComplexExpression(BVLE, INT_ZERO, ch),
+                new ComplexExpression(BVLE, ch, INT_CHAR_MAX));
+        Expression c = new ComplexExpression(SFROMCODE, new ComplexExpression(BV2NAT, ch));
+        return new ComplexExpression(ITE, valid, stringIndexOf(s, c, from), Constant.fromConcreteValue(-1));
+    }
+
+    /** the largest arrays whose elements are selected by a decision on the symbolic index */
+    public static final int MAX_INDEX_SPLIT = 4096;
+
+    /**
+     * An access to an element through a symbolic index whose elements are not terms: a decision on the index like a
+     * switch over the indices of the array (branch {@code i} for {@code index == i}, stable across executions, in
+     * contrast to a decision {@code index == concrete index}); larger arrays lose precision.
+     */
+    @CompilerDirectives.TruffleBoundary
+    public void concretizeIndex(Expression sIndex, int cIndex, int length) {
+        if (sIndex == null || sIndex instanceof Constant) {
+            return;
+        }
+        if (length > MAX_INDEX_SPLIT) {
+            tools.aqua.spout.SPouT.losePrecision("an element of an array with more than " + MAX_INDEX_SPLIT
+                    + " elements is accessed through a symbolic index", null);
+            return;
+        }
+        tableSwitch(null, null, 0, 0, length - 1, cIndex, sIndex);
+    }
+
+    /** records a fact that holds in every execution (a lemma that helps the solver), not a decision */
+    public void lemma(Expression fact) {
+        trace.addElement(new Assumption(fact, true));
+    }
+
+    /** records the decision {@code cond} with its concrete value in this execution */
+    public void decide(Expression cond, boolean value) {
+        trace.addElement(new PathCondition(value ? cond : new ComplexExpression(BNEG, cond),
+                value ? SUCCESS : FAILURE, BINARY_SPLIT));
+    }
+
+    /** {@code s.substring(from, from + length)} for int (bit-vector) positions within the string */
+    public Expression stringSubstring(Expression s, Expression from, Expression length) {
+        return new ComplexExpression(SSUBSTR, s, new ComplexExpression(BV2NAT, from),
+                new ComplexExpression(BV2NAT, length));
+    }
+
+    /** {@code s.length()} */
+    public Expression stringLengthExpression(Expression s) {
+        return new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, s));
+    }
+
+    /** records the decision whether the character code {@code ch} is in the basic multilingual plane */
+    public void decideBasicPlane(Expression ch, int cCh) {
+        Expression bmp = new ComplexExpression(BVLE, ch, INT_CHAR_MAX);
+        boolean inBmp = cCh <= 0xFFFF;
+        trace.addElement(new PathCondition(inBmp ? bmp : new ComplexExpression(BNEG, bmp),
+                inBmp ? SUCCESS : FAILURE, BINARY_SPLIT));
+    }
+
     @Override
     public Expression stringindexOfString(String self, String other, Expression a1, Expression a2) {
         if (a1 == null && a2 == null) return null;
@@ -1863,10 +1674,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     public Object regionMatches(StaticObject self, StaticObject other, boolean ignore, int ctoffset, int cooffset, int clen, boolean cRes, Meta meta) {
         String cSelf = meta.toHostString(self);
         String cOther = meta.toHostString(other);
-        boolean isSelfSymbolic = self.hasAnnotations()
-                && self.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
-        boolean isOtherSymbolic = other.hasAnnotations()
-                && other.getAnnotations()[self.getAnnotations().length - 1].getAnnotations()[config.getConcolicIdx()] != null;
+        boolean isSelfSymbolic = SPouT.hasSymbolicContent(self);
+        boolean isOtherSymbolic = SPouT.hasSymbolicContent(other);
         boolean boundsCheck =
                 evaluateBoundRegionMatches(
                         cooffset,
@@ -2005,11 +1814,8 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     private Expression makeStringToExpr(StaticObject self, Meta meta) {
-        if (self.hasAnnotations()) {
-            Annotations[] fields = self.getAnnotations();
-            return (Expression) Annotations.annotation(fields[fields.length - 1], config.getConcolicIdx());
-        }
-        return Constant.fromConcreteValue(meta.toHostString(self));
+        Expression content = Annotations.annotation(SPouT.stringContent(self), config.getConcolicIdx());
+        return content != null ? content : Constant.fromConcreteValue(meta.toHostString(self));
     }
 
     private Expression makeStringLengthExpr(StaticObject self, Meta meta) {
@@ -2029,6 +1835,10 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
     public boolean hasConcolicStringAnnotations(StaticObject self) {
+        return SPouT.hasSymbolicContent(self);
+    }
+
+    private boolean hasConcolicStringAnnotationsOfObject(StaticObject self) {
         //return stringAnnotation != null && stringAnnotation[stringAnnotation.length - 1].getAnnotations()[config.getConcolicIdx()] != null;
         Annotations[] stringAnnotation = self.getAnnotations();
         if (stringAnnotation != null) {
@@ -2049,6 +1859,10 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public void checkNull(StaticObject object, boolean isNull, Expression a) {
+        if (!(a instanceof Atom)) {
+            // only variables denote objects (see takeBranchRef1)
+            return;
+        }
         Expression expr = new ComplexExpression(OBJECT_IS_NULL, a, Constant.NULL);
 
         if (a instanceof Atom) {
@@ -2065,7 +1879,12 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                 SPouT.debug("  annotation ", atom);
                 SPouT.debug("  object", object);
                 SPouT.debug("  is null", isNull);
-                Annotations.setObjectAnnotation(object, null);
+                if (!object.isArray()) {
+                    // for an array, the annotation is its symbolic length, which is kept
+                    Annotations.setObjectAnnotation(object, null);
+                }
+                // e.g. the length annotation of an array: (= <length> null) is ill-typed, record nothing
+                return;
             }
         }
 
@@ -2094,7 +1913,7 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         return subExpressions;
     }
 
-    private Expression convertCharToInt(Expression e) {
+    public Expression convertCharToInt(Expression e) {
         if (e instanceof ComplexExpression && ((ComplexExpression) e).getOperator().equals(SAT)){
             Expression codepoint = new ComplexExpression(STOCODE, e);
             trace.addElement(new Assumption(new ComplexExpression(LE, new ComplexExpression(STOCODE, e), Constant.createNatConstant(65535)), true));
