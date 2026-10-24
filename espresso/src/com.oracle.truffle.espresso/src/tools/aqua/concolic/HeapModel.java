@@ -81,9 +81,13 @@ public class HeapModel {
     private final Set<String> declared = new HashSet<>();
     private final Set<StaticObject> initial = Collections.newSetFromMap(new IdentityHashMap<>());
 
-    /** a write to a field (or array element) of an initial object */
+    /**
+     * A write to a field (or array element) of an initial object; {@code valueTerm} is the written value as a term
+     * of the sort of reads (primitive fields, builder contents), {@code null} if reads branch on the aliasing of this
+     * write instead (references: their terms are used as receivers).
+     */
     private record Write(StaticObject receiver, Expression receiverTerm, int index, Expression indexExpr,
-                         Annotations value) {}
+                         Annotations value, Expression valueTerm) {}
 
     /** writes per field ({@link Field}) and per array element kind ({@link Character}), oldest first */
     private final Map<Object, List<Write>> writes = new HashMap<>();
@@ -488,20 +492,62 @@ public class HeapModel {
         if (value != null && isOpaque(value, meta) && !StaticObject.isNull(value)) {
             return slot;
         }
-        List<Write> log = writes.get(f);
-        if (log != null) {
-            for (int i = log.size() - 1; i >= 0; i--) {
-                Write w = log.get(i);
-                if (aliases(w, receiver, t, null, -1)) {
-                    return w.value();
-                }
-            }
+        Annotations written = readLog(writes.get(f), receiver, t, slot, widen(f.getKind(), fieldTerm(f, t)));
+        if (written != null) {
+            return written;
         }
         Expression read = widen(f.getKind(), fieldTerm(f, t));
         if (value != null) {
             nameObject(value, read, meta);
         }
         return withTerm(slot, read);
+    }
+
+    /**
+     * The value read from the logged writes {@code log} of a field of {@code receiver}, read through term {@code t}:
+     * {@code ite(t = t_n, v_n, ... ite(t = t_1, v_1, initial))} over the writes through other terms {@code t_i}
+     * since the newest write through {@code t} itself (whose value then replaces {@code initial}). Writes without a
+     * value term (references) are decided instead: the newest aliasing one is the value. {@code null} if no write
+     * is involved (the value is {@code initial}).
+     */
+    private Annotations readLog(List<Write> log, StaticObject receiver, Expression t, Annotations slot,
+                                Expression initial) {
+        if (log == null) {
+            return null;
+        }
+        List<Write> candidates = new ArrayList<>();
+        Write base = null;
+        for (int i = log.size() - 1; i >= 0 && base == null; i--) {
+            Write w = log.get(i);
+            if (w.receiverTerm() == null || w.receiverTerm().toString().equals(t.toString())) {
+                // written through a reference without term (concrete), or through the same term (overrides)
+                if (w.receiver() == receiver) {
+                    base = w;
+                }
+            } else if (w.valueTerm() != null) {
+                candidates.add(w);
+            } else if (aliases(w, receiver, t, null, -1)) {
+                base = w;
+            }
+        }
+        if (candidates.isEmpty()) {
+            return base != null ? base.value() : null;
+        }
+        if (base != null && base.valueTerm() == null) {
+            // no term for the value below the candidates: decide them
+            for (Write w : candidates) {
+                if (aliases(w, receiver, t, null, -1)) {
+                    return w.value();
+                }
+            }
+            return base.value();
+        }
+        Expression e = base != null ? base.valueTerm() : initial;
+        for (int i = candidates.size() - 1; i >= 0; i--) {
+            Write w = candidates.get(i);
+            e = new ComplexExpression(ITE, new ComplexExpression(OBJECT_EQ, t, w.receiverTerm()), w.valueTerm(), e);
+        }
+        return withTerm(slot, e);
     }
 
     /**
@@ -515,30 +561,27 @@ public class HeapModel {
         if (t == null || !initial.contains(builder)) {
             return null;
         }
-        List<Write> log = writes.get(SB_VAL);
-        if (log != null) {
-            for (int i = log.size() - 1; i >= 0; i--) {
-                Write w = log.get(i);
-                if (aliases(w, builder, t, null, -1)) {
-                    return w.value();
-                }
-            }
-        }
-        return withTerm(null, builderContentTerm(t));
+        Annotations written = readLog(writes.get(SB_VAL), builder, t, null, builderContentTerm(t));
+        return written != null ? written : withTerm(null, builderContentTerm(t));
     }
 
     /** a mutation of a builder through a reference with annotation {@code ref}: a write of its content */
     @CompilerDirectives.TruffleBoundary
     public void writeBuilderContent(StaticObject builder, Annotations ref, Annotations content) {
         if (initial.contains(builder)) {
-            writes.computeIfAbsent(SB_VAL, k -> new ArrayList<>()).add(new Write(builder, term(ref), -1, null, content));
+            writes.computeIfAbsent(SB_VAL, k -> new ArrayList<>()).add(new Write(builder, term(ref), -1, null, content,
+                    (Expression) Annotations.annotation(content, config.getConcolicIdx())));
         }
     }
 
     @CompilerDirectives.TruffleBoundary
     public void writeField(StaticObject receiver, Annotations receiverA, Field f, Annotations value) {
         if (initial.contains(receiver)) {
-            writes.computeIfAbsent(f, k -> new ArrayList<>()).add(new Write(receiver, term(receiverA), -1, null, value));
+            // called after the concrete store: the field holds the written value
+            Expression valueTerm = f.getKind().isPrimitive() ? widen(f.getKind(), elementValue(f.getKind(),
+                    f.getValue(receiver), (Expression) Annotations.annotation(value, config.getConcolicIdx()))) : null;
+            writes.computeIfAbsent(f, k -> new ArrayList<>())
+                    .add(new Write(receiver, term(receiverA), -1, null, value, valueTerm));
         }
     }
 
@@ -677,7 +720,7 @@ public class HeapModel {
             }
             Expression idx = indexExpr != null ? indexExpr : Constant.fromConcreteValue(index);
             writes.computeIfAbsent(kind.getTypeChar(), k -> new ArrayList<>())
-                    .add(new Write(array, term(arrayA), index, idx, value));
+                    .add(new Write(array, term(arrayA), index, idx, value, null));
         }
     }
 
