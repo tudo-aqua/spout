@@ -52,6 +52,10 @@ public final class InvokeDynamicCallSiteNode extends QuickNode {
     final boolean returnsPrimitiveType;
 
     final Symbol originalLinkName;
+    /** whether the call site is a string concatenation (StringConcatFactory.makeConcatWithConstants) */
+    final boolean concat;
+    /** the recipe of a string concatenation (constants, \1 for arguments) */
+    final String concatRecipe;
 
     @CompilerDirectives.CompilationFinal(dimensions = 1) private Symbol<Type>[] parsedSignature;
 
@@ -67,8 +71,10 @@ public final class InvokeDynamicCallSiteNode extends QuickNode {
         this.resultAt = top - SignatureSymbols.slotsForParameters(parsedSignature); // no receiver
         this.returnsPrimitiveType = TypeSymbols.isPrimitive(returnType);
         this.originalLinkName = null;
+        this.concat = false;
+        this.concatRecipe = null;
     }
-    public InvokeDynamicCallSiteNode(StaticObject memberName, StaticObject appendix, Symbol<Type>[] parsedSignature, Meta meta, int top, int curBCI, Symbol originalLinkName) {
+    public InvokeDynamicCallSiteNode(StaticObject memberName, StaticObject appendix, Symbol<Type>[] parsedSignature, Meta meta, int top, int curBCI, Symbol originalLinkName, String concatRecipe) {
         super(top, curBCI);
         Method target = (Method) meta.HIDDEN_VMTARGET.getHiddenObject(memberName);
         this.appendix = appendix;
@@ -80,6 +86,8 @@ public final class InvokeDynamicCallSiteNode extends QuickNode {
         this.resultAt = top - SignatureSymbols.slotsForParameters(parsedSignature); // no receiver
         this.returnsPrimitiveType = TypeSymbols.isPrimitive(returnType);
         this.originalLinkName = originalLinkName;
+        this.concat = originalLinkName != null && originalLinkName.toString().equals("makeConcatWithConstants");
+        this.concatRecipe = concatRecipe;
     }
 
     @Override
@@ -88,11 +96,17 @@ public final class InvokeDynamicCallSiteNode extends QuickNode {
         Object[] args = EspressoFrame.popBasicArgumentsWithArray(frame, top, parsedSignature, false, new Object[argCount + (hasAppendix ? 1 : 0)]);
         Object[] args2 = null;
         Annotations[] argAnnotations = null;
-        if(originalLinkName.equals(getNames().getOrCreate("makeConcatWithConstants"))) {
+        if(concat) {
             // the terms of string arguments, for the symbolic content of the result
             argAnnotations = SPouT.takeArgumentAnnotations(args);
             SPouT.pauseAnalyze();
             args2 = args.clone();
+            // the concrete concatenation runs on plain values: its symbolic result is built from args2
+            for (int i = 0; i < args.length; i++) {
+                if (args[i] instanceof AnnotatedValue) {
+                    args[i] = AnnotatedValue.value(args[i]);
+                }
+            }
         }
         if (hasAppendix) {
             args[args.length - 1] = appendix;
@@ -104,11 +118,15 @@ public final class InvokeDynamicCallSiteNode extends QuickNode {
             result = callNode.call(args);
         } finally {
             tls.unblockContinuationSuspension();
-            if (originalLinkName.equals(getNames().getOrCreate("makeConcatWithConstants"))) {
+            if (concat) {
                 SPouT.resumeAnalyze();
                 Object call = SPouT.enterCall(args2, argAnnotations);
                 try {
-                    SPouT.makeConcatWithConstantsSymbolically(result, args2, getMeta());
+                    JavaKind[] kinds = new JavaKind[argCount];
+                    for (int i = 0; i < argCount; i++) {
+                        kinds[i] = SignatureSymbols.parameterKind(parsedSignature, i);
+                    }
+                    SPouT.makeConcatWithConstantsSymbolically(result, args2, kinds, concatRecipe, getMeta());
                 } finally {
                     SPouT.exitCall(call);
                 }

@@ -130,6 +130,20 @@ public final class RuntimeConstantPool extends ConstantPool {
         return resolve(index, accessingKlass);
     }
 
+    /**
+     * The recipe of an invokedynamic call site of {@code StringConcatFactory.makeConcatWithConstants}: its first
+     * static argument, {@code null} if it has none.
+     */
+    public String concatRecipe(int invokeDynamicIndex, ObjectKlass accessingKlass) {
+        CompilerAsserts.neverPartOfCompilation();
+        BootstrapMethodsAttribute bms = (BootstrapMethodsAttribute) accessingKlass.getAttribute(BootstrapMethodsAttribute.NAME);
+        BootstrapMethodsAttribute.Entry entry = bms.at(this.invokeDynamicBootstrapMethodAttrIndex(invokeDynamicIndex));
+        if (entry.numBootstrapArguments() == 0 || tagAt(entry.argAt(0)) != Tag.STRING) {
+            return null;
+        }
+        return accessingKlass.getMeta().toHostString(resolvedStringAt(entry.argAt(0)));
+    }
+
     public @JavaType(String.class) StaticObject resolvedStringAt(int index) {
         ResolvedConstant resolved = resolvedAt(null, index);
         return (StaticObject) resolved.value();

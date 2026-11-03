@@ -330,6 +330,8 @@ public enum OperatorComparator {
                 return "str.indexof";
             case STOINT:
                 return "str.to.int";
+            case STOSTR:
+                return "int.to.str";
             case STOLOWER:
                 return "str.lower";
             case STOUPPER:
@@ -406,7 +408,7 @@ public enum OperatorComparator {
 
     public static void initialize() {
         // FIXME: complete set
-        stringOps = EnumSet.of(SSUBSTR, SREPLACE, SREPLACEALL, STOLOWER, STOUPPER, SCONCAT, SAT);
+        stringOps = EnumSet.of(SSUBSTR, SREPLACE, SREPLACEALL, STOLOWER, STOUPPER, SCONCAT, SAT, STOSTR);
         boolOps = EnumSet.of(BVEQ, STRINGEQ, BVNE, STRINGNE, BVLT, BVLE, BVGT, BVGE, BNEG, BAND, BOR, BXOR, BEQUIV, BIMPLIES, SCONTAINS, OBJECT_EXTENDS);
         cmpOps = EnumSet.of(LCMP, FCMPL, FCMPG, DCMPL, DCMPG);
     }

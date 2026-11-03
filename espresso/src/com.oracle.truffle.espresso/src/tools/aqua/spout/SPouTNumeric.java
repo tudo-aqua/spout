@@ -281,8 +281,12 @@ public class SPouTNumeric {
 
     @CompilerDirectives.TruffleBoundary
     public static StaticObject intToString(Object b, Meta meta){
-        if(AnnotatedValue.svalue(b) != null) SPouT.losePrecision("Integer.toString is not symbolically implemented yet", meta);
-        return meta.toGuestString(Integer.toString((AnnotatedValue.value(b))));
+        // also the string of bytes and shorts (boxed as such)
+        StaticObject result = meta.toGuestString(Integer.toString(((Number) AnnotatedValue.value(b)).intValue()));
+        if (AnnotatedValue.svalue(b) != null && SPouT.hasAnalysis() && config.hasConcolicAnalysis()) {
+            config.getConcolicAnalysis().intToString(result, AnnotatedValue.svalue(b));
+        }
+        return result;
     }
 
     @CompilerDirectives.TruffleBoundary

@@ -23,6 +23,7 @@
 
 package tools.aqua.spout;
 
+import com.oracle.truffle.espresso.classfile.JavaKind;
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
@@ -3406,9 +3407,10 @@ public class SPouT {
         return hasSymbolicContent(v);
     }
 
-    public static void makeConcatWithConstantsSymbolically(Object result, Object[] args, Meta meta) {
+    public static void makeConcatWithConstantsSymbolically(Object result, Object[] args, JavaKind[] kinds, String recipe,
+                                                           Meta meta) {
         if (analyze && config.hasConcolicAnalysis()) {
-            config.getConcolicAnalysis().makeConcatWithConstants((StaticObject) result, args, meta);
+            config.getConcolicAnalysis().makeConcatWithConstants((StaticObject) result, args, kinds, recipe, meta);
         }
         if (analyze && config.hasTaintAnalysis()) {
             config.getTaintAnalysis().makeConcatWithConstants((StaticObject) result, args);

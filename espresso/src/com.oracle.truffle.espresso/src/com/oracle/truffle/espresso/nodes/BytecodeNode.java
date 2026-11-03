@@ -2734,11 +2734,18 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
         CompilerDirectives.transferToInterpreterAndInvalidate();
         assert opcode == Bytecodes.INVOKEDYNAMIC;
 
-        // TODO: not sure if getMethod().getName() is the original link name
-
+        // the name of the call site (e.g. makeConcatWithConstants) and the recipe of string concatenations
+        Symbol<?>[] linkName = new Symbol<?>[1];
+        String[] recipe = new String[1];
         BaseQuickNode quick = tryPatchQuick(curBCI,
-                        cpi -> getConstantPool().linkInvokeDynamic(getMethod().getDeclaringKlass(), cpi, getMethod(), curBCI),
-                        link -> new InvokeDynamicCallSiteNode(link.getMemberName(), link.getUnboxedAppendix(), link.getParsedSignature(), getMethod().getMeta(), top, curBCI, getMethod().getName()));
+                        cpi -> {
+                            linkName[0] = getConstantPool().invokeDynamicName(cpi);
+                            if (linkName[0].toString().equals("makeConcatWithConstants")) {
+                                recipe[0] = getConstantPool().concatRecipe(cpi, getMethod().getDeclaringKlass());
+                            }
+                            return getConstantPool().linkInvokeDynamic(getMethod().getDeclaringKlass(), cpi, getMethod(), curBCI);
+                        },
+                        link -> new InvokeDynamicCallSiteNode(link.getMemberName(), link.getUnboxedAppendix(), link.getParsedSignature(), getMethod().getMeta(), top, curBCI, linkName[0], recipe[0]));
         return quick.execute(frame, false) - Bytecodes.stackEffectOf(opcode);
     }
 

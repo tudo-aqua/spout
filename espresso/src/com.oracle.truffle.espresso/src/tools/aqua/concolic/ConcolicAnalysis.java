@@ -1384,36 +1384,92 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         }
     }
 
+    /**
+     * The string of an argument of a string concatenation of the parameter kind {@code kind} (values of kinds below
+     * int are ints on the operand stack): its symbolic string if it has one, its concrete string otherwise.
+     */
     @CompilerDirectives.TruffleBoundary
-    private ConvRes convertArgToExpression(Object arg) {
+    private ConvRes convertArgToExpression(Object arg, JavaKind kind, Meta meta) {
         if (arg instanceof StaticObject) {
             StaticObject so = (StaticObject) arg;
             Expression content = Annotations.annotation(SPouT.stringContent(so), config.getConcolicIdx());
             return content != null ?
                     new ConvRes(content, true) :
                     new ConvRes(Constant.fromConcreteValue(so.toString()), false);
-        } else if (arg instanceof AnnotatedValue) {
-            Object[] a = ((AnnotatedValue) arg).getAnnotations();
-            return a != null && a[config.getConcolicIdx()] != null ?
-                    new ConvRes((Expression) a[config.getConcolicIdx()], true) :
-                    //FIXME: replaced the fromatted call here. Not sure if this works in general
-                    new ConvRes(Constant.fromConcreteValue("" + AnnotatedValue.value(arg)), false);
-        } else {
-            return new ConvRes(Constant.fromConcreteValue("%s".formatted(arg)), false);
+        }
+        Object v = AnnotatedValue.value(arg);
+        String concrete = switch (kind) {
+            case Boolean -> String.valueOf((boolean) (v instanceof Boolean b ? b : ((Number) v).intValue() != 0));
+            case Char -> String.valueOf((char) (v instanceof Character c ? c : (char) ((Number) v).intValue()));
+            default -> String.valueOf(v);
+        };
+        Object[] a = arg instanceof AnnotatedValue ? ((AnnotatedValue) arg).getAnnotations() : null;
+        Expression e = a != null ? (Expression) a[config.getConcolicIdx()] : null;
+        if (e == null) {
+            return new ConvRes(Constant.fromConcreteValue(concrete), false);
+        }
+        switch (kind) {
+            case Int, Short, Byte:
+                return new ConvRes(intDecimalString(e), true);
+            case Long:
+                return new ConvRes(longDecimalString(e), true);
+            case Char:
+                return new ConvRes(asString(new ComplexExpression(SFROMCODE, new ComplexExpression(BV2NAT, e))), true);
+            case Boolean:
+                Expression cond = Expression.isBoolean(e) ? e : new ComplexExpression(BVNE, e, INT_ZERO);
+                return new ConvRes(asString(new ComplexExpression(ITE, cond, Constant.fromConcreteValue("true"),
+                        Constant.fromConcreteValue("false"))), true);
+            default:
+                SPouT.losePrecision("string concatenation of a symbolic " + kind + " is not symbolically implemented yet",
+                        meta);
+                return new ConvRes(Constant.fromConcreteValue(concrete), false);
         }
     }
 
-    public void makeConcatWithConstants(StaticObject result, Object[] args, Meta meta) {
-        ConvRes cr = convertArgToExpression(args[0]);
-        Expression expr = cr.expr;
-        boolean anySymbolic = cr.fromSymbolic;
-        int i = 1;
-        while (args[i] != null) {
-            cr = convertArgToExpression(args[i]);
-            anySymbolic = anySymbolic ? true : cr.fromSymbolic;
-            Expression expr2 = cr.expr;
-            expr = new ComplexExpression(SCONCAT, expr, expr2);
-            ++i;
+    /**
+     * The content of the result of a string concatenation: the constants of the {@code recipe} and the strings of
+     * the arguments ({@code \1} in the recipe; all arguments in order if there is no recipe).
+     */
+    @CompilerDirectives.TruffleBoundary
+    public void makeConcatWithConstants(StaticObject result, Object[] args, JavaKind[] kinds, String recipe, Meta meta) {
+        if (recipe == null) {
+            recipe = "\u0001".repeat(kinds.length);
+        }
+        if (recipe.indexOf('\u0002') >= 0) {
+            // constants passed as further static arguments (constants containing \1 or \2)
+            boolean symbolic = false;
+            for (Object a : args) {
+                symbolic |= a instanceof AnnotatedValue && ((AnnotatedValue) a).getAnnotations() != null
+                        && ((AnnotatedValue) a).getAnnotations()[config.getConcolicIdx()] != null
+                        || a instanceof StaticObject && Annotations.annotation(SPouT.stringContent((StaticObject) a),
+                        config.getConcolicIdx()) != null;
+            }
+            if (symbolic) {
+                SPouT.losePrecision("string concatenation with constant arguments is not symbolically implemented yet",
+                        meta);
+            }
+            return;
+        }
+        Expression expr = null;
+        boolean anySymbolic = false;
+        StringBuilder constant = new StringBuilder();
+        int arg = 0;
+        for (int k = 0; k <= recipe.length(); k++) {
+            if (k < recipe.length() && recipe.charAt(k) != '\u0001') {
+                constant.append(recipe.charAt(k));
+                continue;
+            }
+            if (!constant.isEmpty()) {
+                Expression c = Constant.fromConcreteValue(constant.toString());
+                expr = expr == null ? c : new ComplexExpression(SCONCAT, expr, c);
+                constant.setLength(0);
+            }
+            if (k < recipe.length() && arg < kinds.length) {
+                ConvRes cr = convertArgToExpression(args[arg], kinds[arg], meta);
+                arg++;
+                anySymbolic |= cr.fromSymbolic;
+                expr = expr == null ? cr.expr : new ComplexExpression(SCONCAT, expr, cr.expr);
+            }
         }
         if (anySymbolic) {
             annotateStringWithExpression(result, expr);
@@ -1920,6 +1976,45 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             e = new ComplexExpression(C2I, new ComplexExpression(NAT2BV16, codepoint));
         }
         return e;
+    }
+
+    /**
+     * The decimal representation ({@code Integer.toString}) of the int {@code x}: {@code int.to.str} of its value
+     * as a natural number, with a sign and the magnitude {@code 0 - x} for negative values; {@code MIN_VALUE}, whose
+     * magnitude is not an int, explicitly ({@code bv2int} is signed in jConstraints, unsigned in Z3).
+     */
+    public Expression intDecimalString(Expression x) {
+        return decimalString(x, INT_ZERO, Constant.fromConcreteValue(Integer.MIN_VALUE),
+                String.valueOf(Integer.MIN_VALUE), OperatorComparator.ISUB, BVLT);
+    }
+
+    /** the decimal representation ({@code Long.toString}) of the long {@code x} */
+    public Expression longDecimalString(Expression x) {
+        return decimalString(x, Constant.fromConcreteValue(0L), Constant.fromConcreteValue(Long.MIN_VALUE),
+                String.valueOf(Long.MIN_VALUE), OperatorComparator.LSUB, BVLT);
+    }
+
+    private static Expression decimalString(Expression x, Expression zero, Expression min, String minString,
+                                            OperatorComparator sub, OperatorComparator lt) {
+        Expression positive = new ComplexExpression(STOSTR, new ComplexExpression(BV2NAT, x));
+        Expression negative = new ComplexExpression(SCONCAT, Constant.fromConcreteValue("-"),
+                new ComplexExpression(STOSTR, new ComplexExpression(BV2NAT, new ComplexExpression(sub, zero, x))));
+        // the concatenation with "" marks the term as a string (an ite is not a string operation)
+        return asString(new ComplexExpression(ITE, new ComplexExpression(BVEQ, x, min),
+                Constant.fromConcreteValue(minString),
+                new ComplexExpression(ITE, new ComplexExpression(lt, x, zero), negative, positive)));
+    }
+
+    private static Expression asString(Expression e) {
+        return new ComplexExpression(SCONCAT, Constant.fromConcreteValue(""), e);
+    }
+
+    /** annotates {@code result}, the string of the int with annotation {@code value}, with its decimal string */
+    public void intToString(StaticObject result, Annotations value) {
+        Expression x = (Expression) Annotations.annotation(value, config.getConcolicIdx());
+        if (x != null) {
+            annotateStringWithExpression(result, intDecimalString(x));
+        }
     }
 
     public Expression convertIntToString(Expression e) {
