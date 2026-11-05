@@ -323,12 +323,20 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression frem(float c1, float c2, Expression a1, Expression a2) {
-        return binarySymbolicOp(OperatorComparator.FREM, Types.FLOAT, c2, c1, a2, a1);
+        // Java's % is fmod (quotient truncated), fp.rem of SMT-LIB the IEEE remainder (quotient rounded to nearest)
+        if (a1 != null || a2 != null) {
+            SPouT.losePrecision("frem (floating point remainder) is not symbolically implemented yet", null);
+        }
+        return null;
     }
 
     @Override
     public Expression drem(double c1, double c2, Expression a1, Expression a2) {
-        return binarySymbolicOp(OperatorComparator.DREM, Types.DOUBLE, c2, c1, a2, a1);
+        // Java's % is fmod (quotient truncated), fp.rem of SMT-LIB the IEEE remainder (quotient rounded to nearest)
+        if (a1 != null || a2 != null) {
+            SPouT.losePrecision("drem (floating point remainder) is not symbolically implemented yet", null);
+        }
+        return null;
     }
 
     @Override
@@ -765,25 +773,12 @@ public class ConcolicAnalysis implements Analysis<Expression> {
                 case FCMPG: //float
                 case DCMPL: //double
                 case DCMPG: //double
-                    // 0 if x == y; less than 0 if x < y; greater than 0 if x > y
-                    switch (opcode) {
-                        case IFEQ:
-                        case IFNE:
-                            op = OperatorComparator.FPEQ;
-                            break;
-                        case IFLT:
-                            op = takeBranch ? OperatorComparator.FPLT : OperatorComparator.FPGE;
-                            break;
-                        case IFGE:
-                            op = takeBranch ? OperatorComparator.FPGE : OperatorComparator.FPLT;
-                            break;
-                        case IFGT:
-                            op = takeBranch ? OperatorComparator.FPGT : OperatorComparator.FPLE;
-                            break;
-                        case IFLE:
-                            op = takeBranch ? OperatorComparator.FPLE : OperatorComparator.FPGT;
-                            break;
+                    if (opcode != IFEQ && opcode != IFNE) {
+                        expr = fpCompareCondition(ce, opcode, takeBranch);
+                        trace.addElement(new PathCondition(expr, takeBranch ? FAILURE : SUCCESS, BINARY_SPLIT));
+                        return;
                     }
+                    op = OperatorComparator.FPEQ;
                     break;
             }
             expr = new ComplexExpression(op, convertCharsToInt(ce.getSubExpressions()));
@@ -821,6 +816,36 @@ public class ConcolicAnalysis implements Analysis<Expression> {
     }
 
 
+
+    /**
+     * The condition of a branch {@code if<cond>} on {@code c = [fd]cmp[lg](x, y)} (c < 0 for x < y, c > 0 for
+     * x > y, 0 for x == y; NaN gives -1 for fcmpl / dcmpl and 1 for fcmpg / dcmpg): with lt = x < y (or NaN for
+     * the l variants) and gt = x > y (or NaN for the g variants), iflt is lt, ifge is not lt, ifgt is gt, ifle is
+     * not gt.
+     */
+    @CompilerDirectives.TruffleBoundary
+    private Expression fpCompareCondition(ComplexExpression ce, int opcode, boolean takeBranch) {
+        Expression x = ce.getSubExpressions()[0];
+        Expression y = ce.getSubExpressions()[1];
+        boolean nanIsLess = ce.getOperator() == OperatorComparator.FCMPL || ce.getOperator() == OperatorComparator.DCMPL;
+        Expression nan = new ComplexExpression(BOR, new ComplexExpression(BNEG, new ComplexExpression(FPEQ, x, x)),
+                new ComplexExpression(BNEG, new ComplexExpression(FPEQ, y, y)));
+        Expression lt = new ComplexExpression(FPLT, x, y);
+        Expression gt = new ComplexExpression(FPGT, x, y);
+        if (nanIsLess) {
+            lt = new ComplexExpression(BOR, lt, nan);
+        } else {
+            gt = new ComplexExpression(BOR, gt, nan);
+        }
+        Expression cond = switch (opcode) {
+            case IFLT -> lt;
+            case IFGE -> new ComplexExpression(BNEG, lt);
+            case IFGT -> gt;
+            case IFLE -> new ComplexExpression(BNEG, gt);
+            default -> throw EspressoError.shouldNotReachHere("expecting IFLT, IFGE, IFGT, IFLE");
+        };
+        return takeBranch ? cond : new ComplexExpression(BNEG, cond);
+    }
 
     @Override
     public void takeBranchPrimitive2(VirtualFrame frame, BytecodeNode bcn, int bci, int opcode, boolean takeBranch, int c1, int c2, Expression a1, Expression a2) {
@@ -1408,22 +1433,44 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         if (e == null) {
             return new ConvRes(Constant.fromConcreteValue(concrete), false);
         }
+        Expression string = primitiveString(e, kind);
+        if (string == null) {
+            SPouT.losePrecision("string concatenation of a symbolic " + kind + " is not symbolically implemented yet",
+                    meta);
+            return new ConvRes(Constant.fromConcreteValue(concrete), false);
+        }
+        return new ConvRes(string, true);
+    }
+
+    /**
+     * The string ({@code String.valueOf}) of the symbolic value {@code e} of a primitive of kind {@code kind} (kinds
+     * below int as ints of the operand stack), {@code null} for floating point values (not implemented).
+     */
+    public Expression primitiveString(Expression e, JavaKind kind) {
         switch (kind) {
             case Int, Short, Byte:
-                return new ConvRes(intDecimalString(e), true);
+                return intDecimalString(e);
             case Long:
-                return new ConvRes(longDecimalString(e), true);
+                return longDecimalString(e);
             case Char:
-                return new ConvRes(asString(new ComplexExpression(SFROMCODE, new ComplexExpression(BV2NAT, e))), true);
+                return asString(new ComplexExpression(SFROMCODE, new ComplexExpression(BV2NAT, e)));
             case Boolean:
                 Expression cond = Expression.isBoolean(e) ? e : new ComplexExpression(BVNE, e, INT_ZERO);
-                return new ConvRes(asString(new ComplexExpression(ITE, cond, Constant.fromConcreteValue("true"),
-                        Constant.fromConcreteValue("false"))), true);
+                return asString(new ComplexExpression(ITE, cond, Constant.fromConcreteValue("true"),
+                        Constant.fromConcreteValue("false")));
             default:
-                SPouT.losePrecision("string concatenation of a symbolic " + kind + " is not symbolically implemented yet",
-                        meta);
-                return new ConvRes(Constant.fromConcreteValue(concrete), false);
+                return null;
         }
+    }
+
+    /** annotates {@code result}, the string of a primitive of kind {@code kind} with annotation {@code value} */
+    public boolean primitiveToString(StaticObject result, Annotations value, JavaKind kind) {
+        Expression e = (Expression) Annotations.annotation(value, config.getConcolicIdx());
+        Expression string = e != null ? primitiveString(e, kind) : null;
+        if (string != null) {
+            annotateStringWithExpression(result, string);
+        }
+        return string != null;
     }
 
     /**

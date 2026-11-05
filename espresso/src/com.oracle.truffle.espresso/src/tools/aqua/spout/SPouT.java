@@ -1142,7 +1142,7 @@ public class SPouT {
         putFloat(frame, top - 2, c1);
         if (analyze)
             AnnotatedVM.putAnnotations(frame, top - 2, analysis.l2f(c1,
-                    AnnotatedVM.popAnnotations(frame, top - 2)));
+                    AnnotatedVM.popAnnotations(frame, top - 1)));
     }
 
     public static void l2d(VirtualFrame frame, int top) {
@@ -1150,7 +1150,7 @@ public class SPouT {
         putDouble(frame, top - 2, c1);
         if (analyze)
             AnnotatedVM.putAnnotations(frame, top - 1, analysis.l2d(c1,
-                    AnnotatedVM.popAnnotations(frame, top - 2)));
+                    AnnotatedVM.popAnnotations(frame, top - 1)));
     }
 
     public static void f2i(VirtualFrame frame, int top) {
@@ -2834,9 +2834,72 @@ public class SPouT {
         if (v instanceof StaticObject && !StaticObject.isNull((StaticObject) v) && ((StaticObject) v).isArray()) {
             // also called before the analysis is set up (e.g. when threads are created)
             tools.aqua.concolic.ConcolicAnalysis ca = config.getConcolicAnalysis();
-            return ca != null && ca.getHeap() != null && ca.getHeap().hasContentTerm((StaticObject) v);
+            if (ca != null && ca.getHeap() != null && ca.getHeap().hasContentTerm((StaticObject) v)) {
+                return true;
+            }
+            return hasSymbolicPrimitiveElements((StaticObject) v);
         }
         return v instanceof AnnotatedValue && isSymbolic(v);
+    }
+
+    /** whether a primitive array has elements with symbolic values (in the annotations of its elements) */
+    public static boolean hasSymbolicPrimitiveElements(StaticObject array) {
+        if (!array.hasAnnotations() || !((com.oracle.truffle.espresso.impl.ArrayKlass) array.getKlass()).getComponentType().isPrimitive()) {
+            return false;
+        }
+        Annotations[] elements = array.getAnnotations();
+        // the last annotation is the one of the array object
+        for (int i = 0; i < elements.length - 1; i++) {
+            if (Annotations.annotation(elements[i], config.getConcolicIdx()) != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * {@code System.arraycopy(src, srcPos, dest, destPos, length)}: copies the annotations of the elements along
+     * (before the concrete copy, which throws for invalid arguments); arrays described by terms (content terms, the
+     * heap of summaries) lose precision.
+     *
+     * @return whether the arrays were handled (their annotations need no further check)
+     */
+    @CompilerDirectives.TruffleBoundary
+    public static boolean arraycopyAnnotations(Object[] args) {
+        if (args.length != 5 || !(AnnotatedValue.value(args[0]) instanceof StaticObject src)
+                || !(AnnotatedValue.value(args[2]) instanceof StaticObject dest) || StaticObject.isNull(src)
+                || StaticObject.isNull(dest) || !src.isArray() || !dest.isArray() || src.getKlass() != dest.getKlass()) {
+            return false;
+        }
+        int srcPos = ((Number) AnnotatedValue.value(args[1])).intValue();
+        int destPos = ((Number) AnnotatedValue.value(args[3])).intValue();
+        int length = ((Number) AnnotatedValue.value(args[4])).intValue();
+        int srcLength = src.length(getMeta().getLanguage());
+        int destLength = dest.length(getMeta().getLanguage());
+        if (srcPos < 0 || destPos < 0 || length < 0 || srcPos > srcLength - length || destPos > destLength - length) {
+            return true;  // the copy throws
+        }
+        if (config.hasConcolicAnalysis() && config.getConcolicAnalysis().getHeap() != null) {
+            tools.aqua.concolic.HeapModel heap = config.getConcolicAnalysis().getHeap();
+            if (heap.hasContentTerm(src) || heap.hasContentTerm(dest) || heap.isInitial(src) || heap.isInitial(dest)) {
+                losePrecision("System.arraycopy of an array described by terms", getMeta());
+            }
+        }
+        if (!src.hasAnnotations() && !dest.hasAnnotations()) {
+            return true;
+        }
+        Annotations[] copied = new Annotations[length];
+        for (int k = 0; k < length; k++) {
+            copied[k] = AnnotatedVM.getArrayAnnotations(src, srcPos + k);
+        }
+        for (int k = 0; k < length; k++) {
+            if (copied[k] != null) {
+                AnnotatedVM.setArrayAnnotations(dest, destPos + k, copied[k], getMeta().getLanguage());
+            } else if (dest.hasAnnotations()) {
+                dest.getAnnotations()[destPos + k] = null;
+            }
+        }
+        return true;
     }
 
     private static boolean isSymbolic(Object v) {
@@ -3226,28 +3289,54 @@ public class SPouT {
         return regex;
     }
 
+    /** the concrete String.valueOf of a primitive of the given kind (values below int may be ints) */
+    @CompilerDirectives.TruffleBoundary
+    public static String concreteString(Object v, char kind) {
+        Object v0 = AnnotatedValue.value(v);
+        return switch (kind) {
+            case 'Z' -> String.valueOf((boolean) (v0 instanceof Boolean b ? b : ((Number) v0).intValue() != 0));
+            case 'C' -> String.valueOf((char) (v0 instanceof Character c ? c : (char) ((Number) v0).intValue()));
+            case 'J' -> String.valueOf(((Number) v0).longValue());
+            case 'F' -> String.valueOf(((Number) v0).floatValue());
+            case 'D' -> String.valueOf(((Number) v0).doubleValue());
+            default -> String.valueOf(((Number) v0).intValue());
+        };
+    }
+
+    @CompilerDirectives.TruffleBoundary
     public static StaticObject valueOf_bool(Object v, Meta meta) {
-        if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
-            losePrecision("concolic type conversion from boolean to string not supported, yet.", meta);
+        Object v0 = AnnotatedValue.value(v);
+        StaticObject result = meta.toGuestString(String.valueOf((boolean) (v0 instanceof Boolean b ? b : ((Number) v0).intValue() != 0)));
+        if (v instanceof AnnotatedValue && analyze && config.hasConcolicAnalysis()
+                && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null
+                && !config.getConcolicAnalysis().primitiveToString(result, (Annotations) v, JavaKind.Boolean)) {
+            losePrecision("concolic type conversion of boolean to string not supported, yet.", meta);
         }
-        String ret = "" + (boolean) AnnotatedValue.value(v);
-        return meta.toGuestString(ret);
+        return result;
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static StaticObject valueOf_byte(Object v, Meta meta) {
-        if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
-            losePrecision("concolic type conversion from byte to string not supported, yet.", meta);
+        Object v0 = AnnotatedValue.value(v);
+        StaticObject result = meta.toGuestString(String.valueOf(((Number) v0).byteValue()));
+        if (v instanceof AnnotatedValue && analyze && config.hasConcolicAnalysis()
+                && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null
+                && !config.getConcolicAnalysis().primitiveToString(result, (Annotations) v, JavaKind.Byte)) {
+            losePrecision("concolic type conversion of byte to string not supported, yet.", meta);
         }
-        String ret = "" + (byte) AnnotatedValue.value(v);
-        return meta.toGuestString(ret);
+        return result;
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static StaticObject valueOf_char(Object v, Meta meta) {
-        if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
-            losePrecision("concolic type char conversion to string not supported, yet.", meta);
+        Object v0 = AnnotatedValue.value(v);
+        StaticObject result = meta.toGuestString(String.valueOf((char) (v0 instanceof Character c ? c : (char) ((Number) v0).intValue())));
+        if (v instanceof AnnotatedValue && analyze && config.hasConcolicAnalysis()
+                && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null
+                && !config.getConcolicAnalysis().primitiveToString(result, (Annotations) v, JavaKind.Char)) {
+            losePrecision("concolic type conversion of char to string not supported, yet.", meta);
         }
-        String ret = "" + (char) AnnotatedValue.value(v);
-        return meta.toGuestString(ret);
+        return result;
     }
 
     public static StaticObject valueOf_char_array(StaticObject v, Meta meta) {
@@ -3268,32 +3357,44 @@ public class SPouT {
         return meta.toGuestString(new String(Arrays.copyOfRange(value, coffset, coffset + ccount)));
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static StaticObject valueOf_short(Object v, Meta meta) {
-        if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
-            losePrecision("concolic type conversion from short to string not supported, yet.", meta);
+        Object v0 = AnnotatedValue.value(v);
+        StaticObject result = meta.toGuestString(String.valueOf(((Number) v0).shortValue()));
+        if (v instanceof AnnotatedValue && analyze && config.hasConcolicAnalysis()
+                && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null
+                && !config.getConcolicAnalysis().primitiveToString(result, (Annotations) v, JavaKind.Short)) {
+            losePrecision("concolic type conversion of short to string not supported, yet.", meta);
         }
-        String ret = "" + (short) AnnotatedValue.value(v);
-        return meta.toGuestString(ret);
+        return result;
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static StaticObject string_valueOf_int(Object v, Meta meta) {
-        if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
-            losePrecision("concolic type conversion from int to string not supported, yet.", meta);
+        Object v0 = AnnotatedValue.value(v);
+        StaticObject result = meta.toGuestString(String.valueOf(((Number) v0).intValue()));
+        if (v instanceof AnnotatedValue && analyze && config.hasConcolicAnalysis()
+                && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null
+                && !config.getConcolicAnalysis().primitiveToString(result, (Annotations) v, JavaKind.Int)) {
+            losePrecision("concolic type conversion of int to string not supported, yet.", meta);
         }
-
-        String ret = "" + (int) AnnotatedValue.value(v);
-        return meta.toGuestString(ret);
+        return result;
     }
 
 
+    @CompilerDirectives.TruffleBoundary
     public static StaticObject valueOf_long(Object v, Meta meta) {
-        if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
-            losePrecision("concolic type conversion from long to string not supported, yet.", meta);
+        Object v0 = AnnotatedValue.value(v);
+        StaticObject result = meta.toGuestString(String.valueOf(((Number) v0).longValue()));
+        if (v instanceof AnnotatedValue && analyze && config.hasConcolicAnalysis()
+                && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null
+                && !config.getConcolicAnalysis().primitiveToString(result, (Annotations) v, JavaKind.Long)) {
+            losePrecision("concolic type conversion of long to string not supported, yet.", meta);
         }
-        String ret = "" + (long) AnnotatedValue.value(v);
-        return meta.toGuestString(ret);
+        return result;
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static StaticObject valueOf_float(Object v, Meta meta) {
         if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
             losePrecision("concolic type conversion from float to string not supported, yet.", meta);
@@ -3302,6 +3403,7 @@ public class SPouT {
         return meta.toGuestString(ret);
     }
 
+    @CompilerDirectives.TruffleBoundary
     public static StaticObject valueOf_double(Object v, Meta meta) {
         if (v instanceof AnnotatedValue && config.hasConcolicAnalysis() && Annotations.annotation((Annotations) v, config.getConcolicIdx()) != null) {
             losePrecision("concolic type conversion from double to string not supported, yet.", meta);

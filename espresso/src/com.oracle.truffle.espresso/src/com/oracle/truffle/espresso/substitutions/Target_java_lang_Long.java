@@ -7,6 +7,11 @@ import tools.aqua.spout.SPouTNumeric;
 @EspressoSubstitutions
 public final class Target_java_lang_Long {
 
+    @Substitution(methodName = "toString", passAnnotations = true)
+    public static @JavaType(String.class) StaticObject longToString(@JavaType(internalName = "J") Object l, @Inject Meta meta) {
+        return tools.aqua.spout.SPouT.valueOf_long(l, meta);
+    }
+
     @Substitution(methodName = "valueOf", passAnnotations = true)
     public static @JavaType(Long.class) StaticObject valueOfLong(@JavaType(internalName = "J") Object j, @Inject Meta meta) {
         return SPouTNumeric.longValueOfLong(j, meta);

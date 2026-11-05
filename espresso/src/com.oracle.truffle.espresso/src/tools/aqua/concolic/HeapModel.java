@@ -215,6 +215,12 @@ public class HeapModel {
     private int contentCounter = 0;
 
     /** @return whether the elements of the allocated array are a content term */
+    /** @return whether the object is part of the heap described by summaries (read through terms) */
+    @CompilerDirectives.TruffleBoundary
+    public boolean isInitial(StaticObject o) {
+        return initial.contains(o);
+    }
+
     @CompilerDirectives.TruffleBoundary
     public boolean hasContentTerm(StaticObject array) {
         return contents.containsKey(array);

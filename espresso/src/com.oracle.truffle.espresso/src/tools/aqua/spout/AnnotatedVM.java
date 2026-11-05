@@ -159,9 +159,15 @@ public class AnnotatedVM {
 
     @CompilerDirectives.TruffleBoundary
     public static Object[] deAnnotateArguments(Object[] args, Method method) {
+        String className = method.getDeclaringKlass().getNameAsString();
+        // System.arraycopy copies the annotations of the elements along
+        boolean arraycopy = SPouT.hasAnalysis() && method.getNameAsString().equals("arraycopy")
+                && className.equals("java/lang/System") && SPouT.arraycopyAnnotations(args);
+        // writes to files and streams (e.g. System.out): their content does not influence the program
+        boolean output = className.equals("java/io/FileOutputStream");
         for (int i=0; i<args.length; i++) {
             String methodName =method.getNameAsString();
-            if (!(args[i] instanceof AnnotatedValue) && SPouT.isConcolic(args[i])) {
+            if (!(args[i] instanceof AnnotatedValue) && !arraycopy && !output && SPouT.isConcolic(args[i])) {
                 SPouT.losePrecision("array with symbolic elements passed to " + method.getDeclaringKlass().getNameAsString()
                         + "." + methodName + " (substituted or native)", getMeta());
             }

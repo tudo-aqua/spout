@@ -750,6 +750,7 @@ public class EspressoSymbols {
         public static final Symbol<Name> append = SYMBOLS.putName("append");
         // java.io.PrintStream
         public static final Symbol<Name> println = SYMBOLS.putName("println");
+        public static final Symbol<Name> print = SYMBOLS.putName("print");
         //
         public static final Symbol<Name> jniVersion = SYMBOLS.putName("jniVersion");
         public static final Symbol<Name> path = SYMBOLS.putName("path");
