@@ -881,7 +881,8 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     case LLOAD:
                         putLong(frame, top, getLocalLong(frame, bs.readLocalIndex1(curBCI)));
                         livenessAnalysis.performPostBCI(frame, curBCI, skipLivenessActions);
-                        AnnotatedVM.putAnnotations(frame, top, AnnotatedVM.getLocalAnnotations(frame, bs.readLocalIndex(curBCI)));
+                        // the annotation of a long is in the upper slot (as for LLOAD_n and DLOAD)
+                        AnnotatedVM.putAnnotations(frame, top + 1, AnnotatedVM.getLocalAnnotations(frame, bs.readLocalIndex(curBCI)));
                         SPouT.markWithIFTaint(frame, top);
                         break;
                     case FLOAD:
@@ -1488,24 +1489,49 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
                     case WIDE: {
                         int wideOpcode = bs.opcode(curBCI + 1);
                         switch (wideOpcode) {
-                            case ILOAD: putInt(frame, top, getLocalInt(frame, bs.readLocalIndex2(curBCI))); break;
-                            case LLOAD: putLong(frame, top, getLocalLong(frame, bs.readLocalIndex2(curBCI))); break;
-                            case FLOAD: putFloat(frame, top, getLocalFloat(frame, bs.readLocalIndex2(curBCI))); break;
-                            case DLOAD: putDouble(frame, top, getLocalDouble(frame, bs.readLocalIndex2(curBCI))); break;
+                            // annotations as for the short forms: ints and floats in their slot, longs and doubles in the upper one
+                            case ILOAD:
+                                putInt(frame, top, getLocalInt(frame, bs.readLocalIndex2(curBCI)));
+                                AnnotatedVM.putAnnotations(frame, top, AnnotatedVM.getLocalAnnotations(frame, bs.readLocalIndex2(curBCI)));
+                                break;
+                            case LLOAD:
+                                putLong(frame, top, getLocalLong(frame, bs.readLocalIndex2(curBCI)));
+                                AnnotatedVM.putAnnotations(frame, top + 1, AnnotatedVM.getLocalAnnotations(frame, bs.readLocalIndex2(curBCI)));
+                                break;
+                            case FLOAD:
+                                putFloat(frame, top, getLocalFloat(frame, bs.readLocalIndex2(curBCI)));
+                                AnnotatedVM.putAnnotations(frame, top, AnnotatedVM.getLocalAnnotations(frame, bs.readLocalIndex2(curBCI)));
+                                break;
+                            case DLOAD:
+                                putDouble(frame, top, getLocalDouble(frame, bs.readLocalIndex2(curBCI)));
+                                AnnotatedVM.putAnnotations(frame, top + 1, AnnotatedVM.getLocalAnnotations(frame, bs.readLocalIndex2(curBCI)));
+                                break;
                             case ALOAD:
                                 putObject(frame, top, getLocalObject(frame, bs.readLocalIndex2(curBCI)));
                                 AnnotatedVM.putAnnotations(frame, top, AnnotatedVM.getLocalAnnotations(frame, bs.readLocalIndex2(curBCI)));
                                 break;
 
-                            case ISTORE: setLocalInt(frame, bs.readLocalIndex2(curBCI), popInt(frame, top - 1)); break;
-                            case LSTORE: setLocalLong(frame, bs.readLocalIndex2(curBCI), popLong(frame, top - 1)); break;
-                            case FSTORE: setLocalFloat(frame, bs.readLocalIndex2(curBCI), popFloat(frame, top - 1)); break;
-                            case DSTORE: setLocalDouble(frame, bs.readLocalIndex2(curBCI), popDouble(frame, top - 1)); break;
+                            case ISTORE:
+                                setLocalInt(frame, bs.readLocalIndex2(curBCI), popInt(frame, top - 1));
+                                AnnotatedVM.setLocalAnnotations(frame, bs.readLocalIndex2(curBCI), AnnotatedVM.popAnnotations(frame, top - 1));
+                                break;
+                            case LSTORE:
+                                setLocalLong(frame, bs.readLocalIndex2(curBCI), popLong(frame, top - 1));
+                                AnnotatedVM.setLocalAnnotations(frame, bs.readLocalIndex2(curBCI), AnnotatedVM.popAnnotations(frame, top - 1));
+                                break;
+                            case FSTORE:
+                                setLocalFloat(frame, bs.readLocalIndex2(curBCI), popFloat(frame, top - 1));
+                                AnnotatedVM.setLocalAnnotations(frame, bs.readLocalIndex2(curBCI), AnnotatedVM.popAnnotations(frame, top - 1));
+                                break;
+                            case DSTORE:
+                                setLocalDouble(frame, bs.readLocalIndex2(curBCI), popDouble(frame, top - 1));
+                                AnnotatedVM.setLocalAnnotations(frame, bs.readLocalIndex2(curBCI), AnnotatedVM.popAnnotations(frame, top - 1));
+                                break;
                             case ASTORE:
                                 setLocalObjectOrReturnAddress(frame, bs.readLocalIndex2(curBCI), popReturnAddressOrObject(frame, top - 1));
                                 AnnotatedVM.setLocalAnnotations(frame, bs.readLocalIndex2(curBCI), AnnotatedVM.popAnnotations(frame, top - 1));
                                 break;
-                            case IINC: setLocalInt(frame, bs.readLocalIndex2(curBCI), getLocalInt(frame, bs.readLocalIndex2(curBCI)) + bs.readIncrement2(curBCI)); break;
+                            case IINC: SPouT.iinc(frame, bs.readLocalIndex2(curBCI), bs.readIncrement2(curBCI)); break;
                             // @formatter:on
                             case RET: {
                                 // Use final local variables to pass in lambdas.
