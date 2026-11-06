@@ -31,13 +31,20 @@ import tools.aqua.spout.TraceElement;
 public class ErrorEvent extends TraceElement {
 
     private final String className;
+    /** whether the exception is a RuntimeException (property no-runtime-exception) */
+    private final boolean runtimeException;
 
     ErrorEvent(String className) {
+        this(className, false);
+    }
+
+    ErrorEvent(String className, boolean runtimeException) {
         this.className = className;
+        this.runtimeException = runtimeException;
     }
 
     @Override
     public String toString() {
-        return "[ERROR] " + className;
+        return "[ERROR] " + className + (runtimeException ? "\n[RUNTIME_EXCEPTION] " + className : "");
     }
 }

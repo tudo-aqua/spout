@@ -206,7 +206,8 @@ public class SPouT {
     public static void uncaughtException(StaticObject pendingException) {
         if (analyze) {
             String errorMessage = pendingException.getKlass().getNameAsString();
-            trace.addElement(new ErrorEvent(errorMessage));
+            boolean runtimeException = getMeta().java_lang_RuntimeException.isAssignableFrom(pendingException.getKlass());
+            trace.addElement(new ErrorEvent(errorMessage, runtimeException));
         }
     }
 
@@ -701,19 +702,33 @@ public class SPouT {
     }
 
     /** annotation of a field read through a reference with annotation {@code receiverA} */
+    /** the guest method of the topmost frame (for messages of precision losses) */
+    @CompilerDirectives.TruffleBoundary
+    private static String currentMethod() {
+        String name = com.oracle.truffle.api.Truffle.getRuntime().iterateFrames(frame -> {
+            if (frame.getCallTarget() instanceof com.oracle.truffle.api.RootCallTarget target
+                    && target.getRootNode() instanceof com.oracle.truffle.espresso.nodes.EspressoRootNode root) {
+                Method m = root.getMethod();
+                return m.getDeclaringKlass().getNameAsString() + "." + m.getNameAsString();
+            }
+            return null;
+        });
+        return name != null ? name : "?";
+    }
+
     @CompilerDirectives.TruffleBoundary
     public static Annotations getFieldAnnotation(StaticObject receiver, Annotations receiverA, Field f) {
         Annotations slot = AnnotatedVM.getFieldAnnotation(receiver, f);
         if (analyze && !f.isStatic() && tools.aqua.concolic.HeapModel.isBuilder(receiver)
                 && isSymbolicBuilder(receiver, receiverA)) {
             // a method without symbolic implementation runs on the concrete characters of a symbolic builder
-            losePrecision("internal field " + f.getNameAsString() + " of a builder with symbolic content is read, "
-                    + "its symbolic content is concretized", getMeta());
+            losePrecision("internal field " + f.getNameAsString() + " of a builder with symbolic content is read in "
+                    + currentMethod() + ", its symbolic content is concretized", getMeta());
         }
         if (analyze && !f.isStatic() && receiver.getKlass() == getMeta().java_lang_String && isSymbolicString(receiver, receiverA)) {
             // a method without symbolic implementation runs on the concrete characters of a symbolic string
-            losePrecision("internal field String." + f.getNameAsString() + " of a symbolic string is read, its "
-                    + "symbolic content is concretized", getMeta());
+            losePrecision("internal field String." + f.getNameAsString() + " of a symbolic string is read in "
+                    + currentMethod() + ", its symbolic content is concretized", getMeta());
         }
         if (!hasHeapModel() || f.isStatic()) {
             return slot;
@@ -2029,18 +2044,17 @@ public class SPouT {
     }
 
     public static double mathPow(Object a, Object b, Meta meta) {
-        if (AnnotatedValue.svalue(a) != null) {
+        if (AnnotatedValue.svalue(a) != null || AnnotatedValue.svalue(b) != null) {
             losePrecision("Math.pow is not symbolically implemented yet", meta);
-            a = AnnotatedValue.value(a);
-        }        return Math.pow((double) a, (double) b);
+        }
+        return Math.pow((double) AnnotatedValue.value(a), (double) AnnotatedValue.value(b));
     }
 
     public static double mathATan2(Object a, Object b, Meta meta) {
-        if (AnnotatedValue.svalue(a) != null) {
+        if (AnnotatedValue.svalue(a) != null || AnnotatedValue.svalue(b) != null) {
             losePrecision("Math.atan2 is not symbolically implemented yet", meta);
-            a = AnnotatedValue.value(a);
         }
-        return Math.atan2((double) a, (double) b);
+        return Math.atan2((double) AnnotatedValue.value(a), (double) AnnotatedValue.value(b));
     }
 
     // --------------------------------------------------------------------------
@@ -3419,7 +3433,12 @@ public class SPouT {
         if (analyze && config.hasConcolicAnalysis() && hasSymbolicContent(s)) {
             losePrecision("Concolic type conversion from string to double is not supported", meta);
         }
-        return Double.parseDouble(meta.toHostString(s));
+        try {
+            return Double.parseDouble(meta.toHostString(s));
+        } catch (NumberFormatException e) {
+            // the exception of the program
+            throw meta.throwExceptionWithMessage(meta.java_lang_NumberFormatException, e.getMessage());
+        }
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -3427,7 +3446,12 @@ public class SPouT {
         if (analyze && config.hasConcolicAnalysis() && hasSymbolicContent(s)) {
             losePrecision("Concolic type conversion from string to float is not supported", meta);
         }
-        return Float.parseFloat(meta.toHostString(s));
+        try {
+            return Float.parseFloat(meta.toHostString(s));
+        } catch (NumberFormatException e) {
+            // the exception of the program
+            throw meta.throwExceptionWithMessage(meta.java_lang_NumberFormatException, e.getMessage());
+        }
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -3435,7 +3459,12 @@ public class SPouT {
         if (analyze && config.hasConcolicAnalysis() && hasSymbolicContent(s)) {
             losePrecision("Concolic type conversion from string to int is not supported", meta);
         }
-        return Integer.parseInt(meta.toHostString(s));
+        try {
+            return Integer.parseInt(meta.toHostString(s));
+        } catch (NumberFormatException e) {
+            // the exception of the program
+            throw meta.throwExceptionWithMessage(meta.java_lang_NumberFormatException, e.getMessage());
+        }
     }
 
     // --------------------------------------------------------------------------

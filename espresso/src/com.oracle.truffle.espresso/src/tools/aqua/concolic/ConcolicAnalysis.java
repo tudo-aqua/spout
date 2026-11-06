@@ -1453,7 +1453,9 @@ public class ConcolicAnalysis implements Analysis<Expression> {
             case Long:
                 return longDecimalString(e);
             case Char:
-                return asString(new ComplexExpression(SFROMCODE, new ComplexExpression(BV2NAT, e)));
+                // a character of a string (str.at) is a string already
+                return Expression.isString(e) ? e
+                        : asString(new ComplexExpression(SFROMCODE, new ComplexExpression(BV2NAT, e)));
             case Boolean:
                 Expression cond = Expression.isBoolean(e) ? e : new ComplexExpression(BVNE, e, INT_ZERO);
                 return asString(new ComplexExpression(ITE, cond, Constant.fromConcreteValue("true"),
@@ -1930,6 +1932,10 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         if (stringAnnotation == null) {
             SPouT.initStringAnnotations(self);
             stringAnnotation = self.getAnnotations();
+        }
+        if (stringAnnotation[stringAnnotation.length - 1] == null) {
+            // the annotations of the fields exist, the one of the object not yet
+            stringAnnotation[stringAnnotation.length - 1] = Annotations.emptyArray();
         }
         stringAnnotation[stringAnnotation.length - 1].set(config.getConcolicIdx(),
                 value);
