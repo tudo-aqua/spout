@@ -5,6 +5,7 @@ import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
 import com.oracle.truffle.espresso.substitutions.Inject;
 import com.oracle.truffle.espresso.substitutions.JavaType;
+import tools.aqua.smt.Expression;
 import tools.aqua.spout.analyses.MetaNumericAnalysis;
 
 import static com.oracle.truffle.espresso.runtime.dispatch.staticobject.EspressoInterop.getMeta;
@@ -273,13 +274,20 @@ public class SPouTNumeric {
     @CompilerDirectives.TruffleBoundary
     public static StaticObject booleanToString(Object b, Meta meta){
         if(AnnotatedValue.svalue(b) != null) SPouT.losePrecision("Boolean.toString is not symbolically implemented yet", meta);
-        return meta.toGuestString(Integer.toString((AnnotatedValue.value(b))));
+        Object v = AnnotatedValue.value(b);
+        // booleans may be ints (0 / 1) on the operand stack
+        boolean value = v instanceof Boolean ? (Boolean) v : ((Number) v).intValue() != 0;
+        return meta.toGuestString(Boolean.toString(value));
     }
 
     @CompilerDirectives.TruffleBoundary
     public static StaticObject intToString(Object b, Meta meta){
-        if(AnnotatedValue.svalue(b) != null) SPouT.losePrecision("Integer.toString is not symbolically implemented yet", meta);
-        return meta.toGuestString(Integer.toString((AnnotatedValue.value(b))));
+        // also the string of bytes and shorts (boxed as such)
+        StaticObject result = meta.toGuestString(Integer.toString(((Number) AnnotatedValue.value(b)).intValue()));
+        if (AnnotatedValue.svalue(b) != null && SPouT.hasAnalysis() && config.hasConcolicAnalysis()) {
+            config.getConcolicAnalysis().intToString(result, AnnotatedValue.svalue(b));
+        }
+        return result;
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -315,17 +323,45 @@ public class SPouTNumeric {
         return dValue;
     }
     @CompilerDirectives.TruffleBoundary
-    public static long doubleToRawLongBits(Object value, Meta meta) {
-        Annotations sVal = AnnotatedValue.svalue(value);
-        SPouT.debug("doubleToRawLongBits is not symbolically implemented yet", sVal);
-        if (AnnotatedValue.svalue(value) != null) {SPouT.losePrecision("Double.doubleToRawLongBits is not implemented symbolically yet", meta);}
-        return Double.doubleToRawLongBits(AnnotatedValue.value(value));
+    public static Object doubleToRawLongBits(Object value, Meta meta) {
+        double v = AnnotatedValue.value(value);
+        return fpToBits(value, Double.doubleToRawLongBits(v), Double.isNaN(v), true, true);
     }
 
     @CompilerDirectives.TruffleBoundary
-    public static double doubleLongBitsToDouble(Object bits, Meta meta) {
-        if (AnnotatedValue.svalue(bits) != null) {SPouT.losePrecision("Double.longBitsToDouble is not implemented symbolically yet", meta);}
-        return Double.longBitsToDouble(AnnotatedValue.value(bits));
+    public static Object doubleToLongBits(Object value, Meta meta) {
+        double v = AnnotatedValue.value(value);
+        return fpToBits(value, Double.doubleToLongBits(v), Double.isNaN(v), true, false);
+    }
+
+    /** the bits of a float or double (concrete {@code bits}), symbolic if the value is symbolic */
+    private static Object fpToBits(Object value, Object bits, boolean nan, boolean isDouble, boolean raw) {
+        Expression x = symbolic(value);
+        if (x == null) {
+            return bits;
+        }
+        Expression e = config.getConcolicAnalysis().fpToBits(x, isDouble, raw, nan);
+        return e != null ? result(bits, e) : bits;
+    }
+
+    private static Expression symbolic(Object value) {
+        if (!analyze || config == null || !config.hasConcolicAnalysis()) {
+            return null;
+        }
+        return (Expression) Annotations.annotation(AnnotatedValue.svalue(value), config.getConcolicIdx());
+    }
+
+    private static Object result(Object concrete, Expression e) {
+        Annotations a = Annotations.create();
+        a.set(config.getConcolicIdx(), e);
+        return new AnnotatedValue(concrete, a);
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public static Object doubleLongBitsToDouble(Object bits, Meta meta) {
+        double v = Double.longBitsToDouble(AnnotatedValue.value(bits));
+        Expression b = symbolic(bits);
+        return b != null ? result(v, config.getConcolicAnalysis().bitsToFp(b, true)) : v;
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -357,47 +393,49 @@ public class SPouTNumeric {
     }
 
     @CompilerDirectives.TruffleBoundary
-    public static int floatToIntBits(Object f, Meta meta) {
-        if(AnnotatedValue.svalue(f) != null) SPouT.losePrecision("Float.floatToIntBits is not symbolically implemented yet", meta);
-        return Float.floatToIntBits(AnnotatedValue.value(f));
+    public static Object floatToIntBits(Object f, Meta meta) {
+        float v = AnnotatedValue.value(f);
+        return fpToBits(f, Float.floatToIntBits(v), Float.isNaN(v), false, false);
     }
 
     @CompilerDirectives.TruffleBoundary
     public static Object floatToRawIntBits(Object value, Meta meta) {
-        if(AnnotatedValue.svalue(value) != null) SPouT.losePrecision("Float.floatToRawIntBits is not symbolically implemented yet", meta);
-        return Float.floatToRawIntBits(AnnotatedValue.value(value));
+        float v = AnnotatedValue.value(value);
+        return fpToBits(value, Float.floatToRawIntBits(v), Float.isNaN(v), false, true);
     }
 
     @CompilerDirectives.TruffleBoundary
     public static Object intBitsToFloat(Object bits, Meta meta) {
-        if(AnnotatedValue.svalue(bits) != null) SPouT.losePrecision("Float.intBitsToFloat is not symbolically implemented yet", meta);
-        return Float.intBitsToFloat(AnnotatedValue.value(bits));
+        float v = Float.intBitsToFloat(AnnotatedValue.value(bits));
+        Expression b = symbolic(bits);
+        return b != null ? result(v, config.getConcolicAnalysis().bitsToFp(b, false)) : v;
     }
 
-    public static @JavaType(internalName = "I") Object integerReverseBytes(@JavaType(internalName = "I") Object i, @Inject Meta meta) {
-        if (AnnotatedValue.svalue(i) != null) {
-            SPouT.losePrecision("Integer.reverseBytes is not symbolically implemented yet", meta);
-        }
-        return Integer.reverseBytes(AnnotatedValue.value(i));
+    @CompilerDirectives.TruffleBoundary
+    public static Object integerReverseBytes(Object i, Meta meta) {
+        int v = Integer.reverseBytes(AnnotatedValue.value(i));
+        Expression x = symbolic(i);
+        return x != null ? result(v, config.getConcolicAnalysis().intReverseBytes(x)) : v;
     }
 
-    public static Object longReverse(Object in,Meta meta) {
-        if (AnnotatedValue.svalue(in) != null) {
-            SPouT.losePrecision("Long.reverse is not symbolically implemented yet", meta);
-        }
-        return Long.reverseBytes(AnnotatedValue.value(in));
+    @CompilerDirectives.TruffleBoundary
+    public static Object longReverse(Object in, Meta meta) {
+        // Long.reverse (was: Long.reverseBytes, also concretely)
+        long v = Long.reverse(AnnotatedValue.value(in));
+        Expression x = symbolic(in);
+        return x != null ? result(v, config.getConcolicAnalysis().longReverse(x)) : v;
     }
 
-    public static Object mathGetExponentDouble(@JavaType(internalName = "D") Object f, Meta meta) {
-        if(AnnotatedValue.svalue(f) != null) {
-            SPouT.losePrecision("Math.getExponent is not symbolically implemented yet", meta);
-        }
-        return Math.getExponent((double) AnnotatedValue.value(f));
+    @CompilerDirectives.TruffleBoundary
+    public static Object mathGetExponentDouble(Object f, Meta meta) {
+        int v = Math.getExponent((double) AnnotatedValue.value(f));
+        Expression x = symbolic(f);
+        return x != null ? result(v, config.getConcolicAnalysis().fpGetExponent(x, true)) : v;
     }
-    public static Object mathGetExponentFloat(@JavaType(internalName = "F") Object f, Meta meta) {
-        if(AnnotatedValue.svalue(f) != null) {
-            SPouT.losePrecision("Math.getExponent is not symbolically implemented yet", meta);
-        }
-        return Math.getExponent((float) AnnotatedValue.value(f));
+    @CompilerDirectives.TruffleBoundary
+    public static Object mathGetExponentFloat(Object f, Meta meta) {
+        int v = Math.getExponent((float) AnnotatedValue.value(f));
+        Expression x = symbolic(f);
+        return x != null ? result(v, config.getConcolicAnalysis().fpGetExponent(x, false)) : v;
     }
 }

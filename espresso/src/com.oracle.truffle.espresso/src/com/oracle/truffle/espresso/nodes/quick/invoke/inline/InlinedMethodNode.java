@@ -152,6 +152,16 @@ public class InlinedMethodNode extends InvokeQuickNode implements InlinedFrameAc
     }
 
     protected final int executeBody(VirtualFrame frame) {
+        if (tools.aqua.spout.SPouT.hasAnalysis()) {
+            // inlined before the analysis started (e.g. during VM startup): the body reads the arguments without
+            // their annotations
+            for (int slot = resultAt; slot < top; slot++) {
+                tools.aqua.spout.Annotations a = tools.aqua.spout.AnnotatedVM.peekAnnotations(frame, slot);
+                if (a != null) {
+                    tools.aqua.spout.SPouT.inlinedCallWithAnnotations(a, method.getMethod());
+                }
+            }
+        }
         body.execute(frame, this);
         return stackEffect;
     }

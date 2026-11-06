@@ -36,7 +36,7 @@ public final class Target_java_lang_StringBuffer {
         return SPouT.stringBuxxToString(self, meta);
     }
 
-    @Substitution(hasReceiver = true, methodName = "insert")
+    @Substitution(passAnnotations = true, hasReceiver = true, methodName = "insert")
     public static @JavaType(StringBuffer.class) StaticObject insert_string(@JavaType(StringBuffer.class) StaticObject self,
                                                                      @JavaType(internalName = "I") Object offset,
                                                                      @JavaType(String.class) StaticObject toInsert,
@@ -44,7 +44,7 @@ public final class Target_java_lang_StringBuffer {
         return SPouT.stringBuxxInsert(self, offset, toInsert, meta);
     }
 
-    @Substitution(hasReceiver = true, methodName = "insert")
+    @Substitution(passAnnotations = true, hasReceiver = true, methodName = "insert")
     public static @JavaType(StringBuffer.class) StaticObject insert_char(@JavaType(StringBuffer.class) StaticObject self,
                                                                          @JavaType(internalName = "I") Object offset,
                                                                          @JavaType(internalName = "C") Object toInsert,
@@ -52,7 +52,7 @@ public final class Target_java_lang_StringBuffer {
         return SPouT.stringBuxxInsert(self, offset, toInsert, meta);
     }
 
-    @Substitution(hasReceiver = true)
+    @Substitution(passAnnotations = true, hasReceiver = true)
     public static @JavaType(internalName = "C") Object charAt(
             @JavaType(StringBuffer.class) StaticObject self,
             @JavaType(internalName = "I") Object index,
@@ -60,7 +60,7 @@ public final class Target_java_lang_StringBuffer {
         return SPouT.stringBuxxCharAt(self, index, meta);
     }
 
-    @Substitution(hasReceiver = true)
+    @Substitution(passAnnotations = true, hasReceiver = true)
     public static void getChars(@JavaType(StringBuffer.class) StaticObject self,
                                 @JavaType(internalName = "I") Object srcBegin,
                                 @JavaType(internalName = "I") Object srcEnd,

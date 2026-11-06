@@ -51,7 +51,7 @@ public final class IntArrayStoreQuickNode extends QuickNode {
         int value = EspressoFrame.popInt(frame, top - 1);
         int index = EspressoFrame.popInt(frame, top - 2);
         StaticObject array = nullCheck(EspressoFrame.popObject(frame, top - 3));
-        SPouT.setArrayAnnotations(frame, getBytecodeNode(), getBci(frame), array, index, top -1, top - 2, EspressoLanguage.get(this));
+        SPouT.setArrayAnnotations(frame, getBytecodeNode(), getBci(frame), array, index, top -1, top - 2, EspressoLanguage.get(this), value);
         intArrayStore.execute(array, index, value);
         return stackEffectOf_IASTORE;
     }

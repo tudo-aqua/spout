@@ -47,13 +47,14 @@ public final class Target_java_lang_Double {
 
     //@Substitution(flags = {IsTrivial})
     @Substitution(passAnnotations = true)
-    public static @JavaType(internalName = "D") Object doubleToRawLongBits(@JavaType(internalName = "D") Object value, @Inject Meta meta) {
+    // returns a long (was declared as double: the substitution did not match and was never used)
+    public static @JavaType(internalName = "J") Object doubleToRawLongBits(@JavaType(internalName = "D") Object value, @Inject Meta meta) {
         return SPouTNumeric.doubleToRawLongBits(value, meta);
     }
 
     @Substitution(passAnnotations = true)
     public static @JavaType(internalName = "J") Object doubleToLongBits(@JavaType(internalName = "D") Object value, @Inject Meta meta) {
-        return SPouTNumeric.doubleToRawLongBits(value, meta);
+        return SPouTNumeric.doubleToLongBits(value, meta);
     }
 
     @Substitution(passAnnotations = true)

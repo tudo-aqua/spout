@@ -104,19 +104,19 @@ public final class Target_java_lang_Math {
     }
     // Checkstyle: resume method name check
 
-    @Substitution
-    public static double ceil(double a) {
-        return Math.ceil(a);
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "D") Object ceil(@JavaType(internalName = "D") Object a, @Inject Meta meta) {
+        return SPouT.mathRoundToIntegral(a, tools.aqua.smt.OperatorComparator.FPRTP, meta);
     }
 
-    @Substitution
-    public static double floor(double a) {
-        return Math.floor(a);
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "D") Object floor(@JavaType(internalName = "D") Object a, @Inject Meta meta) {
+        return SPouT.mathRoundToIntegral(a, tools.aqua.smt.OperatorComparator.FPRTN, meta);
     }
 
-    @Substitution
-    public static double rint(double a) {
-        return Math.rint(a);
+    @Substitution(passAnnotations = true)
+    public static @JavaType(internalName = "D") Object rint(@JavaType(internalName = "D") Object a, @Inject Meta meta) {
+        return SPouT.mathRoundToIntegral(a, tools.aqua.smt.OperatorComparator.FPRNE, meta);
     }
 
     @Substitution(passAnnotations = true)
@@ -151,6 +151,9 @@ public final class Target_java_lang_Math {
         return SPouT.mathAbsLong(a);
     }
 
+    */
+
+    // fp.abs (the implementation of the JDK uses the bits of the value)
     @Substitution(passAnnotations = true, methodName = "abs")
     public static @JavaType(internalName = "F") Object absFloat(@JavaType(internalName = "F") Object a) {
         return SPouT.mathAbsFloat(a);
@@ -160,26 +163,25 @@ public final class Target_java_lang_Math {
     public static @JavaType(internalName = "D") Object absDouble(@JavaType(internalName = "D") Object a) {
         return SPouT.mathAbsDouble(a);
     }
-    */
 
-    @Substitution
-    public static float max(float a, float b) {
-        return Math.max(a, b);
+    @Substitution(passAnnotations = true, methodName = "max")
+    public static @JavaType(internalName = "F") Object max_float(@JavaType(internalName = "F") Object a, @JavaType(internalName = "F") Object b, @Inject Meta meta) {
+        return SPouT.mathMinMax(a, b, false, false, meta);
     }
 
-    @Substitution
-    public static double max(double a, double b) {
-        return Math.max(a, b);
+    @Substitution(passAnnotations = true, methodName = "max")
+    public static @JavaType(internalName = "D") Object max_double(@JavaType(internalName = "D") Object a, @JavaType(internalName = "D") Object b, @Inject Meta meta) {
+        return SPouT.mathMinMax(a, b, false, true, meta);
     }
 
-    @Substitution
-    public static float min(float a, float b) {
-        return Math.min(a, b);
+    @Substitution(passAnnotations = true, methodName = "min")
+    public static @JavaType(internalName = "F") Object min_float(@JavaType(internalName = "F") Object a, @JavaType(internalName = "F") Object b, @Inject Meta meta) {
+        return SPouT.mathMinMax(a, b, true, false, meta);
     }
 
-    @Substitution
-    public static double min(double a, double b) {
-        return Math.min(a, b);
+    @Substitution(passAnnotations = true, methodName = "min")
+    public static @JavaType(internalName = "D") Object min_double(@JavaType(internalName = "D") Object a, @JavaType(internalName = "D") Object b, @Inject Meta meta) {
+        return SPouT.mathMinMax(a, b, true, true, meta);
     }
 
     @Substitution

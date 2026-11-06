@@ -10,6 +10,50 @@ import java.util.Locale;
 @EspressoSubstitutions
 public final class Target_java_lang_String {
     @Substitution(hasReceiver = true)
+    public static @JavaType(internalName = "I") Object hashCode(@JavaType(String.class) StaticObject self, @Inject Meta meta) {
+        return SPouT.stringHashCode(self, meta);
+    }
+
+    @Substitution(hasReceiver = true, methodName = "replace", passAnnotations = true)
+    public static @JavaType(String.class) StaticObject replace_char(@JavaType(String.class) StaticObject self,
+                                                                    @JavaType(internalName = "C") Object oldChar,
+                                                                    @JavaType(internalName = "C") Object newChar,
+                                                                    @Inject Meta meta) {
+        return SPouT.stringReplaceChar(self, oldChar, newChar, meta);
+    }
+
+    @Substitution(hasReceiver = true, methodName = "startsWith")
+    public static @JavaType(internalName = "Z") Object startsWith(@JavaType(String.class) StaticObject self,
+                                                                  @JavaType(String.class) StaticObject prefix,
+                                                                  @Inject Meta meta) {
+        if (StaticObject.isNull(prefix)) {
+            throw meta.throwNullPointerException();
+        }
+        return SPouT.stringStartsOrEndsWith(self, prefix, null, false, meta);
+    }
+
+    @Substitution(hasReceiver = true, methodName = "startsWith", passAnnotations = true)
+    public static @JavaType(internalName = "Z") Object startsWith_offset(@JavaType(String.class) StaticObject self,
+                                                                         @JavaType(String.class) StaticObject prefix,
+                                                                         @JavaType(internalName = "I") Object offset,
+                                                                         @Inject Meta meta) {
+        if (StaticObject.isNull(prefix)) {
+            throw meta.throwNullPointerException();
+        }
+        return SPouT.stringStartsOrEndsWith(self, prefix, offset, false, meta);
+    }
+
+    @Substitution(hasReceiver = true)
+    public static @JavaType(internalName = "Z") Object endsWith(@JavaType(String.class) StaticObject self,
+                                                                @JavaType(String.class) StaticObject suffix,
+                                                                @Inject Meta meta) {
+        if (StaticObject.isNull(suffix)) {
+            throw meta.throwNullPointerException();
+        }
+        return SPouT.stringStartsOrEndsWith(self, suffix, null, true, meta);
+    }
+
+    @Substitution(hasReceiver = true)
     public static @JavaType(internalName = "Z") Object contains(@JavaType(String.class) StaticObject self,
                                                                 @JavaType(CharSequence.class) StaticObject s,
                                                                 @Inject Meta meta) {
@@ -46,7 +90,7 @@ public final class Target_java_lang_String {
         return SPouT.stringEquals(self, other, meta);
     }
 
-    @Substitution(hasReceiver = true)
+    @Substitution(passAnnotations = true, hasReceiver = true)
     public static @JavaType(internalName = "C") Object charAt(@JavaType(String.class) StaticObject self,
                                                                     @JavaType(internalName = "I") Object index,
                                                                     @Inject Meta meta) {
@@ -95,7 +139,31 @@ public final class Target_java_lang_String {
         return SPouT.split(self, regex, meta);
     }
 
-    @Substitution(hasReceiver = true, methodName = "regionMatches")
+    @Substitution(hasReceiver = true, passAnnotations = true, methodName = "getChars")
+    public static void getChars(@JavaType(String.class) StaticObject self,
+                                @JavaType(internalName = "I") Object srcBegin,
+                                @JavaType(internalName = "I") Object srcEnd,
+                                @JavaType(char[].class) StaticObject dst,
+                                @JavaType(internalName = "I") Object dstBegin,
+                                @Inject Meta meta) {
+        SPouT.stringGetChars(self, srcBegin, srcEnd, dst, dstBegin, meta);
+    }
+
+    @Substitution(hasReceiver = true)
+    public static @JavaType(char[].class) StaticObject toCharArray(@JavaType(String.class) StaticObject self,
+                                                                   @Inject Meta meta) {
+        return SPouT.stringToCharArray(self, meta);
+    }
+
+    @Substitution(hasReceiver = true, passAnnotations = true, methodName = "split")
+    public static @JavaType(String[].class) Object split_limit(@JavaType(String.class) StaticObject self,
+                                                         @JavaType(String.class) StaticObject regex,
+                                                         @JavaType(internalName = "I") Object limit,
+                                                         @Inject Meta meta){
+        return SPouT.splitWithLimit(self, regex, limit, meta);
+    }
+
+    @Substitution(passAnnotations = true, hasReceiver = true, methodName = "regionMatches")
     public static @JavaType(internalName = "Z") Object regionMatches_ignoreCase(@JavaType(String.class) StaticObject self,
                                                                                 @JavaType(internalName = "Z") Object ignoreCase,
                                                                                 @JavaType(internalName = "I") Object toffset,
@@ -183,13 +251,16 @@ public final class Target_java_lang_String {
     }
 
     @Substitution(hasReceiver = true)
-    public static boolean isEmpty(@JavaType(String.class) StaticObject self, @Inject Meta meta) {
+    public static @JavaType(internalName = "Z") Object isEmpty(@JavaType(String.class) StaticObject self, @Inject Meta meta) {
         return  SPouT.stringIsEmpty(self, meta);
     }
 
-    // TODO: blacklisted.
+    @Substitution(hasReceiver = true, passAnnotations = true, methodName = "indexOf")
+    public static @JavaType(internalName = "I") Object indexOf_int(@JavaType(String.class) StaticObject self,
+                                                                   @JavaType(internalName = "I") Object cP, @Inject Meta meta) {
+        return SPouT.stringIndexOfIntInt(self, cP, 0, meta);
+    }
 
-    /*
     @Substitution(hasReceiver = true, passAnnotations = true, methodName = "indexOf")
     public static @JavaType(internalName = "I") Object indexOf_int_int(@JavaType(String.class) StaticObject self,
                                                                    @JavaType(internalName = "I") Object cP,
@@ -206,6 +277,5 @@ public final class Target_java_lang_String {
     public static @JavaType(internalName = "I") Object indexOfStringInt(@JavaType(String.class) StaticObject self, @JavaType(String.class) StaticObject other, @JavaType(internalName = "I") Object start, @Inject Meta meta) {
         return SPouT.stringIndexOfWithStart(self, other, start, meta);
     }
-    */
 
 }

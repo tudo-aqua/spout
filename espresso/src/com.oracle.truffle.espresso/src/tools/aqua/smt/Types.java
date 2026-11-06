@@ -24,7 +24,9 @@
 package tools.aqua.smt;
 
 public enum Types {
-    INT, BOOL, CHAR, BYTE, SHORT, LONG, FLOAT, DOUBLE, STRING, NAT, OBJECT, KLASS;
+    INT, BOOL, CHAR, BYTE, SHORT, LONG, FLOAT, DOUBLE, STRING, NAT, OBJECT, KLASS,
+    /** a term of the theory of arrays (its sort is declared explicitly) */
+    ARRAY;
 
     @Override
     public String toString() {

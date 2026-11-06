@@ -9,23 +9,27 @@ development-image:
   image: docker:19.03.12
   variables:
     # Otherwise the docker magic does not work: https://docs.gitlab.com/ee/ci/docker/using_docker_build.html
+    DOCKER_HOST: tcp://docker:2376
     DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: 1
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
   services:
     - docker:19.03.12-dind
   script:
-    - docker login -u $CI_DEPLOY_USER -p $CI_DEPLOY_PASSWORD $CI_REGISTRY
+    - docker login $CI_REGISTRY -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN 
     - cd scripts
-    - docker build -t $CI_REGISTRY/psyco/gdart/development:22.2.0 -f graal-image.Dockerfile .
-    - docker push $CI_REGISTRY/psyco/gdart/development:22.2.0
+    - docker build -t $CI_REGISTRY/aqua/tools/gdart/spout/development:26.04 -f graal-image.Dockerfile .
+    - docker push $CI_REGISTRY/aqua/tools/gdart/spout/development:26.04
   rules:
     - changes:
       - scripts/graal-image.Dockerfile
   tags:
-    - dind
+    - privileged
 
 build:
   stage: build
-  image: $CI_REGISTRY/psyco/gdart/development:22.2.0
+  image: $CI_REGISTRY/aqua/tools/gdart/spout/development:26.04
   script:
+    - source /data/envs/mx_env/bin/activate
     - cd espresso
     - mx --java-home /data/labsjdk-gdart-25+37-jvmci-b01/ --env native-ce build

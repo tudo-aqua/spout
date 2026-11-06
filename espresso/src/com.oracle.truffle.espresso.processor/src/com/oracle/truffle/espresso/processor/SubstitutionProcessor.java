@@ -367,9 +367,12 @@ public final class SubstitutionProcessor extends EspressoProcessor {
             }
 
             TypeMirror encodedInlineGuard = getInlineValue(classWideInline, element);
-            boolean inlineInBytecode = encodedInlineGuard != null ||
+            boolean inlineInBytecode = (encodedInlineGuard != null ||
                             // Implicit inlining of trivial substitutions.
-                            isFlag(flags, SubstitutionFlag.IsTrivial);
+                            isFlag(flags, SubstitutionFlag.IsTrivial))
+                            // SPouT: the inlined code pops the arguments as plain values (a primitive argument of
+                            // a substitution with annotations is an Object, read as null)
+                            && !passAnnotations;
             TypeMirror decodedInlineGuard = (encodedInlineGuard == null || processingEnv.getTypeUtils().isSameType(encodedInlineGuard, noPredicate.asType()))
                             ? null
                             : encodedInlineGuard;
