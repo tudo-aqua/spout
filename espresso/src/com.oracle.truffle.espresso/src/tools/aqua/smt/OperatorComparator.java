@@ -138,6 +138,8 @@ public enum OperatorComparator {
     STRINGNE,
     SCONCAT,
     SCONTAINS,
+    SPREFIXOF,
+    SSUFFIXOF,
     SSUBSTR,
     SAT,
     STOSTR,
@@ -165,6 +167,15 @@ public enum OperatorComparator {
     MATHARCSIN,
     MATHARCCOS,
     FPABS,
+    FPSQRT,
+    FPRTN,
+    FPRTP,
+    FPRNE,
+    FPISNAN,
+    FPISNEGATIVE,
+    FPSAME,
+    BITS2FLOAT,
+    BITS2DOUBLE,
     OBJECT_IS_NULL,
     OBJECT_EQ,
     OBJECT_EXTENDS,
@@ -340,6 +351,10 @@ public enum OperatorComparator {
                 return "str.at";
             case SCONCAT:
                 return "str.++";
+            case SPREFIXOF:
+                return "str.prefixof";
+            case SSUFFIXOF:
+                return "str.suffixof";
             case SCONTAINS:
                 return "str.contains";
             case SLT:
@@ -386,6 +401,25 @@ public enum OperatorComparator {
                 return "ARCSIN";
             case FPABS:
                 return "fp.abs";
+            case FPSQRT:
+                return "fp.sqrt (RNE RoundingMode)";
+            case FPRTN:
+                return "fp.roundToIntegral (RTN RoundingMode)";
+            case FPRTP:
+                return "fp.roundToIntegral (RTP RoundingMode)";
+            case FPRNE:
+                return "fp.roundToIntegral (RNE RoundingMode)";
+            case FPISNAN:
+                return "fp.isNaN";
+            case FPISNEGATIVE:
+                return "fp.isNegative";
+            case FPSAME:
+                // SMT equality of floating point values (one NaN, -0.0 and 0.0 differ), not fp.eq
+                return "=";
+            case BITS2FLOAT:
+                return "(_ to_fp 8 24)";
+            case BITS2DOUBLE:
+                return "(_ to_fp 11 53)";
             case OBJECT_IS_NULL:
                 return "=";
             case OBJECT_EQ:
@@ -409,7 +443,7 @@ public enum OperatorComparator {
     public static void initialize() {
         // FIXME: complete set
         stringOps = EnumSet.of(SSUBSTR, SREPLACE, SREPLACEALL, STOLOWER, STOUPPER, SCONCAT, SAT, STOSTR);
-        boolOps = EnumSet.of(BVEQ, STRINGEQ, BVNE, STRINGNE, BVLT, BVLE, BVGT, BVGE, BNEG, BAND, BOR, BXOR, BEQUIV, BIMPLIES, SCONTAINS, OBJECT_EXTENDS);
+        boolOps = EnumSet.of(BVEQ, STRINGEQ, BVNE, STRINGNE, BVLT, BVLE, BVGT, BVGE, BNEG, BAND, BOR, BXOR, BEQUIV, BIMPLIES, SCONTAINS, SPREFIXOF, SSUFFIXOF, OBJECT_EXTENDS, FPISNAN, FPISNEGATIVE, FPSAME);
         cmpOps = EnumSet.of(LCMP, FCMPL, FCMPG, DCMPL, DCMPG);
     }
 

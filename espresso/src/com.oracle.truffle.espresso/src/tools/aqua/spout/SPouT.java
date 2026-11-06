@@ -702,18 +702,30 @@ public class SPouT {
     }
 
     /** annotation of a field read through a reference with annotation {@code receiverA} */
-    /** the guest method of the topmost frame (for messages of precision losses) */
+    private static final java.util.Set<String> STRING_CLASSES = java.util.Set.of("java/lang/String",
+            "java/lang/StringBuilder", "java/lang/StringBuffer", "java/lang/AbstractStringBuilder",
+            "java/lang/StringLatin1", "java/lang/StringUTF16", "java/lang/StringConcatHelper");
+
+    /**
+     * For messages of precision losses: the method of the string classes through which the string was entered (the
+     * outermost of the frames of string classes on top of the stack) and its caller.
+     */
     @CompilerDirectives.TruffleBoundary
     private static String currentMethod() {
-        String name = com.oracle.truffle.api.Truffle.getRuntime().iterateFrames(frame -> {
+        String[] entry = new String[1];
+        String caller = com.oracle.truffle.api.Truffle.getRuntime().iterateFrames(frame -> {
             if (frame.getCallTarget() instanceof com.oracle.truffle.api.RootCallTarget target
                     && target.getRootNode() instanceof com.oracle.truffle.espresso.nodes.EspressoRootNode root) {
                 Method m = root.getMethod();
-                return m.getDeclaringKlass().getNameAsString() + "." + m.getNameAsString();
+                String name = m.getDeclaringKlass().getNameAsString() + "." + m.getNameAsString();
+                if (!STRING_CLASSES.contains(m.getDeclaringKlass().getNameAsString())) {
+                    return name;
+                }
+                entry[0] = name;
             }
             return null;
         });
-        return name != null ? name : "?";
+        return (entry[0] != null ? entry[0] : "?") + " (from " + (caller != null ? caller : "?") + ")";
     }
 
     @CompilerDirectives.TruffleBoundary
@@ -1990,13 +2002,50 @@ public class SPouT {
         return Math.atan((double) a);
     }
 
-    //    @CompilerDirectives.TruffleBoundary
+    /** Math.sqrt: fp.sqrt (correctly rounded in Java and SMT-LIB) */
+    @CompilerDirectives.TruffleBoundary
     public static Object mathSqrt(Object a, Meta meta) {
-        if (AnnotatedValue.svalue(a) != null) {
-            losePrecision("Math.sqrt is not symbolically implemented yet", meta);
-            a = AnnotatedValue.value(a);
+        double result = Math.sqrt((double) AnnotatedValue.value(a));
+        Expression x = analyze && config.hasConcolicAnalysis()
+                ? (Expression) Annotations.annotation(AnnotatedValue.svalue(a), config.getConcolicIdx()) : null;
+        return x != null ? symbolicResult(result, config.getConcolicAnalysis().fpSqrt(x)) : result;
+    }
+
+    /** Math.floor (FPRTN), Math.ceil (FPRTP), Math.rint (FPRNE): fp.roundToIntegral */
+    @CompilerDirectives.TruffleBoundary
+    public static Object mathRoundToIntegral(Object a, tools.aqua.smt.OperatorComparator mode, Meta meta) {
+        double v = (double) AnnotatedValue.value(a);
+        double result = mode == tools.aqua.smt.OperatorComparator.FPRTN ? Math.floor(v)
+                : mode == tools.aqua.smt.OperatorComparator.FPRTP ? Math.ceil(v) : Math.rint(v);
+        Expression x = analyze && config.hasConcolicAnalysis()
+                ? (Expression) Annotations.annotation(AnnotatedValue.svalue(a), config.getConcolicIdx()) : null;
+        return x != null ? symbolicResult(result, config.getConcolicAnalysis().fpRoundToIntegral(x, mode)) : result;
+    }
+
+    /** Math.min / Math.max of floats and doubles (Java's rules for NaN and -0.0) */
+    @CompilerDirectives.TruffleBoundary
+    public static Object mathMinMax(Object a, Object b, boolean min, boolean isDouble, Meta meta) {
+        Object result;
+        if (isDouble) {
+            double x = (double) AnnotatedValue.value(a), y = (double) AnnotatedValue.value(b);
+            result = min ? Math.min(x, y) : Math.max(x, y);
+        } else {
+            float x = (float) AnnotatedValue.value(a), y = (float) AnnotatedValue.value(b);
+            result = min ? Math.min(x, y) : Math.max(x, y);
         }
-        return Math.sqrt((double) a);
+        if (!analyze || !config.hasConcolicAnalysis()) {
+            return result;
+        }
+        Expression ea = (Expression) Annotations.annotation(AnnotatedValue.svalue(a), config.getConcolicIdx());
+        Expression eb = (Expression) Annotations.annotation(AnnotatedValue.svalue(b), config.getConcolicIdx());
+        if (ea == null && eb == null) {
+            return result;
+        }
+        if (ea == null) ea = isDouble ? Constant.fromConcreteValue((double) AnnotatedValue.value(a))
+                : Constant.fromConcreteValue((float) AnnotatedValue.value(a));
+        if (eb == null) eb = isDouble ? Constant.fromConcreteValue((double) AnnotatedValue.value(b))
+                : Constant.fromConcreteValue((float) AnnotatedValue.value(b));
+        return symbolicResult(result, config.getConcolicAnalysis().fpMinMax(ea, eb, min));
     }
 
     //    @CompilerDirectives.TruffleBoundary
@@ -2060,6 +2109,91 @@ public class SPouT {
     // --------------------------------------------------------------------------
     //
     // The String Library
+
+    /** String.hashCode: symbolic for symbolic strings of at most ConcolicAnalysis.MAX_HASH_LENGTH characters */
+    @CompilerDirectives.TruffleBoundary
+    public static Object stringHashCode(StaticObject self, Meta meta) {
+        String concrete = meta.toHostString(self);
+        int hash = concrete.hashCode();
+        Expression s = analyze && config.hasConcolicAnalysis() && hasSymbolicContent(self)
+                ? (Expression) Annotations.annotation(stringContent(self), config.getConcolicIdx()) : null;
+        if (s == null) {
+            return hash;
+        }
+        Expression e = config.getConcolicAnalysis().stringHashCode(concrete, s);
+        return e != null ? symbolicResult(hash, e) : hash;
+    }
+
+    /** String.replace(char, char): symbolic for symbolic strings of at most ConcolicAnalysis.MAX_HASH_LENGTH characters */
+    @CompilerDirectives.TruffleBoundary
+    public static StaticObject stringReplaceChar(StaticObject self, Object oldChar, Object newChar, Meta meta) {
+        String concrete = meta.toHostString(self);
+        char o = concreteChar(oldChar);
+        char n = concreteChar(newChar);
+        StaticObject result = meta.toGuestString(concrete.replace(o, n));
+        boolean symbolic = hasSymbolicContent(self) || AnnotatedValue.svalue(oldChar) != null
+                || AnnotatedValue.svalue(newChar) != null;
+        if (!analyze || !config.hasConcolicAnalysis() || !symbolic) {
+            return result;
+        }
+        tools.aqua.concolic.ConcolicAnalysis ca = config.getConcolicAnalysis();
+        Expression e = ca.stringReplaceChar(concrete, stringExpression(self, concrete), charString(oldChar, o),
+                charString(newChar, n));
+        if (e != null) {
+            Annotations a = Annotations.create();
+            a.set(config.getConcolicIdx(), e);
+            setStringAnnotations(result, a);
+        }
+        return result;
+    }
+
+    /** a char argument (a char or an int of the operand stack, possibly annotated) */
+    private static char concreteChar(Object c) {
+        Object v = AnnotatedValue.value(c);
+        return v instanceof Character ch ? ch : (char) ((Number) v).intValue();
+    }
+
+    /** a character as a string of length 1 (symbolic: str.from_code of its code) */
+    private static Expression charString(Object c, char concrete) {
+        Expression e = (Expression) Annotations.annotation(AnnotatedValue.svalue(c), config.getConcolicIdx());
+        return e != null ? config.getConcolicAnalysis().primitiveString(e, com.oracle.truffle.espresso.classfile.JavaKind.Char)
+                : Constant.fromConcreteValue(String.valueOf(concrete));
+    }
+
+    /** String.startsWith / endsWith (offset {@code null}: startsWith(prefix), endsWith: {@code ends}) */
+    @CompilerDirectives.TruffleBoundary
+    public static Object stringStartsOrEndsWith(StaticObject self, StaticObject other, Object offset, boolean ends,
+                                                Meta meta) {
+        String s = meta.toHostString(self);
+        String o = meta.toHostString(other);
+        int off = offset != null ? ((Number) AnnotatedValue.value(offset)).intValue() : 0;
+        boolean concrete = ends ? s.endsWith(o) : s.startsWith(o, off);
+        boolean symbolic = hasSymbolicContent(self) || hasSymbolicContent(other)
+                || offset instanceof AnnotatedValue && AnnotatedValue.svalue(offset) != null;
+        if (!analyze || !config.hasConcolicAnalysis() || !symbolic) {
+            return concrete;
+        }
+        tools.aqua.concolic.ConcolicAnalysis ca = config.getConcolicAnalysis();
+        Expression se = stringExpression(self, s);
+        Expression oe = stringExpression(other, o);
+        Expression e;
+        if (ends) {
+            e = ca.stringEndsWith(se, oe);
+        } else {
+            Expression offE = offset == null ? null
+                    : AnnotatedValue.svalue(offset) != null
+                    ? (Expression) Annotations.annotation(AnnotatedValue.svalue(offset), config.getConcolicIdx())
+                    : Constant.fromConcreteValue(off);
+            e = ca.stringStartsWith(se, oe, offE);
+        }
+        return symbolicResult(concrete, e);
+    }
+
+    /** the symbolic content of a string, its concrete content as a constant if it has none */
+    private static Expression stringExpression(StaticObject string, String concrete) {
+        Expression e = (Expression) Annotations.annotation(stringContent(string), config.getConcolicIdx());
+        return e != null ? e : Constant.fromConcreteValue(concrete);
+    }
 
     @CompilerDirectives.TruffleBoundary
     public static Object stringContains(StaticObject self, StaticObject s, Meta meta) {

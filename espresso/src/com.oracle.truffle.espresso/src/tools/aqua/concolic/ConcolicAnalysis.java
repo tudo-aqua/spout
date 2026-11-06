@@ -1219,16 +1219,126 @@ public class ConcolicAnalysis implements Analysis<Expression> {
 
     @Override
     public Expression mathAbs(int c, Expression s) {
+        // (x + (x >> 31)) ^ (x >> 31) (was: |, which gives -1 for every negative x)
         ComplexExpression res = new ComplexExpression(ISHR, s, Constant.fromConcreteValue(31));
         ComplexExpression addRes = new ComplexExpression(IADD, res, s);
-        return new ComplexExpression(IOR, res, addRes);
+        return new ComplexExpression(OperatorComparator.IXOR, addRes, res);
     }
 
     @Override
     public Expression mathAbs(long c, Expression s) {
-        ComplexExpression res = new ComplexExpression(LSHR, s, Constant.fromConcreteValue(63));
+        ComplexExpression res = new ComplexExpression(LSHR, s, Constant.fromConcreteValue(63L));
         ComplexExpression addRes = new ComplexExpression(LADD, res, s);
-        return new ComplexExpression(LOR, res, addRes);
+        return new ComplexExpression(OperatorComparator.LXOR, addRes, res);
+    }
+
+    // --------------------------------------------------------------------------
+    //
+    // floating point functions with exact counterparts in SMT-LIB, bit representations
+
+    /** Math.sqrt: correctly rounded in Java, fp.sqrt RNE */
+    public Expression fpSqrt(Expression x) {
+        return new ComplexExpression(FPSQRT, x);
+    }
+
+    /** Math.floor (RTN), Math.ceil (RTP), Math.rint (RNE): fp.roundToIntegral */
+    public Expression fpRoundToIntegral(Expression x, OperatorComparator mode) {
+        return new ComplexExpression(mode, x);
+    }
+
+    /**
+     * Math.min / Math.max of floating point values: NaN if one of them is NaN, -0.0 < 0.0, otherwise the smaller /
+     * larger one (fp.min / fp.max leave the sign of zero unspecified).
+     */
+    public Expression fpMinMax(Expression a, Expression b, boolean min) {
+        Expression first = new ComplexExpression(min ? FPLT : FPGT, a, b);
+        Expression second = new ComplexExpression(min ? FPLT : FPGT, b, a);
+        // equal values (also -0.0 and 0.0): the negative one for min, the other one for max
+        Expression aNegative = new ComplexExpression(FPISNEGATIVE, a);
+        Expression equal = new ComplexExpression(ITE, aNegative, min ? a : b, min ? b : a);
+        Expression ordered = new ComplexExpression(ITE, first, a, new ComplexExpression(ITE, second, b, equal));
+        return new ComplexExpression(ITE, new ComplexExpression(FPISNAN, a), a,
+                new ComplexExpression(ITE, new ComplexExpression(FPISNAN, b), b, ordered));
+    }
+
+    /** Float.intBitsToFloat / Double.longBitsToDouble: the IEEE 754 value of the bit pattern */
+    public Expression bitsToFp(Expression bits, boolean isDouble) {
+        return new ComplexExpression(isDouble ? BITS2DOUBLE : BITS2FLOAT, bits);
+    }
+
+    private int bitsCounter = 0;
+
+    /**
+     * The bit pattern of a floating point value: a fresh bit vector b with isNaN(x) or x = to_fp(b) (SMT equality,
+     * distinguishes -0.0 and 0.0). Float.floatToIntBits / Double.doubleToLongBits ({@code raw} false): the canonical
+     * NaN for NaN. ...RawIntBits / RawLongBits: the bit pattern of NaN is not determined (NaN payloads), the branch
+     * of NaN loses precision ({@code null}).
+     */
+    @CompilerDirectives.TruffleBoundary
+    public Expression fpToBits(Expression x, boolean isDouble, boolean raw, boolean concreteNaN) {
+        Expression nan = new ComplexExpression(FPISNAN, x);
+        if (raw) {
+            decide(nan, concreteNaN);
+            if (concreteNaN) {
+                SPouT.losePrecision((isDouble ? "Double.doubleToRawLongBits" : "Float.floatToRawIntBits")
+                        + " of NaN is concretized (the bits of NaN are not determined)", null);
+                return null;
+            }
+        }
+        AuxiliaryVariable b = new AuxiliaryVariable("__bits_" + bitsCounter++, isDouble ? Types.LONG : Types.INT);
+        trace.addElement(new SymbolDeclaration(b, true));
+        lemma(new ComplexExpression(BOR, nan, new ComplexExpression(FPSAME, x, bitsToFp(b, isDouble))));
+        if (raw) {
+            return b;
+        }
+        Expression canonical = isDouble ? Constant.fromConcreteValue(Double.doubleToLongBits(Double.NaN))
+                : Constant.fromConcreteValue(Float.floatToIntBits(Float.NaN));
+        return new ComplexExpression(ITE, nan, canonical, b);
+    }
+
+    /** Math.getExponent: the unbiased exponent field (of the canonical bits: the same for all NaN) */
+    @CompilerDirectives.TruffleBoundary
+    public Expression fpGetExponent(Expression x, boolean isDouble) {
+        Expression bits = fpToBits(x, isDouble, false, false);
+        if (isDouble) {
+            Expression field = new ComplexExpression(OperatorComparator.LAND,
+                    new ComplexExpression(OperatorComparator.LUSHR, bits, Constant.fromConcreteValue(52L)),
+                    Constant.fromConcreteValue(0x7ffL));
+            return new ComplexExpression(OperatorComparator.ISUB, new ComplexExpression(OperatorComparator.L2I, field),
+                    Constant.fromConcreteValue(1023));
+        }
+        Expression field = new ComplexExpression(OperatorComparator.IAND,
+                new ComplexExpression(OperatorComparator.IUSHR, bits, Constant.fromConcreteValue(23)),
+                Constant.fromConcreteValue(0xff));
+        return new ComplexExpression(OperatorComparator.ISUB, field, Constant.fromConcreteValue(127));
+    }
+
+    /** Integer.reverseBytes */
+    public Expression intReverseBytes(Expression x) {
+        Expression b0 = new ComplexExpression(OperatorComparator.ISHL, x, Constant.fromConcreteValue(24));
+        Expression b1 = new ComplexExpression(OperatorComparator.ISHL,
+                new ComplexExpression(OperatorComparator.IAND, x, Constant.fromConcreteValue(0xff00)), Constant.fromConcreteValue(8));
+        Expression b2 = new ComplexExpression(OperatorComparator.IAND,
+                new ComplexExpression(OperatorComparator.IUSHR, x, Constant.fromConcreteValue(8)), Constant.fromConcreteValue(0xff00));
+        Expression b3 = new ComplexExpression(OperatorComparator.IUSHR, x, Constant.fromConcreteValue(24));
+        return new ComplexExpression(OperatorComparator.IOR, new ComplexExpression(OperatorComparator.IOR, b0, b1),
+                new ComplexExpression(OperatorComparator.IOR, b2, b3));
+    }
+
+    /** Long.reverse: swaps of bits, pairs, nibbles, bytes, half words and words (Hacker's Delight) */
+    public Expression longReverse(Expression x) {
+        long[] masks = {0x5555555555555555L, 0x3333333333333333L, 0x0f0f0f0f0f0f0f0fL, 0x00ff00ff00ff00ffL,
+                0x0000ffff0000ffffL, 0x00000000ffffffffL};
+        for (int k = 0; k < masks.length; k++) {
+            Expression shift = Constant.fromConcreteValue((long) (1 << k));
+            Expression m = Constant.fromConcreteValue(masks[k]);
+            Expression low = new ComplexExpression(OperatorComparator.LSHL,
+                    new ComplexExpression(OperatorComparator.LAND, x, m), shift);
+            Expression high = new ComplexExpression(OperatorComparator.LAND,
+                    new ComplexExpression(OperatorComparator.LUSHR, x, shift), m);
+            x = new ComplexExpression(OperatorComparator.LOR, low, high);
+        }
+        return x;
     }
 
     @Override
@@ -1251,6 +1361,98 @@ public class ConcolicAnalysis implements Analysis<Expression> {
         if (a1 == null) a1 = Constant.fromConcreteValue(self);
         if (a2 == null) a2 = Constant.fromConcreteValue(other);
         return new ComplexExpression(SCONTAINS, a1, a2);
+    }
+
+    /** strings up to this length have a symbolic hashCode (for longer ones it is concretized) */
+    public static final int MAX_HASH_LENGTH = 16;
+
+    /**
+     * {@code String.hashCode} of the string with content {@code s} (concrete content {@code concrete}): a switch over
+     * the length (stable branches 0..{@link #MAX_HASH_LENGTH}, one for longer strings); for length n, fresh character
+     * variables c_0..c_n-1 (as int, below 0x10000) with s = from_code(c_0) ++ ... ++ from_code(c_n-1) and the
+     * polynomial c_0*31^(n-1) + ... + c_n-1 mod 2^32 over them (Z3 solves this quickly, in contrast to the same
+     * polynomial over str.to_code(str.at(s, i))); {@code null} (concretized, precision loss) for longer strings.
+     */
+    @CompilerDirectives.TruffleBoundary
+    public Expression stringHashCode(String concrete, Expression s) {
+        int n = concrete.length();
+        tableSwitch(null, null, 0, 0, MAX_HASH_LENGTH, n,
+                new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, s)));
+        if (n > MAX_HASH_LENGTH) {
+            SPouT.losePrecision("String.hashCode of a symbolic string longer than " + MAX_HASH_LENGTH
+                    + " characters is concretized", null);
+            return null;
+        }
+        int id = hashCounter++;
+        Expression h = INT_ZERO;
+        Expression chars = Constant.fromConcreteValue("");
+        for (int i = 0; i < n; i++) {
+            AuxiliaryVariable c = new AuxiliaryVariable("__hash_" + id + "_" + i, Types.INT);
+            trace.addElement(new SymbolDeclaration(c, true));
+            lemma(new ComplexExpression(BAND, new ComplexExpression(BVLE, INT_ZERO, c),
+                    new ComplexExpression(BVLE, c, INT_CHAR_MAX)));
+            chars = new ComplexExpression(SCONCAT, chars,
+                    new ComplexExpression(SFROMCODE, new ComplexExpression(BV2NAT, c)));
+            h = new ComplexExpression(OperatorComparator.IADD,
+                    new ComplexExpression(OperatorComparator.IMUL, h, Constant.fromConcreteValue(31)), c);
+        }
+        lemma(new ComplexExpression(STRINGEQ, s, chars));
+        return h;
+    }
+
+    /** numbers the character variables of String.hashCode */
+    private int hashCounter = 0;
+
+    /**
+     * {@code s.replace(oldChar, newChar)} (characters as strings of length 1): for at most {@link #MAX_HASH_LENGTH}
+     * characters (a decision on the length) the concatenation of ite(s[i] = old, new, s[i]), {@code null}
+     * (concretized, precision loss) for longer strings (str.replace_all is incomplete in Z3 4.14).
+     */
+    @CompilerDirectives.TruffleBoundary
+    public Expression stringReplaceChar(String concrete, Expression s, Expression oldChar, Expression newChar) {
+        Expression length = new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, s));
+        Expression bound = Constant.fromConcreteValue(MAX_HASH_LENGTH);
+        if (concrete.length() > MAX_HASH_LENGTH) {
+            trace.addElement(new PathCondition(new ComplexExpression(BVGT, length, bound), FAILURE, BINARY_SPLIT));
+            SPouT.losePrecision("String.replace of a symbolic string longer than " + MAX_HASH_LENGTH
+                    + " characters is concretized", null);
+            return null;
+        }
+        trace.addElement(new PathCondition(new ComplexExpression(BVLE, length, bound), SUCCESS, BINARY_SPLIT));
+        Expression prefix = Constant.fromConcreteValue("");
+        Expression result = Constant.fromConcreteValue("");
+        for (int n = 1; n <= MAX_HASH_LENGTH; n++) {
+            Expression c = new ComplexExpression(SAT, s, Constant.createNatConstant(n - 1));
+            Expression replaced = asString(new ComplexExpression(ITE, new ComplexExpression(STRINGEQ, c, oldChar),
+                    newChar, c));
+            prefix = new ComplexExpression(SCONCAT, prefix, replaced);
+            result = asString(new ComplexExpression(ITE, new ComplexExpression(BVEQ, length, Constant.fromConcreteValue(n)),
+                    prefix, result));
+        }
+        return result;
+    }
+
+    /**
+     * {@code s.startsWith(prefix, offset)}: false for an offset outside [0, length(s) - length(prefix)], otherwise
+     * whether the prefix starts at the offset.
+     */
+    @CompilerDirectives.TruffleBoundary
+    public Expression stringStartsWith(Expression s, Expression prefix, Expression offset) {
+        if (offset == null) {
+            return new ComplexExpression(SPREFIXOF, prefix, s);
+        }
+        Expression length = new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, s));
+        Expression prefixLength = new ComplexExpression(NAT2BV32, new ComplexExpression(SLENGTH, prefix));
+        Expression inside = new ComplexExpression(BAND, new ComplexExpression(BVLE, INT_ZERO, offset),
+                new ComplexExpression(BVLE, offset, new ComplexExpression(OperatorComparator.ISUB, length, prefixLength)));
+        Expression rest = new ComplexExpression(SSUBSTR, s, new ComplexExpression(BV2NAT, offset),
+                new ComplexExpression(BV2NAT, new ComplexExpression(OperatorComparator.ISUB, length, offset)));
+        return new ComplexExpression(BAND, inside, new ComplexExpression(SPREFIXOF, prefix, rest));
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    public Expression stringEndsWith(Expression s, Expression suffix) {
+        return new ComplexExpression(SSUFFIXOF, suffix, s);
     }
 
     @Override

@@ -10,6 +10,50 @@ import java.util.Locale;
 @EspressoSubstitutions
 public final class Target_java_lang_String {
     @Substitution(hasReceiver = true)
+    public static @JavaType(internalName = "I") Object hashCode(@JavaType(String.class) StaticObject self, @Inject Meta meta) {
+        return SPouT.stringHashCode(self, meta);
+    }
+
+    @Substitution(hasReceiver = true, methodName = "replace", passAnnotations = true)
+    public static @JavaType(String.class) StaticObject replace_char(@JavaType(String.class) StaticObject self,
+                                                                    @JavaType(internalName = "C") Object oldChar,
+                                                                    @JavaType(internalName = "C") Object newChar,
+                                                                    @Inject Meta meta) {
+        return SPouT.stringReplaceChar(self, oldChar, newChar, meta);
+    }
+
+    @Substitution(hasReceiver = true, methodName = "startsWith")
+    public static @JavaType(internalName = "Z") Object startsWith(@JavaType(String.class) StaticObject self,
+                                                                  @JavaType(String.class) StaticObject prefix,
+                                                                  @Inject Meta meta) {
+        if (StaticObject.isNull(prefix)) {
+            throw meta.throwNullPointerException();
+        }
+        return SPouT.stringStartsOrEndsWith(self, prefix, null, false, meta);
+    }
+
+    @Substitution(hasReceiver = true, methodName = "startsWith", passAnnotations = true)
+    public static @JavaType(internalName = "Z") Object startsWith_offset(@JavaType(String.class) StaticObject self,
+                                                                         @JavaType(String.class) StaticObject prefix,
+                                                                         @JavaType(internalName = "I") Object offset,
+                                                                         @Inject Meta meta) {
+        if (StaticObject.isNull(prefix)) {
+            throw meta.throwNullPointerException();
+        }
+        return SPouT.stringStartsOrEndsWith(self, prefix, offset, false, meta);
+    }
+
+    @Substitution(hasReceiver = true)
+    public static @JavaType(internalName = "Z") Object endsWith(@JavaType(String.class) StaticObject self,
+                                                                @JavaType(String.class) StaticObject suffix,
+                                                                @Inject Meta meta) {
+        if (StaticObject.isNull(suffix)) {
+            throw meta.throwNullPointerException();
+        }
+        return SPouT.stringStartsOrEndsWith(self, suffix, null, true, meta);
+    }
+
+    @Substitution(hasReceiver = true)
     public static @JavaType(internalName = "Z") Object contains(@JavaType(String.class) StaticObject self,
                                                                 @JavaType(CharSequence.class) StaticObject s,
                                                                 @Inject Meta meta) {

@@ -77,7 +77,9 @@ public abstract class Constant extends Atom {
         @Override
         @CompilerDirectives.TruffleBoundary
         public String toString() {
-            return "#x" + String.format("%1$0" + (bytes * 2) +"x", getValue());
+            // the two's complement in the width of the constant (format pads, but does not truncate negative values)
+            long bits = getValue() & ((1L << (8 * bytes)) - 1);
+            return "#x" + String.format("%1$0" + (bytes * 2) + "x", bits);
         }
     }
 
